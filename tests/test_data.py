@@ -40,6 +40,7 @@ from tests.oracle_fixtures import (
     read_dataset,
     require_cases,
 )
+from tests.tolerances import assert_close
 
 BACKENDS = ("pandas", "polars", "pyarrow")
 CASES = require_cases(cases_for("ggbetweenstats"), "ggbetweenstats")
@@ -122,10 +123,15 @@ def test_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
         assert row["max"] == values.max()
         if "std.dev" in row:  # the bayes label layer has none
             sd = float(np.std(values, ddof=1))
-            assert math.isclose(row["std.dev"], sd, rel_tol=1e-13)
+            assert_close(
+                "closed_form", sd, row["std.dev"], what=f"{case.name} {level} SD"
+            )
         if case.type == "parametric":
-            assert math.isclose(
-                row[case.args["y"]], float(values.mean()), rel_tol=1e-13
+            assert_close(
+                "closed_form",
+                float(values.mean()),
+                row[case.args["y"]],
+                what=f"{case.name} {level} mean",
             )
         assert values.dtype == np.float64
         assert not values.flags.writeable

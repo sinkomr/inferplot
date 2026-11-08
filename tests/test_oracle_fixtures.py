@@ -138,8 +138,11 @@ def test_failed_case_fails_where_declared(case: OracleCase) -> None:
     for entry in before:
         value = case.partial(entry["component"])
         assert value, f"{entry['component']} returned nothing"
-    with pytest.raises(KeyError, match="pairwise"):
-        case.partial("pairwise")
+    # The failing call is recorded too, with no value: it returned nothing.
+    components = [entry["component"] for entry in case.raw["partial"]]
+    assert components.count(expected["component"]) == 1
+    assert components[-1] == expected["component"]
+    assert case.partial(expected["component"]) is None
     # The centrality labels R computed carry the counts generate.R recorded.
     labels = case.partial("centrality_description")
     x = case.args["x"]
