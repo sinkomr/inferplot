@@ -67,7 +67,7 @@ jobs:
       - name: Tests
         # Image baselines are generated on Linux only, so --mpl runs only there.
         run: >-
-          uv run pytest -q -m "not slow"
+          uv run pytest -m "not slow"
           ${{ (matrix.os == 'ubuntu-latest' && matrix.python == '3.15') && '--mpl' || '' }}
       - name: Reference known-answer checks
         run: uv run python -I tools/reference/stats_reference.py
@@ -89,6 +89,6 @@ jobs:
       - name: Installed versions
         run: uv pip list
       - name: Tests
-        run: uv run pytest -q -m "not slow"
+        run: uv run pytest -m "not slow"
       - name: Reference known-answer checks
         run: uv run python -I tools/reference/stats_reference.py
