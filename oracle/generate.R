@@ -293,6 +293,8 @@ recording_eval_f <- function(.f, ...) {
 # Records warnings and passes them on to ggstatsplot's own suppressWarnings(). The
 # original call is evaluated as written, so non-standard evaluation is unchanged.
 recording_wrapper <- function(component, f) {
+  # Force both now: the caller's loop variable changes before the wrapper runs.
+  force(component)
   force(f)
   wrapper <- function() {
     call <- sys.call()
