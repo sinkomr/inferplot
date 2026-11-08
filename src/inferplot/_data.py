@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import difflib
 import math
-from collections.abc import Hashable, Sequence
+import numbers
+from collections.abc import Hashable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -309,23 +310,50 @@ def _row_labels(raw: Sequence[object], name: str) -> list[str]:
     return out
 
 
+def _order_item(item: object) -> object:
+    """A pyarrow scalar as its Python value; anything else unchanged."""
+    if type(item).__module__.split(".")[0] == "pyarrow":
+        as_py = getattr(item, "as_py", None)
+        if callable(as_py):
+            return as_py()
+    return item
+
+
+def _order_label(item: object) -> str:
+    """The level label of one ``order`` entry: text, or a number ``x`` can hold.
+
+    Integers of any kind (Python, NumPy) and finite floats are accepted and labelled
+    as ``x``'s values are (``8.0`` and ``np.int64(8)`` both name level ``"8"``).
+    """
+    value = _order_item(item)
+    if isinstance(value, str):
+        return str(value)  # a plain str, also for numpy.str_
+    if isinstance(value, bool | np.bool_):
+        pass
+    elif isinstance(value, numbers.Integral):
+        return str(int(value))
+    elif isinstance(value, float | np.floating):
+        number = float(cast("float | np.floating[Any]", value))
+        if math.isfinite(number):
+            return level_label(number)
+    raise TypeError(f"order entries must be level names, not {value!r}.")
+
+
 def _check_order(
     order: object, present: Sequence[str], empty: Sequence[str]
 ) -> list[str]:
     """``order`` as labels, if it is a permutation of ``present``.
 
-    Typed ``object``: callers that skip type checking can pass anything.
+    ``order`` may be any iterable other than a string: a list, a tuple, a NumPy
+    array, a pandas Index or Series, a polars Series or a pyarrow array. Typed
+    ``object``: callers that skip type checking can pass anything.
     """
-    if isinstance(order, str) or not isinstance(order, Sequence):
+    if isinstance(order, str | bytes) or not isinstance(order, Iterable):
         raise TypeError(
             "order must be a list of level names, for example "
             f"order={list(present)!r}; got {order!r}."
         )
-    labels: list[str] = []
-    for item in cast("Sequence[object]", order):
-        if isinstance(item, bool) or not isinstance(item, str | int):
-            raise TypeError(f"order entries must be level names, not {item!r}.")
-        labels.append(level_label(item))
+    labels = [_order_label(item) for item in cast("Iterable[object]", order)]
     duplicates = sorted({label for label in labels if labels.count(label) > 1})
     if duplicates:
         raise ValueError(f"order names {duplicates!r} more than once.")
@@ -358,7 +386,7 @@ def read_between(
     x: str,
     y: str,
     *,
-    order: Sequence[str | int] | None = None,
+    order: Iterable[object] | None = None,
     min_levels: int = 2,
 ) -> BetweenData:
     """Read a between-groups design: ``y`` split by the levels of ``x``.
