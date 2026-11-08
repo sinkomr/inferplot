@@ -24,6 +24,10 @@ BOOT_SEED <- 1L # reference run; replicate i uses BOOT_SEED + i
 BOOT_REFERENCE_RESAMPLES <- 20000L
 BOOT_REPLICATE_RESAMPLES <- 2000L # inferplot's resample count (SPEC.md section 5)
 BOOT_REPLICATES <- 50L
+# Resamples ggbetweenstats uses for every bootstrap CI: statsExpressions 2.2.1's nboot
+# default, which it passes as nboot (akp.effect, t1way) or iterations
+# (rank_epsilon_squared).
+GG_RESAMPLES <- 100L
 
 RECORDED_PACKAGES <- c(
   "ggstatsplot", "statsExpressions", "effectsize", "parameters", "bayestestR",
@@ -187,14 +191,29 @@ plot_layers <- function(plot) {
   layers <- tryCatch(plot@layers, error = function(e) plot$layers)
   layer_names <- names(layers)
   if (is.null(layer_names)) layer_names <- rep("", length(layers))
-  unname(Map(function(layer, name) {
+  unname(Map(function(layer, name, index) {
     data <- layer$data
+    geom <- class(layer$geom)[[1L]]
+    signif <- geom == "GeomSignif"
     list(
       name = name,
-      geom = class(layer$geom)[[1L]],
-      data = if (is.data.frame(data)) frame_rows(data) else NULL
+      geom = geom,
+      data = if (is.data.frame(data)) frame_rows(data) else NULL,
+      # Significance brackets keep the drawn pairs (`comparisons`) and their labels
+      # (`annotations`) in the layer's parameters, not in its data; `built` is the
+      # layer as ggplot2 computes it for drawing.
+      params = if (signif) {
+        list(
+          stat = to_json_value(layer$stat_params),
+          geom = to_json_value(layer$geom_params),
+          aes = to_json_value(layer$aes_params)
+        )
+      } else {
+        NULL
+      },
+      built = if (signif) frame_rows(ggplot2::layer_data(plot, index)) else NULL
     )
-  }, layers, layer_names))
+  }, layers, layer_names, seq_along(layers)))
 }
 
 VERSIONS <- list(
@@ -202,6 +221,7 @@ VERSIONS <- list(
   platform = R.version$platform,
   os = utils::sessionInfo()$running,
   collate = Sys.getlocale("LC_COLLATE"),
+  rng_kind = as.list(RNGkind()),
   repos = as.list(getOption("repos")),
   packages = stats::setNames(
     lapply(RECORDED_PACKAGES, function(p) as.character(packageVersion(p))),
@@ -211,16 +231,31 @@ VERSIONS <- list(
 
 # Bootstrap references --------------------------------------------------------------
 #
-# For effect sizes whose CI ggstatsplot bootstraps (with 100 resamples), call the
-# underlying R function directly: once with BOOT_REFERENCE_RESAMPLES resamples for a
-# precise reference, then BOOT_REPLICATES times with BOOT_REPLICATE_RESAMPLES
-# resamples to measure the Monte Carlo spread of an estimate and CI computed the way
-# inferplot computes them.
+# For effect sizes whose CI ggstatsplot bootstraps:
 #
-# A case may list several candidate calls (for example both EQVAR settings of
-# akp.effect). The first candidate whose point estimate reproduces ggstatsplot's is
-# used; every candidate's estimate is recorded so a mismatch can be diagnosed.
+# 1. Replay ggstatsplot's own computation. Inside ggbetweenstats() the effect-size
+#    call is the first to draw random numbers (statsExpressions 2.2.1 source), so
+#    set.seed(CASE_SEED) followed by the same call with GG_RESAMPLES resamples, on
+#    the rows in statsExpressions' order, must reproduce ggstatsplot's estimate and
+#    both CI bounds exactly. A match proves the reference call below is the method
+#    and variant ggstatsplot ran. A case may list several candidate calls (both
+#    EQVAR settings of akp.effect); the one that matches is used, and every
+#    candidate's replayed values are recorded.
+# 2. Reference: the same call with BOOT_REFERENCE_RESAMPLES resamples.
+# 3. Replicates: BOOT_REPLICATES runs with BOOT_REPLICATE_RESAMPLES resamples, the
+#    Monte Carlo spread of an estimate and CI computed the way inferplot computes
+#    them.
 # Each `run` returns list(values = c(estimate, conf_low, conf_high), raw = ...).
+
+# Rows as statsExpressions passes them to the effect-size functions:
+# long_to_wide_converter(paired = FALSE, spread = FALSE) orders them by the levels of
+# x and keeps the original order within a level. Bootstraps that resample rows depend
+# on this order, so replays must use it.
+statsexpressions_rows <- function(analysis) {
+  convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
+  long <- convert(data = analysis, x = x, y = y, paired = FALSE, spread = FALSE)
+  data.frame(y = long[["y"]], x = long[["x"]])
+}
 
 akp_candidate <- function(analysis, eqvar) {
   list(
@@ -303,26 +338,29 @@ run_or_stop <- function(case, what, expr) {
 
 bootstrap_reference <- function(case, analysis, stats) {
   subtitle_row <- stats$subtitle_data
-  candidates <- bootstrap_candidates(case, analysis, subtitle_row)
+  ordered <- statsexpressions_rows(analysis)
+  candidates <- bootstrap_candidates(case, ordered, subtitle_row)
   if (length(candidates) == 0L) {
     return(NULL)
   }
-  gg_estimate <- unname(subtitle_row$estimate)
+  gg_values <- unname(c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high))
 
-  # Pick the candidate that reproduces ggstatsplot's point estimate.
   tried <- list()
   chosen <- NULL
   for (candidate in candidates) {
-    probe <- run_or_stop(case, "bootstrap probe", {
-      set.seed(BOOT_SEED)
-      candidate$run(BOOT_REPLICATE_RESAMPLES)
+    replay <- run_or_stop(case, "ggstatsplot replay", {
+      set.seed(CASE_SEED)
+      candidate$run(GG_RESAMPLES)
     })
-    estimate <- unname(probe$value$values[[1L]])
-    matches <- isTRUE(all.equal(estimate, gg_estimate, tolerance = 1e-8))
-    tried[[length(tried) + 1L]] <- list(call = candidate$call, estimate = estimate, matches = matches)
+    values <- unname(replay$value$values)
+    matches <- isTRUE(all.equal(values, gg_values, tolerance = 1e-10))
+    tried[[length(tried) + 1L]] <- list(
+      call = candidate$call, values = as.list(values), matches = matches
+    )
     if (matches && is.null(chosen)) chosen <- candidate
   }
-  if (is.null(chosen)) chosen <- candidates[[1L]]
+  replayed <- !is.null(chosen)
+  if (!replayed) chosen <- candidates[[1L]]
 
   reference <- run_or_stop(case, "bootstrap reference", {
     set.seed(BOOT_SEED)
@@ -341,21 +379,22 @@ bootstrap_reference <- function(case, analysis, stats) {
   list(
     quantity = "effect size confidence interval",
     call = chosen$call,
-    candidates = tried,
+    data_order = "rows ordered by the levels of x, as statsExpressions passes them",
     conf_level = 0.95,
+    ggstatsplot = list(
+      estimate = gg_values[[1L]],
+      conf_low = gg_values[[2L]],
+      conf_high = gg_values[[3L]],
+      resamples = GG_RESAMPLES,
+      seed = CASE_SEED
+    ),
+    replay = list(matches = replayed, candidates = tried),
     seed = BOOT_SEED,
     resamples = BOOT_REFERENCE_RESAMPLES,
     estimate = ref[[1L]],
     conf_low = ref[[2L]],
     conf_high = ref[[3L]],
     raw = reference$value$raw,
-    ggstatsplot = list(
-      estimate = gg_estimate,
-      conf_low = unname(subtitle_row$conf.low),
-      conf_high = unname(subtitle_row$conf.high),
-      resamples = if (is.null(subtitle_row$conf.iterations)) NULL else unname(subtitle_row$conf.iterations)
-    ),
-    estimate_matches_ggstatsplot = isTRUE(all.equal(ref[[1L]], gg_estimate, tolerance = 1e-8)),
     replicates = list(
       count = BOOT_REPLICATES,
       resamples = BOOT_REPLICATE_RESAMPLES,
@@ -461,7 +500,7 @@ for (case in CASES) {
   summary_rows <- c(summary_rows, sprintf(
     "| %s | %s | %d | %s |",
     case$name, gsub("|", "/", status, fixed = TRUE), length(fixture$r_warnings),
-    if (is.null(boot)) "" else sprintf("estimate matches: %s", boot$estimate_matches_ggstatsplot)
+    if (is.null(boot)) "" else sprintf("replay matches ggstatsplot: %s", boot$replay$matches)
   ))
 }
 
@@ -483,10 +522,31 @@ if (length(problems) > 0L) {
 }
 
 fixture_files <- sort(setdiff(list.files(out_dir, pattern = "\\.json$"), "manifest.json"))
+env_or_null <- function(name) {
+  value <- Sys.getenv(name)
+  if (nzchar(value)) value else NULL
+}
+library_packages <- utils::installed.packages(lib.loc = .libPaths())
+library_packages <- library_packages[!duplicated(library_packages[, "Package"]), , drop = FALSE]
+library_packages <- library_packages[order(library_packages[, "Package"]), , drop = FALSE]
 manifest <- list(
   schema_version = SCHEMA_VERSION,
   generator = "oracle/generate.R",
   parity_target = paste("ggstatsplot", PARITY_VERSION),
+  # The GitHub Actions run that produced the files; the fixture provenance workflow
+  # downloads this run's artifact and compares it byte for byte with the commit.
+  run = list(
+    repository = env_or_null("GITHUB_REPOSITORY"),
+    run_id = env_or_null("GITHUB_RUN_ID"),
+    run_attempt = env_or_null("GITHUB_RUN_ATTEMPT"),
+    commit = env_or_null("GITHUB_SHA")
+  ),
+  R = VERSIONS$R,
+  rng_kind = VERSIONS$rng_kind,
+  r_library = stats::setNames(
+    as.list(unname(library_packages[, "Version"])),
+    unname(library_packages[, "Package"])
+  ),
   fixtures = stats::setNames(
     lapply(fixture_files, function(f) file_sha256(file.path(out_dir, f))),
     fixture_files

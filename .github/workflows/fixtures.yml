@@ -1,0 +1,46 @@
+name: Fixture provenance
+
+# Whenever committed oracle fixtures or datasets change, check that they are exactly
+# what the oracle run named in tests/fixtures/oracle/manifest.json produced: download
+# that run's artifacts and compare byte for byte. This is what makes a hand edit fail,
+# even one that also re-hashes the manifest.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tests/fixtures/oracle/**"
+      - "oracle/datasets/**"
+  pull_request:
+    paths:
+      - "tests/fixtures/oracle/**"
+      - "oracle/datasets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    name: Fixtures match their oracle run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Compare with the oracle run's artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=$(python3 -I -c 'import json; print(json.load(open("tests/fixtures/oracle/manifest.json"))["run"]["run_id"])')
+          echo "Oracle run named in the manifest: $run_id"
+          gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json workflowName,conclusion,headBranch \
+            --jq '"\(.workflowName) \(.conclusion) \(.headBranch)"' | tee run.txt
+          test "$(cat run.txt)" = "Oracle success main"
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -n oracle-fixtures -D "$RUNNER_TEMP/fixtures"
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -n oracle-datasets -D "$RUNNER_TEMP/datasets"
+          diff -r "$RUNNER_TEMP/fixtures" tests/fixtures/oracle
+          diff -r "$RUNNER_TEMP/datasets" oracle/datasets
+          echo "Fixtures and datasets are byte-identical to oracle run $run_id."
