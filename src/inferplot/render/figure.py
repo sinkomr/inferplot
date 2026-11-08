@@ -15,6 +15,7 @@ from inferplot.render import theme
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+    from matplotlib.lines import Line2D
     from matplotlib.text import Text
 
     from inferplot.check import Issue
@@ -45,6 +46,7 @@ class StatsFigure:
 
     __slots__ = (
         "_axes",
+        "_brackets",
         "_figure",
         "_inside",
         "_own",
@@ -63,6 +65,7 @@ class StatsFigure:
         roles: Mapping[int, str],
         inside: tuple[Text, ...],
         subsample: Subsample | None,
+        brackets: tuple[tuple[Text, Line2D, str], ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -71,6 +74,7 @@ class StatsFigure:
         self._roles = MappingProxyType(dict(roles))
         self._inside = inside
         self._subsample = subsample
+        self._brackets = brackets
 
     @property
     def figure(self) -> Figure:
@@ -95,10 +99,10 @@ class StatsFigure:
     def check(self) -> tuple[Issue, ...]:
         """Statistical and rendering problems; an empty tuple when there are none.
 
-        Rendering problems are measured on the drawn figure: overlapping texts
-        (``label_overlap``), texts outside the figure or, for texts drawn inside an
-        Axes, outside that Axes (``text_clipped``), and subsampled points
-        (``points_subsampled``).
+        Rendering problems are measured on the drawn figure: overlapping texts, or a
+        bracket label drawn across another bracket's line (``label_overlap``),
+        texts outside the figure or, for texts drawn inside an Axes, outside that
+        Axes (``text_clipped``), and subsampled points (``points_subsampled``).
         """
         from inferplot.render.checks import figure_issues
 
@@ -148,6 +152,11 @@ class StatsFigure:
     def inside(self) -> tuple[Text, ...]:
         """Texts that must stay inside the main Axes."""
         return self._inside
+
+    @property
+    def brackets(self) -> tuple[tuple[Text, Line2D, str], ...]:
+        """Each significance bracket: its label, its line, and what it is in words."""
+        return self._brackets
 
     def draw(self) -> None:
         """Draw the figure so text extents are current."""

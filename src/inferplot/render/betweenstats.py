@@ -12,6 +12,10 @@ When inferplot creates the figure it sizes it from the rendered sizes of its tex
 so nothing is clipped and no two texts overlap (a long subtitle widens the figure).
 With ``ax=`` the subtitle and caption go inside that Axes and ``fig.check()``
 reports anything that does not fit.
+
+Every argument is checked before anything is drawn, so a call that raises leaves a
+given Axes as it was: the artist dicts are applied to throwaway artists of the
+classes that receive them, and the user's texts are laid out once as mathtext.
 """
 
 from __future__ import annotations
@@ -23,12 +27,13 @@ from typing import TYPE_CHECKING, Any, Final, cast
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.collections import PathCollection
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.path import Path
 from matplotlib.text import Text
-from matplotlib.transforms import Bbox, offset_copy
+from matplotlib.transforms import Bbox, IdentityTransform, offset_copy
 from numpy.typing import NDArray
 
 from inferplot import _validate as v
@@ -103,9 +108,18 @@ def betweenstats(
         palette: a matplotlib colormap name or a list of at least one color per
             level; default Okabe-Ito (``tab20`` for more than 8 levels).
         point_args, boxplot_args, violin_args: matplotlib properties applied with
-            ``Artist.set`` to each level's points, box and violin.
+            ``Artist.set`` to each level's points, box and violin. Each needs its
+            layer ("points", "box", "violin") in ``layers``; unknown properties and
+            values matplotlib rejects raise before anything is drawn.
         ax: draw into this Axes instead of a new figure; the subtitle and caption
             then go inside it.
+
+    ``title``, ``subtitle``, ``caption``, ``xlab`` and ``ylab`` are matplotlib
+    text, which follows matplotlib's convention: text between two dollar signs is
+    a mathtext expression (``r"Weight ($\\mu$g)"``). Write ``\\$`` for a literal
+    dollar sign (``r"Revenue in \\$"``). An expression matplotlib cannot read
+    raises ``ValueError`` at the call. Column names drawn as default labels are
+    never read as mathtext.
 
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
@@ -159,7 +173,9 @@ def betweenstats(
             f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
         )
     colors, palette_warning = theme.resolve_palette(palette, k)
+    _check_artist_args(options)
     with theme.context():
+        _check_mathtext(options)
         return _Drawing(result, options, colors, palette_warning, ax).run()
 
 
@@ -190,6 +206,76 @@ def _apply(artist: Artist, args: Mapping[str, object], name: str) -> None:
         ) from error
     except ValueError as error:
         raise ValueError(f"{name} has a value matplotlib rejects: {error}") from error
+
+
+# The layer each artist dict styles, and a throwaway artist of the class that
+# receives it there (ax.scatter's PathCollection, the box PathPatch, the violin
+# Polygon).
+_ARTIST_LAYERS: Final = (
+    ("point_args", "points"),
+    ("boxplot_args", "box"),
+    ("violin_args", "violin"),
+)
+
+
+def _throwaway(layer: str) -> Artist:
+    if layer == "points":
+        return PathCollection(
+            (Path.unit_circle(),),
+            sizes=[14.0],
+            offsets=np.zeros((1, 2)),
+            offset_transform=IdentityTransform(),
+        )
+    if layer == "box":
+        return PathPatch(_box_path(np.array([0.0, 1.0]), 0.0))
+    return Polygon(np.zeros((3, 2)), closed=True)
+
+
+def _check_artist_args(options: _Options) -> None:
+    """Each non-empty artist dict styles a layer that is drawn and is accepted by
+    the class of artist it is applied to; checked before anything is drawn."""
+    for name, layer in _ARTIST_LAYERS:
+        args: dict[str, object] = getattr(options, name)
+        if not args:
+            continue
+        if layer not in options.layers:
+            with_layer = tuple(
+                item for item in v.LAYERS if item in options.layers or item == layer
+            )
+            raise ValueError(
+                f"{name} styles the {layer} layer, which layers={options.layers!r} "
+                f"does not draw. To style it, add {layer!r} to layers, for example "
+                f"layers={with_layer!r}; otherwise remove {name}=."
+            )
+        _apply(_throwaway(layer), args, name)
+
+
+_USER_TEXTS: Final = ("title", "subtitle", "caption", "xlab", "ylab")
+
+
+def _check_mathtext(options: _Options) -> None:
+    """Lay out each user text once, so an expression matplotlib cannot read raises
+    here, before anything is drawn (with ``ax=`` it would otherwise surface only
+    when the figure is drawn)."""
+    given = [(name, getattr(options, name)) for name in _USER_TEXTS]
+    given = [(name, value) for name, value in given if value is not None]
+    if not given:
+        return
+    figure = Figure()
+    renderer = FigureCanvasAgg(figure).get_renderer()
+    for name, value in given:
+        text = figure.text(0.0, 0.0, value, fontproperties=theme.font(theme.SIZE_LABEL))
+        try:
+            text.get_window_extent(renderer)
+        except ValueError as error:
+            lines = [line.strip() for line in str(error).splitlines() if line.strip()]
+            detail = lines[-1] if lines else type(error).__name__
+            raise ValueError(
+                f"{name} is drawn as matplotlib mathtext, where text between two $ "
+                f"signs is a math expression, and matplotlib cannot read it: "
+                f"{detail}. Fix the expression, or write \\$ for a literal dollar "
+                f"sign; got {name}={value!r}."
+            ) from error
 
 
 # --------------------------------------------------------------------------- #
@@ -309,6 +395,7 @@ class _Drawing:
         self.bracket_lines: list[Line2D] = []
         self.bracket_labels: list[Text] = []
         self.bracket_pairs: list[tuple[int, int]] = []
+        self.bracket_names: list[str] = []
         self.header: list[Text] = []  # title, subtitle (own figure)
         self.captions: list[Text] = []
 
@@ -360,6 +447,14 @@ class _Drawing:
             roles=self.roles,
             inside=tuple(self.inside),
             subsample=self.subsample,
+            brackets=tuple(
+                zip(
+                    self.bracket_labels,
+                    self.bracket_lines,
+                    self.bracket_names,
+                    strict=True,
+                )
+            ),
         )
 
     def draw_data(self) -> None:
@@ -526,6 +621,9 @@ class _Drawing:
             self.inside.append(text)
             self.bracket_labels.append(text)
             self.bracket_pairs.append((i, j))
+            self.bracket_names.append(
+                f"the bracket of {pair.group1!r} and {pair.group2!r}"
+            )
 
     def draw_ticks_and_labels(self) -> None:
         ax, result, options = self.ax, self.result, self.options
