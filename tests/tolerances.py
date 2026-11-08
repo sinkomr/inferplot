@@ -93,15 +93,49 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
         ),
         "noncentral_ci": Tolerance(
             rtol=1e-6,
+            atol=4e-8,
+            reason=(
+                "CI bounds found by inverting a noncentral t or F distribution in "
+                "its noncentrality parameter: R's root finding is accurate to about "
+                "1e-8 absolute, whatever the size of the bound. Measured with "
+                "inferplot.stats (own noncentral t and F functions, accurate to "
+                "2.5e-12 relative; tests/stats/test_noncentral.py) on the 45 "
+                "ggstatsplot 1.1.4 fixtures: Hedges' g, 10 finite bounds in 6 "
+                "fixtures, max abs 1.9e-8 (mtcars-am-drat upper), max rel 7.5e-7 "
+                "(ToothGrowth lower, -0.0217); partial omega squared lower bound, "
+                "7 fixtures, max abs 1.5e-8 (edge_k5), max rel 9.9e-8 "
+                "(edge_unbalanced, 0.0268); PlantGrowth's 0 and every upper bound "
+                "of 1 are exact. atol is about twice the largest absolute error, so "
+                "a bound near 0 passes on its absolute error; rtol stays at SPEC.md "
+                "section 10's 1e-6, which ToothGrowth's lower bound needs alone."
+            ),
+        ),
+        "studentized_range_tail": Tolerance(
+            rtol=4e-13,
             atol=0.0,
             reason=(
-                "Starting value from SPEC.md section 10 for CIs found by inverting "
-                "noncentral t, F or chi-square distributions (R root-finding "
-                "precision). Measured so far: Hedges' g bounds in the 6 two-group "
-                "parametric fixtures agree with a tight SciPy inversion to 7.5e-7 "
-                "relative; R's error is about 1e-8 absolute on every bound (up to "
-                "1.9e-8), so a bound near 0 will need an absolute part. Replace with "
-                "the implementation's own measurement in Phase 1."
+                "inferplot.stats.srange_sf against the high-precision mpmath "
+                "references in tests/data/studentized_range_reference.json (711 "
+                "points: 384 on a grid k = 3..50, df = 1..1000; 72 at df = Inf; "
+                "224 exact k = 2 values, df = 1..1e12 and Inf; the 31 Games-Howell "
+                "pairs of the fixtures). Measured max relative error 7.2e-15 for "
+                "tails >= 1e-15, 4.5e-14 down to 1e-100 and 1.4e-13 at 1e-300 "
+                "(k = 2, df = Inf), the same at SciPy 1.11 and 1.18: the rounding "
+                "of exp(log P), about |log P| x 2.2e-16, at most 1.6e-13 for any "
+                "normal double. 4e-13 leaves 2.8 times headroom."
+            ),
+        ),
+        "noncentral_cdf": Tolerance(
+            rtol=2e-11,
+            atol=0.0,
+            reason=(
+                "inferplot's noncentral t and F distribution functions (either tail) "
+                "against the mpmath references in tests/data/noncentral_reference.json "
+                "(329 t points, t = -50..500, df = 1..1e4; 192 F points), for tail "
+                "probabilities >= 1e-20. Measured max relative error: t 1.6e-14 at "
+                "SciPy 1.11 and 1.18; F 1.8e-13 at SciPy 1.18 and 2.5e-12 at SciPy "
+                "1.11, whose incomplete beta function is less accurate at df2 = 5000. "
+                "2e-11 leaves 8 times headroom over the worst."
             ),
         ),
         "ttest_bayes_factor": Tolerance(
