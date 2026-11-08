@@ -123,6 +123,12 @@ def betweenstats(
             f"ip.render.{result.analysis}(result)."
         )
     k = len(result.levels)
+    if k >= 1 and not result.values:
+        raise ValueError(
+            "This result holds no observations to draw: the copy of a result that "
+            "save() embeds in a figure file leaves them out. Recompute it with "
+            "ip.analyze.betweenstats(data, x, y, ...) and draw that."
+        )
     if not (len(result.values) == len(result.descriptives) == k and k >= 1):
         raise ValueError(
             "result is inconsistent: it needs one entry of values and descriptives "

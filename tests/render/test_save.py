@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -24,8 +25,21 @@ NAMES = ["ToothGrowth", "PlantGrowth-display-all", "ToothGrowth-greater"]
 
 
 def _same_result(embedded: str, result: StatsResult) -> None:
-    assert embedded == result.to_json(indent=None)
-    assert StatsResult.from_json(embedded).to_dict() == result.to_dict()
+    # Every number and text, without the analyzed observations (D36).
+    assert embedded == result.to_json(indent=None, include_values=False)
+    back = StatsResult.from_json(embedded)
+    assert back.values == ()
+    assert result.values
+    assert dataclasses.replace(back, values=result.values).to_dict() == result.to_dict()
+
+
+def test_a_result_read_from_a_saved_figure_cannot_be_drawn(tmp_path: Path) -> None:
+    fig = default_figure("ToothGrowth")
+    path = tmp_path / "f.svg"
+    fig.save(path)
+    back = StatsResult.from_json(svg_description(path))
+    with pytest.raises(ValueError, match="holds no observations"):
+        betweenstats(back)
 
 
 def test_metadata_keys() -> None:

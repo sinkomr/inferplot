@@ -460,11 +460,18 @@ class StatsResult(_Plain):
         """Nested dicts and lists; floats stay floats (``inf`` and ``nan`` kept)."""
         return cast("dict[str, Any]", _to_dict(self))
 
-    def to_json(self, indent: int | None = 2) -> str:
-        """Strict, ASCII-only JSON: inf as "Inf", -inf as "-Inf", nan as null."""
-        return json.dumps(
-            _encode(self), indent=indent, allow_nan=False, ensure_ascii=True
-        )
+    def to_json(self, indent: int | None = 2, *, include_values: bool = True) -> str:
+        """Strict, ASCII-only JSON: inf as "Inf", -inf as "-Inf", nan as null.
+
+        ``include_values=False`` writes ``values`` as an empty list: every number
+        and text except the analyzed observations, which can be large and are the
+        user's data. ``save()`` embeds this form in figure files; a result read
+        back from it has ``values == ()`` and cannot be drawn again.
+        """
+        encoded = _encode(self)
+        if not include_values:
+            cast("dict[str, object]", encoded)["values"] = []
+        return json.dumps(encoded, indent=indent, allow_nan=False, ensure_ascii=True)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> StatsResult:

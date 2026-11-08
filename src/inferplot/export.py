@@ -5,8 +5,9 @@
 
 Text stays editable: SVG text is written as ``<text>`` elements
 (``svg.fonttype="none"``) and PDF fonts as TrueType (``pdf.fonttype=42``). The
-result's JSON (:meth:`~inferplot.result.StatsResult.to_json`, compact) is embedded
-as the PNG text chunk "Description", the SVG metadata "Description" and the PDF
+result's JSON (:meth:`~inferplot.result.StatsResult.to_json`, compact, without the
+analyzed observations: they can be large and are the user's data) is embedded as
+the PNG text chunk "Description", the SVG metadata "Description" and the PDF
 "Subject". Output is deterministic: a fixed ``svg.hashsalt`` and no creation date,
 so saving twice gives identical bytes. These settings apply inside an
 ``rc_context`` only; global ``rcParams`` are never changed.
@@ -48,7 +49,8 @@ SAVE_RC: Final[dict[str, object]] = {
 
 
 def _metadata(fig: StatsFigure, fmt: Format) -> dict[str, str | None]:
-    payload = fig.result.to_json(indent=None)
+    # Every number and text, without the analyzed observations (DECISIONS D36).
+    payload = fig.result.to_json(indent=None, include_values=False)
     metadata: dict[str, str | None] = {METADATA_KEYS[fmt]: payload}
     if fmt == "svg":
         metadata["Date"] = None
