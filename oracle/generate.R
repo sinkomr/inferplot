@@ -77,10 +77,13 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 # Cases ---------------------------------------------------------------------------
 #
 # Each case names a dataset CSV, the R arguments (x and y are column names), and
-# optionally declared factor levels (to create empty levels). `expect_error = TRUE`
-# records a case where ggstatsplot itself is expected to fail; `expect_hidden_errors`
-# names the components (subtitle, caption) whose error ggstatsplot is expected to
-# swallow (see "Conditions ggstatsplot hides" below). Any other outcome stops the run.
+# optionally declared factor levels (to create empty levels). `expect_error` declares
+# a case where ggstatsplot itself fails: the hidden call that fails (`component`),
+# text its error message contains (`message`) and why (`reason`); the fixture then
+# records what the hidden calls returned before the failure (`partial`).
+# `expect_hidden_errors` names the components (subtitle, caption) whose error
+# ggstatsplot is expected to swallow (see "Conditions ggstatsplot hides" below). Any
+# other outcome stops the run.
 
 TYPES <- c("parametric", "nonparametric", "robust", "bayes")
 
@@ -94,7 +97,7 @@ between_cases <- function(dataset, x, y, label = dataset, types = TYPES,
       factor_levels = factor_levels,
       args = c(list(x = x, y = y, type = type), extra_args),
       columns = c("x", "y"),
-      expect_error = FALSE,
+      expect_error = NULL,
       expect_hidden_errors = character()
     )
   })
@@ -104,11 +107,13 @@ between_cases <- function(dataset, x, y, label = dataset, types = TYPES,
 # others. ggbetweenstats arguments other than x, y and type go in `extra_args`;
 # `label` names the case.
 parametric_case <- function(dataset, x, y, label = dataset, extra_args = list(),
-                            factor_levels = NULL) {
-  between_cases(
+                            factor_levels = NULL, expect_error = NULL) {
+  cases <- between_cases(
     dataset, x = x, y = y, label = label, types = "parametric",
     extra_args = extra_args, factor_levels = factor_levels
   )
+  cases[[1L]]$expect_error <- expect_error
+  cases
 }
 
 CASES <- c(
@@ -161,8 +166,23 @@ CASES <- c(
     "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-declared",
     factor_levels = list(group = c("trt2", "ctrl", "trt1"))
   ),
-  # Two values per group: Welch df between 1 and 2 per pair.
-  parametric_case("edge_n2", x = "group", y = "value"),
+  # Two values per group: every pair's Welch df lies between 1 and 2 (1.06, 1.42,
+  # 1.28). ggbetweenstats 1.1.4 fails here: R's ptukey returns NaN for df < 2, so
+  # PMCMRplus::gamesHowellTest gives NaN p-values (probe-ptukey records them), and
+  # statsExpressions' pairwise_comparisons() then stops while building its table.
+  # The subtitle, the Bayes caption and the centrality labels were computed before
+  # the failure; the fixture keeps them in `partial`.
+  parametric_case(
+    "edge_n2", x = "group", y = "value",
+    expect_error = list(
+      component = "pairwise_comparisons",
+      message = "arguments imply differing number of rows",
+      reason = paste(
+        "Welch df below 2 in every pair: ptukey returns NaN for df < 2 and",
+        "pairwise_comparisons() fails on the NaN p-values"
+      )
+    )
+  ),
   # Integer scores with heavy ties: centrality labels at exact decimals.
   parametric_case("edge_ties", x = "group", y = "score"),
   # All-negative outcome: negative means and labels.
@@ -207,7 +227,7 @@ CASES <- c(
     "mtcars", x = "cyl", y = "mpg", label = "mtcars-digits3",
     extra_args = list(digits = 3L)
   ),
-  # Which pairs get brackets, and the axis label that says so.
+  # Which pairs get brackets.
   parametric_case(
     "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-display-all",
     extra_args = list(pairwise.display = "all")
@@ -383,14 +403,18 @@ file_sha256 <- function(path) digest::digest(path, algo = "sha256", file = TRUE)
 
 HIDDEN <- new.env()
 HIDDEN$log <- list()
+# What each logged call returned (NULL after an error), in the same order. Written to
+# a fixture only when ggstatsplot fails (`partial`).
+HIDDEN$values <- list()
 
-log_hidden <- function(component, error, warnings, messages) {
+log_hidden <- function(component, error, warnings, messages, value = NULL) {
   HIDDEN$log[[length(HIDDEN$log) + 1L]] <- list(
     component = component,
     error = error,
     warnings = as.list(warnings),
     messages = as.list(messages)
   )
+  HIDDEN$values[length(HIDDEN$values) + 1L] <- list(value)
 }
 
 # Same behavior as ggstatsplot's `.eval_f`: NULL on error, warnings and messages muted.
@@ -416,12 +440,13 @@ recording_eval_f <- function(.f, ...) {
       NULL
     }
   )
-  log_hidden(".eval_f", error, warnings, messages)
+  log_hidden(".eval_f", error, warnings, messages, value)
   value
 }
 
 # Records warnings and passes them on to ggstatsplot's own suppressWarnings(). The
-# original call is evaluated as written, so non-standard evaluation is unchanged.
+# original call is evaluated as written, so non-standard evaluation is unchanged. An
+# error is logged and raised again unchanged (ggstatsplot does not catch it).
 recording_wrapper <- function(component, f) {
   # Force both now: the caller's loop variable changes before the wrapper runs.
   force(component)
@@ -430,11 +455,20 @@ recording_wrapper <- function(component, f) {
     call <- sys.call()
     call[[1L]] <- f
     warnings <- character()
-    value <- withCallingHandlers(
-      eval(call, parent.frame()),
-      warning = function(w) warnings <<- c(warnings, conditionMessage(w))
+    caller <- parent.frame()
+    value <- tryCatch(
+      withCallingHandlers(
+        eval(call, caller),
+        warning = function(w) warnings <<- c(warnings, conditionMessage(w))
+      ),
+      # Only an error that leaves the call ends up here (one handled inside it
+      # does not): log it, then raise the same condition again.
+      error = function(e) {
+        log_hidden(component, conditionMessage(e), warnings, character())
+        stop(e)
+      }
     )
-    log_hidden(component, NULL, warnings, character())
+    log_hidden(component, NULL, warnings, character(), value)
     value
   }
   formals(wrapper) <- formals(f)
@@ -803,6 +837,7 @@ run_case <- function(case) {
   env <- environment()
 
   HIDDEN$log <- list()
+  HIDDEN$values <- list()
   set.seed(CASE_SEED)
   outcome <- capture({
     plot <- eval(cl, envir = env)
@@ -833,6 +868,13 @@ run_case <- function(case) {
     analysis_levels = as.list(levels(analysis$x)),
     n_per_level = as.list(table(analysis$x)),
     error = if (failed) conditionMessage(outcome$value) else NULL,
+    expected_error = case$expect_error,
+    # What the hidden calls returned before ggstatsplot failed, one entry per call.
+    partial = if (failed) {
+      lapply(seq_along(hidden), function(i) {
+        list(component = hidden[[i]]$component, value = to_json_value(HIDDEN$values[[i]]))
+      })
+    },
     r_warnings = as.list(outcome$warnings),
     r_messages = as.list(outcome$messages),
     suppressed = hidden,
@@ -850,11 +892,30 @@ run_case <- function(case) {
 # Everything about a finished case that differs from what the case declares.
 outcome_problems <- function(case, fixture) {
   errored <- !is.null(fixture$error)
-  if (errored != isTRUE(case$expect_error)) {
+  expected <- case$expect_error
+  if (errored != !is.null(expected)) {
     return(if (errored) paste("error:", fixture$error) else "expected an error, got none")
   }
   if (errored) {
-    return(character())
+    # The declared call must be the one that failed, with the declared message, and
+    # every hidden call before it must have run.
+    out <- character()
+    if (!grepl(expected$message, fixture$error, fixed = TRUE)) {
+      out <- c(out, paste("unexpected error:", fixture$error))
+    }
+    calls <- vapply(fixture$suppressed, function(entry) entry$component, character(1L))
+    errors <- lapply(fixture$suppressed, function(entry) entry$error)
+    last <- length(calls)
+    planned <- expected_hidden_calls(case, unlist(fixture$analysis_levels))
+    if (last == 0L || calls[[last]] != expected$component || is.null(errors[[last]]) ||
+      !identical(unname(calls), planned[seq_len(min(last, length(planned)))]) ||
+      any(!vapply(errors[-last], is.null, logical(1L)))) {
+      out <- c(out, sprintf(
+        "expected %s to fail after %s; hidden calls were %s",
+        expected$component, paste(planned, collapse = ", "), paste(calls, collapse = ", ")
+      ))
+    }
+    return(out)
   }
   out <- character()
   hidden_errors <- Filter(function(entry) !is.null(entry$error), fixture$suppressed)
@@ -1015,6 +1076,8 @@ format_probe <- function() {
       i <- i + 1L
       values[[i]] <- list(
         hex = hex(x),
+        # sprintf("%a") may print -0 as 0x0p+0; this says which zero it is.
+        negative_zero = isTRUE(x == 0 && 1 / x < 0),
         digits = d,
         format_value = safe(fv(x, d)),
         to_char = tc,
