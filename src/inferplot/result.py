@@ -49,7 +49,8 @@ PARITY_TARGET: Final = "ggstatsplot 1.1.4"
 
 
 def _plain_value(value: object) -> object:
-    """Convert NumPy scalars to Python scalars and lists to tuples, recursively."""
+    """Convert NumPy scalars to Python scalars, and lists and NumPy arrays to
+    tuples, recursively."""
     if value is None or type(value) in (str, int, float, bool):
         return value
     if isinstance(value, bool):
@@ -59,6 +60,10 @@ def _plain_value(value: object) -> object:
         return tuple(_plain_value(v) for v in items)
     if dataclasses.is_dataclass(value):
         return value
+    tolist = getattr(value, "tolist", None)
+    ndim = getattr(value, "ndim", None)
+    if callable(tolist) and isinstance(ndim, int) and ndim >= 1:
+        return _plain_value(tolist())
     item = getattr(value, "item", None)
     if callable(item) and getattr(value, "ndim", None) == 0:
         return _plain_value(item())
@@ -369,7 +374,13 @@ _FRAME_COLUMNS: Final = (
 
 @dataclass(frozen=True, slots=True)
 class StatsResult(_Plain):
-    """Everything an analysis computed, as plain Python values (SPEC section 6)."""
+    """Everything an analysis computed, as plain Python values (SPEC section 6).
+
+    ``values`` holds the analyzed observations: for each entry of ``levels``, the
+    ``y`` values of the complete rows in that level, in data order, as floats. The
+    renderer draws the points, boxes and violins from them, so a result read back
+    with :meth:`from_json` draws the same figure (DECISIONS.md D36).
+    """
 
     analysis: str
     design: str
@@ -378,6 +389,7 @@ class StatsResult(_Plain):
     y: str
     subject_id: str | None
     levels: tuple[str, ...]
+    values: tuple[tuple[float, ...], ...]
     descriptives: tuple[Descriptive, ...]
     test: TestResult
     effect_size: EffectSize

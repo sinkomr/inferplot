@@ -35,6 +35,7 @@ from inferplot.result import (
 )
 from tests.oracle_fixtures import OracleCase, load_cases, number, r_level_label
 from tests.plotmath import parse
+from tests.stats.fixture_data import groups
 from tests.test_text_format import (
     all_case_params,
     case_digits,
@@ -434,6 +435,8 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
         y=str(case.args["y"]),
         subject_id=None,
         levels=levels,
+        # The analyzed observations, read from the fixture's dataset.
+        values=tuple(tuple(g.tolist()) for g in groups(case)),
         descriptives=descriptives,
         test=test,
         effect_size=effect_size,

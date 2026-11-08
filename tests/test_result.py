@@ -91,6 +91,20 @@ def test_lists_become_tuples(anova: StatsResult) -> None:
     assert result.warnings == ("w",)
 
 
+def test_numpy_arrays_become_tuples_of_floats(anova: StatsResult) -> None:
+    arrays: Any = tuple(np.asarray(v, dtype=np.float64) for v in anova.values)
+    result = dataclasses.replace(anova, values=arrays)
+    assert result.values == anova.values
+    assert all(type(v) is tuple for v in result.values)
+    assert all(type(x) is float for v in result.values for x in v)
+
+
+def test_values_hold_each_level_and_survive_json(anova: StatsResult) -> None:
+    assert len(anova.values) == len(anova.levels)
+    assert [len(v) for v in anova.values] == [d.n for d in anova.descriptives]
+    assert StatsResult.from_json(anova.to_json()).values == anova.values
+
+
 def test_results_are_frozen(anova: StatsResult) -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         anova.n_obs = 3  # type: ignore[misc]
