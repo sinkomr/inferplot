@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import cast
+import re
 
 import matplotlib
 import numpy as np
@@ -13,11 +13,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.text import Text
 
 from inferplot.render import StatsFigure, betweenstats
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
+from inferplot.render.checks import figure_issues
 from inferplot.render.theme import OKABE_ITO
 from inferplot.result import StatsResult
 from inferplot.text import figure_texts
@@ -258,34 +260,78 @@ def _given_axes(kind: str) -> Axes:
 
 @pytest.mark.parametrize("kind", ["add_axes", "constrained"])
 def test_bracket_label_drawn_across_another_bracket_is_reported(kind: str) -> None:
-    # A short Axes: the label of b-c sits on the bar of a-c.
+    # A short Axes: the label of b-c sits on the bar of a-c. (With matplotlib 3.8
+    # the label of a-b crosses that bar too; the layout differs by a pixel.)
     fig = betweenstats(_three_groups(), ax=_given_axes(kind))
     (issue,) = [i for i in fig.check() if i.code == "label_overlap"]
     assert issue.severity == "warning"
-    assert issue.message.startswith(
-        "1 bracket label crosses the line of another bracket: bracket label of "
-        "'b' and 'c' 'p_Holm-adj. = 0.02' crosses the bracket of 'a' and 'c'."
+    assert re.match(
+        r"[12] bracket labels? cross(es)? the lines? of (another bracket|other "
+        r"brackets): ",
+        issue.message,
     ), issue.message
+    assert (
+        "bracket label of 'b' and 'c' 'p_Holm-adj. = 0.02' crosses the bracket of "
+        "'a' and 'c'"
+    ) in issue.message
     assert "pairwise_display" in issue.fix
     # inferplot's own figure makes room for it.
     assert figure_codes(betweenstats(_three_groups())) == []
 
 
-def test_bracket_crossing_needs_a_line_not_its_box() -> None:
-    # In a 3.5-inch Axes the label of a-b reaches into the box the a-c bracket
-    # spans (between its legs, below its bar) without touching its line; only the
-    # label of b-c, which sits on that bar, is reported.
-    figure, (ax,) = _user_axes(10.0, 3.5)
-    fig = betweenstats(_three_groups(), ax=ax)
-    fig.draw()
-    renderer = cast("FigureCanvasAgg", figure.canvas).get_renderer()
-    (ab, ac, _) = fig.brackets
-    assert ab[0].get_window_extent(renderer).overlaps(ac[1].get_window_extent(renderer))
-    (issue,) = [i for i in fig.check() if i.code == "label_overlap"]
-    assert issue.message == (
-        "1 bracket label crosses the line of another bracket: bracket label of "
-        "'b' and 'c' 'p_Holm-adj. = 0.02' crosses the bracket of 'a' and 'c'."
+def _two_brackets(label_x: float, label_y: float) -> StatsFigure:
+    """Brackets a-b (legs 5 to 6) and a-c (legs 8 to 9) in a 320-pixel-high Axes
+    showing y from 0 to 10, with the label of a-b at (label_x, label_y)."""
+    figure = Figure(figsize=(6.0, 4.0), dpi=100)
+    FigureCanvasAgg(figure)
+    ax = figure.add_axes((0.1, 0.1, 0.8, 0.8))
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(0.0, 10.0)
+    inner = ax.add_line(Line2D([0, 0, 1, 1], [5, 6, 6, 5]))
+    outer = ax.add_line(Line2D([0, 0, 2, 2], [8, 9, 9, 8]))
+    inner_label = ax.text(label_x, label_y, "p = 0.5", ha="center", va="bottom")
+    outer_label = ax.text(1.0, 9.2, "p = 0.01", ha="center", va="bottom")
+    return StatsFigure(
+        figure=figure,
+        axes={"main": ax},
+        result=_plant(),
+        own=False,
+        roles={id(inner_label): "label a-b", id(outer_label): "label a-c"},
+        inside=(),
+        subsample=None,
+        brackets=(
+            (inner_label, inner, "bracket a-b"),
+            (outer_label, outer, "bracket a-c"),
+        ),
     )
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "in_box", "crosses"),
+    [
+        (0.5, 6.2, False, False),  # above its own bar, below the other bracket
+        (0.5, 8.1, True, False),  # inside a-c's box: between its legs, below its bar
+        (1.0, 8.75, True, True),  # across a-c's bar
+        (0.0, 8.2, True, True),  # across a-c's left leg
+        (2.0, 8.2, True, True),  # across a-c's right leg
+    ],
+)
+def test_bracket_crossing_needs_a_line_not_its_box(
+    x: float, y: float, in_box: bool, crosses: bool
+) -> None:
+    fig = _two_brackets(x, y)
+    found = [i.message for i in figure_issues(fig) if i.code == "label_overlap"]
+    (label, _, _), (_, outer, _) = fig.brackets
+    renderer = fig.figure.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+    box = label.get_window_extent(renderer)
+    assert bool(box.overlaps(outer.get_window_extent(renderer))) is in_box
+    if crosses:
+        assert found == [
+            "1 bracket label crosses the line of another bracket: label a-b crosses "
+            "bracket a-c."
+        ]
+    else:
+        assert found == []
 
 
 def test_a_tall_given_axes_fits_the_brackets() -> None:

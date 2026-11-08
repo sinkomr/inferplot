@@ -147,11 +147,15 @@ def _segments(line: Line2D, dpi: float) -> list[Bbox]:
     ]
 
 
-def _crossings(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[str]:
+def _crossings(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> list[tuple[int, str]]:
     """Bracket labels whose box crosses the bar or a leg of another bracket.
 
-    A label may sit inside the area an enclosing bracket spans (between its legs,
-    below its bar); only the drawn lines count.
+    One entry per label and bracket crossed: the label's position among the
+    brackets and the crossing in words. A label may sit inside the area an
+    enclosing bracket spans (between its legs, below its bar); only the drawn
+    lines count.
     """
     boxes = {id(text): (described, box) for text, described, box in extents}
     dpi = float(root_figure(fig.figure).dpi)
@@ -159,7 +163,7 @@ def _crossings(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[
         _segments(line, dpi) if line.get_visible() and line.axes is not None else []
         for _, line, _ in fig.brackets
     ]
-    found: list[str] = []
+    found: list[tuple[int, str]] = []
     for n, (label, _, _) in enumerate(fig.brackets):
         drawn = boxes.get(id(label))
         if drawn is None:
@@ -167,7 +171,7 @@ def _crossings(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[
         described, box = drawn
         for m, (_, _, bracket) in enumerate(fig.brackets):
             if m != n and any(_intersect(box, piece) for piece in lines[m]):
-                found.append(f"{described} crosses {bracket}")
+                found.append((n, f"{described} crosses {bracket}"))
     return found
 
 
@@ -216,12 +220,14 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
         )
         found.append(f"{len(overlaps)} {noun}: {_listing(overlaps)}")
     if crossings:
+        labels = len({n for n, _ in crossings})
         noun = (
             "bracket label crosses the line of another bracket"
-            if len(crossings) == 1
-            else "times a bracket label crosses the line of another bracket"
+            if labels == 1
+            else "bracket labels cross the lines of other brackets"
         )
-        found.append(f"{len(crossings)} {noun}: {_listing(crossings)}")
+        listed = _listing([words for _, words in crossings])
+        found.append(f"{labels} {noun}: {listed}")
     if found:
         issues.append(
             Issue(
