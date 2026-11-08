@@ -496,13 +496,17 @@ def check_probability(value: object, name: str) -> float:
     return number
 
 
-def check_positive(value: object, name: str) -> float:
-    """A finite number greater than 0, such as ``bf_prior``."""
-    number = _real(value, name, "0.707")
+def check_positive(value: object, name: str, *, example: str = "0.707") -> float:
+    """A finite number greater than 0, such as ``bf_prior`` or ``dpi``.
+
+    ``example`` is the value the error messages suggest (``bf_prior``'s default
+    unless given).
+    """
+    number = _real(value, name, example)
     if not (math.isfinite(number) and number > 0.0):
         raise ValueError(
             f"{name} must be a finite number greater than 0, for example "
-            f"{name}=0.707; got {_show(value)}."
+            f"{name}={example}; got {_show(value)}."
         )
     return number
 

@@ -104,7 +104,7 @@ def save(
             f"save() writes .svg, .pdf or .png files; got {os.fspath(path)!r}. Use "
             "one of these extensions (.svg or .pdf keep text editable)."
         )
-    dots = v.check_positive(dpi, "dpi")
+    dots = v.check_positive(dpi, "dpi", example="300")
     clear = v.check_bool(transparent, "transparent")
     _write(fig, path, FORMATS[suffix], dpi=dots, transparent=clear)
 

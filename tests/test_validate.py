@@ -699,6 +699,18 @@ def test_positive_bounds(value: float) -> None:
     )
 
 
+def test_positive_example_follows_the_argument() -> None:
+    text = message(ValueError, lambda: v.check_positive(0, "dpi", example="300"))
+    assert text == (
+        "dpi must be a finite number greater than 0, for example dpi=300; got 0."
+    )
+    text = message(TypeError, lambda: v.check_positive("300", "dpi", example="300"))
+    assert text == "dpi must be a number, for example dpi=300; got '300'."
+    # The default example is bf_prior's.
+    text = message(TypeError, lambda: v.check_positive("x", "bf_prior"))
+    assert text == "bf_prior must be a number, for example bf_prior=0.707; got 'x'."
+
+
 @pytest.mark.parametrize("value", [0, 0.0, 0.2, 0.1, math.nextafter(0.5, 0.0)])
 def test_tr_accepted(value: float) -> None:
     out = v.check_tr(value)
