@@ -28,6 +28,14 @@ BOOT_REPLICATES <- 50L
 # default, which it passes as nboot (akp.effect, t1way) or iterations
 # (rank_epsilon_squared).
 GG_RESAMPLES <- 100L
+# statsExpressions passes alpha = 1.0 - conf.level to WRS2. In floating point that is
+# 0.050000000000000044, not 0.05, which can change which bootstrap order statistic a
+# CI uses (alpha / 2 * 100 = 2.500000000000002). Candidates try both spellings.
+CONF_LEVEL <- 0.95
+ALPHAS <- list(
+  list(text = "1 - 0.95", value = 1.0 - CONF_LEVEL),
+  list(text = "0.05", value = 0.05)
+)
 
 RECORDED_PACKAGES <- c(
   "ggstatsplot", "statsExpressions", "effectsize", "parameters", "bayestestR",
@@ -257,15 +265,16 @@ statsexpressions_rows <- function(analysis) {
   data.frame(y = long[["y"]], x = long[["x"]])
 }
 
-akp_candidate <- function(analysis, eqvar) {
+akp_candidate <- function(analysis, eqvar, alpha) {
   list(
     call = sprintf(
-      "WRS2::akp.effect(y ~ x, data, EQVAR = %s, tr = 0.2, nboot = R, alpha = 0.05)", eqvar
+      "WRS2::akp.effect(y ~ x, data, EQVAR = %s, tr = 0.2, nboot = R, alpha = %s)",
+      eqvar, alpha$text
     ),
     run = function(resamples) {
       r <- WRS2::akp.effect(
         y ~ x,
-        data = analysis, EQVAR = eqvar, tr = 0.2, nboot = resamples, alpha = 0.05
+        data = analysis, EQVAR = eqvar, tr = 0.2, nboot = resamples, alpha = alpha$value
       )
       effect <- as.numeric(r$AKPeffect)
       ci <- r$AKPci
@@ -292,19 +301,30 @@ bootstrap_candidates <- function(case, analysis, subtitle_row) {
   }
   k <- nlevels(analysis$x)
   if (case$args$type == "robust" && k == 2L) {
-    return(list(akp_candidate(analysis, TRUE), akp_candidate(analysis, FALSE)))
+    # statsExpressions' own call first: EQVAR = FALSE, alpha = 1 - conf.level.
+    return(c(
+      lapply(ALPHAS, function(alpha) akp_candidate(analysis, FALSE, alpha)),
+      lapply(ALPHAS, function(alpha) akp_candidate(analysis, TRUE, alpha))
+    ))
   }
   if (case$args$type == "robust" && k > 2L) {
-    return(list(list(
-      call = "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
-      run = function(resamples) {
-        r <- WRS2::t1way(y ~ x, data = analysis, tr = 0.2, alpha = 0.05, nboot = resamples)
-        list(
-          values = c(r$effsize, r$effsize_ci),
-          raw = list(effsize = r$effsize, effsize_ci = r$effsize_ci)
-        )
-      }
-    )))
+    return(lapply(ALPHAS, function(alpha) {
+      list(
+        call = sprintf(
+          "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = %s, nboot = R)", alpha$text
+        ),
+        run = function(resamples) {
+          r <- WRS2::t1way(
+            y ~ x,
+            data = analysis, tr = 0.2, alpha = alpha$value, nboot = resamples
+          )
+          list(
+            values = c(r$effsize, r$effsize_ci),
+            raw = list(effsize = r$effsize, effsize_ci = r$effsize_ci)
+          )
+        }
+      )
+    }))
   }
   if (case$args$type == "nonparametric" && k > 2L) {
     # Match the sidedness ggstatsplot reported: an upper bound of exactly 1 means a
