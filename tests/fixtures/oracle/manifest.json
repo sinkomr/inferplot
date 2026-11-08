@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "generator": "oracle/generate.R",
+  "parity_target": "ggstatsplot 1.1.4",
+  "fixtures": {
+    "ggbetweenstats-PlantGrowth-bayes.json": "4aa471d1ed24ad21bfdcd6aa89d72a7d6cc653ad0611e9bc566bcade8afdb5ad",
+    "ggbetweenstats-PlantGrowth-nonparametric.json": "0a3d441a21dce7a4234bad4171b64262a5489cfa185ee20b2a994a9ca51bd45f",
+    "ggbetweenstats-PlantGrowth-parametric.json": "f30d523e7da79caba55bc91d2e3bcfe83afc30347340b2ca2b40fcbff1b2920d",
+    "ggbetweenstats-PlantGrowth-robust.json": "121033c7582db4d03b52ff2dc9bc8bb7efd602ab2e1027ae91f6621a70296ae6",
+    "ggbetweenstats-ToothGrowth-bayes.json": "5cf7dfa1a43d815e8bad5d12fb68440cdde16d2ded1a4d298d8a0179dcea4533",
+    "ggbetweenstats-ToothGrowth-nonparametric.json": "1d57cce3cfa0884dfd82c0c7bbccb8f7abcb56079c961bc5357580ad9d4fde80",
+    "ggbetweenstats-ToothGrowth-parametric.json": "fe64676b6b5408d9977e69d5df503d2a9e50826f606b241474c7b6ca139f7d45",
+    "ggbetweenstats-ToothGrowth-robust.json": "ac0508c5409dfee145e7c682a1639ed11b77870b026a639d10569b476495c11f",
+    "ggbetweenstats-mtcars-bayes.json": "9ff4126b5391b51bf2c047bf98e56068427269a7039eb1a0042a6757973391cd",
+    "ggbetweenstats-mtcars-nonparametric.json": "e868a11f91ec9f608cd5eb14a692cf88fd6f4117e746dd9e147fd2f21ede752b",
+    "ggbetweenstats-mtcars-parametric.json": "07ca110d6498c0d9363c5324247f27992f9e55a145d1366aff856f7fb2f4490f",
+    "ggbetweenstats-mtcars-robust.json": "f1801b049c90222d0aa19ac20c52577a9523f4b68629de3608a3c4a2bbe2c8a0"
+  }
+}

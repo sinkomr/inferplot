@@ -1,6 +1,6 @@
 # inferplot specification
 
-Status: draft 1, 2026-11-07. Parity target: **ggstatsplot 1.1.4** (CRAN, 2026-10-22).
+Status: draft 2, 2026-11-07 (Phase 0 oracle findings). Parity target: **ggstatsplot 1.1.4** (CRAN, 2026-10-22).
 When this document and the R oracle disagree, the oracle wins: fix this document and
 log the change in `DECISIONS.md`. Rows marked *(verify)* name the R function but not yet
 the exact variant (continuity correction, exact vs asymptotic p, CI method, sidedness);
@@ -151,17 +151,17 @@ a docstring):
 | type | Test (R reference) | Effect size + CI (R reference) | Centrality |
 | --- | --- | --- | --- |
 | parametric | Welch's t (`stats::t.test`, var.equal = FALSE) | Hedges' g (`effectsize::hedges_g`) *(verify pooled vs unpooled SD and CI method)* | mean |
-| nonparametric | Mann-Whitney U (`stats::wilcox.test`) *(verify exact/correct)* | rank-biserial r (`effectsize::rank_biserial`) *(verify CI)* | median |
-| robust | Yuen, 20% trim (`WRS2::yuen`) | AKP robust standardized difference (`WRS2::akp.effect`), bootstrap CI | trimmed mean |
+| nonparametric | Mann-Whitney U (`stats::wilcox.test`, R's defaults: exact p when both groups have fewer than 50 values and there are no ties, otherwise normal approximation with continuity correction; the fixture's method string omits "with continuity correction", so decide by the rule) *(verify the exact branch with a tie-free fixture)* | rank-biserial r (`effectsize::rank_biserial`) *(verify CI)* | median |
+| robust | Yuen, 20% trim (`WRS2::yuen`) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); bootstrap CI | trimmed mean |
 | bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF`) | posterior difference: v0.2 | MAP *(verify density settings)* |
 
 ### betweenstats, three or more groups
 
 | type | Omnibus | Effect size + CI | Pairwise, then `p_adjust_method` | Centrality |
 | --- | --- | --- | --- | --- |
-| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared (`effectsize::omega_squared`); oracle shows CI [0, 1], so one-sided | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top** | mean |
-| nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), bootstrap CI | Dunn (`PMCMRplus::kwAllPairsDunnTest`) | median |
-| robust | trimmed-means ANOVA (`WRS2::t1way`) | explanatory effect size (`WRS2::t1way`), bootstrap CI | `WRS2::lincon` | trimmed mean |
+| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared (`effectsize::omega_squared`); oracle shows CI [0, 1], so one-sided | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1) (1.1.1 reported abs(q)) | mean |
+| nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), one-sided percentile bootstrap CI [lower, 1] (ggstatsplot: 100 iterations) | Dunn (`PMCMRplus::kwAllPairsDunnTest`) | median |
+| robust | trimmed-means ANOVA (`WRS2::t1way`) | explanatory effect size (`WRS2::t1way`), bootstrap CI; with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon` | trimmed mean |
 | bayes | v0.2: `BayesFactor::anovaBF` | v0.2: Bayesian R squared | v0.2: `ttestBF` per pair, unadjusted | MAP |
 
 ### withinstats, two conditions
@@ -308,7 +308,10 @@ no problems.
   WRS2, BayesFactor, PMCMRplus, afex, correlation), `extract_stats()` tables, and the
   subtitle and caption expression strings.
 - For bootstrap-based CIs, the script also calls the underlying function directly with
-  at least 20,000 resamples to give a precise reference.
+  at least 20,000 resamples to give a precise reference, then 50 more times with 2,000
+  resamples to measure the Monte Carlo SD of the estimate and of each bound. When
+  several calls are plausible (`akp.effect`'s `EQVAR`), it keeps the one that
+  reproduces ggstatsplot's point estimate and records every candidate.
 - `.github/workflows/oracle.yml` (manual dispatch): `r-lib/actions/setup-r@v2` with R
   4.5, CRAN pinned to a Posit Package Manager snapshot dated on or after 2026-10-23, and
   a hard check `packageVersion("ggstatsplot") == "1.1.4"`. It uploads the JSON files as
@@ -316,13 +319,39 @@ no problems.
 - Datasets: mtcars, iris, ToothGrowth, PlantGrowth, morley, sleep, ggstatsplot's
   `bugs_long` and `Titanic_full`, plus edge cases: n = 2 per group, ties, all-negative
   outcome, empty factor level, missing values, unbalanced groups, k = 2, 3 and 5, a
-  subject missing one condition, heavy outliers.
+  subject missing one condition, heavy outliers. `oracle/export_datasets.R` writes the R
+  datasets (UTF-8, LF, quoted strings, empty field for missing, up to 15 significant
+  digits); every oracle run re-exports them and fails if a committed byte changed. The
+  edge cases are hand-written `edge_*.csv` files; an empty factor level is declared in the
+  case (`factor_levels`) because CSV cannot hold one.
+- Both sides read CSVs the same way: only empty fields are missing, and R sorts strings
+  in the C locale, so factor levels from text columns follow Python's `sorted()`.
 - plotsalot's `oracle/` (MIT) is a usable starting point; credit it in `NOTICE`.
 - Python tests load the same CSV from `oracle/datasets/`, translate the fixture's R
   arguments to inferplot keywords with one mapping table (`tests/oracle_args.py`: dots to
   underscores, R `TRUE`/`FALSE`/`NULL` to Python), run the analysis, and compare every
   number the fixture holds, using `tests/tolerances.py`. One parametrized test per
   function collects all its fixtures, so a new fixture is tested without new code.
+
+**Fixture schema (version 1).** One JSON object per case, named `<name>.json`:
+
+| Field | Content |
+| --- | --- |
+| `schema_version`, `name` | 1; `<R function>-<dataset label>-<type>` |
+| `function`, `call`, `args`, `seed` | the R function, the deparsed call, its arguments (column names as strings), the `set.seed()` value used before it |
+| `dataset` | `file`, `sha256` of the CSV R read, `rows`, declared `factor_levels` or null |
+| `analysis_levels`, `n_per_level` | group order and counts after dropping incomplete rows and empty levels |
+| `error`, `r_warnings`, `r_messages` | conditions R signalled; `error` is null unless the case expects ggstatsplot to fail |
+| `subtitle`, `caption` | deparsed plotmath from `extract_subtitle()` and `extract_caption()` |
+| `stats` | every `extract_stats()` table as an array of row objects; plotmath columns deparsed. In 1.1.4 `descriptive_data` is null |
+| `plot_layers` | the ggplot layers in order: `name`, `geom`, and the layer's own data (the centrality labels: value, n, `expression`, `n.expression`), null for layers that draw the main data |
+| `bootstrap_reference` | null, or the 20,000-resample reference described above with `candidates`, `raw` output, ggstatsplot's own values, and `replicates` (mean and SD of estimate and bounds) |
+| `versions` | R version, platform, OS, collation, repositories, package versions |
+
+Numbers carry 15 significant digits; R's NA is null; NaN, Inf and -Inf are the strings
+`"NaN"`, `"Inf"`, `"-Inf"`. `manifest.json` holds the SHA-256 of every fixture. The
+loader (`tests/oracle_fixtures.py`) refuses a fixture whose own hash or whose dataset's
+hash differs, so hand edits and dataset drift fail the tests.
 
 ## 10. Tolerances
 
