@@ -35,6 +35,7 @@ from tests.oracle_fixtures import (
     DATASET_DIR,
     OracleCase,
     cases_for,
+    fixture_paths,
     r_level_label,
     read_dataset,
     require_cases,
@@ -42,6 +43,11 @@ from tests.oracle_fixtures import (
 
 BACKENDS = ("pandas", "polars", "pyarrow")
 CASES = require_cases(cases_for("ggbetweenstats"), "ggbetweenstats")
+# Cases where ggstatsplot itself failed (declared in the fixture): the data were read
+# and counted all the same, so their levels and counts are checked too.
+FAILED = require_cases(
+    cases_for("ggbetweenstats", failed=True), "ggbetweenstats (failed in R)"
+)
 
 
 def make(backend: str, columns: dict[str, Any]) -> Any:
@@ -67,25 +73,51 @@ def _csv_missing(case: OracleCase) -> tuple[int, int, int]:
     return mx, my, either
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("case", CASES, ids=[c.name for c in CASES])
-def test_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
+def _check_levels_and_counts(case: OracleCase, backend: str) -> Any:
     frame = read_dataset(case, backend)  # type: ignore[arg-type]
-    out = read_between(frame, str(case.args["x"]), str(case.args["y"]))
+    x = str(case.args["x"])
+    out = read_between(frame, x, str(case.args["y"]))
     assert out.levels == case.analysis_levels
     assert out.counts() == case.n_per_level
     mx, my, either = _csv_missing(case)
     assert (out.n_missing_x, out.n_missing_y, out.n_dropped) == (mx, my, either)
     assert out.n_obs + out.n_dropped == case.raw["dataset"]["rows"]
-    assert out.empty_levels == ()
-    assert out.level_source == "sorted"  # no fixture declares factor levels
+    declared = case.factor_levels.get(x)
+    if declared is None:
+        assert out.level_source == "sorted"
+        assert out.empty_levels == ()
+    else:
+        # Declared levels keep their order; a declared level without rows is
+        # dropped from the analysis and reported (edge_empty_level).
+        assert out.level_source == "declared"
+        assert out.empty_levels == tuple(
+            level for level in declared if level not in case.analysis_levels
+        )
+        assert out.levels == tuple(
+            level for level in declared if level in case.analysis_levels
+        )
+    return out
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("case", FAILED, ids=[c.name for c in FAILED])
+def test_failed_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
+    assert case.expected_error is not None
+    _check_levels_and_counts(case, backend)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("case", CASES, ids=[c.name for c in CASES])
+def test_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
+    out = _check_levels_and_counts(case, backend)
     # ggstatsplot's own centrality label layer: its level order, n, SD, min and max.
     (labels,) = case.layer_data("GeomLabelRepel")
     x = str(case.args["x"])
     assert tuple(str(row[x]) for row in labels) == out.levels
     for row, level, values in zip(labels, out.levels, out.values, strict=True):
         assert row["n.obs"] == values.size
-        assert row["n.expression"] == f"{level}\n(n = {values.size})"
+        # statsExpressions' .prettyNum: a comma every three digits from 1,000 on.
+        assert row["n.expression"] == f"{level}\n(n = {values.size:,})"
         assert row["min"] == values.min()
         assert row["max"] == values.max()
         if "std.dev" in row:  # the bayes label layer has none
@@ -100,8 +132,11 @@ def test_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
 
 
 def test_fixture_selection_is_complete() -> None:
-    assert len(CASES) == 45
-    assert sum(c.type == "parametric" for c in CASES) == 13
+    # Every ggbetweenstats fixture is read above: completed ones with ggstatsplot's
+    # label layer, failed ones for their levels and counts.
+    names = {p.stem for p in fixture_paths() if p.stem.startswith("ggbetweenstats-")}
+    assert {c.name for c in CASES} | {c.name for c in FAILED} == names
+    assert not {c.name for c in CASES} & {c.name for c in FAILED}
 
 
 # --- what data may be --------------------------------------------------------------
