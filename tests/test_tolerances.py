@@ -23,6 +23,8 @@ EXPECTED_KINDS = {
     "games_howell_p",
     "wrs2_p",
     "noncentral_ci",
+    "noncentral_cdf",
+    "studentized_range_tail",
     "ttest_bayes_factor",
 }
 
@@ -40,13 +42,17 @@ def test_every_entry_is_bounded_and_explained(kind: str) -> None:
 
 
 def test_spec_values() -> None:
-    # SPEC.md section 10 starting values; a change needs a measured reason. Both rtol
-    # and atol are pinned: a nonzero atol would make every small p-value "close".
+    # SPEC.md section 10 values; a change needs a measured reason. Both rtol and
+    # atol are pinned: a nonzero atol would make every small p-value "close".
+    # noncentral_ci's atol, noncentral_cdf and studentized_range_tail were
+    # measured in Phase 1.
     expected = {
         "closed_form": (1e-10, 0.0),
         "games_howell_p": (1e-6, 3e-9),
         "wrs2_p": (1e-10, 2.0**-53),
-        "noncentral_ci": (1e-6, 0.0),
+        "noncentral_ci": (1e-6, 4e-8),
+        "noncentral_cdf": (2e-11, 0.0),
+        "studentized_range_tail": (4e-13, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),
     }
     for kind, (rtol, atol) in expected.items():
