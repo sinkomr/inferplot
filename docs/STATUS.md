@@ -14,19 +14,23 @@ Current phase: **1 — betweenstats, parametric, end to end** (Phase 0 done 2026
 - [x] `tests/tolerances.py` and a fixture loader; `tools/reference/stats_reference.py` checks run in CI
 
 Phase 0 notes: fixtures come from oracle run 42462799705 (R 4.5.3, ggstatsplot
-1.1.4, statsExpressions 2.2.1, Posit snapshot 2026-10-23): 45 ggbetweenstats cases, all
-four types on ten datasets plus one-sided alternatives on ToothGrowth. In every fixture
-`tests/test_reference_vs_oracle.py` independently reproduces each test statistic, df and
-p-value, omnibus and pairwise; Hedges' g and the rank-biserial r with their CIs; partial
-omega squared; and every JZS Bayes factor (two-group subtitles, parametric captions,
-pairs). Games-Howell p-values match only to R's ptukey precision (open below). Not
-reproduced: the Bayes ANOVA caption and posterior estimates (v0.2), and the
-bootstrapped effect sizes, whose method is proved instead by replay: for all 18
-bootstrapped effect-size CIs the oracle reproduces ggstatsplot's own 100-resample
-values exactly, so the 20,000-resample references use the same method. The centrality
-labels' bootstrap CIs, which ggstatsplot computes but never shows, are not replayed.
-Both end-of-phase reviews' findings are fixed or listed below; oracle findings that
-changed SPEC.md are logged in DECISIONS.md.
+1.1.4, statsExpressions 2.2.1, Posit snapshot 2026-10-23): 45 ggbetweenstats cases,
+namely all four types on ten dataset and variable pairs from eight CSV files (40),
+one-sided alternatives on ToothGrowth (4) and mtcars `am` x `drat` (parametric). In
+every fixture `tests/test_reference_vs_oracle.py` independently reproduces each test
+statistic, df and p-value, omnibus and pairwise; Hedges' g and the rank-biserial r with
+their CIs; the partial omega squared estimate; and every JZS Bayes factor (two-group
+subtitles, parametric captions, pairs). Games-Howell p-values match only to R's ptukey
+precision (open below). Not reproduced: the partial omega squared CI (Phase 1 parity),
+the Bayes ANOVA (the caption of a parametric test with three or more groups and the
+subtitle of the bayes type) and posterior estimates (v0.2), and the bootstrapped effect
+sizes, whose method is proved instead by replay: for all 17 bootstrapped effect-size
+CIs (3 AKP, 7 t1way, 7 rank epsilon squared) the oracle reproduces ggstatsplot's own
+100-resample values exactly, so the 20,000-resample references use the same method.
+The centrality labels' bootstrap CIs, which ggstatsplot computes but never shows, are
+not replayed. Both end-of-phase reviews' findings are fixed or listed below, and a
+third, fresh-context review confirmed the fixes; oracle findings that changed SPEC.md
+are logged in DECISIONS.md.
 
 ## Phase 1 — betweenstats, parametric, end to end
 
@@ -68,30 +72,43 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 
 - **Open: Games-Howell p in the far tail.** R's ptukey, which PMCMRplus uses, is off
   by up to about 5e-10 absolute there (2.5e-9 after Holm), and ggstatsplot prints
-  those values: the iris setosa-versicolor bracket reads p = 1.41e-09 where the exact
-  value is 1.9e-14 (`edge_k5`, iris and mtcars disp differ from SciPy's exact
+  those values: the iris setosa-versicolor bracket reads p = 1.41e-09 where the true
+  value is about 2.2e-14 (`edge_k5`, iris and mtcars disp differ from SciPy's
   studentized range by more than the registered 1e-6). `games_howell_p` stays
   inferplot's requirement, so before Phase 1's Games-Howell slice either reproduce
   ptukey's numerics (the algorithm R documents, Copenhaver & Holland 1988) or log a
-  deliberate difference in SPEC §5.
+  deliberate difference in SPEC §5. SciPy's `studentized_range.sf` is no ground truth
+  in the far tail either (1.9e-14 for that pair, 14% low; it can return 0): a
+  deliberate difference would need a stable tail computation.
 - The generator handles ggbetweenstats only: `between_analysis`,
   `statsexpressions_rows` (`paired = FALSE`) and `bootstrap_candidates` stop on any
   other function. Each one needs its own bookkeeping (complete subjects for
   withinstats via `statsExpressions::complete_subjects`, one sample for histostats)
   and bootstrap replay (withinstats: `kendalls_w`, `dep.effect`, `wmcpAKP`; histostats
-  robust: `trimcibt`) before its cases are added. Unused edge CSVs: `edge_n2`,
+  robust: `trimcibt`) before its cases are added, and so do `name_hidden`, the caption
+  rule in `outcome_problems` and `label_counts`, which assume ggbetweenstats (barstats
+  computes its pairwise tests through the same hidden helper, and `.chisq_test_safe`
+  swallows errors into NA rows the recorders cannot see). A case that declares a
+  swallowed subtitle (`expect_hidden_errors`) would still get a bootstrap reference;
+  skip it in `run_case` with the first such case. Unused edge CSVs: `edge_n2`,
   `edge_ties`, `edge_negative`, `edge_empty_level`, `edge_missing`, `edge_outliers`,
   `edge_within_missing`.
 - Phase 1: the default caption of a two-group parametric test is the JZS Bayes factor
   (SPEC §7, D28), which the checklist lists under Phase 2. Implement it in Phase 1 or
   check caption parity in Phase 2.
-- Phase 1: Hedges' g CI bounds agree with a tight SciPy inversion to 7.5e-7 relative,
-  but that is 1.6e-8 absolute on a bound near 0; set `noncentral_ci` from the
-  implementation's own measurement and consider an absolute part for bounds near 0.
-- Phase 2: compute WRS2's p-values as R does, 1 - cdf (`wrs2_p`), or they differ by up
-  to 3.2e-6 relative for tiny p. lincon's critical values need the published
-  Studentized maximum modulus table (C = 3 at df 5 is 3.39, not the rounded 3.40); no
-  fixture has a Yuen df above 200 or alpha other than 0.05.
+- Phase 1: Hedges' g CI bounds agree with a tight SciPy inversion to 7.5e-7 relative
+  and up to 1.9e-8 absolute; set `noncentral_ci` from the implementation's own
+  measurement and add an absolute part before a fixture has a bound near 0.
+- Phase 2: compute WRS2's p-values as R does, 1 - cdf (`wrs2_p`; the statistics rule
+  has an exception for it). Every fixture's p is large enough that `sf` passes too, so
+  add a robust case whose p underflows (for example iris Petal.Length) to pin how
+  ggstatsplot prints a p of 0 or one rounded on the double grid; and a two-group robust
+  case with tiny p to confirm Yuen's 1 - pt. lincon's critical values need the
+  published Studentized maximum modulus table (C = 3 at df 5 is 3.39, not the rounded
+  3.40); no fixture has a Yuen df above 200 or alpha other than 0.05.
+- Phases 3 and 4: `ttest_bayes_factor` was measured on two-sample Bayes factors only;
+  measure paired and one-sample ones against an exact integral when their fixtures
+  arrive, and log any change.
 - AKP: WRS2's scaling constant differs from the exact winsorized-normal value by
   1.2e-9 relative (review measurement), which is above the 1e-10 closed-form tolerance.
   Phase 2 must match WRS2's constant or register a measured tolerance.

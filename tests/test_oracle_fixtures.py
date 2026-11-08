@@ -73,36 +73,42 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     assert versions["packages"]["ggstatsplot"] == PARITY_VERSION
     assert versions["R"].startswith("4.5.")
     assert case.error is None, case.error
-    assert case.subtitle, "ggstatsplot drew no subtitle"
 
     # What ggstatsplot hid (SPEC.md section 9), one entry per hidden call in call
-    # order; no call swallowed an error unless the case says so. ggstatsplot's
-    # bf.condition draws the Bayes caption only for type "parametric".
+    # order. ggstatsplot computes the centrality labels whether or not it draws
+    # them, and its bf.condition draws the Bayes caption only for "parametric".
     with_caption = case.type == "parametric" and case.args.get("bf.message", True)
     expected_calls = ["subtitle"]
     if with_caption:
         expected_calls.append("caption")
-    if case.args.get("centrality.plotting", True):
-        expected_calls.append("centrality_description")
+    expected_calls.append("centrality_description")
     if (
         len(case.analysis_levels) > 2
         and case.args.get("pairwise.display", "significant") != "none"
     ):
         expected_calls.append("pairwise_comparisons")
     assert [entry["component"] for entry in case.suppressed] == expected_calls
+    # No call swallowed an error unless the case declares it; a declared component
+    # is missing from the output, and the checks that need it do not apply.
     swallowed = {
         entry["component"]: entry["error"]
         for entry in case.suppressed
         if entry["error"] is not None
     }
-    assert set(swallowed) == set(case.expected_hidden_errors), swallowed
-    if with_caption:
+    declared = set(case.expected_hidden_errors)
+    assert set(swallowed) == declared, swallowed
+    if with_caption and "caption" not in declared:
         assert case.caption, "no Bayes caption"
         assert case.caption_data is not None, "no caption_data"
     else:
         assert case.caption is None
         assert case.caption_data is None
+    if "subtitle" in declared:
+        assert case.subtitle is None
+        assert case.subtitle_rows == []
+        return
 
+    assert case.subtitle, "ggstatsplot drew no subtitle"
     rows = case.subtitle_rows
     assert rows, "no subtitle_data"
     if case.type == "bayes":
@@ -120,6 +126,23 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     assert call.function == "betweenstats"
     assert call.args == (case.args["x"], case.args["y"])
     assert call.kwargs["type"] == case.type
+
+
+def test_lookups_of_unknown_names_fail_loudly() -> None:
+    # A misspelled table or geom must not pass as an empty one (SPEC.md section 9).
+    case = next(c for c in load_cases() if c.name == "ggbetweenstats-mtcars-parametric")
+    assert len(case.pairwise) == 3
+    assert case.descriptive == []  # R gave NULL: empty, not an error
+    with pytest.raises(KeyError, match="pairwise_comparison_data"):
+        case.table("pairwise_comparison_data")
+    with pytest.raises(KeyError, match="GeomLabelRepell"):
+        case.layer_data("GeomLabelRepel" + "l")
+    with pytest.raises(KeyError, match="recorded only for"):
+        case.layer_params("GeomPoint")
+    assert len(case.layer_params("GeomSignif")) == 1
+    assert case.layer_data("GeomViolin") == []  # draws the plot's own data
+    # Two point layers: the raw points (plot data) and the centrality points.
+    assert len(case.layer_data("GeomPoint")) == 1
 
 
 def _levels_and_counts(frame: Any, x: str, y: str) -> tuple[list[str], dict[str, int]]:

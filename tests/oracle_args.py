@@ -63,8 +63,8 @@ KEYWORDS: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Argument values spelled differently in inferplot. Vector arguments (JSON arrays,
-# such as ``ratio``) pass through unchanged.
+# Argument values spelled differently in inferplot. A vector argument (a JSON array,
+# such as ``ratio``) is translated element by element.
 VALUES: Mapping[str, Mapping[Any, Any]] = MappingProxyType(
     {"alternative": MappingProxyType({"two.sided": "two-sided"})}
 )
@@ -94,8 +94,14 @@ def translate(r_function: str, r_args: Mapping[str, Any]) -> InferplotCall:
     for r_name, value in r_args.items():
         if r_name in positional:
             continue
-        spellings = VALUES.get(r_name)
-        if spellings is not None and isinstance(value, Hashable):
-            value = spellings.get(value, value)
-        kwargs[KEYWORDS[r_name]] = value
+        kwargs[KEYWORDS[r_name]] = _respell(VALUES.get(r_name, {}), value)
     return InferplotCall(function=FUNCTIONS[r_function], args=args, kwargs=kwargs)
+
+
+def _respell(spellings: Mapping[Any, Any], value: Any) -> Any:
+    """``value`` in inferplot's spelling; lists element by element."""
+    if isinstance(value, list):
+        return [_respell(spellings, item) for item in value]
+    if isinstance(value, Hashable):
+        return spellings.get(value, value)
+    return value

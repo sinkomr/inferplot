@@ -189,27 +189,31 @@ class OracleCase:
     @property
     def plot_layers(self) -> list[Row]:
         """Each ggplot layer's geom and its own data (null when it uses the plot's)."""
-        layers = self.raw.get("plot_layers")
-        return [] if layers is None else list(layers)
+        layers = self.raw["plot_layers"]
+        if layers is None:
+            raise ValueError(f"{self.name}: ggstatsplot failed ({self.error})")
+        return list(layers)
 
     def layer_params(self, geom: str) -> list[Mapping[str, Any]]:
-        """Parameters (``stat``, ``geom``, ``aes``) of layers drawn with ``geom``.
+        """Parameters (``stat``, ``geom``, ``aes``) of the layers drawn with ``geom``.
 
-        Empty when this plot has no such layer; a geom no fixture draws raises
-        ``KeyError``.
+        The generator records parameters only for the significance brackets
+        (``GeomSignif``); any other geom raises ``KeyError``. Empty when this plot
+        draws no brackets.
         """
-        _check_geom(geom)
-        return [
-            layer["params"]
-            for layer in self.plot_layers
-            if layer["geom"] == geom and layer.get("params")
-        ]
+        if geom not in PARAMETER_GEOMS:
+            raise KeyError(
+                f"layer parameters are recorded only for {sorted(PARAMETER_GEOMS)}, "
+                f"not {geom!r}"
+            )
+        return [layer["params"] for layer in self.plot_layers if layer["geom"] == geom]
 
     def layer_data(self, geom: str) -> list[list[Row]]:
-        """Own data of every layer drawn with ``geom``, e.g. ``"GeomLabelRepel"``.
+        """Own data of the layers drawn with ``geom``, e.g. ``"GeomLabelRepel"``.
 
-        Empty when this plot has no such layer; a geom no fixture draws raises
-        ``KeyError``.
+        Layers that draw the plot's main data (points, boxes, violins) have no data
+        of their own and are left out, so the result is empty for them and when this
+        plot has no such layer. A geom no fixture draws raises ``KeyError``.
         """
         _check_geom(geom)
         return [
@@ -305,11 +309,17 @@ def load_cases() -> tuple[OracleCase, ...]:
     return tuple(cases)
 
 
+# Geoms whose layer parameters generate.R records (the drawn pairs and labels).
+PARAMETER_GEOMS = frozenset({"GeomSignif"})
+
+
 @functools.cache
 def known_geoms() -> frozenset[str]:
-    """Every geom drawn by some fixture's plot."""
+    """Every geom drawn by some fixture's plot (cases where R failed have none)."""
     return frozenset(
-        str(layer["geom"]) for case in load_cases() for layer in case.plot_layers
+        str(layer["geom"])
+        for case in load_cases()
+        for layer in case.raw["plot_layers"] or []
     )
 
 

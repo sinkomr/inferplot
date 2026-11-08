@@ -16,7 +16,7 @@ Two groups (alternative two-sided, greater or less):
 
 Three or more groups:
     parametric     Welch ANOVA, partial omega squared, Games-Howell then Holm
-                   (reference; p against the exact distribution, see ptukey_vs_exact)
+                   (reference; p against SciPy's studentized range, ptukey_vs_scipy)
     nonparametric  Kruskal-Wallis (SciPy); Dunn then Holm (inline, Dunn 1964)
     robust         trimmed-means ANOVA (reference t1way); lincon pairwise Yuen tests
                    then Holm, with the Studentized maximum modulus CI (inline)
@@ -88,8 +88,9 @@ def _value(row: Row, column: str) -> float:
 def _r_upper_tail(p: float) -> float:
     """An upper-tail probability as R gets it from ``1 - cdf``.
 
-    WRS2 computes the p-values of yuen, t1way and lincon as 1 - pt or 1 - pf, so they
-    are the exact tail rounded to the spacing of doubles just below 1 (2**-53).
+    WRS2 computes the p-values of t1way and lincon (and presumably yuen) as 1 - pt or
+    1 - pf, so they are the tail rounded to the spacing of doubles just below 1
+    (2**-53).
     """
     return 1.0 - (1.0 - p)
 
@@ -215,10 +216,10 @@ def test_welch_anova_omega_and_games_howell(case: OracleCase) -> None:
         assert pair["test"] == "Games-Howell"
         assert pair["p.adjust.method"] == "Holm"
         assert_close("closed_form", q, number(pair["statistic"]), what=f"{what} q")
-        # The reference uses SciPy's exact studentized range; R's ptukey has its
-        # own absolute error in the far tail (ptukey_vs_exact, STATUS.md).
+        # The reference uses SciPy's studentized range; R's ptukey has its own
+        # absolute error in the far tail (ptukey_vs_scipy, STATUS.md).
         assert_close(
-            "ptukey_vs_exact", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
+            "ptukey_vs_scipy", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
         )
 
 
@@ -293,7 +294,7 @@ def test_yuen(case: OracleCase) -> None:
         assert _value(row, "estimate") < 0, "the effect size keeps its sign"
     assert_close("closed_form", df, _value(row, "df.error"), what="Yuen df")
     p = 2 * _r_upper_tail(float(stats.t.sf(abs(t), df)))
-    assert_close("wrs2_p", p, _value(row, "p.value"), what="Yuen p")
+    assert_close("wrs2_p", p, _value(row, "p.value"), what="Yuen p", atol_scale=2)
 
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=False))
@@ -500,8 +501,14 @@ def test_lincon_holm(case: OracleCase) -> None:
         assert_close(
             "closed_form", estimate, _value(row, "estimate"), what=f"{what} estimate"
         )
+        # Two-sided, then Holm over the pairs: one grid step of a one-sided tail
+        # can become 2 x pairs steps here (wrs2_p).
         assert_close(
-            "wrs2_p", adjusted[(g1, g2)], _value(row, "p.value"), what=f"{what} Holm p"
+            "wrs2_p",
+            adjusted[(g1, g2)],
+            _value(row, "p.value"),
+            what=f"{what} Holm p",
+            atol_scale=2 * len(pairs),
         )
         assert_close(
             "closed_form",

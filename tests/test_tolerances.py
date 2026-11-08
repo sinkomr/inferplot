@@ -21,7 +21,7 @@ from tests.tolerances import (
 EXPECTED_KINDS = {
     "closed_form",
     "games_howell_p",
-    "ptukey_vs_exact",
+    "ptukey_vs_scipy",
     "wrs2_p",
     "noncentral_ci",
     "ttest_bayes_factor",
@@ -46,8 +46,8 @@ def test_spec_values() -> None:
     expected = {
         "closed_form": (1e-10, 0.0),
         "games_howell_p": (1e-6, 0.0),
-        "ptukey_vs_exact": (1e-6, 3e-9),
-        "wrs2_p": (1e-10, 2.0**-52),
+        "ptukey_vs_scipy": (1e-6, 3e-9),
+        "wrs2_p": (1e-10, 2.0**-53),
         "noncentral_ci": (1e-6, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),
     }
@@ -91,6 +91,17 @@ def test_absolute_boundary(kind: str) -> None:
     atol = TOLERANCES[kind].atol
     assert is_close(kind, atol / 2, 0.0)
     assert not is_close(kind, atol * 2, 0.0)
+
+
+def test_atol_scale_widens_only_the_absolute_part() -> None:
+    step = TOLERANCES["wrs2_p"].atol
+    # A two-sided Holm-adjusted p over 3 pairs: one grid step of the one-sided tail
+    # becomes 6 steps of the compared value.
+    assert not is_close("wrs2_p", 5.0 * step, 0.0)
+    assert is_close("wrs2_p", 5.0 * step, 0.0, atol_scale=6.0)
+    assert not is_close("wrs2_p", 7.0 * step, 0.0, atol_scale=6.0)
+    with pytest.raises(ValueError, match="atol_scale"):
+        is_close("wrs2_p", 0.0, 0.0, atol_scale=0.5)
 
 
 def test_special_values() -> None:

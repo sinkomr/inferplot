@@ -3,19 +3,22 @@ name: Fixture provenance
 # Checks that the committed oracle fixtures are what oracle.yml produced from the
 # committed generator:
 # 1. tests/fixtures/oracle/manifest.json carries a build-provenance attestation signed
-#    by .github/workflows/oracle.yml in this repository, at the commit the manifest
-#    names, by the run it names. A hand-edited or re-hashed manifest has none, and a
-#    fork's pull request cannot sign one.
+#    by .github/workflows/oracle.yml in this repository, as that file stood at the
+#    commit the manifest names (the signer's own commit is pinned too, so a copy
+#    called from another ref does not count), by the run the manifest names. A
+#    hand-edited or re-hashed manifest has none, and a fork's pull request cannot
+#    sign one.
 # 2. That commit is in this branch's history, and its generator files
 #    (oracle/generate.R, oracle/export_datasets.R, oracle.yml) equal the committed
-#    ones, so the fixtures are what the committed generator writes.
+#    ones, so the fixtures are what the committed generator writes. A branch that
+#    carries new fixtures must therefore land with a merge commit or a fast-forward:
+#    a squash or rebase merge drops the oracle's commit from main's history.
 # tests/oracle_fixtures.py then ties every fixture, every dataset a fixture read and
 # every generator file to the SHA-256 values in the manifest, on every CI run.
-# Attestations do not expire, so this check runs on every push.
+# Attestations do not expire, so this check runs on every push to any branch.
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -53,6 +56,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/oracle.yml" \
             --source-digest "$commit" \
+            --signer-digest "$commit" \
             --deny-self-hosted-runners \
             --format json > "$RUNNER_TEMP/attestation.json"
           python3 -I - "$RUNNER_TEMP/attestation.json" "$run_id" <<'PY'
@@ -77,7 +81,13 @@ jobs:
               sys.exit(f"attested by run(s) {sorted(runs)}, not run {sys.argv[2]}")
           PY
 
-          git merge-base --is-ancestor "$commit" HEAD
-          git diff --exit-code --stat "$commit" HEAD -- \
-            oracle/generate.R oracle/export_datasets.R .github/workflows/oracle.yml
+          if ! git merge-base --is-ancestor "$commit" HEAD; then
+            echo "::error::oracle run $run_id's commit $commit is not in this branch's history. A squash or rebase merge drops it: land fixture branches with a merge commit or a fast-forward, or run oracle.yml on this branch and commit its fixtures."
+            exit 1
+          fi
+          if ! git diff --exit-code --stat "$commit" HEAD -- \
+            oracle/generate.R oracle/export_datasets.R .github/workflows/oracle.yml; then
+            echo "::error::the generator changed since oracle run $run_id ($commit): run oracle.yml on this branch and commit its fixtures."
+            exit 1
+          fi
           echo "manifest.json is attested by oracle.yml run $run_id at $commit, which is in this branch's history with the committed generator."

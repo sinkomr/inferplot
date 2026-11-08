@@ -4,8 +4,9 @@ Every oracle comparison names one entry here. Change an entry only with a measur
 reason written into it, and never loosen one to get a pass (CLAUDE.md rule 2): find
 out why the numbers differ instead.
 
-Closeness is ``|actual - expected| <= atol + rtol * |expected|``, with the oracle
-value as ``expected``. Equal infinities and two NaNs count as equal.
+Closeness is ``|actual - expected| <= atol * atol_scale + rtol * |expected|``, with
+the oracle value as ``expected``; ``atol_scale`` is 1 unless an entry's reason says
+how to scale its absolute part. Equal infinities and two NaNs count as equal.
 """
 
 from __future__ import annotations
@@ -68,32 +69,37 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "SciPy's studentized_range agree to 2.8e-7 relative away from the far "
                 "upper tail (PlantGrowth and mtcars fixtures; 2.6e-7 on plotsalot's "
                 "m3-between), but ptukey's own absolute error reaches about 5e-10 in "
-                "the tail (see ptukey_vs_exact), so meeting this entry there means "
+                "the tail (see ptukey_vs_scipy), so meeting this entry there means "
                 "reproducing ptukey (STATUS.md)."
             ),
         ),
-        "ptukey_vs_exact": Tolerance(
+        "ptukey_vs_scipy": Tolerance(
             rtol=1e-6,
             atol=3e-9,
             reason=(
                 "Cross-check only: R's ptukey (PMCMRplus::gamesHowellTest) against "
-                "the exact studentized range (SciPy). ptukey's upper tail has "
-                "absolute error up to about 5e-10; after Holm the fixtures differ by "
-                "up to 2.5e-9 absolute (edge_k5 a-e: 2.34134e-5 vs exact 2.34158e-5; "
-                "iris setosa-versicolor: 1.41e-9 vs exact 1.9e-14). Never used for "
+                "SciPy's studentized_range. ptukey's upper tail has absolute error up "
+                "to about 5e-10; after Holm the fixtures differ by up to 2.5e-9 "
+                "absolute (edge_k5 a-e: 2.34134e-5 vs SciPy 2.34158e-5; iris "
+                "setosa-versicolor: 1.41e-9 where a high-precision integral gives "
+                "about 2.2e-14). SciPy's own far tail is not exact either (errors of "
+                "order 1e-14 below 1e-13), far inside this entry. Never used for "
                 "inferplot's own numbers."
             ),
         ),
         "wrs2_p": Tolerance(
             rtol=1e-10,
-            atol=2.0**-52,
+            atol=2.0**-53,
             reason=(
-                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way, lincon): "
-                "the upper tail rounded to the spacing of doubles just below 1 "
-                "(2**-53). Rounding SciPy's exact tail the same way, 1 - (1 - sf), "
-                "matches every fixture to 2.4e-11 relative except iris t1way, where "
-                "R's tail rounds to the neighbouring grid point (1.1e-16 absolute, "
-                "1.6e-6 relative). The absolute part is two grid steps."
+                "p-values WRS2 computes as 1 - pt or 1 - pf (t1way and lincon in the "
+                "fixtures; yuen presumably too): the one-sided tail rounded to the "
+                "spacing of doubles just below 1 (2**-53). Rounding SciPy's tail the "
+                "same way, 1 - (1 - sf), matches every fixture to 2.4e-11 relative "
+                "except iris t1way, where R's tail lands on the neighbouring grid "
+                "point: one step, 1.1e-16 absolute (1.6e-6 relative). The absolute "
+                "part is that one step of the one-sided tail; pass atol_scale = the "
+                "factor applied to the tail afterwards (2 for a two-sided p, times "
+                "the number of pairs for a Holm-adjusted p)."
             ),
         ),
         "noncentral_ci": Tolerance(
@@ -102,8 +108,11 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             reason=(
                 "Starting value from SPEC.md section 10 for CIs found by inverting "
                 "noncentral t, F or chi-square distributions (R root-finding "
-                "precision). Replace with a measured value when the first such CI "
-                "is implemented."
+                "precision). Measured so far: Hedges' g bounds in the 6 two-group "
+                "parametric fixtures agree with a tight SciPy inversion to 7.5e-7 "
+                "relative; R's error is about 1e-8 absolute on every bound (up to "
+                "1.9e-8), so a bound near 0 will need an absolute part. Replace with "
+                "the implementation's own measurement in Phase 1."
             ),
         ),
         "ttest_bayes_factor": Tolerance(
@@ -111,13 +120,15 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             atol=0.0,
             reason=(
                 "JZS Bayes factors of t tests (BayesFactor::ttestBF, one-dimensional "
-                "quadrature). tools/reference reproduces all 35 distinct two-sample "
-                "values in the 45 ggstatsplot 1.1.4 fixtures to at most 1.5e-9 "
-                "relative (iris setosa-virginica, BF10 2.2e6). A prior scale of "
-                "sqrt(2)/2 instead of 0.707 moves them by 3.8e-6 or more, and "
-                "Welch's t instead of Student's moves every unbalanced pair by "
-                "1.5e-4 or more (bugs_long, 92 against 91), so both fail. Other Bayes "
-                "factor families need their own measured entry."
+                "quadrature), measured on two-sample values only: tools/reference "
+                "reproduces all 35 distinct ones in the 45 ggstatsplot 1.1.4 "
+                "fixtures to at most 1.5e-9 relative (iris setosa-virginica, BF10 "
+                "2.2e6), and that residual is BayesFactor's own integration error. "
+                "A prior scale of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or "
+                "more, and Welch's t instead of Student's moves every unbalanced "
+                "pair by 1.5e-4 or more (bugs_long, 92 against 91), so both fail. "
+                "Measure paired and one-sample values when their fixtures arrive; "
+                "other Bayes factor families need their own entry."
             ),
         ),
     }
@@ -155,18 +166,29 @@ def _equal_special(actual: float, expected: float) -> bool | None:
     return None
 
 
-def is_close(kind: str, actual: float, expected: float) -> bool:
+def is_close(
+    kind: str, actual: float, expected: float, *, atol_scale: float = 1.0
+) -> bool:
     """Whether ``actual`` matches the oracle value ``expected`` under ``kind``."""
+    if not atol_scale >= 1.0:
+        raise ValueError(f"atol_scale must be at least 1, got {atol_scale!r}")
     tol = TOLERANCES[kind]
     special = _equal_special(actual, expected)
     if special is not None:
         return special
-    return abs(actual - expected) <= tol.atol + tol.rtol * abs(expected)
+    return abs(actual - expected) <= tol.atol * atol_scale + tol.rtol * abs(expected)
 
 
-def assert_close(kind: str, actual: float, expected: float, *, what: str) -> None:
+def assert_close(
+    kind: str,
+    actual: float,
+    expected: float,
+    *,
+    what: str,
+    atol_scale: float = 1.0,
+) -> None:
     """Assert closeness under the registered tolerance ``kind``."""
-    if is_close(kind, actual, expected):
+    if is_close(kind, actual, expected, atol_scale=atol_scale):
         return
     tol = TOLERANCES[kind]
     diff = abs(actual - expected)
@@ -178,7 +200,7 @@ def assert_close(kind: str, actual: float, expected: float, *, what: str) -> Non
     raise AssertionError(
         f"{what}: got {actual!r}, oracle {expected!r} "
         f"(abs diff {diff:.3g}, rel diff {rel:.3g}; "
-        f"tolerance {kind}: rtol={tol.rtol:g}, atol={tol.atol:g})"
+        f"tolerance {kind}: rtol={tol.rtol:g}, atol={tol.atol:g} x {atol_scale:g})"
     )
 
 
