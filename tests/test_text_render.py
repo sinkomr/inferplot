@@ -16,27 +16,18 @@ import functools
 import html
 import io
 import re
-import warnings
 
+import matplotlib as mpl
 import pytest
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.backends.backend_svg import FigureCanvasSVG
+from matplotlib.figure import Figure
 
-# matplotlib 3.8 (the D22 floor) uses pyparsing's camelCase names (parseString,
-# resetCache, endQuoteChar, ...), which pyparsing 3.3 deprecates; lowest-direct
-# resolution pairs the two. These warnings are about matplotlib's own code, not
-# inferplot's, so only they are ignored, by pyparsing's message pattern.
-_MPL38_PYPARSING = r"'[A-Za-z]+' (argument is )?deprecated"
-warnings.filterwarnings("ignore", message=_MPL38_PYPARSING)
-pytestmark = pytest.mark.filterwarnings(f"ignore:{_MPL38_PYPARSING}")
-
-import matplotlib as mpl  # noqa: E402
-from matplotlib.backends.backend_agg import FigureCanvasAgg  # noqa: E402
-from matplotlib.backends.backend_svg import FigureCanvasSVG  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
-
-from inferplot import text as tx  # noqa: E402
-from tests.oracle_fixtures import load_cases  # noqa: E402
-from tests.plotmath import expected_glyphs, parse  # noqa: E402
-from tests.test_text_expressions import checked_expressions, v01_caption  # noqa: E402
+from inferplot import text as tx
+from tests.oracle_fixtures import load_cases
+from tests.plotmath import expected_glyphs, parse
+from tests.test_text_expressions import checked_expressions, v01_caption
+from tests.test_text_format import centrality_rows
 
 # matplotlib 3.11 writes one <tspan x=".." y=".." style=".."> per glyph; 3.8 writes
 # runs of same-style glyphs as <tspan style=".." x="x1 x2 .." y="..">run</tspan>.
@@ -109,10 +100,8 @@ def render_items() -> tuple[
             caption = v01_caption(case)
             if caption is not None:
                 sources.setdefault(f"[v0.1 caption] {case.name}", caption)
-        for layer in case.plot_layers:
-            for row in layer["data"] or []:
-                if "n.expression" in row:
-                    ticks.add(str(row["n.expression"]))
+        for _, row in centrality_rows(case):
+            ticks.add(str(row["n.expression"]))
     symbols: list[tx.Node] = [
         *tx.STATISTIC_SYMBOLS.values(),
         *tx.EFFECT_SIZE_SYMBOLS.values(),

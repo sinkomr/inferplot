@@ -105,6 +105,46 @@ def test_values_hold_each_level_and_survive_json(anova: StatsResult) -> None:
     assert StatsResult.from_json(anova.to_json()).values == anova.values
 
 
+@pytest.mark.parametrize(
+    "values",
+    [
+        ((1, 2, 3), (4, 5)),
+        [[1, 2, 3], [4, 5]],
+        (np.array([1, 2, 3], dtype=np.int64), np.array([4, 5], dtype=np.int32)),
+        (np.array([1.0, 2.0, 3.0]), (np.int64(4), np.float32(5.0))),
+    ],
+    ids=["int tuples", "int lists", "int arrays", "mixed scalars"],
+)
+def test_values_are_floats_whatever_the_input(anova: StatsResult, values: Any) -> None:
+    """Integer data still gives floats, so the JSON writes 1.0 and reads back equal
+    and of the same types."""
+    result = dataclasses.replace(anova, values=values)
+    assert result.values == ((1.0, 2.0, 3.0), (4.0, 5.0))
+    assert all(type(x) is float for v in result.values for x in v)
+    assert json.loads(result.to_json())["values"] == [[1.0, 2.0, 3.0], [4.0, 5.0]]
+    assert '"values": [\n    [\n      1.0,' in result.to_json()
+    back = StatsResult.from_json(result.to_json())
+    assert back == result
+    assert all(type(x) is float for v in back.values for x in v)
+    assert result.to_dict()["values"] == [[1.0, 2.0, 3.0], [4.0, 5.0]]
+
+
+def test_float_fields_become_floats_and_reject_bools(anova: StatsResult) -> None:
+    d = Descriptive(level="a", n=3, centrality="mean", value=cast_any(2))
+    assert type(d.value) is float
+    pair = anova.pairwise[0]
+    assert type(dataclasses.replace(pair, df=cast_any(7)).df) is float
+    assert dataclasses.replace(pair, df=None).df is None
+    with pytest.raises(TypeError, match=r"Descriptive\.value must be a number"):
+        Descriptive(level="a", n=3, centrality="mean", value=cast_any(True))
+    with pytest.raises(TypeError, match=r"StatsResult\.values must be a number"):
+        dataclasses.replace(anova, values=((1.0, cast_any(False)),))
+
+
+def cast_any(value: object) -> Any:
+    return value
+
+
 def test_results_are_frozen(anova: StatsResult) -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         anova.n_obs = 3  # type: ignore[misc]
@@ -339,6 +379,27 @@ def test_str_with_pairs(anova: StatsResult) -> None:
         "no",
     ]
     assert len(lines) == 4 + len(anova.pairwise)
+
+
+@pytest.mark.parametrize(
+    ("method", "heading"),
+    [
+        ("holm", "p (Holm)"),
+        ("hochberg", "p (Hochberg)"),
+        ("hommel", "p (Hommel)"),
+        ("bonferroni", "p (Bonferroni)"),
+        ("BH", "p (Benjamini-Hochberg)"),
+        ("fdr", "p (Benjamini-Hochberg)"),
+        ("BY", "p (Benjamini-Yekutieli)"),
+        ("none", "p (unadj.)"),
+    ],
+)
+def test_str_names_the_adjustment(
+    anova: StatsResult, method: str, heading: str
+) -> None:
+    settings = dataclasses.replace(anova.settings, p_adjust_method=method)
+    header = str(dataclasses.replace(anova, settings=settings)).splitlines()[3]
+    assert f"  {heading}  " in header
 
 
 def test_texts_match_builders(anova: StatsResult) -> None:

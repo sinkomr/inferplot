@@ -141,7 +141,18 @@ addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 # A parametrization that selects no fixtures is an error, not a silent skip.
 empty_parameter_set_mark = "fail_at_collect"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # matplotlib 3.8 (the D22 floor) calls pyparsing's camelCase API, which pyparsing
+    # 3.3 deprecates with PyparsingDeprecationWarning (a DeprecationWarning). Ignored
+    # only where Python attributes them: matplotlib's two parser modules, and
+    # pyparsing's own wrapper for the one deprecated argument matplotlib passes. A
+    # deprecation that inferplot or a test triggers is attributed to that caller and
+    # still fails. Built-in category only, so no import is needed at startup.
+    'ignore::DeprecationWarning:matplotlib\._mathtext\Z',
+    'ignore::DeprecationWarning:matplotlib\._fontconfig_pattern\Z',
+    "ignore:'parseAll' argument is deprecated:DeprecationWarning:pyparsing\\.util\\Z",
+]
 markers = [
     "slow: takes more than 5 seconds; simulation tests always carry it",
 ]

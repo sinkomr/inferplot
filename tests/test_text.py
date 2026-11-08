@@ -18,7 +18,7 @@ from inferplot.result import (
 )
 from tests.oracle_fixtures import OracleCase, load_cases
 from tests.plotmath import parse
-from tests.test_text_expressions import result_from_fixture
+from tests.test_text_expressions import ADJUSTED, result_from_fixture
 
 
 def _case(name: str) -> OracleCase:
@@ -338,6 +338,33 @@ def test_tick_label_is_plain_text() -> None:
             "Welch's t-test: t(18.33) = -3.77, p = .001, Hedges' g = -1.35, "
             "95% CI [-2.17, -0.51], n = 32.",
         ),
+        (
+            "ToothGrowth-cl90-parametric",
+            "Welch's t-test: t(55.31) = 1.92, p = .061, Hedges' g = 0.49, "
+            "90% CI [0.06, 0.91], n = 60.",
+        ),
+        (
+            "PlantGrowth-cl90-parametric",
+            "Welch's ANOVA: F(2, 17.13) = 5.18, p = .017, partial omega squared = "
+            ".29, 90% CI [.04, 1.00], n = 30.",
+        ),
+        (
+            "edge_large_n-parametric",
+            "Welch's ANOVA: F(2, 2372.96) = 16.51, p < .001, partial omega squared = "
+            ".01, 95% CI [.01, 1.00], n = 3,600.",
+        ),
+        # results.subtitle FALSE: no subtitle table, so result_from_fixture computes
+        # these numbers with inferplot.stats; they read as their siblings' above.
+        (
+            "ToothGrowth-nosubtitle-parametric",
+            "Welch's t-test: t(55.31) = 1.92, p = .061, Hedges' g = 0.49, "
+            "95% CI [-0.02, 0.99], n = 60.",
+        ),
+        (
+            "PlantGrowth-nosubtitle-parametric",
+            "Welch's ANOVA: F(2, 17.13) = 5.18, p = .017, partial omega squared = "
+            ".29, 95% CI [.00, 1.00], n = 30.",
+        ),
     ],
 )
 def test_apa_sentence_from_fixtures(name: str, apa: str) -> None:
@@ -433,16 +460,6 @@ def test_apa_numbers() -> None:
 # caption lines for every pairwise_display and p_adjust_method
 # --------------------------------------------------------------------------- #
 
-ADJUSTED = {
-    "holm": "Games-Howell, Holm adjusted",
-    "hochberg": "Games-Howell, Hochberg adjusted",
-    "hommel": "Games-Howell, Hommel adjusted",
-    "bonferroni": "Games-Howell, Bonferroni adjusted",
-    "BH": "Games-Howell, Benjamini-Hochberg adjusted",
-    "fdr": "Games-Howell, Benjamini-Hochberg adjusted",
-    "BY": "Games-Howell, Benjamini-Yekutieli adjusted",
-    "none": "Games-Howell, unadjusted",
-}
 DISPLAY_TAIL = {
     "significant": "showing 1 of 3 pairs (significant only).",
     "non-significant": "showing 2 of 3 pairs (non-significant only).",
@@ -539,6 +556,35 @@ def test_no_subtitle_and_no_bayes_line_without_results_subtitle() -> None:
     assert fig.caption_lines == ()
 
 
+@pytest.mark.parametrize("bf_message", [None, True, False])
+def test_bf_message_false_never_draws_the_bayes_line(bf_message: bool | None) -> None:
+    """ggstatsplot's bf.message = FALSE (fixture ToothGrowth-nobf) drops the caption,
+    even when a result carries a Bayes factor."""
+    base = result_from_fixture(_case("ToothGrowth-parametric"))
+    assert base.bayes is not None
+    settings = dataclasses.replace(base.settings, bf_message=bf_message)
+    texts = tx.build_texts(
+        x=base.x,
+        y=base.y,
+        descriptives=base.descriptives,
+        test=base.test,
+        effect_size=base.effect_size,
+        bayes=base.bayes,
+        pairwise=base.pairwise,
+        n_obs=base.n_obs,
+        settings=settings,
+    )
+    fig = tx.figure_texts(dataclasses.replace(base, settings=settings, text=texts))
+    if bf_message is False:
+        assert texts.caption is None
+        assert fig.caption_lines == ()
+    else:
+        assert texts.caption == base.text.caption
+        assert texts.caption == "log_e(BF_01) = -0.18, r_Cauchy^JZS = 0.71"
+        assert len(fig.caption_lines) == 1
+    assert texts.subtitle == base.text.subtitle
+
+
 def test_digits_three() -> None:
     base = result_from_fixture(_case("PlantGrowth-parametric"))
     settings = dataclasses.replace(base.settings, digits=3)
@@ -572,7 +618,7 @@ def test_alt_text_on_every_parametric_fixture() -> None:
         assert result.x in alt
         assert result.text.apa in alt
         for d in result.descriptives:
-            assert f"{d.level} (n = {d.n}, mean " in alt
+            assert f"{d.level} (n = {tx.format_n(d.n)}, mean " in alt
         if result.pairwise:
             significant = sum(p.significant for p in result.pairwise)
             assert f"{significant} of {len(result.pairwise)} pairwise" in alt
