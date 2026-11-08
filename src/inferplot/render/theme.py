@@ -1,0 +1,171 @@
+"""inferplot's look: palette, fonts, sizes and the rcParams used while drawing.
+
+The look is ours (DECISIONS.md D19); only the content is ggstatsplot's. Global
+``rcParams`` are never changed: :func:`context` applies matplotlib's defaults plus
+:data:`RC` inside ``matplotlib.style.context`` (an ``rc_context``), so a user's
+global style cannot leak into an inferplot figure.
+"""
+
+from __future__ import annotations
+
+import difflib
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+from typing import Final, cast
+
+import matplotlib
+import matplotlib.colors as mcolors
+import matplotlib.style
+from matplotlib.font_manager import FontProperties
+
+__all__ = [
+    "FONT_FAMILY",
+    "MATH_FONT_FAMILY",
+    "OKABE_ITO",
+    "RC",
+    "Color",
+    "context",
+    "font",
+    "resolve_palette",
+]
+
+Color = tuple[float, float, float, float]
+
+# The font every text uses; DejaVu Sans ships with matplotlib, so every machine
+# renders the same glyphs.
+FONT_FAMILY: Final = "DejaVu Sans"
+MATH_FONT_FAMILY: Final = "dejavusans"
+
+# Okabe & Ito (2008), "Color Universal Design": orange, sky blue, bluish green,
+# yellow, blue, vermillion, reddish purple, black (black last so that up to seven
+# levels never get it).
+OKABE_ITO: Final = (
+    "#E69F00",
+    "#56B4E9",
+    "#009E73",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+    "#CC79A7",
+    "#000000",
+)
+MANY_LEVELS_COLORMAP: Final = "tab20"
+
+INK: Final = "#222222"
+SOFT_INK: Final = "#4D4D4D"
+CENTRALITY_COLOR: Final = "#8B0000"  # ggstatsplot's "darkred" centrality point
+
+RC: Final[dict[str, object]] = {
+    "font.family": FONT_FAMILY,
+    "mathtext.fontset": MATH_FONT_FAMILY,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "axes.edgecolor": SOFT_INK,
+    "axes.labelcolor": INK,
+    "axes.linewidth": 0.8,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.grid": True,
+    "axes.grid.axis": "y",
+    "axes.axisbelow": True,
+    "grid.color": "#E6E6E6",
+    "grid.linewidth": 0.7,
+    "xtick.color": SOFT_INK,
+    "ytick.color": SOFT_INK,
+    "xtick.labelcolor": INK,
+    "ytick.labelcolor": INK,
+    "text.color": INK,
+    "text.usetex": False,
+}
+
+# Font sizes in points.
+SIZE_TITLE: Final = 13.0
+SIZE_SUBTITLE: Final = 10.5
+SIZE_CAPTION: Final = 9.0
+SIZE_AXIS_LABEL: Final = 11.0
+SIZE_TICK: Final = 10.0
+SIZE_LABEL: Final = 9.0  # centrality and bracket labels
+
+
+@contextmanager
+def context() -> Generator[None]:
+    """matplotlib's defaults plus :data:`RC`, restored on exit."""
+    with matplotlib.style.context(["default", RC]):
+        yield
+
+
+def font(size: float, *, weight: str = "normal") -> FontProperties:
+    """DejaVu Sans at ``size`` points, with DejaVu Sans for mathtext too."""
+    return FontProperties(
+        family=FONT_FAMILY, size=size, weight=weight, math_fontfamily=MATH_FONT_FAMILY
+    )
+
+
+def _rgba(color: object, where: str) -> Color:
+    try:
+        return cast("Color", tuple(float(c) for c in mcolors.to_rgba(color)))  # pyright: ignore[reportArgumentType]
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"palette contains {color!r} at {where}, which is not a matplotlib color; "
+            "use names such as 'tab:blue' or hex strings such as '#0072B2'."
+        ) from None
+
+
+def _colormap_colors(name: str, k: int) -> list[Color]:
+    try:
+        cmap = matplotlib.colormaps[name]
+    except KeyError:
+        close = difflib.get_close_matches(name, list(matplotlib.colormaps), n=1)
+        hint = f" Did you mean {close[0]!r}?" if close else ""
+        raise ValueError(
+            f"palette={name!r} is not a matplotlib colormap name. Pass a colormap "
+            f"name such as 'viridis' or 'Set2', or a list of colors such as "
+            f"['#E69F00', '#56B4E9'].{hint}"
+        ) from None
+    if isinstance(cmap, mcolors.ListedColormap) and cmap.N < 64:
+        # A qualitative colormap: use its colors in order.
+        if k > cmap.N:
+            raise ValueError(
+                f"palette={name!r} has {cmap.N} colors but the plot has {k} levels; "
+                "choose a colormap with more colors or pass a list of colors."
+            )
+        return [_rgba(cmap(i), f"index {i}") for i in range(k)]
+    # A continuous colormap: k evenly spaced colors.
+    if k == 1:
+        return [_rgba(cmap(0.5), "0.5")]
+    return [_rgba(cmap(i / (k - 1)), f"{i / (k - 1):.3f}") for i in range(k)]
+
+
+def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
+    """``k`` colors for ``palette`` and a warning when the default had to change.
+
+    ``palette`` is None (Okabe-Ito; more than 8 levels use ``tab20``), a matplotlib
+    colormap name, or a sequence of at least ``k`` matplotlib colors.
+    """
+    if palette is None:
+        if k <= len(OKABE_ITO):
+            return [_rgba(c, f"index {i}") for i, c in enumerate(OKABE_ITO[:k])], None
+        cmap = matplotlib.colormaps[MANY_LEVELS_COLORMAP]
+        colors = [_rgba(cmap(i % cmap.N), f"index {i}") for i in range(k)]
+        repeat = f"; with more than {cmap.N} levels colors repeat" if k > cmap.N else ""
+        warning = (
+            f"The plot has {k} levels, more than the {len(OKABE_ITO)} colors of the "
+            f"default Okabe-Ito palette, so its colors come from matplotlib's "
+            f"'{MANY_LEVELS_COLORMAP}' colormap{repeat}. Pass palette= to choose "
+            "your own colors."
+        )
+        return colors, warning
+    if isinstance(palette, str):
+        return _colormap_colors(palette, k), None
+    if isinstance(palette, Sequence):
+        items = list(cast("Sequence[object]", palette))
+        if len(items) < k:
+            raise ValueError(
+                f"palette has {len(items)} colors but the plot has {k} levels; pass "
+                f"at least {k} colors, or a colormap name such as 'viridis'."
+            )
+        return [_rgba(c, f"index {i}") for i, c in enumerate(items[:k])], None
+    raise TypeError(
+        "palette must be None, a matplotlib colormap name or a list of colors; got "
+        f"{type(palette).__name__}."
+    )
