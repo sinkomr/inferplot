@@ -103,6 +103,44 @@ def test_centrality_labels_are_recorded(case: OracleCase) -> None:
     )
     rows = labelled[0]
     assert [str(r[case.args["x"]]) for r in rows] == list(case.analysis_levels)
+    # ggstatsplot's own n per group agrees with the counts generate.R recorded.
+    assert {str(r[case.args["x"]]): int(r["n.obs"]) for r in rows} == case.n_per_level
+
+
+@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
+def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
+    # SPEC.md section 4: brackets exist only for three or more groups; by default
+    # they mark the pairs whose adjusted p is strictly below 0.05, and every pair
+    # for type "bayes". Each label is the pair's expression from the pairwise table.
+    brackets = case.layer_params("GeomSignif")
+    if len(case.analysis_levels) == 2:
+        assert brackets == []
+        return
+    rows = case.pairwise
+    shown = (
+        rows
+        if case.type == "bayes"
+        else [r for r in rows if number(r["p.value"]) < 0.05]
+    )
+    expected = {
+        (str(r["group1"]), str(r["group2"])): str(r["expression"]) for r in shown
+    }
+    if not expected:
+        assert brackets == []
+        return
+    assert len(brackets) == 1
+    stat = brackets[0]["stat"]
+    annotations = stat["annotations"]
+    if isinstance(annotations, str):  # R writes a single label as a scalar
+        annotations = [annotations]
+    drawn = dict(
+        zip(
+            (tuple(map(str, pair)) for pair in stat["comparisons"]),
+            annotations,
+            strict=True,
+        )
+    )
+    assert drawn == expected
 
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -119,24 +157,23 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     assert ref["resamples"] >= 20000
     reps = ref["replicates"]
     assert reps["resamples"] == 2000
-    gg_estimate = number(ref["ggstatsplot"]["estimate"])
-    if number(reps["estimate_sd"]) == 0.0:
-        # Deterministic point estimate: the reference call must reproduce it exactly,
-        # which shows it is the same method and variant ggstatsplot ran.
-        assert ref["estimate_matches_ggstatsplot"], (
-            f"{ref['call']} gives {ref['estimate']}, ggstatsplot {gg_estimate}; "
-            f"candidates tried: {ref['candidates']}"
-        )
-    else:
-        # The point estimate itself is random (t1way's explanatory measure subsamples
-        # unequal groups), so ggstatsplot's draw must lie in the replicate spread.
-        assert_within_monte_carlo(
-            gg_estimate,
-            number(reps["estimate_mean"]),
-            number(reps["estimate_sd"]),
-            what=f"{case.name} ggstatsplot estimate",
-        )
+    # The oracle replayed ggstatsplot's own bootstrap (set.seed, then the same call
+    # with the same 100 resamples on the same rows) and reproduced its estimate and
+    # both CI bounds exactly. That proves the reference call is the method, variant,
+    # sidedness and alpha ggstatsplot used, which a tolerance check could not.
+    assert ref["replay"]["matches"], (
+        f"no candidate call reproduces ggstatsplot {ref['ggstatsplot']}: "
+        f"{ref['replay']['candidates']}"
+    )
+    assert ref["ggstatsplot"]["resamples"] == 100
+    estimate = number(ref["estimate"])
     low, high = number(ref["conf_low"]), number(ref["conf_high"])
-    assert low <= number(ref["estimate"]) <= high
-    assert number(reps["conf_low_sd"]) >= 0.0
-    assert number(reps["conf_high_sd"]) >= 0.0
+    assert low <= estimate <= high
+    # The 20,000-resample reference lies within the spread of 2,000-resample runs.
+    for key in ("estimate", "conf_low", "conf_high"):
+        assert_within_monte_carlo(
+            number(ref[key]),
+            number(reps[f"{key}_mean"]),
+            number(reps[f"{key}_sd"]),
+            what=f"{case.name} reference {key}",
+        )

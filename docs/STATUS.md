@@ -13,12 +13,15 @@ Current phase: **1 — betweenstats, parametric, end to end** (Phase 0 done 2026
 - [x] `oracle/` with `generate.R` and datasets; `.github/workflows/oracle.yml`; first fixtures (ggbetweenstats, all types, three datasets) committed under `tests/fixtures/oracle/`
 - [x] `tests/tolerances.py` and a fixture loader; `tools/reference/stats_reference.py` checks run in CI
 
-Phase 0 notes: fixtures come from oracle run 42446767391 (R 4.5.3, ggstatsplot 1.1.4,
-statsExpressions 2.2.1, Posit snapshot 2026-10-23). `tests/test_reference_vs_oracle.py`
-reproduces every ggbetweenstats test statistic, df and p-value in them with
-`tools/reference` or SciPy (Bayes ANOVA excepted, v0.2). Oracle findings that changed
-SPEC.md are logged in DECISIONS.md (AKP variant, signed Games-Howell q, Mann-Whitney
-correction, bootstrap details, centrality labels from plot layers).
+Phase 0 notes: fixtures come from oracle run 42452307942 (R 4.5.3, ggstatsplot
+1.1.4, statsExpressions 2.2.1, Posit snapshot 2026-10-23). `tests/test_reference_vs_oracle.py`
+reproduces every omnibus and pairwise test statistic, df and p-value in them with
+`tools/reference`, SciPy or an inline implementation (Dunn, lincon), plus partial omega
+squared, except the Bayes ANOVA, which is v0.2. For every bootstrap CI the oracle
+replays ggstatsplot's own bootstrap exactly, which proves the 20,000-resample reference
+uses the same method. The end-of-phase review found no high-severity problem; its
+findings are fixed or listed below. Oracle findings that changed SPEC.md are logged in
+DECISIONS.md.
 
 ## Phase 1 — betweenstats, parametric, end to end
 
@@ -62,9 +65,19 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 - Fixtures cover ggbetweenstats on ToothGrowth, PlantGrowth and mtcars only. Add
   edge-case and other-function cases to `oracle/generate.R` in the phase that needs
   them; the edge-case CSVs are already committed.
-- Mann-Whitney's exact branch (no ties, both n < 50) is not yet covered by a fixture.
-- MAP centrality (Bayes) is recorded, but the density grid behind the "one grid step"
-  tolerance is not; settle it in Phase 2.
+- Phase 1: the default caption of a two-group parametric test is the JZS Bayes factor
+  (SPEC §7, D28), which the checklist lists under Phase 2. Implement it in Phase 1 or
+  check caption parity in Phase 2.
+- lincon's CI critical value: the 3-group fixtures cannot tell whether its C counts
+  pairs or groups. Add a fixture with 4+ groups (`edge_k5.csv`) before Phase 2's robust
+  slice.
+- AKP: WRS2's scaling constant differs from the exact winsorized-normal value by
+  1.2e-9 relative (review measurement), which is above the 1e-10 closed-form tolerance.
+  Phase 2 must match WRS2's constant or register a measured tolerance.
+- Mann-Whitney is never exact in ggbetweenstats (`exact = FALSE` in statsExpressions'
+  source); a tie-free fixture would confirm it from the oracle itself.
+- MAP centrality: the oracle records the values; the grid behind SPEC §10's "one grid
+  step" tolerance is bayestestR's 2^10-point density (help page), to confirm in Phase 2.
 - ggstatsplot's own bootstrap CIs use 100 resamples, so they differ from the 20,000-
   resample references by Monte Carlo noise; parity tests compare against the
-  references (SPEC.md section 10), not against ggstatsplot's 100-resample values.
+  references (SPEC §10, D29), not against ggstatsplot's 100-resample values.

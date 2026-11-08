@@ -55,17 +55,23 @@
     {
       "name": "geom_point",
       "geom": "GeomPoint",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_boxplot",
       "geom": "GeomBoxplot",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_violin",
       "geom": "GeomViolin",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_point...4",
@@ -103,7 +109,9 @@
           "expression": "list(widehat(mu)[trimmed] == \"16.58\")",
           "n.expression": "VC\n(n = 30)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_label_repel",
@@ -141,25 +149,64 @@
           "expression": "list(widehat(mu)[trimmed] == \"16.58\")",
           "n.expression": "VC\n(n = 30)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     }
   ],
   "bootstrap_reference": {
     "quantity": "effect size confidence interval",
-    "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 0.05)",
-    "candidates": [
-      {
-        "call": "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 0.05)",
-        "estimate": 0.639261658700388,
-        "matches": false
-      },
-      {
-        "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 0.05)",
-        "estimate": 0.682722711362298,
-        "matches": true
-      }
-    ],
+    "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
     "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 0.682722711362298,
+      "conf_low": 0.130400819378828,
+      "conf_high": 1.79961240555356,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+          "values": [
+            0.682722711362298,
+            0.130400819378828,
+            1.79961240555356
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 0.05)",
+          "values": [
+            0.682722711362298,
+            0.130400819378828,
+            1.79961240555356
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+          "values": [
+            0.639261658700388,
+            0.131249397913724,
+            1.17687172307018
+          ],
+          "matches": false
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 0.05)",
+          "values": [
+            0.639261658700388,
+            0.131249397913724,
+            1.17687172307018
+          ],
+          "matches": false
+        }
+      ]
+    },
     "seed": 1,
     "resamples": 20000,
     "estimate": 0.682722711362298,
@@ -170,13 +217,6 @@
       "AKPci": [0.0358831402078578, 2.11837115166514],
       "AKPci_dim": null
     },
-    "ggstatsplot": {
-      "estimate": 0.682722711362298,
-      "conf_low": 0.130400819378828,
-      "conf_high": 1.79961240555356,
-      "resamples": null
-    },
-    "estimate_matches_ggstatsplot": true,
     "replicates": {
       "count": 50,
       "resamples": 2000,
@@ -195,6 +235,11 @@
     "platform": "x86_64-pc-linux-gnu",
     "os": "Ubuntu 24.04.5 LTS",
     "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
     "repos": {
       "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
       "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"

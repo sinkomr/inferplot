@@ -95,17 +95,23 @@
     {
       "name": "geom_point",
       "geom": "GeomPoint",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_boxplot",
       "geom": "GeomBoxplot",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_violin",
       "geom": "GeomViolin",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_point...4",
@@ -159,7 +165,9 @@
           "expression": "list(widehat(mu)[trimmed] == \"5.46\")",
           "n.expression": "trt2\n(n = 10)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_label_repel",
@@ -213,25 +221,151 @@
           "expression": "list(widehat(mu)[trimmed] == \"5.46\")",
           "n.expression": "trt2\n(n = 10)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_signif",
       "geom": "GeomSignif",
-      "data": null
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["trt1", "trt2"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": "list(italic(p)[\"Holm\" - adj.] == \"7.09e-03\")",
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.107996323529412,
+          "step_increase": 0.075,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 6.57655,
+          "yend": 6.60375,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.09e-03\")",
+          "group": "trt1-trt2-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 3,
+          "y": 6.60375,
+          "yend": 6.60375,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.09e-03\")",
+          "group": "trt1-trt2-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 6.60375,
+          "yend": 6.57655,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.09e-03\")",
+          "group": "trt1-trt2-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
     }
   ],
   "bootstrap_reference": {
     "quantity": "effect size confidence interval",
-    "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
-    "candidates": [
-      {
-        "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
-        "estimate": 0.669475297193573,
-        "matches": true
-      }
-    ],
+    "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
     "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 0.669475297193573,
+      "conf_low": 0.375140523541642,
+      "conf_high": 0.980121530983618,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+          "values": [
+            0.669475297193573,
+            0.375140523541642,
+            0.980121530983618
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
+          "values": [
+            0.669475297193573,
+            0.289700863181327,
+            0.998728724871765
+          ],
+          "matches": false
+        }
+      ]
+    },
     "seed": 1,
     "resamples": 20000,
     "estimate": 0.669475297193573,
@@ -241,13 +375,6 @@
       "effsize": 0.669475297193573,
       "effsize_ci": [0.278997521379238, 0.984848134271564]
     },
-    "ggstatsplot": {
-      "estimate": 0.669475297193573,
-      "conf_low": 0.375140523541642,
-      "conf_high": 0.980121530983618,
-      "resamples": null
-    },
-    "estimate_matches_ggstatsplot": true,
     "replicates": {
       "count": 50,
       "resamples": 2000,
@@ -266,6 +393,11 @@
     "platform": "x86_64-pc-linux-gnu",
     "os": "Ubuntu 24.04.5 LTS",
     "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
     "repos": {
       "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
       "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"

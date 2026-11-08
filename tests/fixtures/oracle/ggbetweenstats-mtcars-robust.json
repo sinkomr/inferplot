@@ -95,17 +95,23 @@
     {
       "name": "geom_point",
       "geom": "GeomPoint",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_boxplot",
       "geom": "GeomBoxplot",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_violin",
       "geom": "GeomViolin",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_point...4",
@@ -159,7 +165,9 @@
           "expression": "list(widehat(mu)[trimmed] == \"15.27\")",
           "n.expression": "8\n(n = 14)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_label_repel",
@@ -213,25 +221,285 @@
           "expression": "list(widehat(mu)[trimmed] == \"15.27\")",
           "n.expression": "8\n(n = 14)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_signif",
       "geom": "GeomSignif",
-      "data": null
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["4", "6"],
+            ["4", "8"],
+            ["6", "8"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": ["list(italic(p)[\"Holm\" - adj.] == \"7.81e-03\")", "list(italic(p)[\"Holm\" - adj.] == \"1.17e-03\")", "list(italic(p)[\"Holm\" - adj.] == \"1.67e-03\")"],
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.086063829787234,
+          "step_increase": 0.075,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 35.6875,
+          "yend": 35.9225,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.81e-03\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 2,
+          "y": 35.9225,
+          "yend": 35.9225,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.81e-03\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 35.9225,
+          "yend": 35.6875,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"7.81e-03\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 37.45,
+          "yend": 37.685,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.17e-03\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 3,
+          "y": 37.685,
+          "yend": 37.685,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.17e-03\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 37.685,
+          "yend": 37.45,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.17e-03\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 39.2125,
+          "yend": 39.4475,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.67e-03\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 3,
+          "y": 39.4475,
+          "yend": 39.4475,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.67e-03\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 39.4475,
+          "yend": 39.2125,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.67e-03\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
     }
   ],
   "bootstrap_reference": {
     "quantity": "effect size confidence interval",
-    "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
-    "candidates": [
-      {
-        "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
-        "estimate": 1.09694795282875,
-        "matches": false
-      }
-    ],
+    "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
     "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 1.10557052035146,
+      "conf_low": 0.844358670020794,
+      "conf_high": 1.48406225453642,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+          "values": [
+            1.10557052035146,
+            0.844358670020794,
+            1.48406225453642
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
+          "values": [
+            1.10557052035146,
+            0.825340384936963,
+            1.54530671146412
+          ],
+          "matches": false
+        }
+      ]
+    },
     "seed": 1,
     "resamples": 20000,
     "estimate": 1.09174127688284,
@@ -241,13 +509,6 @@
       "effsize": 1.09174127688284,
       "effsize_ci": [0.83510458545454, 1.58843436048427]
     },
-    "ggstatsplot": {
-      "estimate": 1.10557052035146,
-      "conf_low": 0.844358670020794,
-      "conf_high": 1.48406225453642,
-      "resamples": null
-    },
-    "estimate_matches_ggstatsplot": false,
     "replicates": {
       "count": 50,
       "resamples": 2000,
@@ -266,6 +527,11 @@
     "platform": "x86_64-pc-linux-gnu",
     "os": "Ubuntu 24.04.5 LTS",
     "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
     "repos": {
       "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
       "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"

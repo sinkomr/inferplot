@@ -219,17 +219,23 @@
     {
       "name": "geom_point",
       "geom": "GeomPoint",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_boxplot",
       "geom": "GeomBoxplot",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_violin",
       "geom": "GeomViolin",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_point...4",
@@ -280,7 +286,9 @@
           "expression": "list(widehat(mu)[MAP] == \"15.19\")",
           "n.expression": "8\n(n = 14)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_label_repel",
@@ -331,12 +339,248 @@
           "expression": "list(widehat(mu)[MAP] == \"15.19\")",
           "n.expression": "8\n(n = 14)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_signif",
       "geom": "GeomSignif",
-      "data": null
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["4", "6"],
+            ["4", "8"],
+            ["6", "8"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": ["list(log[e] * (BF[\"01\"]) == \"-3.18\")", "list(log[e] * (BF[\"01\"]) == \"-12.38\")", "list(log[e] * (BF[\"01\"]) == \"-4.36\")"],
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.086063829787234,
+          "step_increase": 0.075,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 35.6875,
+          "yend": 35.9225,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-3.18\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 2,
+          "y": 35.9225,
+          "yend": 35.9225,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-3.18\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 35.9225,
+          "yend": 35.6875,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-3.18\")",
+          "group": "4-6-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 37.45,
+          "yend": 37.685,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-12.38\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 3,
+          "y": 37.685,
+          "yend": 37.685,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-12.38\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 37.685,
+          "yend": 37.45,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-12.38\")",
+          "group": "4-8-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 39.2125,
+          "yend": 39.4475,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-4.36\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 3,
+          "y": 39.4475,
+          "yend": 39.4475,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-4.36\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 39.4475,
+          "yend": 39.2125,
+          "annotation": "list(log[e] * (BF[\"01\"]) == \"-4.36\")",
+          "group": "6-8-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
     }
   ],
   "bootstrap_reference": null,
@@ -345,6 +589,11 @@
     "platform": "x86_64-pc-linux-gnu",
     "os": "Ubuntu 24.04.5 LTS",
     "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
     "repos": {
       "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
       "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"

@@ -60,17 +60,23 @@
     {
       "name": "geom_point",
       "geom": "GeomPoint",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_boxplot",
       "geom": "GeomBoxplot",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_violin",
       "geom": "GeomViolin",
-      "data": null
+      "data": null,
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_point...4",
@@ -106,7 +112,9 @@
           "expression": "list(widehat(mu)[MAP] == \"15.44\")",
           "n.expression": "VC\n(n = 30)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     },
     {
       "name": "geom_label_repel",
@@ -142,7 +150,9 @@
           "expression": "list(widehat(mu)[MAP] == \"15.44\")",
           "n.expression": "VC\n(n = 30)"
         }
-      ]
+      ],
+      "params": null,
+      "built": null
     }
   ],
   "bootstrap_reference": null,
@@ -151,6 +161,11 @@
     "platform": "x86_64-pc-linux-gnu",
     "os": "Ubuntu 24.04.5 LTS",
     "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
     "repos": {
       "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
       "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"

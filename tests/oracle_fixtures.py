@@ -160,6 +160,14 @@ class OracleCase:
         layers = self.raw.get("plot_layers")
         return [] if layers is None else list(layers)
 
+    def layer_params(self, geom: str) -> list[Mapping[str, Any]]:
+        """Parameters (``stat``, ``geom``, ``aes``) of layers drawn with ``geom``."""
+        return [
+            layer["params"]
+            for layer in self.plot_layers
+            if layer["geom"] == geom and layer.get("params")
+        ]
+
     def layer_data(self, geom: str) -> list[list[Row]]:
         """Own data of every layer drawn with ``geom``, e.g. ``"GeomLabelRepel"``."""
         return [
