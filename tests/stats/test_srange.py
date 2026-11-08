@@ -19,7 +19,7 @@ from tests.tolerances import TOLERANCES, assert_close
 REFERENCE = (
     Path(__file__).resolve().parents[1] / "data" / "studentized_range_reference.json"
 )
-SETS = ("grid", "df_inf", "k2_identity", "fixture_pairs")
+SETS = ("grid", "df_inf", "k2_identity", "fixture_pairs", "failed_fixture_pairs")
 
 
 @cache
@@ -37,7 +37,13 @@ def _df(value: object) -> float:
 
 def test_reference_file_has_the_frozen_sets() -> None:
     sizes = {name: len(_points(name)) for name in SETS}
-    assert sizes == {"grid": 384, "df_inf": 72, "k2_identity": 224, "fixture_pairs": 31}
+    assert sizes == {
+        "grid": 384,
+        "df_inf": 72,
+        "k2_identity": 224,
+        "fixture_pairs": 31,
+        "failed_fixture_pairs": 3,
+    }
     assert "studentized_range_mpmath.py" in _reference()["generator"]
 
 

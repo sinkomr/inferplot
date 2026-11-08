@@ -127,6 +127,14 @@ def partial_omega_squared(
     (Steiger 2004); the lower bound is lambda / (lambda + df2) and the upper bound 1.
     F <= 1 gives omega 0 and the interval [0, 1].
 
+    The bound is the accurate root, not effectsize's: on the oracle probe
+    probe-omega (577 rows with alternative "greater") effectsize agrees with an
+    accurate uniroot bound within ``noncentral_ci`` in 574 rows, where inferplot
+    matches it too; in 3 rows its root search stops early (at worst 2.1e-3 low,
+    F = 10, df = (4, 5.5), 90%) and inferplot matches the accurate root
+    (DECISIONS.md D33; tests/stats/test_probes.py). The estimate equals effectsize's
+    bit for bit in all 577 rows.
+
     Raises:
         ValueError: F is negative or not finite, a df is not positive, or
             conf_level is not strictly between 0 and 1.

@@ -32,9 +32,11 @@ test_multi.py, test_hommel). BH multiplies by ``n / i`` first, ``(n / i) * p``:
 for the largest p-value the factor is exactly 1, so the adjusted value is never
 below the raw one (``(n * p) / n`` rounds below ``p`` in about 6% of cases). BY uses
 ``((q * n) / i) * p``, whose factor is never below BH's, so BY >= BH holds bit for
-bit. No R output pins the BH and BY orderings yet (proposed oracle probe); the
-alternatives differ by at most 2 ulp (tests/stats/test_padjust.py, operation-order
-check).
+bit. The alternatives differ by at most 2 ulp (tests/stats/test_padjust.py,
+operation-order check); the oracle probe probe-padjust (R 4.5.3, x86_64) pins the
+choice: every method on its 19 vectors without missing values, from 1 to 1008
+p-values, is bitwise equal to R except BY on 1008 values, where R's long-double
+harmonic sum is the whole difference (``_by``; tests/stats/test_probes.py).
 """
 
 from __future__ import annotations
@@ -151,7 +153,10 @@ def _by(sorted_p: FloatArray) -> FloatArray:
     oracle runs, that is a 64-bit significand, which gives the same double as
     ``fsum`` for every n < 1008 and differs by 1 ulp at n = 1008, 1138, 1259, ...
     (tests/stats/test_padjust.py, harmonic-sum check). A plain double loop differs
-    from n = 4 on.
+    from n = 4 on. The oracle probe confirms it: R's sum equals ``fsum`` at
+    n = 1007 and is 1 ulp above it at n = 1008, so there all 1008 BY values are
+    1 or 2 ulp below R's (928 and 80 of them), and with R's sum substituted they
+    are bitwise equal. inferplot keeps the correctly rounded sum.
     """
     n = sorted_p.size
     q = math.fsum(1.0 / k for k in range(1, n + 1))
