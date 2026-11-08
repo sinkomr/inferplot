@@ -14,6 +14,7 @@ reads it back into an equal result.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import importlib.metadata
 import json
 import math
@@ -78,15 +79,65 @@ def _plain_value(value: object) -> object:
     )
 
 
+@functools.cache
+def _field_hints(cls: type) -> dict[str, object]:
+    return typing.get_type_hints(cls)
+
+
+def _as_float(hint: object, value: object, where: str) -> object:
+    """Make the numbers of a float-typed field floats (``3`` -> ``3.0``).
+
+    Follows ``float``, ``float | None`` and ``tuple[float, ...]`` (nested) hints; a
+    bool where a number belongs raises ``TypeError``. Other values are returned as
+    they are.
+    """
+    if _is_union(hint):
+        if value is None:
+            return None
+        non_none = [a for a in typing.get_args(hint) if a is not type(None)]
+        return _as_float(non_none[0], value, where) if len(non_none) == 1 else value
+    if hint is float:
+        if isinstance(value, bool):
+            raise TypeError(f"{where} must be a number, got {value!r}")
+        return float(value) if type(value) is int else value
+    if typing.get_origin(hint) is tuple and isinstance(value, tuple):
+        items = cast("tuple[object, ...]", value)
+        args = typing.get_args(hint)
+        if len(args) == 2 and args[1] is Ellipsis and _holds_float(args[0]):
+            return tuple(_as_float(args[0], v, where) for v in items)
+        return items
+    return value
+
+
+def _holds_float(hint: object) -> bool:
+    if hint is float:
+        return True
+    if _is_union(hint):
+        return any(_holds_float(a) for a in typing.get_args(hint))
+    if typing.get_origin(hint) is tuple:
+        return any(_holds_float(a) for a in typing.get_args(hint) if a is not Ellipsis)
+    return False
+
+
 class _Plain:
-    """Mixin: normalize every field to plain Python types after construction."""
+    """Mixin: normalize every field to plain Python types after construction.
+
+    NumPy scalars and arrays and lists become Python scalars and tuples, and the
+    numbers of float-typed fields become floats, so ``values`` built from integer
+    data still holds floats and a result equals itself read back from JSON.
+    """
 
     __slots__ = ()
 
     def __post_init__(self) -> None:
+        hints = _field_hints(type(self))
         for field in dataclasses.fields(cast("Any", self)):
             value = getattr(self, field.name)
             plain = _plain_value(value)
+            if _holds_float(hints[field.name]):
+                plain = _as_float(
+                    hints[field.name], plain, f"{type(self).__name__}.{field.name}"
+                )
             if plain is not value:
                 object.__setattr__(self, field.name, plain)
 
@@ -556,12 +607,23 @@ def _num_cell(x: float | None) -> str:
     return f"{x:.2f}"
 
 
+# Column heading of the adjusted p by p_adjust_method (the caption's names).
+_ADJUSTED_HEADINGS: Final = {
+    "holm": "p (Holm)",
+    "hochberg": "p (Hochberg)",
+    "hommel": "p (Hommel)",
+    "bonferroni": "p (Bonferroni)",
+    "BH": "p (Benjamini-Hochberg)",
+    "fdr": "p (Benjamini-Hochberg)",
+    "BY": "p (Benjamini-Yekutieli)",
+    "none": "p (unadj.)",
+}
+
+
 def _pairwise_table(result: StatsResult) -> str:
     first = result.pairwise[0]
     method = result.settings.p_adjust_method
-    adjusted = (
-        "p (unadj.)" if method == "none" else f"p ({method[:1].upper()}{method[1:]})"
-    )
+    adjusted = _ADJUSTED_HEADINGS.get(method, f"p ({method})")
     header = (
         "group1",
         "group2",

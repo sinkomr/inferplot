@@ -26,9 +26,13 @@ sources ``R/add-expression-col.R``, ``R/pairwise-comparisons.R`` and
 * the CI level: ``paste0(conf.level * 100L, "%")`` -> :func:`format_conf_level`.
 
 insight (GPL-3) source was not read: :func:`format_value`'s rules come from insight's
-reference manual and from the oracle fixtures, which they reproduce for all 1,604
-number strings in the 45 Phase 0 fixtures. Rules the fixtures do not pin are kept in
-the ``UNPINNED_*`` constants below until the oracle probe settles them.
+reference manual, the oracle fixtures (every number string of every fixture) and the
+oracle probe ``probe-format`` (``tests/fixtures/oracle/probe-format.json``), which
+records ``insight::format_value``, statsExpressions' ``.to_char`` and ``.prettyNum``,
+the df route and the CI-level label in R for a grid of 1,002 doubles (decimal ties
+and their neighbours one ulp away, subnormals, the largest double, Inf, NA, NaN) at
+digits 0 to 4. The functions below reproduce every one of those 5,010 rows. The one
+rule the probe could not pin is kept in :data:`UNPINNED_KEEP_NEGATIVE_ZERO`.
 
 This module imports nothing outside the standard library and the result types; in
 particular it never imports matplotlib.
@@ -58,13 +62,11 @@ __all__ = [
     "ALT_TEXT_MAX_CHARS",
     "DOUBLE_XMIN",
     "EFFECT_SIZE_SYMBOLS",
+    "N_BIG_MARK",
     "PRIOR_SYMBOLS",
+    "SCI_LARGE_THRESHOLD",
     "STATISTIC_SYMBOLS",
     "UNPINNED_KEEP_NEGATIVE_ZERO",
-    "UNPINNED_NAN_AS_MISSING",
-    "UNPINNED_N_BIG_MARK",
-    "UNPINNED_SCI_LARGE_THRESHOLD",
-    "UNPINNED_SMALL_SCI_SCALES_WITH_DIGITS",
     "BinOp",
     "Call",
     "FigureTexts",
@@ -104,28 +106,32 @@ __all__ = [
 # Number formatting
 # =========================================================================== #
 
-# UNPINNED: the fixtures print nothing larger than 575.5, so the magnitude at which
-# format_value switches large numbers to scientific notation is not observed. This is
-# a working hypothesis for the oracle probe to confirm; it matters only for
-# |x| >= 1e5 (huge F or W statistics, df of very large samples).
-UNPINNED_SCI_LARGE_THRESHOLD: Final[float] = 1e5
+# Pinned by probe-format ("values"): a non-zero |x| at or above 1e5 prints in
+# scientific notation, judged on the unrounded value: 99999.996 prints "100000.00" at
+# digits 2 and 1e5 prints "1.00e+05"; 99999.99999999997 prints "100000" at digits 0.
+# The largest double and 1e300 follow the same rule.
+SCI_LARGE_THRESHOLD: Final[float] = 1e5
 
-# UNPINNED: the fixtures pin the small-number switch "log10(|x|) < -digits" only at
-# digits = 2 (0.00709 -> "7.09e-03"). True means the threshold moves with digits
-# (digits = 3 switches below 0.001); False would keep it at 0.01.
-UNPINNED_SMALL_SCI_SCALES_WITH_DIGITS: Final[bool] = True
+# Pinned by probe-format ("values"): small numbers switch to scientific notation when
+# log10(|x|) < -digits, so the threshold moves with digits: 0.000999 prints "1e-03"
+# at digits 0, "9.990e-04" at digits 3 and "0.0010" at digits 4; 0.0095 prints
+# "9.50e-03" at digits 2 and "0.009" at digits 3. Like the large switch it is judged
+# on the unrounded value (0.0099999 prints "1.00e-02" at digits 2, "0.010" at 3).
+#
+# Also pinned there: NA and NaN print as the ``missing`` text, "" from format_value
+# itself and "NA" through statsExpressions' .to_char; Inf and -Inf print as "Inf" and
+# "-Inf" whatever digits is.
 
-# UNPINNED: whether NaN prints as the missing text ("NA" or "") or as "NaN".
-UNPINNED_NAN_AS_MISSING: Final[bool] = True
-
-# UNPINNED: an exact negative zero prints as C sprintf prints it ("-0.00"); no fixture
-# holds -0.0.
+# UNPINNED: an exact negative zero prints as C sprintf prints it ("-0.00"). The probe
+# could not settle this: R handed its -0 grid point and the end-to-end estimate -0 to
+# format_value as +0 (every "values" row reports negative_zero false, and the
+# end-to-end subtitle prints "0.00"), so no row shows what format_value does with -0.
 UNPINNED_KEEP_NEGATIVE_ZERO: Final[bool] = True
 
-# UNPINNED: thousands separator for n >= 1000, from insight's documented big_mark
-# example ("1,234.56"); the fixtures hold no n >= 1000. Sample sizes never switch to
-# scientific notation under this hypothesis.
-UNPINNED_N_BIG_MARK: Final[str] = ","
+# Pinned by probe-format ("counts"): statsExpressions' .prettyNum puts a comma every
+# three digits from 1,000 on and never switches to scientific notation, for doubles
+# and integers alike ("100,000", "1,000,000,000").
+N_BIG_MARK: Final[str] = ","
 
 # R's .Machine$double.xmin: add_expression_col() replaces an exact 0 p-value by it.
 DOUBLE_XMIN: Final[float] = sys.float_info.min
@@ -135,28 +141,27 @@ def format_value(x: float | None, digits: int = 2, *, missing: str = "NA") -> st
     """Format ``x`` as ``insight::format_value(x, digits)`` does in ggstatsplot.
 
     Fixed notation with ``digits`` decimals, unless ``x`` is non-zero and
-    ``log10(|x|) < -digits`` (scientific, ``digits`` mantissa decimals, signed
-    exponent of at least two digits, as "7.09e-03") or
-    ``|x| >= UNPINNED_SCI_LARGE_THRESHOLD``. Rounding is C ``sprintf`` rounding of the
-    binary double (correctly rounded), which Python's formatting reproduces exactly.
-    Infinite values print as "Inf" and "-Inf".
+    ``log10(|x|) < -digits`` or ``|x| >= SCI_LARGE_THRESHOLD`` (1e5), both judged on
+    the unrounded value: then scientific, ``digits`` mantissa decimals and a signed
+    exponent of at least two digits, as "7.09e-03". Rounding is C ``sprintf``
+    rounding of the binary double (correctly rounded), which Python's formatting
+    reproduces exactly. Infinite values print as "Inf" and "-Inf". All of it is
+    pinned by the oracle probe ``probe-format`` (every row, digits 0 to 4).
 
-    ``missing`` is returned for None (R's NA): ``"NA"`` on statsExpressions'
-    ``.to_char`` route (subtitle and caption tables), ``""`` for its direct
-    ``format_value`` calls (pairwise labels, the log Bayes factor, centrality labels).
+    ``missing`` is returned for None and NaN (R's NA and NaN): ``"NA"`` on
+    statsExpressions' ``.to_char`` route (subtitle and caption tables), ``""`` for
+    its direct ``format_value`` calls (pairwise labels, the log Bayes factor,
+    centrality labels).
     """
     if digits < 0:
         raise ValueError(f"digits must be >= 0, got {digits}")
-    if x is None:
+    if x is None or math.isnan(x):
         return missing
-    if math.isnan(x):
-        return missing if UNPINNED_NAN_AS_MISSING else "NaN"
     if math.isinf(x):
         return "Inf" if x > 0 else "-Inf"
     if x != 0.0:
         magnitude = abs(x)
-        small = digits if UNPINNED_SMALL_SCI_SCALES_WITH_DIGITS else 2
-        if math.log10(magnitude) < -small or magnitude >= UNPINNED_SCI_LARGE_THRESHOLD:
+        if math.log10(magnitude) < -digits or magnitude >= SCI_LARGE_THRESHOLD:
             return f"{x:.{digits}e}"
     elif not UNPINNED_KEEP_NEGATIVE_ZERO:
         x = 0.0
@@ -173,8 +178,18 @@ def format_p_subtitle(p: float, digits: int = 2) -> str:
 
 
 def format_bf01_log(bf10: float, digits: int = 2) -> str:
-    """Format ``log_e(BF01) = -log(bf10)`` as the caption and pairwise labels do."""
-    return format_value(-math.log(bf10), digits, missing="")
+    """Format ``log_e(BF01) = -log(bf10)`` as the caption and pairwise labels do.
+
+    As in R, a Bayes factor of 0 gives "Inf" and an infinite one "-Inf" (probe-format,
+    "end_to_end": ``bf10 = exp(-123456.7)``, which is 0, prints "Inf"); a missing one
+    prints as "".
+    """
+    if math.isnan(bf10):
+        return format_value(None, digits, missing="")
+    if bf10 < 0:
+        raise ValueError(f"a Bayes factor cannot be negative, got {bf10}")
+    log_bf01 = math.inf if bf10 == 0.0 else -math.log(bf10)
+    return format_value(log_bf01, digits, missing="")
 
 
 def r_number_text(x: float) -> str:
@@ -227,14 +242,23 @@ def format_df(df: float, digits: int) -> str:
 
 
 def format_n(n: int) -> str:
-    """Format a sample size as statsExpressions' ``.prettyNum(n)``: "1,234"."""
+    """Format a sample size as statsExpressions' ``.prettyNum(n)``: "1,234".
+
+    A comma every three digits from 1,000 on, never scientific notation (pinned by
+    probe-format's "counts" for doubles and integers up to 1e9).
+    """
     if n < 0:
         raise ValueError(f"n must be >= 0, got {n}")
-    return f"{n:,d}".replace(",", UNPINNED_N_BIG_MARK)
+    return f"{n:,d}".replace(",", N_BIG_MARK)
 
 
 def format_conf_level(level: float) -> str:
-    """Format the CI level as ``paste0(conf.level * 100L, "%")``: 0.95 -> "95%"."""
+    """Format the CI level as ``paste0(conf.level * 100L, "%")``: 0.95 -> "95%".
+
+    ``as.character`` prints the product with 15 significant digits, so 0.89 * 100
+    (89.00000000000001) is "89%" and 0.9999 * 100 is "99.99%" (probe-format,
+    "conf_levels").
+    """
     return r_number_text(level * 100) + "%"
 
 
@@ -590,8 +614,13 @@ _P_ADJUST_LABELS: Final[dict[str, str]] = {
 def p_adjust_label(method: str) -> str:
     """statsExpressions' label for ``p.adjust.method``.
 
-    ``insight::format_capitalize()`` (first letter upper case), then "BH" and "Fdr"
-    become "FDR". Only "Holm" is pinned by the Phase 0 fixtures.
+    ``.pairwise_p_adjust_expr()`` (statsExpressions 2.2.1, MIT) applies
+    ``insight::format_capitalize()`` (first letter upper case), then turns "BH" and
+    "Fdr" into "FDR"; "None" makes the subscript ``unadj.``. Every label is pinned by
+    the fixtures: "Holm" by the default cases, the others by the
+    PlantGrowth-padj-{hochberg, hommel, bonferroni, BH, fdr, BY, none} cases, whose
+    ``p.adjust.method`` column and bracket labels read "Hochberg", "Hommel",
+    "Bonferroni", "FDR", "FDR", "BY" and "None" (``italic(p)[unadj.]``).
     """
     try:
         return _P_ADJUST_LABELS[method]
@@ -606,7 +635,10 @@ def pairwise_p_expression(
 ) -> Call:
     """Bracket label ``list(italic(p)['Holm'-adj.]=='0.47')``.
 
-    With no adjustment statsExpressions writes ``italic(p)[unadj.]``.
+    The subscript is :func:`p_adjust_label`'s label; with no adjustment
+    statsExpressions writes ``italic(p)[unadj.]``. The p-value goes through
+    ``format_value`` directly, so an exact 0 prints "0.00" (not the subtitle's
+    2.23e-308) and a missing one "" (probe-format, "end_to_end").
     """
     label = p_adjust_label(adjust_method)
     sub: Node = (
@@ -1146,7 +1178,8 @@ def _expressions(
     bayes_caption = None
     if settings.results_subtitle:
         subtitle = subtitle_expression(test, effect_size, n_obs=n_obs, digits=digits)
-        if bayes is not None:
+        # bf_message=False never draws the caption, even when a Bayes factor exists.
+        if bayes is not None and settings.bf_message is not False:
             bayes_caption = bayes_factor_expression(
                 log_bf01=bayes.log_bf01,
                 prior=bayes.prior,
@@ -1200,9 +1233,11 @@ def build_texts(
     """Every plain text of a result, from the parts the analysis computed.
 
     The subtitle is None when ``settings.results_subtitle`` is false. The caption
-    holds the Bayes line (when ``bayes`` is given and the subtitle is drawn) and the
-    pairwise line, joined by a newline, or None when there is neither. The user's own
-    caption is not part of it.
+    holds the Bayes line (when ``bayes`` is given, the subtitle is drawn and
+    ``settings.bf_message`` is not False, as ggstatsplot's ``bf.message``) and the
+    pairwise line (three or more groups, unless ``pairwise_display`` is "none"),
+    joined by a newline, or None when there is neither. The user's own caption is
+    not part of it.
     """
     ex = _expressions(
         descriptives=descriptives,
