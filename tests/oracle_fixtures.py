@@ -364,7 +364,11 @@ def read_dataset(case: OracleCase, backend: Backend = "pandas") -> Any:
     if backend == "polars":
         import polars as pl
 
-        out = pl.from_pandas(frame)
+        # polars 1.0 (the floor, D22) cannot convert a pandas object column holding
+        # NaN for missing text (bugs_long's gender, region, education); pandas'
+        # string dtype carries those as nulls.
+        text = {c: "string" for c in frame.columns if frame[c].dtype == object}
+        out = pl.from_pandas(frame.astype(text))
         for column, levels in case.factor_levels.items():
             out = out.with_columns(
                 pl.col(column).cast(pl.String).cast(pl.Enum(list(levels)))
