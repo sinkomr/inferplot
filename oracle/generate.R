@@ -179,19 +179,22 @@ capture <- function(expr) {
 
 file_sha256 <- function(path) digest::digest(path, algo = "sha256", file = TRUE)
 
-# Layer-specific data of the plot, such as the centrality labels (ggstatsplot 1.1.4's
-# extract_stats() leaves descriptive_data empty) and the significance brackets.
-# Layers that draw the plot's own data are recorded by geom only.
+# The plot's layers in drawing order, with each layer's own data. The centrality
+# labels live here (ggstatsplot 1.1.4's extract_stats() leaves descriptive_data
+# empty). Layers that draw the plot's main data have data null.
 plot_layers <- function(plot) {
   # ggplot2 4.x plots are S7 objects; fall back to `$` for older S3 plots.
   layers <- tryCatch(plot@layers, error = function(e) plot$layers)
-  lapply(layers, function(layer) {
+  layer_names <- names(layers)
+  if (is.null(layer_names)) layer_names <- rep("", length(layers))
+  unname(Map(function(layer, name) {
     data <- layer$data
     list(
+      name = name,
       geom = class(layer$geom)[[1L]],
       data = if (is.data.frame(data)) frame_rows(data) else NULL
     )
-  })
+  }, layers, layer_names))
 }
 
 VERSIONS <- list(
