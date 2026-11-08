@@ -5122,6 +5122,44 @@
      "p": "1.00000000000130505426e-300"
     }
    ]
+  },
+  "failed_fixture_pairs": {
+   "method": "ref_srange as for grid, at the Games-Howell pairs (|q|, Welch df) of the parametric ggbetweenstats fixtures with three or more groups where ggstatsplot failed (edge_n2: Welch df below 2, R's ptukey NaN)",
+   "points": [
+    {
+     "case": "ggbetweenstats-edge_n2-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 1.0622233917848858,
+     "q": 0.38620933395897644,
+     "p": "0.9611858702291641524592"
+    },
+    {
+     "case": "ggbetweenstats-edge_n2-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 1.415833741937917,
+     "q": 10.9642566073651,
+     "p": "0.06499257162666535130613"
+    },
+    {
+     "case": "ggbetweenstats-edge_n2-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 1.2802657279577814,
+     "q": 4.6464526048342245,
+     "p": "0.2254686260585423775463"
+    }
+   ]
   }
  }
 }

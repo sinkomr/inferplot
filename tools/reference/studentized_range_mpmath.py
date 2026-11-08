@@ -7,7 +7,8 @@ Regenerates ``tests/data/studentized_range_reference.json``, which
 inferplot or of its tests. Run from the repository root:
 
     uv run --with mpmath python -I tools/reference/studentized_range_mpmath.py \
-        [--sets grid,df_inf,k2_identity,fixture_pairs] [--workers 8] [--fresh]
+        [--sets grid,df_inf,k2_identity,fixture_pairs,failed_fixture_pairs] \
+        [--workers 8] [--fresh]
 
 By default the points (k, df, q) already in the JSON file are kept and only their
 reference values are recomputed, so a rerun reproduces the file; ``--fresh`` picks
@@ -36,8 +37,15 @@ first; without that, values near 1e-99 came back 4.5e-7 off.
 
 Fixture pairs: q = |mean_i - mean_j| / sqrt((v_i/n_i + v_j/n_j) / 2) and the pair's
 Welch df for every Games-Howell pair of the parametric ggbetweenstats fixtures with
-three or more groups (computed with NumPy from the fixture datasets when the set is
-built fresh).
+three or more groups, as ``inferplot.stats.games_howell`` computes them from the
+fixture datasets when a set is built fresh (``fixture_pairs`` was first built with
+NumPy's mean and variance; the reference is exact at whatever q and df it is
+given, and the tests check that the frozen points agree with games_howell within
+``closed_form``). ``fixture_pairs`` holds the 31 pairs of the cases ggstatsplot
+completed when the set was first built; ``failed_fixture_pairs`` holds the pairs of
+the cases where ggstatsplot failed (edge_n2: every Welch df is below 2 and R's
+ptukey returns NaN, so the probe has no R value to compare and the reference is the
+only check of inferplot's p there).
 """
 
 from __future__ import annotations
@@ -206,14 +214,17 @@ def _q_for(target: float, k: int, nu: float) -> float:
     return math.exp(optimize.brentq(f, -30.0, 705.0, xtol=1e-14))
 
 
-def _fixture_points() -> list[dict[str, Any]]:
+def _fixture_points(*, failed: bool = False) -> list[dict[str, Any]]:
+    """|q| and Welch df of every Games-Howell pair, as games_howell computes them."""
     import numpy as np
 
     sys.path.insert(0, str(ROOT))
     from tests.oracle_fixtures import cases_for, r_level_label, read_dataset
 
+    from inferplot.stats import games_howell
+
     out: list[dict[str, Any]] = []
-    for case in cases_for("ggbetweenstats"):
+    for case in cases_for("ggbetweenstats", failed=failed):
         if case.type != "parametric" or len(case.analysis_levels) < 3:
             continue
         frame = read_dataset(case)
@@ -224,19 +235,17 @@ def _fixture_points() -> list[dict[str, Any]]:
             used.loc[labels == lv, y].to_numpy(dtype=np.float64)
             for lv in case.analysis_levels
         ]
-        k = len(groups)
-        for i, j in itertools.combinations(range(k), 2):
-            a, b = groups[i], groups[j]
-            va, vb = a.var(ddof=1) / a.size, b.var(ddof=1) / b.size
-            df = (va + vb) ** 2 / (va**2 / (a.size - 1) + vb**2 / (b.size - 1))
-            q = abs(a.mean() - b.mean()) / math.sqrt(va + vb) * math.sqrt(2.0)
+        for pair in games_howell(groups, p_adjust_method="none"):
             out.append(
                 {
                     "case": case.name,
-                    "pair": [case.analysis_levels[i], case.analysis_levels[j]],
-                    "k": k,
-                    "df": float(df),
-                    "q": float(q),
+                    "pair": [
+                        case.analysis_levels[pair.i],
+                        case.analysis_levels[pair.j],
+                    ],
+                    "k": len(groups),
+                    "df": pair.df,
+                    "q": abs(pair.statistic),
                 }
             )
     return out
@@ -264,6 +273,8 @@ def _fresh_points(name: str) -> list[dict[str, Any]]:
         ]
     if name == "fixture_pairs":
         return _fixture_points()
+    if name == "failed_fixture_pairs":
+        return _fixture_points(failed=True)
     raise KeyError(name)
 
 
@@ -300,6 +311,9 @@ METHODS = {
     "x = nu / (nu + q^2 / 2), 60 digits (erfc(q / 2) for nu = Inf)",
     "fixture_pairs": "ref_srange as for grid, at the 31 Games-Howell pairs (|q|, Welch "
     "df) of the parametric ggbetweenstats fixtures with three or more groups",
+    "failed_fixture_pairs": "ref_srange as for grid, at the Games-Howell pairs (|q|, "
+    "Welch df) of the parametric ggbetweenstats fixtures with three or more groups "
+    "where ggstatsplot failed (edge_n2: Welch df below 2, R's ptukey NaN)",
 }
 
 
