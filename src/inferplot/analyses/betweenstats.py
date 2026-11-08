@@ -98,6 +98,9 @@ _ADJUSTMENT_CITATIONS: Final[dict[str, str]] = {
     "(Benjamini-Yekutieli adjustment).",
 }
 
+# ggstatsplot's default trimming; another value is allowed only where it is used.
+_DEFAULT_TR: Final = 0.2
+
 _BAYES_K3_WARNING: Final = (
     "The Bayes factor caption for three or more groups arrives in inferplot 0.2."
 )
@@ -261,7 +264,8 @@ def betweenstats(
         pairwise_alpha: a pair is significant when its adjusted p is below this.
         conf_level: confidence level of the effect-size interval.
         digits: decimals in the subtitle, caption and labels.
-        tr: trimming proportion of the robust methods (recorded; unused here).
+        tr: trimming proportion of the robust methods; another value than 0.2
+            with type="parametric" raises, since nothing would be trimmed.
         bf_prior: scale of the Cauchy prior of the Bayes factor (0.707).
         bf_message: None draws the Bayes factor caption where it is available;
             True requires it; False never draws it.
@@ -299,6 +303,14 @@ def betweenstats(
         raise NotImplementedError(
             f"type={shown} is not available yet in this development version of "
             "inferplot; only type='parametric' exists for now."
+        )
+    if trim != _DEFAULT_TR:
+        # ggstatsplot silently ignores tr outside the robust type; inferplot never
+        # drops an argument (CLAUDE.md rule 3), as for alternative (SPEC section 2).
+        raise ValueError(
+            f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
+            f"type={type_name!r} trims nothing, so it would have no effect. Remove "
+            "tr=; the robust methods arrive later in this development version."
         )
     if show_bf is True and not subtitle_on:
         raise ValueError(

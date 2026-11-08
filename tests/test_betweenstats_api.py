@@ -215,6 +215,17 @@ def test_other_types_are_not_implemented(
     assert "only type='parametric'" in message
 
 
+@pytest.mark.parametrize("tr", [0.0, 0.1, 0.25, 0.49])
+def test_tr_other_than_the_default_raises_for_parametric(
+    plants: pd.DataFrame, tr: float
+) -> None:
+    # ggstatsplot ignores tr outside type "robust"; inferplot never drops an argument.
+    with pytest.raises(ValueError, match="trims nothing") as info:
+        betweenstats(plants, "group", "weight", tr=tr)
+    assert f"tr={tr!r}" in str(info.value)
+    assert betweenstats(plants, "group", "weight", tr=0.2).settings.tr == 0.2
+
+
 def test_type_checked_before_the_data() -> None:
     with pytest.raises(NotImplementedError):
         betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="np")
@@ -599,7 +610,7 @@ def test_settings_record_canonical_values(plants: pd.DataFrame) -> None:
         pairwise_alpha=0.1,
         conf_level=0.9,
         digits=3,
-        tr=0.1,
+        tr=0.2,
         bf_prior=0.5,
         bf_message=False,
         seed=7,
@@ -609,7 +620,7 @@ def test_settings_record_canonical_values(plants: pd.DataFrame) -> None:
     assert settings.pairwise_display == "non-significant"
     assert settings.p_adjust_method == "BY"
     assert (settings.pairwise_alpha, settings.conf_level) == (0.1, 0.9)
-    assert (settings.digits, settings.tr, settings.bf_prior) == (3, 0.1, 0.5)
+    assert (settings.digits, settings.tr, settings.bf_prior) == (3, 0.2, 0.5)
     assert (settings.bf_message, settings.results_subtitle) == (False, True)
     assert (settings.seed, result.provenance.seed) == (7, 7)
     assert settings.alternative == "two-sided"
