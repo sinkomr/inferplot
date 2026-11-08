@@ -179,6 +179,21 @@ capture <- function(expr) {
 
 file_sha256 <- function(path) digest::digest(path, algo = "sha256", file = TRUE)
 
+# Layer-specific data of the plot, such as the centrality labels (ggstatsplot 1.1.4's
+# extract_stats() leaves descriptive_data empty) and the significance brackets.
+# Layers that draw the plot's own data are recorded by geom only.
+plot_layers <- function(plot) {
+  # ggplot2 4.x plots are S7 objects; fall back to `$` for older S3 plots.
+  layers <- tryCatch(plot@layers, error = function(e) plot$layers)
+  lapply(layers, function(layer) {
+    data <- layer$data
+    list(
+      geom = class(layer$geom)[[1L]],
+      data = if (is.data.frame(data)) frame_rows(data) else NULL
+    )
+  })
+}
+
 VERSIONS <- list(
   R = paste(R.version$major, R.version$minor, sep = "."),
   platform = R.version$platform,
@@ -193,42 +208,71 @@ VERSIONS <- list(
 
 # Bootstrap references --------------------------------------------------------------
 #
-# For effect sizes whose CI ggstatsplot bootstraps, call the underlying function
-# directly with BOOT_REFERENCE_RESAMPLES resamples for a precise reference, then
-# BOOT_REPLICATES times with BOOT_REPLICATE_RESAMPLES resamples to measure the Monte
-# Carlo spread of a CI computed the way inferplot computes it.
+# For effect sizes whose CI ggstatsplot bootstraps (with 100 resamples), call the
+# underlying R function directly: once with BOOT_REFERENCE_RESAMPLES resamples for a
+# precise reference, then BOOT_REPLICATES times with BOOT_REPLICATE_RESAMPLES
+# resamples to measure the Monte Carlo spread of an estimate and CI computed the way
+# inferplot computes them.
+#
+# A case may list several candidate calls (for example both EQVAR settings of
+# akp.effect). The first candidate whose point estimate reproduces ggstatsplot's is
+# used; every candidate's estimate is recorded so a mismatch can be diagnosed.
+# Each `run` returns list(values = c(estimate, conf_low, conf_high), raw = ...).
 
-bootstrap_spec <- function(case, analysis, subtitle_row) {
+akp_candidate <- function(analysis, eqvar) {
+  list(
+    call = sprintf(
+      "WRS2::akp.effect(y ~ x, data, EQVAR = %s, tr = 0.2, nboot = R, alpha = 0.05)", eqvar
+    ),
+    run = function(resamples) {
+      r <- WRS2::akp.effect(
+        y ~ x,
+        data = analysis, EQVAR = eqvar, tr = 0.2, nboot = resamples, alpha = 0.05
+      )
+      effect <- as.numeric(r$AKPeffect)
+      ci <- r$AKPci
+      # EQVAR = FALSE may return one effect per group's variance; keep the first and
+      # its interval. The raw output is recorded so the extraction can be checked.
+      pair <- if (is.matrix(ci) && nrow(ci) == length(effect)) {
+        ci[1L, ]
+      } else if (is.matrix(ci) && ncol(ci) == length(effect)) {
+        ci[, 1L]
+      } else {
+        as.numeric(ci)[1:2]
+      }
+      list(
+        values = c(effect[[1L]], as.numeric(pair)),
+        raw = list(AKPeffect = r$AKPeffect, AKPci = r$AKPci, AKPci_dim = dim(r$AKPci))
+      )
+    }
+  )
+}
+
+bootstrap_candidates <- function(case, analysis, subtitle_row) {
   if (case$fun != "ggbetweenstats") {
-    return(NULL)
+    return(list())
   }
   k <- nlevels(analysis$x)
   if (case$args$type == "robust" && k == 2L) {
-    return(list(
-      call = "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 0.05)",
-      run = function(resamples) {
-        r <- WRS2::akp.effect(
-          y ~ x,
-          data = analysis, EQVAR = TRUE, tr = 0.2, nboot = resamples, alpha = 0.05
-        )
-        c(r$AKPeffect, r$AKPci)
-      }
-    ))
+    return(list(akp_candidate(analysis, TRUE), akp_candidate(analysis, FALSE)))
   }
   if (case$args$type == "robust" && k > 2L) {
-    return(list(
+    return(list(list(
       call = "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
       run = function(resamples) {
         r <- WRS2::t1way(y ~ x, data = analysis, tr = 0.2, alpha = 0.05, nboot = resamples)
-        c(r$effsize, r$effsize_ci)
+        list(
+          values = c(r$effsize, r$effsize_ci),
+          raw = list(effsize = r$effsize, effsize_ci = r$effsize_ci)
+        )
       }
-    ))
+    )))
   }
   if (case$args$type == "nonparametric" && k > 2L) {
     # Match the sidedness ggstatsplot reported: an upper bound of exactly 1 means a
     # one-sided ("greater") interval.
     alternative <- if (isTRUE(subtitle_row$conf.high == 1)) "greater" else "two.sided"
-    return(list(
+    return(list(list(
       call = sprintf(
         "effectsize::rank_epsilon_squared(y ~ x, data, ci = 0.95, alternative = \"%s\", iterations = R)",
         alternative
@@ -239,55 +283,82 @@ bootstrap_spec <- function(case, analysis, subtitle_row) {
           data = analysis, ci = 0.95, alternative = alternative,
           iterations = resamples, verbose = FALSE
         )
-        c(r[[1L]], r$CI_low, r$CI_high)
+        list(values = c(r[[1L]], r$CI_low, r$CI_high), raw = r)
       }
-    ))
+    )))
   }
-  NULL
+  list()
+}
+
+run_or_stop <- function(case, what, expr) {
+  out <- capture(expr)
+  if (inherits(out$value, "error")) {
+    stop(what, " failed for ", case$name, ": ", conditionMessage(out$value))
+  }
+  out
 }
 
 bootstrap_reference <- function(case, analysis, stats) {
   subtitle_row <- stats$subtitle_data
-  spec <- bootstrap_spec(case, analysis, subtitle_row)
-  if (is.null(spec)) {
+  candidates <- bootstrap_candidates(case, analysis, subtitle_row)
+  if (length(candidates) == 0L) {
     return(NULL)
   }
-  reference <- capture({
-    set.seed(BOOT_SEED)
-    spec$run(BOOT_REFERENCE_RESAMPLES)
-  })
-  if (inherits(reference$value, "error")) {
-    stop("bootstrap reference failed for ", case$name, ": ", conditionMessage(reference$value))
-  }
-  replicates <- capture(t(vapply(seq_len(BOOT_REPLICATES), function(i) {
-    set.seed(BOOT_SEED + i)
-    spec$run(BOOT_REPLICATE_RESAMPLES)
-  }, numeric(3L))))
-  if (inherits(replicates$value, "error")) {
-    stop("bootstrap replicates failed for ", case$name, ": ", conditionMessage(replicates$value))
-  }
-  ref <- unname(reference$value)
-  reps <- replicates$value
   gg_estimate <- unname(subtitle_row$estimate)
+
+  # Pick the candidate that reproduces ggstatsplot's point estimate.
+  tried <- list()
+  chosen <- NULL
+  for (candidate in candidates) {
+    probe <- run_or_stop(case, "bootstrap probe", {
+      set.seed(BOOT_SEED)
+      candidate$run(BOOT_REPLICATE_RESAMPLES)
+    })
+    estimate <- unname(probe$value$values[[1L]])
+    matches <- isTRUE(all.equal(estimate, gg_estimate, tolerance = 1e-8))
+    tried[[length(tried) + 1L]] <- list(call = candidate$call, estimate = estimate, matches = matches)
+    if (matches && is.null(chosen)) chosen <- candidate
+  }
+  if (is.null(chosen)) chosen <- candidates[[1L]]
+
+  reference <- run_or_stop(case, "bootstrap reference", {
+    set.seed(BOOT_SEED)
+    chosen$run(BOOT_REFERENCE_RESAMPLES)
+  })
+  replicates <- run_or_stop(case, "bootstrap replicates", t(vapply(
+    seq_len(BOOT_REPLICATES),
+    function(i) {
+      set.seed(BOOT_SEED + i)
+      unname(chosen$run(BOOT_REPLICATE_RESAMPLES)$values)
+    },
+    numeric(3L)
+  )))
+  ref <- unname(reference$value$values)
+  reps <- replicates$value
   list(
     quantity = "effect size confidence interval",
-    call = spec$call,
+    call = chosen$call,
+    candidates = tried,
     conf_level = 0.95,
     seed = BOOT_SEED,
     resamples = BOOT_REFERENCE_RESAMPLES,
     estimate = ref[[1L]],
     conf_low = ref[[2L]],
     conf_high = ref[[3L]],
+    raw = reference$value$raw,
     ggstatsplot = list(
       estimate = gg_estimate,
       conf_low = unname(subtitle_row$conf.low),
-      conf_high = unname(subtitle_row$conf.high)
+      conf_high = unname(subtitle_row$conf.high),
+      resamples = if (is.null(subtitle_row$conf.iterations)) NULL else unname(subtitle_row$conf.iterations)
     ),
     estimate_matches_ggstatsplot = isTRUE(all.equal(ref[[1L]], gg_estimate, tolerance = 1e-8)),
     replicates = list(
       count = BOOT_REPLICATES,
       resamples = BOOT_REPLICATE_RESAMPLES,
       first_seed = BOOT_SEED + 1L,
+      estimate_mean = mean(reps[, 1L]),
+      estimate_sd = stats::sd(reps[, 1L]),
       conf_low_mean = mean(reps[, 2L]),
       conf_low_sd = stats::sd(reps[, 2L]),
       conf_high_mean = mean(reps[, 3L]),
@@ -335,7 +406,8 @@ run_case <- function(case) {
     list(
       stats = ggstatsplot::extract_stats(plot),
       subtitle = ggstatsplot::extract_subtitle(plot),
-      caption = ggstatsplot::extract_caption(plot)
+      caption = ggstatsplot::extract_caption(plot),
+      layers = plot_layers(plot)
     )
   })
   failed <- inherits(outcome$value, "error")
@@ -362,6 +434,7 @@ run_case <- function(case) {
     subtitle = if (failed) NULL else to_json_value(outcome$value$subtitle),
     caption = if (failed) NULL else to_json_value(outcome$value$caption),
     stats = if (failed) NULL else to_json_value(outcome$value$stats),
+    plot_layers = if (failed) NULL else outcome$value$layers,
     bootstrap_reference = if (failed) NULL else bootstrap_reference(case, analysis, outcome$value$stats),
     versions = VERSIONS
   )
