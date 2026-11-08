@@ -35,7 +35,7 @@ mtcars_df <- package_data("mtcars", "datasets")
 mtcars_df <- cbind(model = rownames(mtcars_df), mtcars_df)
 write_dataset(mtcars_df, "mtcars")
 
-for (name in c("iris", "ToothGrowth", "PlantGrowth", "morley", "sleep")) {
+for (name in c("iris", "ToothGrowth", "PlantGrowth", "morley", "sleep", "InsectSprays")) {
   write_dataset(package_data(name, "datasets"), name)
 }
 
