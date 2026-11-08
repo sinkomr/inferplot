@@ -97,6 +97,14 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   scales), never widened to fit.
 - D33 and D37 follow the owner's D31 precedent (accurate value over R's numerical
   accident) and await the owner's confirmation.
+- Owner decision needed (fixed D5, CLAUDE.md rule 4): the text layer
+  (`src/inferplot/text.py`) adapts statsExpressions 2.2.1's expression templates, symbol
+  tables and number-formatting routes, read from its MIT source, while rule 4 allows
+  adapting source only from ggstatsplot. statsExpressions is ggstatsplot's own text
+  engine, by the same authors, and MIT-licensed; `NOTICE` now carries its notice. Either
+  extend the D5 exception to statsExpressions or rebuild those tables from the fixtures
+  and documentation (every template in use is pinned by AST equality with the fixtures;
+  the symbol entries no v0.1 fixture exercises would go).
 - Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
   ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
   figure). Figures with several bracket levels are tall (three levels 7.3 in,
