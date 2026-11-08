@@ -1,0 +1,58 @@
+inferplot
+Copyright (c) 2026 inferplot contributors
+Licensed under the MIT License (see LICENSE).
+
+This product reproduces the behavior of, and may adapt code from, the following
+software. Their notices are kept here as their licenses require.
+
+-------------------------------------------------------------------------------
+ggstatsplot (R package)
+https://github.com/IndrajeetPatil/ggstatsplot
+https://cran.r-project.org/package=ggstatsplot
+
+inferplot replicates ggstatsplot 1.1.4's statistical defaults, argument names,
+results text and behavior, and is tested against its output. ggstatsplot is
+distributed under the MIT License; its CRAN LICENSE file reads
+"YEAR: 2025 / COPYRIGHT HOLDER: ggstatsplot authors".
+
+MIT License
+
+Copyright (c) 2025 ggstatsplot authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+plotsalot (Python package)
+https://github.com/joshuamyers22/plotsalot
+Copyright (c) 2026 Joshua Myers, MIT License
+
+Credit: plotsalot is the earlier Python adaptation of ggstatsplot. inferplot
+takes several design ideas from it (the analyze/render split, frozen typed
+results, keyword-only allowlisted signatures, explicit subject IDs, seeded
+randomness recorded in results, and an R oracle with pinned versions and hashed
+fixtures). Its frozen ggstatsplot 1.1.1 outputs supply known answers in
+tools/reference/stats_reference.py. No plotsalot source code is included.
+
+-------------------------------------------------------------------------------
+Datasets in oracle/datasets/
+
+mtcars, iris, ToothGrowth, PlantGrowth, morley and sleep are exported from R's
+built-in datasets package. bugs_long and Titanic_full are exported from
+ggstatsplot (MIT, notice above). Files named edge_*.csv were written for this
+project.

@@ -1,0 +1,10 @@
+# Normalize text to LF everywhere so hashes and byte comparisons agree on Windows.
+* text=auto eol=lf
+
+# Oracle inputs and outputs are hashed (tests/fixtures/oracle/manifest.json and each
+# fixture's dataset sha256). Git must never rewrite their bytes.
+oracle/datasets/*.csv -text
+tests/fixtures/oracle/*.json -text
+
+*.png binary
+*.pdf binary

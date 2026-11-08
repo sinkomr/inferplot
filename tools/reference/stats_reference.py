@@ -99,7 +99,7 @@ def hedges_j(df: float) -> float:
 def _trimmed_kernel(x: FloatArray, tr: float) -> tuple[float, float, int]:
     """Return (trimmed mean, Yuen squared standard error d, h) for one sample."""
     n = x.size
-    g = int(math.floor(tr * n))
+    g = math.floor(tr * n)
     h = n - 2 * g
     ordered = np.sort(x)
     winsorized = np.clip(x, ordered[g], ordered[n - g - 1])

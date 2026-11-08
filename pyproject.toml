@@ -1,0 +1,138 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inferplot"
+dynamic = ["version"]
+description = "Statistical plots with the right test computed and its full results annotated, after ggstatsplot."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "inferplot contributors" }]
+requires-python = ">=3.11"
+keywords = ["statistics", "plotting", "matplotlib", "ggstatsplot", "effect size", "hypothesis test"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Typing :: Typed",
+]
+# Runtime dependencies are fixed by DECISIONS.md D6. Lower bounds are exercised by
+# the CI job that installs with `--resolution lowest-direct`.
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+    "narwhals>=2.0",
+]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.1"]
+polars = ["polars>=1.0"]
+pyarrow = ["pyarrow>=14"]
+
+[project.urls]
+Homepage = "https://github.com/sinkomr/inferplot"
+Issues = "https://github.com/sinkomr/inferplot/issues"
+
+[dependency-groups]
+# Every entry has a lower bound so the lowest-direct CI job resolves to versions
+# that exist for Python 3.11, not to ancient releases.
+dev = [
+    "pytest>=8.3",
+    "hypothesis>=6.100",
+    "pytest-mpl>=0.17",
+    "ruff>=0.9",
+    "pyright>=1.1.390",
+    "scipy-stubs>=1.15",
+]
+
+[tool.hatch.version]
+path = "src/inferplot/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inferplot"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/LICENSE",
+    "/NOTICE",
+    "/README.md",
+    "/pyproject.toml",
+]
+
+# --- ruff -------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["src", "tests", "tools"]
+# Code blocks in the design documents are aligned by hand; ruff only owns .py files.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",  # pycodestyle, pyflakes
+    "I",            # import order
+    "B",            # bugbear
+    "UP",           # pyupgrade
+    "SIM",          # simplify
+    "C4",           # comprehensions
+    "PIE",
+    "PT",           # pytest style
+    "RUF",
+    "NPY",          # NumPy deprecations
+    "TID",          # banned APIs (rules 5 and 6 in CLAUDE.md)
+    "T20",          # print
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"matplotlib.pyplot".msg = "Library code never imports matplotlib.pyplot; use matplotlib.figure.Figure with FigureCanvasAgg."
+"seaborn".msg = "Do not use seaborn anywhere in this package."
+"pingouin".msg = "pingouin is GPL-licensed; never depend on it."
+"statsmodels".msg = "Not a runtime dependency (DECISIONS.md D6)."
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may print through pytest and may use pyplot-based plugins.
+"tests/**" = ["T20", "TID251"]
+# The audit script reports PASS/FAIL lines on stdout by design.
+"tools/**" = ["T20"]
+
+# --- pyright ----------------------------------------------------------------
+
+[tool.pyright]
+include = ["src", "tests", "tools"]
+strict = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+# --- pytest -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+    "slow: takes more than 5 seconds; simulation tests always carry it",
+]
+# pytest-mpl: image comparisons run only when --mpl is passed (Linux CI job).
+mpl-baseline-path = "tests/render/baseline"
+mpl-results-path = "build/mpl-results"
+mpl-default-style = "default"
+mpl-default-backend = "agg"
+mpl-default-tolerance = "2"
