@@ -66,6 +66,9 @@ packages = ["src/inferplot"]
 include = [
     "/src",
     "/tests",
+    # The tests read the oracle datasets and import the reference implementations.
+    "/oracle/datasets/*.csv",
+    "/tools/reference/*.py",
     "/LICENSE",
     "/NOTICE",
     "/README.md",

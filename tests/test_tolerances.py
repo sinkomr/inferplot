@@ -33,11 +33,16 @@ def test_every_entry_is_bounded_and_explained(kind: str) -> None:
 
 
 def test_spec_values() -> None:
-    # SPEC.md section 10 starting values; a change needs a measured reason.
-    assert TOLERANCES["closed_form"].rtol == 1e-10
-    assert TOLERANCES["games_howell_p"].rtol == 1e-6
-    assert TOLERANCES["noncentral_ci"].rtol == 1e-6
-    assert TOLERANCES["bayes_factor"].rtol == 1e-4
+    # SPEC.md section 10 starting values; a change needs a measured reason. Both rtol
+    # and atol are pinned: a nonzero atol would make every small p-value "close".
+    expected = {
+        "closed_form": (1e-10, 0.0),
+        "games_howell_p": (1e-6, 0.0),
+        "noncentral_ci": (1e-6, 0.0),
+        "bayes_factor": (1e-4, 0.0),
+    }
+    for kind, (rtol, atol) in expected.items():
+        assert (TOLERANCES[kind].rtol, TOLERANCES[kind].atol) == (rtol, atol), kind
     assert BOOTSTRAP.n_sd == 4.0
     assert MAP_CENTRALITY.steps == 1.0
 
