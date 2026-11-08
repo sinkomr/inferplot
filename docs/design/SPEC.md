@@ -257,6 +257,11 @@ Statistical and behavioral differences are exactly these:
    caption is drawn by default and `warnings` says so; `bf_message=True` raises
    `NotImplementedError` for those designs (§2). Posterior estimates in Bayes captions
    also arrive in v0.2 (§1).
+6. Games-Howell p-values are computed from an accurate upper tail of the studentized
+   range, not from R's `ptukey`, whose far tail is off by up to about 5e-10 (D31). Where
+   that shows, the printed p differs from ggstatsplot's: iris setosa-versicolor, where
+   ggstatsplot prints 1.41e-09 and inferplot about 2.24e-14. §10 says how they are
+   tested.
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -432,8 +437,7 @@ again.
 | Quantity | Tolerance | Reason |
 | --- | --- | --- |
 | closed-form statistics, df, t/F/chi-square/normal p-values | rtol 1e-10 | both sides exact to double precision |
-| Games-Howell p (`games_howell_p`) | rtol 1e-6 | R ptukey vs SciPy studentized_range measured 2.8e-7 away from the far tail; in the tail ptukey has absolute error up to about 5e-10, so inferplot must reproduce ptukey there |
-| R ptukey against SciPy's studentized range (`ptukey_vs_scipy`, reference cross-check only) | rtol 1e-6, atol 3e-9 | measured up to 2.5e-9 absolute after Holm (`edge_k5`, iris); SciPy's own far tail is off by order 1e-14 |
+| Games-Howell p against ggstatsplot (`games_howell_p`) | rtol 1e-6, atol 3e-9 | R ptukey agrees with an accurate tail to 2.8e-7 relative away from the far tail and is off by up to 2.5e-9 absolute after Holm in it (`edge_k5`, iris); inferplot computes the accurate value (§5 item 6), checked against a high-precision reference under its own measured entry |
 | p-values WRS2 computes as 1 - pt or 1 - pf (`wrs2_p`: t1way, lincon, presumably Yuen) | rtol 1e-10, atol 2^-53 x the factor applied to the one-sided tail afterwards (2 for two-sided, times the number of pairs after Holm) | the one-sided tail rounded to the spacing of doubles just below 1 (2^-53); rounding the tail the same way matches all fixtures but iris t1way, which lands one grid step away |
 | noncentral-distribution CIs | start rtol 1e-6; set from measurement | R root-finding precision; Hedges' g bounds agree with a tight SciPy inversion to 7.5e-7 relative and up to 1.9e-8 absolute, so a bound near 0 will need an absolute part |
 | JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces all 35 distinct `ttestBF` values in the fixtures to at most 1.5e-9, which is BayesFactor's own integration error; a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive |
@@ -453,6 +457,12 @@ match ggstatsplot's strings: ggstatsplot computes them from 100 resamples, infer
    R reference (`bootstrap_reference` in the fixture);
 2. inferplot's formatter, applied to ggstatsplot's own value from `stats`, reproduces
    ggstatsplot's string exactly.
+
+**Games-Howell p (§5 item 6).** Checked the same two ways: the value inferplot computes
+is within `games_howell_p` (rtol 1e-6, atol 3e-9: R's measured error after Holm) of
+ggstatsplot's value and within a tight measured tolerance of a high-precision reference;
+and the formatter applied to ggstatsplot's own value reproduces ggstatsplot's label.
+Where both values format to the same string, inferplot's own string must equal it.
 
 Every other subtitle number is compared as the exact string inferplot produces.
 

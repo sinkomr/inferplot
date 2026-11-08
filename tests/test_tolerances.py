@@ -21,7 +21,6 @@ from tests.tolerances import (
 EXPECTED_KINDS = {
     "closed_form",
     "games_howell_p",
-    "ptukey_vs_scipy",
     "wrs2_p",
     "noncentral_ci",
     "ttest_bayes_factor",
@@ -45,8 +44,7 @@ def test_spec_values() -> None:
     # and atol are pinned: a nonzero atol would make every small p-value "close".
     expected = {
         "closed_form": (1e-10, 0.0),
-        "games_howell_p": (1e-6, 0.0),
-        "ptukey_vs_scipy": (1e-6, 3e-9),
+        "games_howell_p": (1e-6, 3e-9),
         "wrs2_p": (1e-10, 2.0**-53),
         "noncentral_ci": (1e-6, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),

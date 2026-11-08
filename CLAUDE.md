@@ -126,10 +126,10 @@ Review any fixture diff before committing it.
   shows in the fifth significant figure of Bayes factors.
 - ggstatsplot applies Holm on top of Games-Howell p-values, which are already
   family-wise. Replicate it; do not fix it.
-- SciPy's `studentized_range` and R's `ptukey` agree to about 3e-7 away from the far
-  tail; there ptukey is off by up to about 5e-10 absolute, and ggstatsplot prints it
-  (1.41e-9 where the true p is about 2.2e-14). Games-Howell p must reproduce ptukey;
-  its tolerance is for Games-Howell only.
+- R's `ptukey` is off by up to about 5e-10 absolute in the far upper tail, and
+  ggstatsplot prints it (1.41e-9 where the true p is about 2.2e-14). inferplot computes
+  the accurate tail (DECISIONS.md D31); SciPy's `studentized_range` is not accurate
+  there either. The `games_howell_p` tolerance is for Games-Howell only.
 - Exact versus normal-approximation p-values in rank tests, and continuity corrections
   in chi-square and McNemar tests, follow R's rules for the given input. Read the
   variant from the oracle; it is part of the method, not a choice.

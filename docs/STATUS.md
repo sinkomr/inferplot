@@ -35,7 +35,8 @@ are logged in DECISIONS.md.
 ## Phase 1 — betweenstats, parametric, end to end
 
 - [ ] `_data.py` boundary (pandas, polars, pyarrow) and `_validate.py` (aliases, did-you-mean, removed-argument messages)
-- [ ] Welch t and ANOVA, Hedges' g and partial omega squared with CIs, Games-Howell then Holm
+- [ ] Welch t and ANOVA, Hedges' g and partial omega squared with CIs, Games-Howell then Holm (accurate studentized range tail, D31)
+- [ ] Two-group JZS Bayes factor caption (D32)
 - [ ] `StatsResult`, `text.py` (subtitle parity, APA, caption, alt text), `check()`
 - [ ] Renderer (violin, box, points, centrality label, brackets, subtitle, caption) and `save()`
 - [ ] Oracle parity tests pass for every betweenstats parametric fixture
@@ -70,16 +71,11 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 
 ## Known gaps and open oracle discrepancies
 
-- **Open: Games-Howell p in the far tail.** R's ptukey, which PMCMRplus uses, is off
-  by up to about 5e-10 absolute there (2.5e-9 after Holm), and ggstatsplot prints
-  those values: the iris setosa-versicolor bracket reads p = 1.41e-09 where the true
-  value is about 2.2e-14 (`edge_k5`, iris and mtcars disp differ from SciPy's
-  studentized range by more than the registered 1e-6). `games_howell_p` stays
-  inferplot's requirement, so before Phase 1's Games-Howell slice either reproduce
-  ptukey's numerics (the algorithm R documents, Copenhaver & Holland 1988) or log a
-  deliberate difference in SPEC §5. SciPy's `studentized_range.sf` is no ground truth
-  in the far tail either (1.9e-14 for that pair, 14% low; it can return 0): a
-  deliberate difference would need a stable tail computation.
+- Decided (D31): Games-Howell p is computed from an accurate studentized range tail,
+  not R's ptukey, which is off by up to about 5e-10 in the far tail (iris
+  setosa-versicolor: ggstatsplot 1.41e-09, true about 2.2e-14). SciPy's
+  `studentized_range.sf` is no ground truth there either (1.9e-14, 14% low; it can
+  return 0), so Phase 1 needs its own stable tail computation.
 - The generator handles ggbetweenstats only: `between_analysis`,
   `statsexpressions_rows` (`paired = FALSE`) and `bootstrap_candidates` stop on any
   other function. Each one needs its own bookkeeping (complete subjects for
@@ -93,9 +89,6 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   skip it in `run_case` with the first such case. Unused edge CSVs: `edge_n2`,
   `edge_ties`, `edge_negative`, `edge_empty_level`, `edge_missing`, `edge_outliers`,
   `edge_within_missing`.
-- Phase 1: the default caption of a two-group parametric test is the JZS Bayes factor
-  (SPEC §7, D28), which the checklist lists under Phase 2. Implement it in Phase 1 or
-  check caption parity in Phase 2.
 - Phase 1: Hedges' g CI bounds agree with a tight SciPy inversion to 7.5e-7 relative
   and up to 1.9e-8 absolute; set `noncentral_ci` from the implementation's own
   measurement and add an absolute part before a fixture has a bound near 0.

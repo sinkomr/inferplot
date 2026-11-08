@@ -16,7 +16,7 @@ Two groups (alternative two-sided, greater or less):
 
 Three or more groups:
     parametric     Welch ANOVA, partial omega squared, Games-Howell then Holm
-                   (reference; p against SciPy's studentized range, ptukey_vs_scipy)
+                   (reference; p against SciPy's studentized range)
     nonparametric  Kruskal-Wallis (SciPy); Dunn then Holm (inline, Dunn 1964)
     robust         trimmed-means ANOVA (reference t1way); lincon pairwise Yuen tests
                    then Holm, with the Studentized maximum modulus CI (inline)
@@ -217,9 +217,9 @@ def test_welch_anova_omega_and_games_howell(case: OracleCase) -> None:
         assert pair["p.adjust.method"] == "Holm"
         assert_close("closed_form", q, number(pair["statistic"]), what=f"{what} q")
         # The reference uses SciPy's studentized range; R's ptukey has its own
-        # absolute error in the far tail (ptukey_vs_scipy, STATUS.md).
+        # absolute error in the far tail (games_howell_p, DECISIONS.md D31).
         assert_close(
-            "ptukey_vs_scipy", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
+            "games_howell_p", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
         )
 
 

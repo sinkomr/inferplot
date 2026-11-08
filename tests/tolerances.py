@@ -63,28 +63,17 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
         ),
         "games_howell_p": Tolerance(
             rtol=1e-6,
-            atol=0.0,
-            reason=(
-                "Games-Howell p in inferplot against ggstatsplot. R's ptukey and "
-                "SciPy's studentized_range agree to 2.8e-7 relative away from the far "
-                "upper tail (PlantGrowth and mtcars fixtures; 2.6e-7 on plotsalot's "
-                "m3-between), but ptukey's own absolute error reaches about 5e-10 in "
-                "the tail (see ptukey_vs_scipy), so meeting this entry there means "
-                "reproducing ptukey (STATUS.md)."
-            ),
-        ),
-        "ptukey_vs_scipy": Tolerance(
-            rtol=1e-6,
             atol=3e-9,
             reason=(
-                "Cross-check only: R's ptukey (PMCMRplus::gamesHowellTest) against "
-                "SciPy's studentized_range. ptukey's upper tail has absolute error up "
-                "to about 5e-10; after Holm the fixtures differ by up to 2.5e-9 "
-                "absolute (edge_k5 a-e: 2.34134e-5 vs SciPy 2.34158e-5; iris "
-                "setosa-versicolor: 1.41e-9 where a high-precision integral gives "
-                "about 2.2e-14). SciPy's own far tail is not exact either (errors of "
-                "order 1e-14 below 1e-13), far inside this entry. Never used for "
-                "inferplot's own numbers."
+                "Games-Howell p against ggstatsplot. inferplot computes the "
+                "studentized range tail accurately (DECISIONS.md D31); R's ptukey "
+                "agrees to 2.8e-7 relative away from the far tail (PlantGrowth and "
+                "mtcars fixtures; 2.6e-7 on plotsalot's m3-between) but is off by "
+                "up to about 5e-10 absolute in it, 2.5e-9 after Holm (edge_k5 a-e: "
+                "2.34134e-5 against 2.34158e-5; iris setosa-versicolor: 1.41e-9 "
+                "where a stable integral gives about 2.2e-14). The same entry serves "
+                "the SciPy cross-check, whose own far-tail error (order 1e-14) is "
+                "far inside it."
             ),
         ),
         "wrs2_p": Tolerance(
