@@ -1,25 +1,27 @@
 name: Fixture provenance
 
-# Whenever committed oracle fixtures or datasets change, check that they are exactly
-# what the oracle run named in tests/fixtures/oracle/manifest.json produced: download
-# that run's artifacts and compare byte for byte. This is what makes a hand edit fail,
-# even one that also re-hashes the manifest.
+# Checks that the committed oracle fixtures are what oracle.yml produced from the
+# committed generator:
+# 1. tests/fixtures/oracle/manifest.json carries a build-provenance attestation signed
+#    by .github/workflows/oracle.yml in this repository, at the commit the manifest
+#    names, by the run it names. A hand-edited or re-hashed manifest has none, and a
+#    fork's pull request cannot sign one.
+# 2. That commit is in this branch's history, and its generator files
+#    (oracle/generate.R, oracle/export_datasets.R, oracle.yml) equal the committed
+#    ones, so the fixtures are what the committed generator writes.
+# tests/oracle_fixtures.py then ties every fixture, every dataset a fixture read and
+# every generator file to the SHA-256 values in the manifest, on every CI run.
+# Attestations do not expire, so this check runs on every push.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "tests/fixtures/oracle/**"
-      - "oracle/datasets/**"
   pull_request:
-    paths:
-      - "tests/fixtures/oracle/**"
-      - "oracle/datasets/**"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
+  attestations: read
 
 jobs:
   verify:
@@ -29,18 +31,53 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Compare with the oracle run's artifacts
+          # The attested commit must be found in this branch's history.
+          fetch-depth: 0
+
+      - name: Verify the manifest's attestation and the generator it ran
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          run_id=$(python3 -I -c 'import json; print(json.load(open("tests/fixtures/oracle/manifest.json"))["run"]["run_id"])')
-          echo "Oracle run named in the manifest: $run_id"
-          gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json workflowName,conclusion,headBranch \
-            --jq '"\(.workflowName) \(.conclusion) \(.headBranch)"' | tee run.txt
-          test "$(cat run.txt)" = "Oracle success main"
-          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -n oracle-fixtures -D "$RUNNER_TEMP/fixtures"
-          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -n oracle-datasets -D "$RUNNER_TEMP/datasets"
-          diff -r "$RUNNER_TEMP/fixtures" tests/fixtures/oracle
-          diff -r "$RUNNER_TEMP/datasets" oracle/datasets
-          echo "Fixtures and datasets are byte-identical to oracle run $run_id."
+          manifest=tests/fixtures/oracle/manifest.json
+          field() {
+            python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["run"][sys.argv[2]])' "$manifest" "$1"
+          }
+          repository=$(field repository)
+          run_id=$(field run_id)
+          commit=$(field commit)
+          echo "manifest.json names oracle run $run_id of $repository at $commit"
+          test "$repository" = "$GITHUB_REPOSITORY"
+
+          gh attestation verify "$manifest" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/oracle.yml" \
+            --source-digest "$commit" \
+            --deny-self-hosted-runners \
+            --format json > "$RUNNER_TEMP/attestation.json"
+          python3 -I - "$RUNNER_TEMP/attestation.json" "$run_id" <<'PY'
+          import json
+          import re
+          import sys
+
+          runs = set()
+
+          def walk(node):
+              if isinstance(node, dict):
+                  for value in node.values():
+                      walk(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk(value)
+              elif isinstance(node, str):
+                  runs.update(re.findall(r"/actions/runs/(\d+)/attempts/", node))
+
+          walk(json.load(open(sys.argv[1], encoding="utf-8")))
+          if runs != {sys.argv[2]}:
+              sys.exit(f"attested by run(s) {sorted(runs)}, not run {sys.argv[2]}")
+          PY
+
+          git merge-base --is-ancestor "$commit" HEAD
+          git diff --exit-code --stat "$commit" HEAD -- \
+            oracle/generate.R oracle/export_datasets.R .github/workflows/oracle.yml
+          echo "manifest.json is attested by oracle.yml run $run_id at $commit, which is in this branch's history with the committed generator."

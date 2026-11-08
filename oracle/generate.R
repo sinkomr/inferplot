@@ -1,13 +1,15 @@
 #!/usr/bin/env Rscript
 # inferplot R oracle: run ggstatsplot 1.1.4 and write one JSON fixture per case.
 #
-# Usage: Rscript oracle/generate.R <datasets-dir> <output-dir>
+# Usage, from the repository root: Rscript oracle/generate.R <datasets-dir> <output-dir>
 #
-# Runs in GitHub Actions only (.github/workflows/oracle.yml), which pins R 4.5 and a
-# dated Posit Package Manager CRAN snapshot and checks every installed version. The
-# output is committed to tests/fixtures/oracle/ after review and never edited by hand:
-# manifest.json holds the SHA-256 of every fixture, and each fixture holds the
-# SHA-256 of the CSV it read. docs/design/SPEC.md section 9 describes the schema.
+# Runs in GitHub Actions only (.github/workflows/oracle.yml), which pins R 4.5.3 and a
+# dated Posit Package Manager CRAN snapshot, checks every installed version, and signs
+# the output with a build-provenance attestation. The output is committed to
+# tests/fixtures/oracle/ after review and never edited by hand: manifest.json holds
+# the SHA-256 of every fixture and of the generator files below, and each fixture
+# holds the SHA-256 of the CSV it read. docs/design/SPEC.md section 9 describes the
+# schema.
 #
 # This script only calls R packages; none of their code is copied into inferplot.
 
@@ -18,7 +20,12 @@ suppressPackageStartupMessages({
 })
 
 PARITY_VERSION <- "1.1.4"
-SCHEMA_VERSION <- 1L
+SCHEMA_VERSION <- 2L
+# Files that decide what the fixtures contain. The manifest records their SHA-256, and
+# the Python loader refuses fixtures whose generator differs from the committed one.
+GENERATOR_FILES <- c(
+  "oracle/generate.R", "oracle/export_datasets.R", ".github/workflows/oracle.yml"
+)
 CASE_SEED <- 20261107L # set before every ggstatsplot call
 BOOT_SEED <- 1L # reference run; replicate i uses BOOT_SEED + i
 BOOT_REFERENCE_RESAMPLES <- 20000L
@@ -49,6 +56,13 @@ if (as.character(packageVersion("ggstatsplot")) != PARITY_VERSION) {
     " is installed; the oracle requires ", PARITY_VERSION
   )
 }
+missing_generator_files <- GENERATOR_FILES[!file.exists(GENERATOR_FILES)]
+if (length(missing_generator_files) > 0L) {
+  stop(
+    "run generate.R from the repository root; not found: ",
+    paste(missing_generator_files, collapse = ", ")
+  )
+}
 
 # Sort strings by code point, as Python's sorted() does, so factor levels built from
 # character columns come out in the same order on both sides.
@@ -63,20 +77,24 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 #
 # Each case names a dataset CSV, the R arguments (x and y are column names), and
 # optionally declared factor levels (to create empty levels). `expect_error = TRUE`
-# records a case where ggstatsplot itself is expected to fail.
+# records a case where ggstatsplot itself is expected to fail; `expect_hidden_errors`
+# names the components (subtitle, caption) whose error ggstatsplot is expected to
+# swallow (see "Conditions ggstatsplot hides" below). Any other outcome stops the run.
 
 TYPES <- c("parametric", "nonparametric", "robust", "bayes")
 
-between_cases <- function(dataset, x, y, label = dataset, factor_levels = NULL) {
-  lapply(TYPES, function(type) {
+between_cases <- function(dataset, x, y, label = dataset, types = TYPES,
+                          extra_args = list(), factor_levels = NULL) {
+  lapply(types, function(type) {
     list(
       name = paste("ggbetweenstats", label, type, sep = "-"),
       fun = "ggbetweenstats",
       dataset = dataset,
       factor_levels = factor_levels,
-      args = list(x = x, y = y, type = type),
+      args = c(list(x = x, y = y, type = type), extra_args),
       columns = c("x", "y"),
-      expect_error = FALSE
+      expect_error = FALSE,
+      expect_hidden_errors = character()
     )
   })
 }
@@ -84,7 +102,38 @@ between_cases <- function(dataset, x, y, label = dataset, factor_levels = NULL) 
 CASES <- c(
   between_cases("ToothGrowth", x = "supp", y = "len"), # k = 2, n = 30 + 30
   between_cases("PlantGrowth", x = "group", y = "weight"), # k = 3, n = 10 each
-  between_cases("mtcars", x = "cyl", y = "mpg") # k = 3, n = 11/7/14, ties
+  between_cases("mtcars", x = "cyl", y = "mpg"), # k = 3, n = 11/7/14, ties
+  # Added after the Phase 0 review; each settles a SPEC.md claim the cases above
+  # cannot test.
+  # Unbalanced two groups (19/13): pooled or unpooled SD in Hedges' g, Student or
+  # Welch t in the JZS Bayes factor.
+  between_cases("mtcars", x = "am", y = "mpg", label = "mtcars-am"),
+  # Welch df 27.197..., which the subtitle prints as 27.2 (df are numbers there).
+  between_cases(
+    "mtcars", x = "am", y = "drat", label = "mtcars-am-drat", types = "parametric"
+  ),
+  # One-sided alternatives: the sidedness of the effect-size CIs.
+  between_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-greater",
+    types = c("parametric", "nonparametric"), extra_args = list(alternative = "greater")
+  ),
+  between_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-less",
+    types = c("parametric", "nonparametric"), extra_args = list(alternative = "less")
+  ),
+  # Two groups without ties, both under 50: exact or normal-approximation
+  # Mann-Whitney p.
+  between_cases("edge_k2", x = "group", y = "value"), # n = 9 + 12
+  # Welch F df2 97.40 (printed 97.4); lincon at Yuen df 56 to 58.
+  between_cases("iris", x = "Species", y = "Sepal.Width"),
+  # t1way df2 10.40 (printed 10.4); lincon at Yuen df 6.7, 11.9 and 12.9.
+  between_cases("mtcars", x = "cyl", y = "disp", label = "mtcars-disp"),
+  # lincon at Yuen df 5.2, 12.8 and 19.1; groups of 4, 12 and 25.
+  between_cases("edge_unbalanced", x = "group", y = "value"),
+  # Five groups, ten pairs: whether lincon's C counts pairs or groups.
+  between_cases("edge_k5", x = "group", y = "value"),
+  # Four groups, six pairs, Yuen df 99 to 110; missing values in y.
+  between_cases("bugs_long", x = "condition", y = "desire")
 )
 
 case_names <- vapply(CASES, function(case) case$name, character(1L))
@@ -191,6 +240,97 @@ capture <- function(expr) {
 
 file_sha256 <- function(path) digest::digest(path, algo = "sha256", file = TRUE)
 
+# Conditions ggstatsplot hides ------------------------------------------------------
+#
+# ggstatsplot 1.1.4 computes the subtitle and the caption through its internal
+# `.eval_f`, purrr::possibly() around suppressWarnings(suppressMessages(...)): an
+# error there leaves the subtitle or caption out without a trace, and warnings and
+# messages never reach capture(). It also wraps centrality_description() and
+# pairwise_comparisons() in suppressWarnings() (their errors do reach capture()).
+# The replacements below make exactly the same calls, with the same arguments and the
+# same random-number stream, return the same values and pass the same conditions on,
+# and log what ggstatsplot hides: one entry per call, in call order.
+
+HIDDEN <- new.env()
+HIDDEN$log <- list()
+
+log_hidden <- function(component, error, warnings, messages) {
+  HIDDEN$log[[length(HIDDEN$log) + 1L]] <- list(
+    component = component,
+    error = error,
+    warnings = as.list(warnings),
+    messages = as.list(messages)
+  )
+}
+
+# Same behavior as ggstatsplot's `.eval_f`: NULL on error, warnings and messages muted.
+recording_eval_f <- function(.f, ...) {
+  dots <- rlang::list2(...)
+  warnings <- character()
+  messages <- character()
+  error <- NULL
+  value <- tryCatch(
+    withCallingHandlers(
+      rlang::exec(.f, !!!dots),
+      warning = function(w) {
+        warnings <<- c(warnings, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      },
+      message = function(m) {
+        messages <<- c(messages, conditionMessage(m))
+        invokeRestart("muffleMessage")
+      }
+    ),
+    error = function(e) {
+      error <<- conditionMessage(e)
+      NULL
+    }
+  )
+  log_hidden(".eval_f", error, warnings, messages)
+  value
+}
+
+# Records warnings and passes them on to ggstatsplot's own suppressWarnings(). The
+# original call is evaluated as written, so non-standard evaluation is unchanged.
+recording_wrapper <- function(component, f) {
+  force(f)
+  wrapper <- function() {
+    call <- sys.call()
+    call[[1L]] <- f
+    warnings <- character()
+    value <- withCallingHandlers(
+      eval(call, parent.frame()),
+      warning = function(w) warnings <<- c(warnings, conditionMessage(w))
+    )
+    log_hidden(component, NULL, warnings, character())
+    value
+  }
+  formals(wrapper) <- formals(f)
+  wrapper
+}
+
+utils::assignInNamespace(".eval_f", recording_eval_f, ns = "ggstatsplot")
+local({
+  imports <- parent.env(asNamespace("ggstatsplot"))
+  for (name in c("centrality_description", "pairwise_comparisons")) {
+    original <- get(name, envir = imports, inherits = FALSE)
+    unlockBinding(name, imports)
+    assign(name, recording_wrapper(name, original), envir = imports)
+    lockBinding(name, imports)
+  }
+})
+
+# ggbetweenstats calls `.eval_f` for the subtitle and then, for a parametric test with
+# bf.message, for the Bayes caption; name those entries by their order.
+name_hidden <- function(case, log) {
+  eval_f <- which(vapply(log, function(entry) entry$component == ".eval_f", logical(1L)))
+  if (length(eval_f) > 2L) {
+    stop(case$name, ": ", length(eval_f), " `.eval_f` calls; expected subtitle and caption")
+  }
+  for (i in seq_along(eval_f)) log[[eval_f[[i]]]]$component <- c("subtitle", "caption")[[i]]
+  log
+}
+
 # The plot's layers in drawing order, with each layer's own data. The centrality
 # labels live here (ggstatsplot 1.1.4's extract_stats() leaves descriptive_data
 # empty). Layers that draw the plot's main data have data null.
@@ -296,18 +436,32 @@ akp_candidate <- function(analysis, eqvar, alpha) {
 }
 
 bootstrap_candidates <- function(case, analysis, subtitle_row) {
+  # Fail closed: each function needs its own replay (paired row order, other effect
+  # sizes) before its cases are added.
   if (case$fun != "ggbetweenstats") {
-    return(list())
+    stop("generate.R has no bootstrap replay for ", case$fun, "; add one first")
+  }
+  for (argument in c("conf.level", "tr")) {
+    if (!is.null(case$args[[argument]])) {
+      stop(case$name, " sets ", argument, "; the replays assume its default")
+    }
   }
   k <- nlevels(analysis$x)
-  if (case$args$type == "robust" && k == 2L) {
+  type <- case$args$type
+  # statsExpressions 2.2.1 bootstraps the effect-size CI of exactly these
+  # ggbetweenstats designs: AKP (robust, two groups), t1way's explanatory effect size
+  # (robust, three or more) and rank epsilon squared (nonparametric, three or more).
+  if (type %in% c("parametric", "bayes") || (type == "nonparametric" && k == 2L)) {
+    return(list())
+  }
+  if (type == "robust" && k == 2L) {
     # statsExpressions' own call first: EQVAR = FALSE, alpha = 1 - conf.level.
     return(c(
       lapply(ALPHAS, function(alpha) akp_candidate(analysis, FALSE, alpha)),
       lapply(ALPHAS, function(alpha) akp_candidate(analysis, TRUE, alpha))
     ))
   }
-  if (case$args$type == "robust" && k > 2L) {
+  if (type == "robust") {
     return(lapply(ALPHAS, function(alpha) {
       list(
         call = sprintf(
@@ -326,7 +480,7 @@ bootstrap_candidates <- function(case, analysis, subtitle_row) {
       )
     }))
   }
-  if (case$args$type == "nonparametric" && k > 2L) {
+  if (type == "nonparametric") {
     # Match the sidedness ggstatsplot reported: an upper bound of exactly 1 means a
     # one-sided ("greater") interval.
     alternative <- if (isTRUE(subtitle_row$conf.high == 1)) "greater" else "two.sided"
@@ -345,7 +499,7 @@ bootstrap_candidates <- function(case, analysis, subtitle_row) {
       }
     )))
   }
-  list()
+  stop(case$name, ": no bootstrap rule for type ", type)
 }
 
 run_or_stop <- function(case, what, expr) {
@@ -453,6 +607,29 @@ between_analysis <- function(data, x, y) {
   data.frame(y = used[[y]], x = droplevels(groups))
 }
 
+# Which rows each function analyzes. Fail closed: within-subjects designs keep only
+# complete subjects (statsExpressions::complete_subjects), one-sample designs have no
+# x, and so on, so every other function needs its own entry before its cases.
+ANALYSES <- list(ggbetweenstats = between_analysis)
+for (case in CASES) {
+  if (is.null(ANALYSES[[case$fun]])) {
+    stop("generate.R has no analysis bookkeeping for ", case$fun, "; add it first")
+  }
+}
+
+# Group counts from ggstatsplot's own centrality labels (`n.obs`), named by level.
+label_counts <- function(layers, x) {
+  for (layer in layers) {
+    if (identical(layer$geom, "GeomLabelRepel") && length(layer$data) > 0L) {
+      return(stats::setNames(
+        vapply(layer$data, function(row) as.integer(row[["n.obs"]]), integer(1L)),
+        vapply(layer$data, function(row) as.character(row[[x]]), character(1L))
+      ))
+    }
+  }
+  NULL
+}
+
 run_case <- function(case) {
   dataset <- read_dataset(case)
   data <- dataset$data
@@ -462,6 +639,7 @@ run_case <- function(case) {
   cl <- as.call(c(list(fn, data = quote(data)), call_args))
   env <- environment()
 
+  HIDDEN$log <- list()
   set.seed(CASE_SEED)
   outcome <- capture({
     plot <- eval(cl, envir = env)
@@ -473,8 +651,9 @@ run_case <- function(case) {
     )
   })
   failed <- inherits(outcome$value, "error")
+  hidden <- name_hidden(case, HIDDEN$log)
 
-  analysis <- between_analysis(data, case$args$x, case$args$y)
+  analysis <- ANALYSES[[case$fun]](data, case$args$x, case$args$y)
   fixture <- list(
     schema_version = SCHEMA_VERSION,
     name = case$name,
@@ -493,6 +672,8 @@ run_case <- function(case) {
     error = if (failed) conditionMessage(outcome$value) else NULL,
     r_warnings = as.list(outcome$warnings),
     r_messages = as.list(outcome$messages),
+    suppressed = hidden,
+    expected_hidden_errors = as.list(case$expect_hidden_errors),
     subtitle = if (failed) NULL else to_json_value(outcome$value$subtitle),
     caption = if (failed) NULL else to_json_value(outcome$value$caption),
     stats = if (failed) NULL else to_json_value(outcome$value$stats),
@@ -503,6 +684,55 @@ run_case <- function(case) {
   fixture
 }
 
+# Everything about a finished case that differs from what the case declares.
+outcome_problems <- function(case, fixture) {
+  errored <- !is.null(fixture$error)
+  if (errored != isTRUE(case$expect_error)) {
+    return(if (errored) paste("error:", fixture$error) else "expected an error, got none")
+  }
+  if (errored) {
+    return(character())
+  }
+  out <- character()
+  hidden_errors <- Filter(function(entry) !is.null(entry$error), fixture$suppressed)
+  failed_parts <- vapply(hidden_errors, function(entry) entry$component, character(1L))
+  for (entry in hidden_errors) {
+    if (!(entry$component %in% case$expect_hidden_errors)) {
+      out <- c(out, sprintf("ggstatsplot swallowed a %s error: %s", entry$component, entry$error))
+    }
+  }
+  for (part in setdiff(case$expect_hidden_errors, failed_parts)) {
+    out <- c(out, sprintf("expected ggstatsplot to swallow a %s error", part))
+  }
+  # ggbetweenstats draws the subtitle unless results.subtitle = FALSE, and the Bayes
+  # caption only for type "parametric" with bf.message (ggstatsplot's bf.condition).
+  wants_subtitle <- !isFALSE(case$args$results.subtitle)
+  wants_caption <- wants_subtitle && case$args$type == "parametric" &&
+    !isFALSE(case$args$bf.message)
+  has_subtitle <- !is.null(fixture$subtitle)
+  has_caption <- !is.null(fixture$caption)
+  if ((wants_subtitle != has_subtitle) && !("subtitle" %in% failed_parts)) {
+    out <- c(out, if (wants_subtitle) "no subtitle" else "unexpected subtitle")
+  }
+  if ((wants_caption != has_caption) && !("caption" %in% failed_parts)) {
+    out <- c(out, if (wants_caption) "no Bayes caption" else "unexpected caption")
+  }
+  # n_per_level must be what ggstatsplot itself counted.
+  labels <- label_counts(fixture$plot_layers, case$args$x)
+  counts <- unlist(fixture$n_per_level)
+  if (is.null(labels)) {
+    out <- c(out, "no centrality label layer to check n_per_level against")
+  } else if (!identical(sort(names(labels)), sort(names(counts))) ||
+    !identical(unname(as.integer(counts[names(labels)])), unname(labels))) {
+    out <- c(out, sprintf(
+      "n_per_level %s differs from ggstatsplot's n.obs %s",
+      paste(names(counts), counts, sep = "=", collapse = ","),
+      paste(names(labels), labels, sep = "=", collapse = ",")
+    ))
+  }
+  out
+}
+
 # Main ------------------------------------------------------------------------------
 
 summary_rows <- character()
@@ -511,15 +741,20 @@ for (case in CASES) {
   message("== ", case$name)
   fixture <- run_case(case)
   write_json_file(fixture, file.path(out_dir, paste0(case$name, ".json")))
-  errored <- !is.null(fixture$error)
-  status <- if (errored) paste("error:", fixture$error) else "ok"
-  if (errored != isTRUE(case$expect_error)) {
-    problems <- c(problems, sprintf("%s: %s", case$name, status))
+  case_problems <- outcome_problems(case, fixture)
+  if (length(case_problems) > 0L) {
+    problems <- c(problems, paste0(case$name, ": ", case_problems))
   }
+  status <- if (!is.null(fixture$error)) paste("error:", fixture$error) else "ok"
+  if (length(case_problems) > 0L) status <- paste(case_problems, collapse = "; ")
+  hidden_conditions <- sum(vapply(fixture$suppressed, function(entry) {
+    length(entry$warnings) + length(entry$messages) + !is.null(entry$error)
+  }, numeric(1L)))
   boot <- fixture$bootstrap_reference
   summary_rows <- c(summary_rows, sprintf(
-    "| %s | %s | %d | %s |",
+    "| %s | %s | %d | %d | %s |",
     case$name, gsub("|", "/", status, fixed = TRUE), length(fixture$r_warnings),
+    as.integer(hidden_conditions),
     if (is.null(boot)) "" else sprintf("replay matches ggstatsplot: %s", boot$replay$matches)
   ))
 }
@@ -527,8 +762,8 @@ for (case in CASES) {
 summary_text <- c(
   sprintf("ggstatsplot %s, R %s", PARITY_VERSION, VERSIONS$R),
   "",
-  "| case | result | R warnings | bootstrap reference |",
-  "| --- | --- | --- | --- |",
+  "| case | result | R warnings | conditions ggstatsplot hid | bootstrap reference |",
+  "| --- | --- | --- | --- | --- |",
   summary_rows
 )
 cat(summary_text, sep = "\n")
@@ -553,8 +788,12 @@ manifest <- list(
   schema_version = SCHEMA_VERSION,
   generator = "oracle/generate.R",
   parity_target = paste("ggstatsplot", PARITY_VERSION),
-  # The GitHub Actions run that produced the files; the fixture provenance workflow
-  # downloads this run's artifact and compares it byte for byte with the commit.
+  # The files that produced these fixtures; tests/oracle_fixtures.py compares them
+  # with the committed ones.
+  generator_files = stats::setNames(lapply(GENERATOR_FILES, file_sha256), GENERATOR_FILES),
+  # The GitHub Actions run that produced the files. oracle.yml attests this manifest;
+  # .github/workflows/fixtures.yml verifies the attestation and that the generator
+  # at `commit` is the committed one.
   run = list(
     repository = env_or_null("GITHUB_REPOSITORY"),
     run_id = env_or_null("GITHUB_RUN_ID"),

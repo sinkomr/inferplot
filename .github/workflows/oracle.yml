@@ -1,9 +1,12 @@
 name: Oracle
 
-# Generates the R oracle fixtures. Run manually:
-#   gh workflow run oracle.yml
+# Generates the R oracle fixtures. Run it on the branch that changes oracle/ or this
+# file, then commit its fixtures on that branch:
+#   gh workflow run oracle.yml --ref <branch>
 #   gh run download <run-id> -n oracle-fixtures -D tests/fixtures/oracle
-# Review the fixture diff before committing it (CLAUDE.md).
+# Review the fixture diff before committing it (CLAUDE.md). fixtures.yml accepts the
+# fixtures only if this workflow attested them at a commit whose generator files are
+# the committed ones.
 
 on:
   workflow_dispatch:
@@ -119,3 +122,30 @@ jobs:
           name: oracle-datasets
           path: oracle/datasets/
           if-no-files-found: error
+
+  attest:
+    # A separate job, so the R packages above never hold the signing token.
+    name: Attest the fixtures
+    needs: generate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: oracle-fixtures
+          path: fixtures
+
+      - name: Fixtures and manifest are present
+        run: |
+          test -f fixtures/manifest.json
+          ls -l fixtures
+
+      # SLSA build provenance for every fixture and the manifest: signed (Sigstore)
+      # proof that this workflow, at this commit, produced these exact bytes. Unlike
+      # the artifacts it does not expire.
+      - uses: actions/attest@v4
+        with:
+          subject-path: fixtures/*.json
