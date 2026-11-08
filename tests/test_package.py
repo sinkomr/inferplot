@@ -43,3 +43,41 @@ def test_import_works_without_optional_backends() -> None:
     block = "import sys\nfor name in ('pandas', 'polars', 'pyarrow'):\n"
     block += "    sys.modules[name] = None\n"
     _run(block + IMPORT_ALL)
+
+
+def test_public_api() -> None:
+    assert sorted(inferplot.__all__) == [
+        "Issue",
+        "StatsResult",
+        "__version__",
+        "analyze",
+    ]
+    for name in inferplot.__all__:
+        assert hasattr(inferplot, name)
+    assert callable(inferplot.analyze.betweenstats)
+    assert inferplot.analyze.__all__ == ["betweenstats"]
+
+
+def test_analysis_does_not_load_matplotlib() -> None:
+    # SPEC.md section 2: inferplot.analyze must not import matplotlib, and neither
+    # must `import inferplot` nor running an analysis.
+    _run(
+        """
+        import sys
+        import inferplot
+        assert "matplotlib" not in sys.modules, "import inferplot"
+        import inferplot.analyze
+        assert "matplotlib" not in sys.modules, "import inferplot.analyze"
+        import pandas as pd
+        two = pd.DataFrame({"g": list("aaabbb"), "y": [1.0, 2.0, 4.0, 3.0, 5.0, 8.0]})
+        three = pd.DataFrame(
+            {"g": list("aaabbbccc"), "y": [1.0, 2, 4, 3, 5, 8, 6, 9, 13]}
+        )
+        for data in (two, three):
+            result = inferplot.analyze.betweenstats(data, "g", "y")
+            result.to_json()
+            result.check()
+            str(result)
+        assert "matplotlib" not in sys.modules, "running an analysis"
+        """
+    )
