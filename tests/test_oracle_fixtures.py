@@ -6,6 +6,7 @@ ggstatsplot hid, and that every supported dataframe backend sees the same groups
 counts that R analyzed.
 """
 
+import math
 from collections.abc import Sequence
 from typing import Any
 
@@ -19,8 +20,11 @@ from tests.oracle_fixtures import (
     OracleCase,
     integrity_problems,
     load_cases,
+    load_probes,
     number,
     oracle_params,
+    probe,
+    r_double,
     r_level_label,
     read_dataset,
 )
@@ -44,6 +48,33 @@ ALL_TYPE_LABELS = (
     "edge_k5",
     "bugs_long",
 )
+# Phase 1 (betweenstats, parametric): edge data and every argument the parametric
+# slice exposes (see generate.R).
+P_ADJUST_METHODS = ("bonferroni", "hochberg", "hommel", "BH", "BY", "fdr", "none")
+PARAMETRIC_LABELS = (
+    "edge_missing",
+    "edge_empty_level",
+    "PlantGrowth-declared",
+    "edge_n2",
+    "edge_ties",
+    "edge_negative",
+    "edge_outliers",
+    "InsectSprays",
+    "edge_null",
+    "edge_large_n",
+    *(f"PlantGrowth-padj-{method}" for method in P_ADJUST_METHODS),
+    "ToothGrowth-cl90",
+    "PlantGrowth-cl90",
+    "mtcars-am-digits3",
+    "mtcars-digits3",
+    "PlantGrowth-display-all",
+    "PlantGrowth-display-ns",
+    "PlantGrowth-display-none",
+    "ToothGrowth-nosubtitle",
+    "PlantGrowth-nosubtitle",
+    "ToothGrowth-nobf",
+    "ToothGrowth-prior08",
+)
 EXPECTED_CASES = frozenset(
     {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
     | {"ggbetweenstats-mtcars-am-drat-parametric"}
@@ -52,6 +83,12 @@ EXPECTED_CASES = frozenset(
         for side in ("greater", "less")
         for t in ("parametric", "nonparametric")
     }
+    | {f"ggbetweenstats-{label}-parametric" for label in PARAMETRIC_LABELS}
+)
+# Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
+EXPECTED_FAILURES = frozenset({"ggbetweenstats-edge_n2-parametric"})
+EXPECTED_PROBES = frozenset(
+    {"probe-format", "probe-padjust", "probe-ptukey", "probe-omega"}
 )
 
 
@@ -65,6 +102,181 @@ def test_case_list_is_what_the_generator_writes() -> None:
         f"missing {sorted(EXPECTED_CASES - names)}, unexpected "
         f"{sorted(names - EXPECTED_CASES)}"
     )
+    assert len(PARAMETRIC_LABELS) == 28
+
+
+ALL_CASES = [
+    *oracle_params("ggbetweenstats"),
+    *oracle_params("ggbetweenstats", failed=True),
+]
+
+
+def test_failures_are_the_declared_ones() -> None:
+    failed = {case.name for case in load_cases() if case.error is not None}
+    assert failed == EXPECTED_FAILURES
+    for case in load_cases():
+        assert (case.expected_error is not None) == (case.name in EXPECTED_FAILURES)
+        assert (case.raw["partial"] is not None) == (case.name in EXPECTED_FAILURES)
+
+
+@pytest.mark.parametrize("case", oracle_params("ggbetweenstats", failed=True))
+def test_failed_case_fails_where_declared(case: OracleCase) -> None:
+    # ggstatsplot stopped inside the declared hidden call, with the declared message,
+    # after every hidden call before it ran; what those calls returned is kept.
+    expected = case.expected_error
+    assert expected is not None
+    assert case.error is not None
+    assert expected["message"] in case.error
+    assert expected["reason"]
+    *before, last = case.suppressed
+    assert last["component"] == expected["component"]
+    assert last["error"] is not None
+    assert all(entry["error"] is None for entry in before)
+    assert case.raw["subtitle"] is None
+    assert case.raw["stats"] is None
+    assert case.raw["plot_layers"] is None
+    for entry in before:
+        value = case.partial(entry["component"])
+        assert value, f"{entry['component']} returned nothing"
+    with pytest.raises(KeyError, match="pairwise"):
+        case.partial("pairwise")
+    # The centrality labels R computed carry the counts generate.R recorded.
+    labels = case.partial("centrality_description")
+    x = case.args["x"]
+    assert {str(r[x]): int(r["n.obs"]) for r in labels} == case.n_per_level
+
+
+def test_probe_list_is_what_the_generator_writes() -> None:
+    assert set(load_probes()) == EXPECTED_PROBES
+    with pytest.raises(KeyError, match="probe-formats"):
+        probe("probe-format" + "s")
+    with pytest.raises(KeyError, match="value"):
+        probe("probe-format").section("value")
+    with pytest.raises(KeyError, match="name"):
+        probe("probe-format").section("name")  # envelope fields are not sections
+
+
+def test_r_double_reads_r_hex_exactly() -> None:
+    assert r_double("0x1.999999999999ap-4") == 0.1
+    assert r_double("0x0p+0") == 0.0
+    negative_zero = r_double("-0x0p+0")
+    assert negative_zero is not None
+    assert negative_zero == 0.0
+    assert math.copysign(1.0, negative_zero) < 0
+    assert r_double("NA") is None
+    assert math.isnan(r_double("NaN") or 0.0)
+    assert r_double("-Inf") == -math.inf
+    with pytest.raises(ValueError, match="hex"):
+        r_double("0.1")
+
+
+def _hex_or_na(text: str) -> float | None:
+    value = r_double(text)
+    assert value is None or isinstance(value, float)
+    return value
+
+
+def test_probe_format_covers_its_grid() -> None:
+    fmt = probe("probe-format")
+    rows = fmt.rows("values")
+    # The generator loops over the grid, then over digits 0 to 4: blocks of five
+    # rows with the same value.
+    assert len(rows) % 5 == 0
+    for start in range(0, len(rows), 5):
+        block = rows[start : start + 5]
+        assert [row["digits"] for row in block] == [0, 1, 2, 3, 4]
+        assert len({(row["hex"], row["negative_zero"]) for row in block}) == 1
+    values = [_hex_or_na(row["hex"]) for row in rows[::5]]
+    assert None in values  # NA
+    finite = [v for v in values if v is not None and math.isfinite(v)]
+    # The grid asks for 0 and -0 (sprintf("%a") prints both as 0x0p+0), but R
+    # received -0 as +0: neither zero row is negative (1 / x > 0, "%.0f" gives "0").
+    zeros = [row for row in rows if row["hex"] == "0x0p+0"]
+    assert len(zeros) == 10
+    assert not any(row["negative_zero"] for row in rows)
+    assert any(v is not None and math.isnan(v) for v in values)
+    assert {math.inf, -math.inf} <= {v for v in values if v is not None}
+    assert max(abs(v) for v in finite) > 1e300
+    for row in rows:
+        assert not str(row["to_char"]).startswith("<error"), row
+    assert len(fmt.rows("counts")) == 34
+    assert [r["label"] for r in fmt.rows("conf_levels")][:5] == [
+        "50%",
+        "80%",
+        "89%",
+        "90%",
+        "95%",
+    ]
+    assert [c["type"] for c in fmt.rows("centrality")] == [
+        "parametric",
+        "nonparametric",
+        "robust",
+    ]
+
+
+def test_probe_padjust_covers_every_method() -> None:
+    padjust = probe("probe-padjust")
+    methods = padjust.section("methods")
+    assert set(methods) == {
+        "holm",
+        "hochberg",
+        "hommel",
+        "bonferroni",
+        "BH",
+        "BY",
+        "fdr",
+        "none",
+    }
+    cases = padjust.rows("cases")
+    assert len(cases) == 20
+    for case in cases:
+        n = len(case["p_hex"])
+        assert set(case["adjusted"]) == set(methods)
+        for method in methods:
+            assert len(case["adjusted"][method]["hex"]) == n, (case["name"], method)
+
+
+def test_probe_ptukey_covers_its_grid_and_every_games_howell_case() -> None:
+    ptukey = probe("probe-ptukey")
+    tails = ptukey.rows("tails")
+    assert len(tails) == 15 * 7 * 13
+    assert {(r["q"], r["nmeans"], r["df_hex"]) for r in tails}.__len__() == len(tails)
+    expected = {
+        case.name
+        for case in load_cases()
+        if case.function == "ggbetweenstats"
+        and case.type == "parametric"
+        and len(case.analysis_levels) > 2
+    }
+    entries = ptukey.rows("games_howell")
+    assert {entry["case"] for entry in entries} == expected
+    by_name = {case.name: case for case in load_cases()}
+    for entry in entries:
+        case = by_name[entry["case"]]
+        k = len(case.analysis_levels)
+        assert tuple(entry["levels"]) == case.analysis_levels
+        assert {str(k): int(v) for k, v in entry["n_per_level"].items()} == (
+            case.n_per_level
+        )
+        assert len(entry["pairs"]) == k * (k - 1) // 2
+        for pair in entry["pairs"]:
+            p_value = _hex_or_na(pair["p_value_hex"])
+            welch_df = _hex_or_na(pair["welch_df_hex"])
+            assert p_value is not None
+            assert welch_df is not None
+            if welch_df < 2:
+                # R's ptukey is undefined below 2 df and returns NaN (edge_n2).
+                assert math.isnan(p_value), pair
+            else:
+                assert 0.0 <= p_value <= 1.0
+
+
+def test_probe_omega_covers_its_grid() -> None:
+    rows = probe("probe-omega").rows("rows")
+    assert len(rows) == 8 * 4 * 6 * 3 * 3 + 3
+    greater = [r for r in rows if r["alternative"] == "greater"]
+    assert all(r["accurate_low"] is not None for r in greater)
+    assert all(r["accurate_low"] is None for r in rows if r["alternative"] != "greater")
 
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -75,10 +287,19 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     assert case.error is None, case.error
 
     # What ggstatsplot hid (SPEC.md section 9), one entry per hidden call in call
-    # order. ggstatsplot computes the centrality labels whether or not it draws
-    # them, and its bf.condition draws the Bayes caption only for "parametric".
-    with_caption = case.type == "parametric" and case.args.get("bf.message", True)
-    expected_calls = ["subtitle"]
+    # order. With results.subtitle (default TRUE) ggstatsplot computes the subtitle,
+    # then the Bayes caption when its bf.condition ("parametric") and bf.message
+    # (default TRUE) both hold; without results.subtitle it computes neither. It
+    # computes the centrality labels whether or not it draws them.
+    with_subtitle = case.args.get("results.subtitle", True) is not False
+    with_caption = (
+        with_subtitle
+        and case.type == "parametric"
+        and case.args.get("bf.message", True) is not False
+    )
+    expected_calls: list[str] = []
+    if with_subtitle:
+        expected_calls.append("subtitle")
     if with_caption:
         expected_calls.append("caption")
     expected_calls.append("centrality_description")
@@ -103,7 +324,7 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     else:
         assert case.caption is None
         assert case.caption_data is None
-    if "subtitle" in declared:
+    if "subtitle" in declared or not with_subtitle:
         assert case.subtitle is None
         assert case.subtitle_rows == []
         return
@@ -163,12 +384,28 @@ def _levels_and_counts(frame: Any, x: str, y: str) -> tuple[list[str], dict[str,
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
+@pytest.mark.parametrize("case", ALL_CASES)
 def test_backends_see_the_groups_r_analyzed(case: OracleCase, backend: Backend) -> None:
     frame = read_dataset(case, backend)
     levels, counts = _levels_and_counts(frame, case.args["x"], case.args["y"])
     assert tuple(levels) == case.analysis_levels
     assert counts == case.n_per_level
+
+
+@pytest.mark.parametrize("case", ALL_CASES)
+def test_declared_level_order_is_kept(case: OracleCase) -> None:
+    # A declared order (factor_levels) survives, minus levels without data; text
+    # columns sort in the C locale, as Python's sorted() does.
+    declared = case.factor_levels.get(case.args["x"])
+    if declared is None:
+        assert list(case.analysis_levels) == sorted(case.analysis_levels)
+        return
+    assert case.analysis_levels == tuple(
+        level for level in declared if level in case.n_per_level
+    )
+    assert set(declared) - set(case.analysis_levels) == {
+        level for level in declared if level not in case.n_per_level
+    }
 
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -187,19 +424,26 @@ def test_centrality_labels_are_recorded(case: OracleCase) -> None:
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
 def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
-    # SPEC.md section 4: brackets exist only for three or more groups; by default
-    # they mark the pairs whose adjusted p is strictly below 0.05, and every pair
-    # for type "bayes". Each label is the pair's expression from the pairwise table.
+    # SPEC.md section 4: brackets exist only for three or more groups and never with
+    # pairwise.display "none"; they mark the pairs whose adjusted p is strictly below
+    # pairwise.alpha (0.05) by default, those at or above it for "non-significant",
+    # every pair for "all", and every pair for type "bayes". Each label is the pair's
+    # expression from the pairwise table.
     brackets = case.layer_params("GeomSignif")
-    if len(case.analysis_levels) == 2:
+    display = case.args.get("pairwise.display", "significant")
+    if len(case.analysis_levels) == 2 or display == "none":
         assert brackets == []
+        assert case.pairwise == []
         return
     rows = case.pairwise
-    shown = (
-        rows
-        if case.type == "bayes"
-        else [r for r in rows if number(r["p.value"]) < 0.05]
-    )
+    alpha = float(case.args.get("pairwise.alpha", 0.05))
+    if case.type == "bayes" or display == "all":
+        shown = rows
+    elif display == "significant":
+        shown = [r for r in rows if number(r["p.value"]) < alpha]
+    else:
+        assert display == "non-significant", display
+        shown = [r for r in rows if number(r["p.value"]) >= alpha]
     expected = {
         (str(r["group1"]), str(r["group2"])): str(r["expression"]) for r in shown
     }

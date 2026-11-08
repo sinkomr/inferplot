@@ -7,6 +7,11 @@ are the ones that wrote the fixtures, so a fixture can never drift silently from
 data the Python tests read or from the committed generator. The schema is described
 in ``docs/design/SPEC.md`` section 9.
 
+Probe files (``probe-*.json``) record what R functions behind ggstatsplot return on
+fixed grids (number formatting, ``p.adjust``, ``ptukey``, the omega squared CI). They
+are hashed in the manifest and checked the same way, and are read through
+``load_probes()`` and ``probe()``, never as cases.
+
 Typical use in a parity test::
 
     @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -21,9 +26,10 @@ import functools
 import hashlib
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal
 
 import pytest
@@ -32,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "oracle"
 DATASET_DIR = ROOT / "oracle" / "datasets"
 MANIFEST = "manifest.json"
+PROBE_PREFIX = "probe-"
 SCHEMA_VERSION = 2
 PARITY_VERSION = "1.1.4"
 # Files that decide what the fixtures contain (repository-relative). The manifest
@@ -113,6 +120,30 @@ class OracleCase:
     @property
     def error(self) -> str | None:
         return self.raw["error"]
+
+    @property
+    def expected_error(self) -> Mapping[str, str] | None:
+        """The failure the case declares: ``component``, ``message``, ``reason``.
+
+        Null unless ggstatsplot itself fails on the case; the generator stops on any
+        failure a case does not declare.
+        """
+        return self.raw["expected_error"]
+
+    def partial(self, component: str) -> Any:
+        """What a hidden call returned before ggstatsplot failed (failed cases only).
+
+        ``component`` is ``subtitle``, ``caption`` or ``centrality_description``;
+        the value is in the fixture's JSON form (a data frame as row objects).
+        """
+        entries = self.raw["partial"]
+        if entries is None:
+            raise ValueError(f"{self.name}: ggstatsplot did not fail; read its outputs")
+        for entry in entries:
+            if entry["component"] == component:
+                return entry["value"]
+        known = [entry["component"] for entry in entries]
+        raise KeyError(f"{self.name}: no partial output {component!r}; have {known}")
 
     @property
     def subtitle(self) -> str | None:
@@ -224,7 +255,16 @@ class OracleCase:
 
 
 def fixture_paths() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.glob("*.json") if p.name != MANIFEST)
+    """Case fixtures: every JSON file except the manifest and the probes."""
+    return sorted(
+        p
+        for p in FIXTURE_DIR.glob("*.json")
+        if p.name != MANIFEST and not p.name.startswith(PROBE_PREFIX)
+    )
+
+
+def probe_paths() -> list[Path]:
+    return sorted(FIXTURE_DIR.glob(f"{PROBE_PREFIX}*.json"))
 
 
 @functools.cache
@@ -267,12 +307,37 @@ def integrity_problems() -> list[str]:
     if manifest.get("parity_target") != f"ggstatsplot {PARITY_VERSION}":
         problems.append(f"manifest parity_target {manifest.get('parity_target')!r}")
     problems.extend(generator_problems(manifest))
-    listed: Mapping[str, str] = manifest.get("fixtures", {})
-    present = {p.name for p in fixture_paths()}
+    problems.extend(
+        _file_problems(manifest, "fixtures", fixture_paths(), _fixture_datasets)
+    )
+    problems.extend(_file_problems(manifest, "probes", probe_paths(), _probe_datasets))
+    return problems
+
+
+def _fixture_datasets(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [raw["dataset"]]
+
+
+def _probe_datasets(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return list(raw["datasets"])
+
+
+def _file_problems(
+    manifest: Mapping[str, Any],
+    key: str,
+    paths: Sequence[Path],
+    datasets: Callable[[Mapping[str, Any]], list[Mapping[str, Any]]],
+) -> list[str]:
+    """Problems of the files the manifest lists under ``key`` (fixtures or probes)."""
+    listed = manifest.get(key)
+    if not isinstance(listed, Mapping):
+        return [f"manifest has no {key!r} map"]
+    problems: list[str] = []
+    present = {p.name for p in paths}
     for name in sorted(present - listed.keys()):
-        problems.append(f"{name} is not in the manifest")
+        problems.append(f"{name} is not in the manifest's {key}")
     for name in sorted(listed.keys() - present):
-        problems.append(f"{name} is in the manifest but missing")
+        problems.append(f"{name} is in the manifest's {key} but missing")
     for name in sorted(present & listed.keys()):
         path = FIXTURE_DIR / name
         if sha256_file(path) != listed[name]:
@@ -283,14 +348,17 @@ def integrity_problems() -> list[str]:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if raw.get("schema_version") != SCHEMA_VERSION:
             problems.append(f"{name}: schema_version {raw.get('schema_version')!r}")
+        if raw.get("name") != path.stem:
+            problems.append(f"{name}: names itself {raw.get('name')!r}")
         version = raw.get("versions", {}).get("packages", {}).get("ggstatsplot")
         if version != PARITY_VERSION:
             problems.append(f"{name}: generated by ggstatsplot {version!r}")
-        dataset = DATASET_DIR / raw["dataset"]["file"]
-        if not dataset.exists():
-            problems.append(f"{name}: dataset {dataset.name} is missing")
-        elif sha256_file(dataset) != raw["dataset"]["sha256"]:
-            problems.append(f"{name}: {dataset.name} differs from the CSV R read")
+        for entry in datasets(raw):
+            dataset = DATASET_DIR / entry["file"]
+            if not dataset.exists():
+                problems.append(f"{name}: dataset {dataset.name} is missing")
+            elif sha256_file(dataset) != entry["sha256"]:
+                problems.append(f"{name}: {dataset.name} differs from the CSV R read")
     return problems
 
 
@@ -307,6 +375,94 @@ def load_cases() -> tuple[OracleCase, ...]:
         raw = json.loads(path.read_text(encoding="utf-8"))
         cases.append(OracleCase(name=str(raw["name"]), path=path, raw=raw))
     return tuple(cases)
+
+
+@dataclass(frozen=True)
+class OracleProbe:
+    """One probe file: what R functions returned on a fixed grid of inputs.
+
+    Doubles are stored as R's C99 hex text (``sprintf("%a")``, read exactly with
+    ``r_double``), most of them also as 15-digit JSON numbers.
+    """
+
+    name: str
+    path: Path
+    raw: Mapping[str, Any]
+
+    def __repr__(self) -> str:
+        return f"OracleProbe({self.name!r})"
+
+    @property
+    def description(self) -> str:
+        return str(self.raw["description"])
+
+    @property
+    def versions(self) -> Mapping[str, Any]:
+        return self.raw["versions"]
+
+    def section(self, key: str) -> Any:
+        """One top-level entry, e.g. ``"values"``; an unknown key raises ``KeyError``.
+
+        A misspelled section must not pass as an empty one.
+        """
+        if key in _PROBE_ENVELOPE or key not in self.raw:
+            known = sorted(set(self.raw) - _PROBE_ENVELOPE)
+            raise KeyError(f"{self.name} has no section {key!r}; sections are {known}")
+        return self.raw[key]
+
+    def rows(self, key: str) -> list[Row]:
+        """A section that is a list of row objects."""
+        value = self.section(key)
+        if not isinstance(value, list):
+            raise TypeError(f"{self.name}: section {key!r} is not a list of rows")
+        return list(value)
+
+
+# Fields every probe file has; the rest are its sections.
+_PROBE_ENVELOPE = frozenset(
+    {"schema_version", "name", "kind", "description", "datasets", "versions"}
+)
+
+
+@functools.cache
+def load_probes() -> Mapping[str, OracleProbe]:
+    """All probe files by name, after the same verification as ``load_cases()``."""
+    problems = integrity_problems()
+    if problems:
+        raise FixtureIntegrityError(
+            "oracle fixtures failed verification:\n" + "\n".join(problems)
+        )
+    probes: dict[str, OracleProbe] = {}
+    for path in probe_paths():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if raw.get("kind") != "probe":
+            raise FixtureIntegrityError(f"{path.name}: kind {raw.get('kind')!r}")
+        name = str(raw["name"])
+        probes[name] = OracleProbe(name=name, path=path, raw=raw)
+    return MappingProxyType(probes)
+
+
+def probe(name: str) -> OracleProbe:
+    """One probe, e.g. ``probe("probe-padjust")``; an unknown name raises."""
+    probes = load_probes()
+    if name not in probes:
+        raise KeyError(f"no probe {name!r}; probes are {sorted(probes)}")
+    return probes[name]
+
+
+def r_double(text: str) -> float | None:
+    """A double R wrote with ``sprintf("%a")``, exactly; R's NA is ``None``.
+
+    NaN, Inf and -Inf come as R prints them (``"NaN"``, ``"Inf"``, ``"-Inf"``),
+    negative zero as ``"-0x0p+0"``.
+    """
+    if text == "NA":
+        return None
+    if text in {"NaN", "Inf", "-Inf"}:
+        return float(text)
+    if not text.removeprefix("-").startswith("0x"):
+        raise ValueError(f"not a hex double: {text!r}")
+    return float.fromhex(text)
 
 
 # Geoms whose layer parameters generate.R records (the drawn pairs and labels).
@@ -330,9 +486,18 @@ def _check_geom(geom: str) -> None:
         )
 
 
-def cases_for(function: str) -> tuple[OracleCase, ...]:
-    """Fixtures for one R function, e.g. ``"ggbetweenstats"``."""
-    return tuple(c for c in load_cases() if c.function == function)
+def cases_for(function: str, *, failed: bool = False) -> tuple[OracleCase, ...]:
+    """Fixtures for one R function, e.g. ``"ggbetweenstats"``.
+
+    By default the cases ggstatsplot completed; with ``failed=True`` the cases where
+    it failed, as the case declares (``expected_error``), which have no outputs to
+    compare against, only ``partial`` ones.
+    """
+    return tuple(
+        c
+        for c in load_cases()
+        if c.function == function and (c.error is not None) == failed
+    )
 
 
 def require_cases(cases: Sequence[OracleCase], what: str) -> Sequence[OracleCase]:
@@ -346,9 +511,13 @@ def require_cases(cases: Sequence[OracleCase], what: str) -> Sequence[OracleCase
     return cases
 
 
-def oracle_params(function: str) -> list[Any]:
-    """``pytest.param`` per fixture of ``function``, with the case name as id."""
-    cases = require_cases(cases_for(function), repr(function))
+def oracle_params(function: str, *, failed: bool = False) -> list[Any]:
+    """``pytest.param`` per fixture of ``function``, with the case name as id.
+
+    ``failed`` selects as in ``cases_for``.
+    """
+    what = f"{function!r}{' (failed in R)' if failed else ''}"
+    cases = require_cases(cases_for(function, failed=failed), what)
     return [pytest.param(case, id=case.name) for case in cases]
 
 
