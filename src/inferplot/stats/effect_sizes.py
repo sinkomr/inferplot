@@ -125,7 +125,18 @@ def partial_omega_squared(
     and convert it back to an F value, F_w = omega df2 / ((1 - omega) df1); invert the
     noncentral F there, lambda = ``f_ncp_bound(F_w, df1, df2, prob=conf_level)``
     (Steiger 2004); the lower bound is lambda / (lambda + df2) and the upper bound 1.
-    F <= 1 gives omega 0 and the interval [0, 1].
+    F <= 1 gives omega 0 and the interval [0, 1]. F_w is computed through the
+    identity F_w = (F - 1) df2 / (df1 + df2 + 1) (1 - omega = (df1 + df2 + 1) /
+    (F df1 + df2 + 1)), which avoids dividing by 1 - omega, 0 once omega rounds to 1
+    (F near 1e17); the two agree within 3e-15 relative where both are defined. A
+    bound beyond the largest double gives a lower bound of 1.
+
+    Run time: a few milliseconds per call at any F up to the largest double (the
+    subsampled Poisson sum and the large-lambda bracket of ``f_ncp_bound``; before
+    them the cost grew like sqrt(F), 125 s at F = 1e12). Against the full Poisson
+    sum inverted from 0 (the method before), for F = 10 to 1e10 at six (df1, df2,
+    level) settings the lower bounds agree within 1e-12 absolute (measured:
+    see tests/stats/test_effect_sizes.py).
 
     The bound is the accurate root, not effectsize's: on the oracle probe
     probe-omega (577 rows with alternative "greater") effectsize agrees with an
@@ -148,12 +159,18 @@ def partial_omega_squared(
     if df1 <= 0.0 or df2 <= 0.0:
         raise ValueError(f"df1 and df2 must be > 0; got {df1!r} and {df2!r}")
     level = check_conf_level(conf_level)
-    estimate = max(0.0, (f - 1.0) * df1 / (f * df1 + df2 + 1.0))
-    f_w = estimate * df2 / ((1.0 - estimate) * df1)
+    if math.isfinite(f * df1 + df2 + 1.0):
+        estimate = max(0.0, (f - 1.0) * df1 / (f * df1 + df2 + 1.0))
+    else:  # 1 - omega = (df1 + df2 + 1) / (F df1 + df2 + 1) rounds to 0
+        estimate = 1.0
+    # F_w = omega df2 / ((1 - omega) df1) = (F - 1) df2 / (df1 + df2 + 1) for F > 1,
+    # without the division by 1 - omega, which rounds to 0 for F near 1e17.
+    f_w = (f - 1.0) * (df2 / (df1 + df2 + 1.0)) if f > 1.0 else 0.0
     ncp = f_ncp_bound(f_w, df1, df2, prob=level)
     return EffectSizeCI(
         estimate=estimate,
-        conf_low=ncp / (ncp + df2),
+        # A root beyond the largest double: the bound rounds to 1.
+        conf_low=ncp / (ncp + df2) if math.isfinite(ncp) else 1.0,
         conf_high=1.0,
         conf_level=level,
         sidedness="greater",

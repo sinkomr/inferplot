@@ -31,9 +31,41 @@ mixture of beta distributions,
     P(F' <= f) = sum_j w_j I_x(df1 / 2 + j, df2 / 2),   x = df1 f / (df1 f + df2),
 
 and the upper tail as sum_j w_j I_{1 - x}(df2 / 2, df1 / 2 + j) with 1 - x computed as
-df2 / (df1 f + df2). The Poisson weights are built from their mode by cumulative
-sums of log i and normalized over a window of +/- (15 sqrt(mu) + 30) terms, which
-avoids the cancellation of -mu + j log mu - log j! for large mu.
+df2 / (df1 f + df2); for x > 1/2 the lower tail's factors are taken as
+1 - I_{1-x}(df2 / 2, df1 / 2 + j) (SciPy's ``betaincc``), since x itself has lost
+the digits of 1 - x (eps / (1 - x) relative: 4e-12 at 1 - x = 3e-5). The Poisson
+weights are normalized over a window of +/- (15 sqrt(mu) + 30) terms around the
+mode, mu = lambda / 2.
+
+* mu below 1e4: every term of the window is summed; the weights are built from the
+  mode by cumulative sums of log i, which avoids the cancellation of
+  -mu + j log mu - log j!.
+* mu from 1e4 on: the sum is taken on every h-th term only, h = floor(sqrt(mu) / 8),
+  weighted by h. The summand w_j I(j) extends to an analytic function of j whose
+  scale is at least sqrt(mu) (the Poisson weights' standard deviation; the beta
+  factor varies more slowly), so this is the trapezoidal rule with about 8 nodes per
+  standard deviation, whose error falls like exp(-2 pi^2 (sqrt(mu) / h)^2)
+  (Trefethen & Weideman 2014, SIAM Review 56: 385-458). The weights at the nodes
+  come from Loader's saddle-point form log w_j = -stirlerr(j) - mu phi((j - mu) / mu)
+  - log sqrt(2 pi j), phi(v) = (1 + v) log1p(v) - v (Loader 2000, "Fast and
+  accurate computation of binomial probabilities"), which stays accurate where the
+  cumulative sums of a million log i drift (measured: log-weight error 3.7e-9 for the
+  cumulative sums at mu = 4.5e6, 3e-14 for Loader's form, against mpmath). 4, 8, 16
+  and 64 nodes per SD give the same sums to 1e-15; against the full sum with
+  independently computed weights (tests/stats/test_noncentral.py, mu up to 2.5e6,
+  both tails) they agree within 1e-12 relative. The window holds about 250 nodes
+  whatever mu is.
+* Beta factors with a large first parameter, a >= 1e5 max(b, 1) (a = df1 / 2 + j,
+  b = df2 / 2): SciPy's ``betainc`` loses accuracy there (up to 2.8e-10 absolute at
+  b = 3 and 30, a = 3e5 to 3e8, in SciPy 1.18; 1e-3 at a = 1e14 in SciPy 1.11, NaN
+  beyond), so I_y(b, a) = P(G_b <= r G_a) with independent gamma variables,
+  r = y / (1 - y), is expanded in the relative fluctuation of G_a around a:
+  I = P(b, z) + p(z) z [c / (2a) + (c^2 - (b - 1)) / (3a^2)
+  + (c^3 - 3c(b - 1) + 2(b - 1)) / (8a^2)] + O((b/a)^3), z = r a, c = b - 1 - z,
+  with P and p the regularized gamma function and density of shape b (the moments of
+  G_a / a - 1 are 1/a, 2/a^2 and 3/a^2 + O(a^-3)). Against mpmath (50 digits) at
+  b = 0.5 to 1150, a = 1e5 to 1e14 and z within 3 SDs of b: absolute error at most
+  1e-12 for a / b >= 1e3 and 1.2e-15 for a / b >= 1e5.
 """
 
 from __future__ import annotations
@@ -48,7 +80,7 @@ from numpy.typing import NDArray
 from scipy import optimize, special
 
 from inferplot.stats.parametric import Alternative, check_alternative
-from inferplot.stats.srange import log_scaled_chi_density
+from inferplot.stats.srange import log_scaled_chi_density, stirlerr_large
 
 FloatArray = NDArray[np.float64]
 
@@ -69,6 +101,15 @@ _LOG_GL_WEIGHTS: Final = np.log(_GL_WEIGHTS)
 # Poisson window half-width: 15 sqrt(mu) + 30 terms on each side of the mode.
 _POISSON_SD: Final = 15.0
 _POISSON_PAD: Final = 30.0
+# From this Poisson mean on, the mixture is summed on every h-th term (module
+# docstring), h = floor(sqrt(mu) / _NODES_PER_SD).
+_SUBSAMPLE_FROM: Final = 1e4
+_NODES_PER_SD: Final = 8.0
+# Beta factors with a >= _LARGE_A max(b, 1) use the large-a expansion.
+_LARGE_A: Final = 1e5
+# Bounds above this noncentrality are searched from the large-lambda start value
+# (f_ncp_bound); below it from 0, as before.
+_TIGHT_BRACKET_FROM: Final = 1e4
 # Root finding: absolute tolerance on the noncentrality parameter.
 _XTOL: Final = 1e-13
 _MAX_EXPANSIONS: Final = 2000
@@ -154,10 +195,38 @@ def _check_f_args(f: float, df1: float, df2: float, ncp: float) -> None:
         raise ValueError(f"df1 and df2 must be > 0; got {df1!r} and {df2!r}")
 
 
-def _log_poisson_window(mu: float) -> tuple[NDArray[np.int64], FloatArray]:
-    """Indices j and normalized log Poisson(mu) weights in a window around the mode."""
+def _phi(v: FloatArray) -> FloatArray:
+    """(1 + v) log1p(v) - v without cancellation near v = 0."""
+    out = (1.0 + v) * np.log1p(v) - v
+    small = np.abs(v) < 0.1
+    if bool(small.any()):
+        vs = v[small]
+        # sum_{n >= 2} (-v)^n / (n (n - 1)), Horner form; 28 terms give < 1e-27 v^2.
+        acc = np.zeros_like(vs)
+        for n in range(30, 1, -1):
+            acc = acc * -vs + 1.0 / (n * (n - 1))
+        out[small] = acc * vs * vs
+    return out
+
+
+def _log_poisson_window(mu: float) -> tuple[FloatArray, FloatArray]:
+    """Nodes j and normalized log Poisson(mu) weights in a window around the mode.
+
+    Below ``_SUBSAMPLE_FROM`` every integer of the window, with exact weights; from
+    it on every h-th integer with Loader's weights times h (module docstring).
+    """
     if mu == 0.0:
-        return np.zeros(1, dtype=np.int64), np.zeros(1)
+        return np.zeros(1), np.zeros(1)
+    if mu >= _SUBSAMPLE_FROM:
+        sd = math.sqrt(mu)
+        step = math.floor(sd / _NODES_PER_SD)
+        count = math.ceil((_POISSON_SD * sd + _POISSON_PAD) / step)
+        # mu >= 1e4: the window, 15 sqrt(mu) + 30 wide, stays far above j = 15.
+        nodes = math.floor(mu) + step * np.arange(-count, count + 1, dtype=np.float64)
+        log_w = (
+            -stirlerr_large(nodes) - mu * _phi((nodes - mu) / mu) - 0.5 * np.log(nodes)
+        )
+        return nodes, log_w - _logsumexp(log_w)
     mode = math.floor(mu)
     span = math.ceil(_POISSON_SD * math.sqrt(mu) + _POISSON_PAD)
     lo, hi = max(0, mode - span), mode + span
@@ -169,7 +238,34 @@ def _log_poisson_window(mu: float) -> tuple[NDArray[np.int64], FloatArray]:
     cumulative[1:] = logs.cumsum()
     at_mode = cumulative[mode - lo]
     rel = (j - mode).astype(np.float64) * math.log(mu) - (cumulative - at_mode)
-    return j, rel - _logsumexp(rel)
+    return j.astype(np.float64), rel - _logsumexp(rel)
+
+
+def _beta_large_a(a: FloatArray, b: float, r: float, *, upper: bool) -> FloatArray:
+    """I_y(b, a) (``upper``) or I_{1-y}(a, b), r = y / (1 - y), for a >> b.
+
+    The expansion of P(G_b <= r G_a) in the fluctuation of G_a / a through a^-2
+    (module docstring).
+    """
+    z = r * a
+    bm1 = b - 1.0
+    c = bm1 - z
+    with np.errstate(divide="ignore", under="ignore"):
+        density = np.exp(bm1 * np.log(z) - z - special.gammaln(b))
+    inv = 1.0 / a
+    correction = (
+        density
+        * z
+        * inv
+        * (
+            0.5 * c
+            + inv * (c * c - bm1) / 3.0
+            + inv * (c * c * c - 3.0 * c * bm1 + 2.0 * bm1) / 8.0
+        )
+    )
+    if upper:
+        return special.gammainc(b, z) + correction
+    return special.gammaincc(b, z) - correction
 
 
 def noncentral_f_logcdf(
@@ -185,13 +281,31 @@ def noncentral_f_logcdf(
     if f == 0.0:
         return 0.0 if upper else -math.inf
     j, log_w = _log_poisson_window(0.5 * ncp)
+    a = 0.5 * df1 + j
+    b = 0.5 * df2
     denom = df1 * f + df2
-    a = 0.5 * df1 + j.astype(np.float64)
-    with np.errstate(divide="ignore"):
+    if math.isfinite(denom):
+        y, x, r = df2 / denom, df1 * f / denom, df2 / (df1 * f)
+    else:  # df1 f overflows: 1 - x = r / (1 + r) = r to double precision
+        r = df2 / df1 / f
+        y, x = r, 1.0
+    large = a >= _LARGE_A * max(b, 1.0)
+    values = np.empty_like(a)
+    if bool(large.any()):
+        values[large] = _beta_large_a(a[large], b, r, upper=upper)
+    if not bool(large.all()):
+        small = a[~large]
         if upper:
-            log_i = np.log(special.betainc(0.5 * df2, a, df2 / denom))
+            values[~large] = special.betainc(b, small, y)
+        elif x > 0.5:
+            # I_x(a, b) = 1 - I_y(b, a) from y, which keeps the digits that x has
+            # lost (eps / y relative: 4e-12 at y = 3e-5 with I_x(a, b) itself).
+            values[~large] = special.betaincc(b, small, y)
         else:
-            log_i = np.log(special.betainc(a, 0.5 * df2, df1 * f / denom))
+            values[~large] = special.betainc(small, b, x)
+    with np.errstate(divide="ignore"):
+        # A large-a value can only fall below 0 far in a tail, where P is ~0.
+        log_i = np.log(np.maximum(values, 0.0))
     return min(0.0, _logsumexp(log_w + log_i))
 
 
@@ -283,6 +397,36 @@ def t_ncp_interval(
     return low, high
 
 
+_LARGEST: Final = float(np.finfo(np.float64).max)
+_BRACKET_STEP: Final = 4.0
+
+
+def _f_ncp_from(g: Callable[[float], float], start: float) -> float:
+    """Root of an increasing g near ``start`` > 0 (math.inf beyond the doubles).
+
+    The bracket is start +/- 4 sqrt(start), widened four-fold until it holds the
+    root; g(0) < 0 is known, so the lower end stops at 0.
+    """
+    if not math.isfinite(start):
+        return math.inf
+    step = _BRACKET_STEP * math.sqrt(start)
+    lo = start - step
+    while lo > 0.0 and g(lo) >= 0.0:
+        step *= _BRACKET_STEP
+        lo = start - step
+    lo = max(lo, 0.0)
+    step = _BRACKET_STEP * math.sqrt(start)
+    while True:
+        hi = min(start + step, _LARGEST)
+        if g(hi) > 0.0:
+            break
+        if hi == _LARGEST:
+            return math.inf
+        step *= _BRACKET_STEP
+    root = optimize.brentq(g, lo, hi, xtol=_XTOL, rtol=4.0 * 2.0**-52, maxiter=500)
+    return float(root)
+
+
 def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
     """Noncentrality lambda >= 0 with P(F'(df1, df2, lambda) <= f) = ``prob``.
 
@@ -291,6 +435,15 @@ def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
     the parameter space (Steiger 2004, section 3). Probabilities above 1/2 are solved
     through the upper tail, P(F' > f) = 1 - prob. The inversion behind
     ``effectsize``'s noncentral-F intervals (R: ``pf(f, df1, df2, ncp)``).
+
+    Root search: Brent's method. When the large-lambda value
+    lambda_0 = df1 (f q / df2 - 1) (q: the chi-square(df2) quantile with upper tail
+    ``prob``, from F' ~ ((lambda + df1) / df1) / (chi2_df2 / df2) for large lambda)
+    is at least 1e4, the bracket is lambda_0 +/- 4 sqrt(lambda_0), widened four-fold
+    until it holds the root; otherwise it runs from 0 to 2 f df1, doubled until it
+    holds the root. With the subsampled Poisson sum (module docstring) the search
+    takes a few milliseconds at any f. Returns ``math.inf`` when the root lies
+    beyond the largest double.
 
     Raises:
         ValueError: an argument is not finite, f < 0, a df is not positive, or
@@ -318,7 +471,14 @@ def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
         def g(ncp: float) -> float:
             return log_target - _clip(noncentral_f_logcdf(f, df1, df2, ncp))
 
-    high = max(1.0, 2.0 * f * df1)
+    # Large lambda: F' is close to ((lambda + df1) / df1) / (chi2_df2 / df2), so the
+    # root is close to df1 (f q / df2 - 1) with q the chi2_df2 quantile that has
+    # upper tail prob.
+    q = float(special.chdtri(df2, prob))
+    start = df1 * (f / df2 * q - 1.0)
+    if start >= _TIGHT_BRACKET_FROM:
+        return _f_ncp_from(g, start)
+    high = min(max(1.0, 2.0 * f * df1), _LARGEST)
     for _ in range(_MAX_EXPANSIONS):
         if g(high) > 0.0:
             break

@@ -12,6 +12,7 @@ from __future__ import annotations
 import inspect
 import json
 import math
+import time
 from typing import Any
 
 import numpy as np
@@ -706,3 +707,28 @@ def test_numpy_and_integer_inputs() -> None:
     assert all(type(v) is float for vs in result.values for v in vs)
     assert type(result.test.statistic) is float
     assert StatsResult.from_json(result.to_json()) == result
+
+
+# --------------------------------------------------------------------------- #
+# extreme data: well-separated groups, huge and tiny scales
+
+
+@pytest.mark.parametrize("sd", [1e-2, 1e-4, 1e-6, 1e-8, 1e-12])
+def test_well_separated_low_noise_groups(sd: float) -> None:
+    # API-1: groups at 10, 20 and 30 with little noise give Welch F of 1e7 to 1e27;
+    # before, sd = 1e-4 ran for minutes and sd = 1e-8 raised ZeroDivisionError.
+    rng = np.random.default_rng(0)
+    data = pd.DataFrame(
+        {
+            "g": np.repeat(["a", "b", "c"], 5),
+            "y": np.repeat([10.0, 20.0, 30.0], 5) + rng.normal(0.0, sd, 15),
+        }
+    )
+    start = time.perf_counter()
+    result = betweenstats(data, "g", "y")
+    assert time.perf_counter() - start < 5.0
+    assert result.test.statistic > 1e6
+    es = result.effect_size
+    assert 0.99 < es.conf_low <= es.estimate <= 1.0
+    assert es.conf_high == 1.0
+    assert "CI_95% [1.00, 1.00]" in result.text.subtitle
