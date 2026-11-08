@@ -40,7 +40,7 @@ fig.save("score.svg")
 | `type` | `"parametric"` | also `"nonparametric"`, `"robust"`, `"bayes"`; aliases `"p"`, `"np"`, `"r"`, `"bf"` |
 | `conf_level` | `0.95` | |
 | `digits` | `2` | subtitle formatting, as ggstatsplot |
-| `tr` | `0.2` | trimming for robust methods |
+| `tr` | `0.2` | trimming for robust methods; another value with a type that trims nothing raises `ValueError` (ggstatsplot silently ignores it) |
 | `bf_prior` | `0.707` | numeric, exactly as ggstatsplot (not sqrt(2)/2) |
 | `bf_message` | `None` | Bayes factor caption. ggstatsplot draws one only when `results_subtitle` is true and either the type is parametric (betweenstats, withinstats, histostats, scatterstats) or, in barstats, the type is not bayes, `paired=False` and `y` is None or has more than one level (ggstatsplot: `y` does not have exactly one level); otherwise it draws none and says nothing. Within that condition `None` draws the caption when v0.1 computes the Bayes factor (two groups or conditions, one sample, correlation) and otherwise adds a `warnings` entry saying it arrives in v0.2 (ANOVA with three or more groups or conditions, contingency tables, one-way goodness of fit); outside it, `None` draws no caption and adds no warning. `True` raises `NotImplementedError` for the v0.2 designs and `ValueError` outside the condition; `False` never draws it. The caption's Bayes factor is two-sided whatever `alternative` says, as ggstatsplot's; with a one-sided `alternative`, `warnings` says so. See §5 item 5 |
 | `results_subtitle` | `True` | |
@@ -176,7 +176,7 @@ a docstring):
 
 | type | Omnibus | Effect size + CI | Pairwise, then `p_adjust_method` | Centrality |
 | --- | --- | --- | --- | --- |
-| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared = max(0, (F - 1) df1 / (F df1 + df2 + 1)) with Welch's F and df (`effectsize::omega_squared`), one-sided CI [lower, 1] at `conf_level`: the estimate read as a partial eta squared gives F_w = omega df2 / ((1 - omega) df1), lambda solves P(F'(df1, df2, lambda) <= F_w) = `conf_level`, the lower bound is lambda / (lambda + df2), and 0 when no lambda > 0 does (D33, probe-omega). inferplot computes the noncentral F itself (SciPy 1.11's `ncfdtr` is off by up to 1.2 relative near P = 1) | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1). p is the accurate studentized range upper tail at the pair's Welch df and \|q\| (`inferplot.stats.srange_sf`, D31), then `p_adjust_method` over all k(k-1)/2 pairs (ggstatsplot's adjusted p is exactly `p.adjust` of gamesHowellTest's raw p). ggstatsplot's p is R's `ptukey` value, whose error grows as the df falls (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, 1.9e-8 at df 20 to 1000, a floor near 4.7e-10 in the far tail) and which is NaN below 2 df, where ggstatsplot stops with an error (fixture `edge_n2`, D37). SciPy's `studentized_range` is no ground truth in the far tail either (1.9e-14 for iris setosa-versicolor, 14% low) | mean |
+| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared = max(0, (F - 1) df1 / (F df1 + df2 + 1)) with Welch's F and df (`effectsize::omega_squared`), one-sided CI [lower, 1] at `conf_level`: the estimate read as a partial eta squared gives F_w = omega df2 / ((1 - omega) df1), lambda solves P(F'(df1, df2, lambda) <= F_w) = `conf_level`, the lower bound is lambda / (lambda + df2), and 0 when no lambda > 0 does (D33, probe-omega). inferplot computes the noncentral F itself (SciPy 1.11's `ncfdtr` is off by up to 1.2 relative near P = 1) | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1); group1 is the earlier level in the analysis order, and rows are sorted by group1 and then group2 as text in the C locale (statsExpressions 2.2.1 `pairwise_comparisons()`: `dplyr::arrange(group1, group2)`), the order the brackets keep. p is the accurate studentized range upper tail at the pair's Welch df and \|q\| (`inferplot.stats.srange_sf`, D31), then `p_adjust_method` over all k(k-1)/2 pairs (ggstatsplot's adjusted p is exactly `p.adjust` of gamesHowellTest's raw p). ggstatsplot's p is R's `ptukey` value, whose error grows as the df falls (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, 1.9e-8 at df 20 to 1000, a floor near 4.7e-10 in the far tail) and which is NaN below 2 df, where ggstatsplot stops with an error (fixture `edge_n2`, D37). SciPy's `studentized_range` is no ground truth in the far tail either (1.9e-14 for iris setosa-versicolor, 14% low) | mean |
 | nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), one-sided percentile bootstrap CI [lower, 1] (ggstatsplot: 100 iterations) | Dunn (`PMCMRplus::kwAllPairsDunnTest`): z = abs(mean-rank difference) / tie-corrected SE, reported unsigned; two-sided normal p (reproduced to 2.4e-15) | median |
 | robust | trimmed-means ANOVA (`WRS2::t1way`); p computed as 1 - pf (§10, `wrs2_p`) | explanatory effect size (`WRS2::t1way`), bootstrap CI (ggstatsplot: 100 resamples, `alpha = 1 - conf.level` computed in floating point, 0.050000000000000044: with 100 resamples only that value, not 0.05, reproduces ggstatsplot's bounds, so the CI's order statistics depend on alpha / 2 x resamples rounding past 2.5); with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon`: estimate = trimmed mean(group1) - trimmed mean(group2); p = per-pair Yuen p (1 - pt), then `p_adjust_method` (lincon's own Hochberg is not used); CI = estimate -/+ c x Yuen SE. c comes from a two-decimal table of the Studentized maximum modulus at (alpha, C = number of pairs, not groups: `edge_k5` has 10, `bugs_long` 6), whose rows are every df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40, 60 and a last row at df 200 holding the infinite-df (normal) values; c is interpolated linearly in 1/df between the rows on either side of the pair's Yuen df (fixtures: df 5.2 to 110, rows up to 60/200; reproduced to 1e-14). The entries are the published table's, not recomputed quantiles: for C = 3 at df 5 the table has 3.39 where the quantile, 3.3992, rounds to 3.40 *(verify: take the table from its published source; no fixture has df above 200 or alpha other than 0.05)* | trimmed mean |
 | bayes | v0.2: `BayesFactor::anovaBF` (method and precision to measure when implemented) | v0.2: Bayesian R squared, posterior median with 95% HDI (`conf.method` "HDI" in the fixtures) | v0.2: `ttestBF` per pair as for two groups, unadjusted, always with prior 0.707 and 95% intervals whatever `bf_prior` and `conf_level` say (every pair's Bayes factor is reproduced by `tools/reference`) | MAP |
@@ -267,7 +267,8 @@ Statistical and behavioral differences are exactly these:
    they are tested.
 3. When only significant pairs are drawn, the caption states how many pairs were tested.
 4. Nothing is silently dropped or aliased: unknown arguments, `type` values without a
-   distinct method, and a `subtitle` passed while `results_subtitle=True` raise.
+   distinct method, a `subtitle` passed while `results_subtitle=True`, and a `tr`
+   other than 0.2 with a type that trims nothing raise.
 5. v0.1 only: where ggstatsplot's default adds a Bayes factor that inferplot computes only
    from v0.2 (the Bayes ANOVA caption after a parametric test with three or more groups
    or conditions; unpaired contingency tables and one-way goodness of fit with a type
@@ -279,8 +280,10 @@ Statistical and behavioral differences are exactly these:
    range, not from R's `ptukey`, whose error grows as the df falls (up to 1.35e-3
    absolute at df 2, 1.8e-7 at df 10, about 5e-10 in the far tail) and which is NaN
    below 2 df (D31, D37). Where that shows, the printed p differs from ggstatsplot's:
-   iris setosa-versicolor, where ggstatsplot prints 1.41e-09 and inferplot about
-   2.24e-14, and setosa-virginica (2.83e-08 against 2.74e-08). Where every pair's Welch
+   3 of the 106 pairwise rows of the parametric fixtures: iris setosa-versicolor,
+   where ggstatsplot prints 1.41e-09 and inferplot about 2.24e-14, iris
+   setosa-virginica (2.83e-08 against 2.74e-08) and edge_negative b-c (1.27e-08
+   against 1.28e-08; an mpmath reference confirms inferplot's raw p). Where every pair's Welch
    df is below 2 (two values per group), ggstatsplot 1.1.4 stops with an error and
    inferplot reports the accurate p-values. §10 says how they are tested.
 7. The partial omega squared lower bound is the accurate root of ggstatsplot's own
@@ -289,14 +292,23 @@ Statistical and behavioral differences are exactly these:
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
-palette Okabe-Ito; more than 8 levels uses `tab20` and adds a warning.
+palette Okabe-Ito; more than 8 levels uses `tab20` and adds a warning. Violins are
+Gaussian kernel densities with Silverman's bandwidth (R's `bw.nrd0`) trimmed to the
+data range; boxes use type-7 quartiles and Tukey whiskers without outlier markers (the
+points show them). A panel with more than 5,000 values draws a uniform seeded
+2,000-point subsample of the points; the violins (or, without a violin layer, unfilled
+density outlines) and boxes show all values. A level with fewer than two distinct
+values gets no violin, and `warnings` says so. inferplot sizes its own figure from the
+rendered text extents, so no text is clipped or overlaps (D38); with `ax=` nothing is
+resized and `check()` reports what does not fit.
 
 ## 6. Result contract
 
-`StatsFigure`: `figure`, `axes` (dict: `"main"`, plus `"xside"`/`"yside"` for marginals),
-`result`, `check()`, `save(path, *, dpi=300, transparent=False)` (format from the
-extension: `.svg`, `.pdf` or `.png`; anything else raises), `_repr_png_` for notebooks.
-No `show()`.
+`StatsFigure`: `figure`, `axes` (read-only mapping: `"main"`, plus `"xside"`/`"yside"`
+for marginals), `result` (the result drawn, with any rendering warnings appended to its
+`warnings`), `check()`, `save(path, *, dpi=300, transparent=False)` (format from the
+extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
+`_repr_png_` for notebooks. No `show()`.
 
 `StatsResult` (frozen dataclass, plain Python types only, JSON-serializable):
 
@@ -325,9 +337,13 @@ p_adjusted, adjust_method, alternative, effect_size, estimate, conf_level, conf_
 conf_high, bf10, log_bf01, significant, displayed; missing values are nulls (pandas uses
 nullable `boolean` columns).
 
-`save()` sets `svg.fonttype="none"` and `pdf.fonttype=42` inside an `rc_context`, and
-embeds `result.to_json()` in file metadata (PNG text chunk; SVG and PDF description
-fields; confirm which keys each matplotlib backend accepts).
+`save()` sets `svg.fonttype="none"`, `pdf.fonttype=42` and a fixed `svg.hashsalt`
+inside an `rc_context`, drops the SVG date and PDF creation date (saving twice writes
+identical bytes), and embeds `result.to_json(include_values=False)` in file metadata:
+the PNG text chunk "Description", the SVG Dublin Core description and the PDF Info
+"Subject". The embedded copy holds every number and text but not the analyzed
+observations, which can be large and are the user's data (D36); a result read back
+from it has `values == ()` and cannot be drawn again.
 
 ## 7. Text formats
 
@@ -395,6 +411,13 @@ no problems.
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect |
 | `text_clipped` | figure | warning | any text extends outside the figure |
 | `points_subsampled` | figure | info | large-n subsampling used |
+
+`label_overlap` compares the rendered boxes of every drawn, non-empty text: title,
+subtitle, caption lines, axis labels, visible tick labels, centrality labels with their
+label boxes, bracket labels; with `ax=` only the texts of that Axes. `text_clipped`
+fires when a text extends more than 0.5 px outside the figure, or a text drawn inside
+the Axes (centrality and bracket labels; with `ax=` also the subtitle and caption)
+extends outside it. Messages name texts in plain words, never mathtext source.
 
 ## 9. R oracle
 
@@ -573,7 +596,8 @@ Every other subtitle number is compared as the exact string inferplot produces.
   polars and pyarrow inputs give identical results; standardized effect sizes invariant
   to location and positive scale.
 - **Rendering:** structural SVG assertions (layers present, label text equals result
-  text); a few pytest-mpl image baselines generated on Linux only.
+  text); a few pytest-mpl image baselines generated on Linux only (not yet generated:
+  STATUS).
 
 ## 12. Documentation for AI users
 

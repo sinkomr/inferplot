@@ -36,10 +36,14 @@ are logged in DECISIONS.md.
 
 - [x] `_data.py` boundary (pandas, polars, pyarrow) and `_validate.py` (aliases, did-you-mean, removed-argument messages)
 - [x] Welch t and ANOVA, Hedges' g and partial omega squared with CIs, Games-Howell then Holm (accurate studentized range tail, D31): `inferplot.stats` reproduces every completed parametric fixture's statistics (`tests/stats/test_parity.py`); end-to-end parity is the last item
-- [ ] Two-group JZS Bayes factor caption (D32)
-- [ ] `StatsResult`, `text.py` (subtitle parity, APA, caption, alt text), `check()`
-- [ ] Renderer (violin, box, points, centrality label, brackets, subtitle, caption) and `save()`
-- [ ] Oracle parity tests pass for every betweenstats parametric fixture
+- [x] Two-group JZS Bayes factor caption (D32): every two-sample ttestBF value within 1.5e-9; the caption is ggstatsplot's first and last items, AST-equal on every two-group parametric fixture
+- [x] `StatsResult`, `text.py` (subtitle parity, APA, caption, alt text), `check()`: every fixture expression AST-equal when rebuilt from its numbers; number formatting reproduces all 5,010 probe-format rows
+- [x] Renderer (violin, box, points, centrality label, brackets, subtitle, caption) and `save()`: all 40 completed parametric fixtures render with no clipped or overlapping text; SVG, PDF and PNG round trips; identical bytes on re-save
+- [x] Oracle parity tests pass for every betweenstats parametric fixture: `ip.analyze.betweenstats` matches all 40 completed parametric fixtures on pandas, polars and pyarrow (`tests/test_betweenstats_parity.py`); three bracket labels differ by design (D31, SPEC §5 item 6); `edge_n2`, where ggstatsplot fails, matches its partial outputs (D37)
+
+Slices: two groups (ToothGrowth) and three or more groups (iris) render to SVG with
+`fig.check()` empty (`tests/test_betweenstats_end_to_end.py`). End-of-phase review:
+pending.
 
 Phase 1 notes: fixtures come from oracle run 42522555302: the 45 Phase 0 cases,
 unchanged, plus 28 parametric ggbetweenstats cases (edge data and every argument the
@@ -71,7 +75,7 @@ confirmed the omega squared CI construction (D33, flagged for the owner).
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
 - [ ] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples
-- [ ] simulation tests (`slow` marker)
+- [ ] simulation tests (`slow` marker); started in Phase 1: Welch t and ANOVA Type I error and Hedges' g CI coverage under the null with unequal variances and n (0.0475, 0.0515, 0.9525; `tests/test_simulation.py`)
 - [ ] agent evaluation harness (ask the human before running it)
 - [ ] release workflow; human publishes to TestPyPI, then PyPI
 
@@ -93,6 +97,13 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   scales), never widened to fit.
 - D33 and D37 follow the owner's D31 precedent (accurate value over R's numerical
   accident) and await the owner's confirmation.
+- Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
+  ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
+  figure). Figures with several bracket levels are tall (three levels 7.3 in,
+  InsectSprays 8.6 in), because a 9 pt label must fit in the 7% level step. With `ax=`
+  the renderer sets DejaVu Sans on every text of that Axes, including the user's.
+- Negative zero in number formatting is not pinned (R received the probe's -0 as +0);
+  inferplot prints "-0.00" as C `sprintf` does.
 - R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
   (`?TDist`); no fixture has a two-group \|t\| above 3.7, so Hedges' g CI parity at
   large \|t\| is untested.
