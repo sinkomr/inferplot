@@ -7,7 +7,8 @@ Regenerates ``tests/data/studentized_range_reference.json``, which
 inferplot or of its tests. Run from the repository root:
 
     uv run --with mpmath python -I tools/reference/studentized_range_mpmath.py \
-        [--sets grid,df_inf,k2_identity,fixture_pairs,failed_fixture_pairs] \
+        [--sets grid,df_inf,k2_identity,fixture_pairs,failed_fixture_pairs,\
+                added_fixture_pairs] \
         [--workers 8] [--fresh]
 
 By default the points (k, df, q) already in the JSON file are kept and only their
@@ -45,7 +46,11 @@ given, and the tests check that the frozen points agree with games_howell within
 completed when the set was first built; ``failed_fixture_pairs`` holds the pairs of
 the cases where ggstatsplot failed (edge_n2: every Welch df is below 2 and R's
 ptukey returns NaN, so the probe has no R value to compare and the reference is the
-only check of inferplot's p there).
+only check of inferplot's p there). ``added_fixture_pairs`` holds the pairs of the
+completed cases that ``fixture_pairs`` does not cover (the cases added to the oracle
+after it was built), so that the two sets together cover every Games-Howell pair of
+every completed parametric case with three or more groups. Points that share
+(k, df, q), such as identical pairs of two cases, are computed once.
 """
 
 from __future__ import annotations
@@ -278,6 +283,15 @@ def _fresh_points(name: str) -> list[dict[str, Any]]:
     raise KeyError(name)
 
 
+def _added_fixture_points(covered: set[tuple[str, str, str]]) -> list[dict[str, Any]]:
+    """The completed fixture pairs whose (case, level, level) is not in ``covered``."""
+    return [
+        p
+        for p in _fixture_points()
+        if (p["case"], p["pair"][0], p["pair"][1]) not in covered
+    ]
+
+
 def _compute(args: tuple[str, dict[str, Any]]) -> str:
     name, point = args
     k, nu, q = int(point["k"]), _df(point["df"]), float(point["q"])
@@ -314,7 +328,14 @@ METHODS = {
     "failed_fixture_pairs": "ref_srange as for grid, at the Games-Howell pairs (|q|, "
     "Welch df) of the parametric ggbetweenstats fixtures with three or more groups "
     "where ggstatsplot failed (edge_n2: Welch df below 2, R's ptukey NaN)",
+    "added_fixture_pairs": "ref_srange as for grid, at the Games-Howell pairs (|q|, "
+    "Welch df) of the completed parametric ggbetweenstats fixtures with three or more "
+    "groups that fixture_pairs does not cover",
 }
+
+
+def _key(point: dict[str, Any]) -> tuple[int, str, str]:
+    return int(point["k"]), repr(_df(point["df"])), repr(float(point["q"]))
 
 
 def main() -> None:
@@ -338,16 +359,25 @@ def main() -> None:
         "sets": {},
     }
     for name in args.sets.split(","):
-        if args.fresh or name not in data["sets"]:
+        if name == "added_fixture_pairs" and (args.fresh or name not in data["sets"]):
+            covered = {
+                (p["case"], p["pair"][0], p["pair"][1])
+                for p in data["sets"]["fixture_pairs"]["points"]
+            }
+            points = [_encode(p) for p in _added_fixture_points(covered)]
+        elif args.fresh or name not in data["sets"]:
             points = [_encode(p) for p in _fresh_points(name)]
         else:
             points = [
                 {k: v for k, v in p.items() if k != "p"}
                 for p in data["sets"][name]["points"]
             ]
-        print(f"{name}: {len(points)} points", flush=True)
+        unique = list({_key(p): p for p in points}.values())
+        print(f"{name}: {len(points)} points, {len(unique)} distinct", flush=True)
         with ProcessPoolExecutor(args.workers) as pool:
-            values = list(pool.map(_compute, [(name, p) for p in points]))
+            done = list(pool.map(_compute, [(name, p) for p in unique]))
+        by_key = {_key(p): v for p, v in zip(unique, done, strict=True)}
+        values = [by_key[_key(p)] for p in points]
         data["sets"][name] = {
             "method": METHODS[name],
             "points": [{**p, "p": v} for p, v in zip(points, values, strict=True)],
