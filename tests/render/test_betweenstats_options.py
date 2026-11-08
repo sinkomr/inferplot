@@ -29,8 +29,8 @@ from tests.render._helpers import (
     text_of,
 )
 from tests.render._results import (
-    build_result,
     fixture_result,
+    frame_result,
     many_levels_result,
     many_points_result,
 )
@@ -310,7 +310,7 @@ def test_unknown_artist_property_raises(name: str) -> None:
 def test_constant_level_skips_its_violin_with_a_warning() -> None:
     # A level whose values are all equal has no density to draw. (The statistics
     # need a variance, so the values are swapped in after the analysis.)
-    built = build_result(
+    built = frame_result(
         ["a", "b", "c"],
         [np.array([1.0, 2.0, 3.0]), np.array([2.0, 2.5, 4.0]), np.array([1.0, 1.5])],
     )
