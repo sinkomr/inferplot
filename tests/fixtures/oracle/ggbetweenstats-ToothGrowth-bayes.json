@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-ToothGrowth-bayes",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = supp, y = len, type = \"bayes\")",
@@ -26,6 +26,21 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(log[e] * (BF[\"01\"]) == \"-0.18\", widehat(delta)[\"difference\"]^\"posterior\" == \"3.15\", CI[\"95%\"]^ETI ~ \"[\" * \"-0.25\", \"6.90\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
   "caption": null,
   "stats": {

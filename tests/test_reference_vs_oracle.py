@@ -2,27 +2,32 @@
 
 These tests do not exercise inferplot. They confirm that the fixture pipeline (CSV,
 R, JSON, loader) carries numbers that an independent implementation of the
-published method reproduces, and they pin down which variant R ran.
+published method reproduces, and they pin down which variant R ran: where a
+plausible variant exists, a negative control shows that it fails.
 
-Two groups:
-    parametric     Welch t (SciPy)
-    nonparametric  Mann-Whitney U (SciPy), variant chosen by R's default rule
-    robust         Yuen (reference)
-    bayes          JZS Bayes factor (reference)
+Two groups (alternative two-sided, greater or less):
+    parametric     Welch t (SciPy); Hedges' g with the unpooled SD, the exact
+                   correction at the Welch df and a noncentral-t CI (inline); the
+                   Bayes caption's JZS Bayes factor (reference)
+    nonparametric  Mann-Whitney U, always the normal approximation with continuity
+                   correction (SciPy); rank-biserial r with a Fisher-z CI (inline)
+    robust         Yuen, |t| and p as WRS2 computes it (reference)
+    bayes          JZS Bayes factor with Student's t and r = 0.707 (reference)
 
 Three or more groups:
     parametric     Welch ANOVA, partial omega squared, Games-Howell then Holm
-                   (reference)
+                   (reference; p against the exact distribution, see ptukey_vs_exact)
     nonparametric  Kruskal-Wallis (SciPy); Dunn then Holm (inline, Dunn 1964)
     robust         trimmed-means ANOVA (reference t1way); lincon pairwise Yuen tests
                    then Holm, with the Studentized maximum modulus CI (inline)
-    bayes          none: Bayes ANOVA arrives in v0.2
+    bayes          JZS Bayes factor of every pair (reference); the Bayes ANOVA
+                   itself arrives in v0.2
 """
 
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pytest
@@ -32,22 +37,36 @@ from tools.reference import stats_reference as ref
 
 from tests.oracle_fixtures import (
     OracleCase,
+    Row,
     cases_for,
     number,
     r_level_label,
     read_dataset,
+    require_cases,
 )
-from tests.tolerances import assert_close
+from tests.tolerances import assert_close, is_close
 
 FloatArray = NDArray[np.float64]
 
+# R's `alternative` values and SciPy's names for them.
+SCIPY_ALTERNATIVE: dict[str, Literal["two-sided", "less", "greater"]] = {
+    "two.sided": "two-sided",
+    "greater": "greater",
+    "less": "less",
+}
+# ggstatsplot's bf.prior default, and the prior of every pairwise Bayes factor.
+JZS_PRIOR = 0.707
+
 
 def _params(type_: str, *, two_groups: bool) -> list[Any]:
-    return [
-        pytest.param(case, id=case.name)
+    cases = [
+        case
         for case in cases_for("ggbetweenstats")
         if case.type == type_ and (len(case.analysis_levels) == 2) == two_groups
     ]
+    design = "two groups" if two_groups else "three or more groups"
+    require_cases(cases, f"ggbetweenstats {type_}, {design}")
+    return [pytest.param(case, id=case.name) for case in cases]
 
 
 def _groups(case: OracleCase) -> list[FloatArray]:
@@ -61,16 +80,39 @@ def _groups(case: OracleCase) -> list[FloatArray]:
     ]
 
 
-def _value(row: Any, column: str) -> float:
+def _value(row: Row, column: str) -> float:
     assert column in row, f"no {column!r} column; columns are {sorted(row)}"
     return number(row[column])
+
+
+def _r_upper_tail(p: float) -> float:
+    """An upper-tail probability as R gets it from ``1 - cdf``.
+
+    WRS2 computes the p-values of yuen, t1way and lincon as 1 - pt or 1 - pf, so they
+    are the exact tail rounded to the spacing of doubles just below 1 (2**-53).
+    """
+    return 1.0 - (1.0 - p)
+
+
+def _alternative(case: OracleCase) -> str:
+    return str(case.args.get("alternative", "two.sided"))
+
+
+def _one_sided_quantile(case: OracleCase, row: Row) -> float:
+    """Normal quantile for the CI's level: alpha/2 per side, or alpha when one-sided."""
+    alpha = 1 - _value(row, "conf.level")
+    tail = alpha / 2 if _alternative(case) == "two.sided" else alpha
+    return float(stats.norm.isf(tail))
 
 
 @pytest.mark.parametrize("case", _params("parametric", two_groups=True))
 def test_welch_t(case: OracleCase) -> None:
     a, b = _groups(case)
-    result = stats.ttest_ind(a, b, equal_var=False)
+    result = stats.ttest_ind(
+        a, b, equal_var=False, alternative=SCIPY_ALTERNATIVE[_alternative(case)]
+    )
     row = case.subtitle_data
+    assert row["alternative"] == _alternative(case)
     assert_close(
         "closed_form", float(result.statistic), _value(row, "statistic"), what="Welch t"
     )
@@ -80,6 +122,64 @@ def test_welch_t(case: OracleCase) -> None:
     assert_close(
         "closed_form", float(result.pvalue), _value(row, "p.value"), what="Welch p"
     )
+
+
+def _ncp_at(t: float, df: float, cdf: float) -> float:
+    """Noncentrality parameter at which a noncentral t(df) has P(T <= t) = ``cdf``."""
+
+    def excess(ncp: float) -> float:
+        return float(stats.nct.cdf(t, df, ncp)) - cdf
+
+    # P(T <= t) falls as the noncentrality parameter grows. Widen the bracket a
+    # step at a time: far in the tails SciPy's nct.cdf returns NaN.
+    low, high = t - 1.0, t + 1.0
+    while excess(low) <= 0.0:
+        low -= 1.0
+    while excess(high) >= 0.0:
+        high += 1.0
+    return float(optimize.brentq(excess, low, high, xtol=1e-14, rtol=1e-15))
+
+
+@pytest.mark.parametrize("case", _params("parametric", two_groups=True))
+def test_hedges_g(case: OracleCase) -> None:
+    # effectsize::hedges_g(pooled_sd = FALSE), as statsExpressions 2.2.1 calls it:
+    #   d = (mean1 - mean2) / s with s = sqrt((var1 + var2) / 2), not the pooled SD
+    #   g = d x J(df_W): Hedges' exact gamma-ratio correction at the Welch df
+    #   CI: the noncentral-t interval for the noncentrality parameter at the Welch t
+    #   and df_W, each bound times (Welch SE / s) x J(df_W). A one-sided
+    #   `alternative` gives a one-sided interval with the far bound infinite.
+    a, b = _groups(case)
+    n1, n2 = a.size, b.size
+    v1, v2 = float(a.var(ddof=1)), float(b.var(ddof=1))
+    difference = float(a.mean() - b.mean())
+    s = math.sqrt((v1 + v2) / 2)
+    w1, w2 = v1 / n1, v2 / n2
+    se = math.sqrt(w1 + w2)
+    df = (w1 + w2) ** 2 / (w1**2 / (n1 - 1) + w2**2 / (n2 - 1))
+    j = ref.hedges_j(df)
+    row = case.subtitle_data
+    assert row["effectsize"] == "Hedges' g"
+    g = _value(row, "estimate")
+    assert_close("closed_form", difference / s * j, g, what="Hedges' g")
+
+    # Negative controls: the pooled SD (equal to s only for equal group sizes) and
+    # the plain average of the two SDs are both off.
+    pooled = math.sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2))
+    if n1 != n2:
+        assert not is_close("closed_form", difference / pooled * j, g)
+    assert not is_close(
+        "closed_form", difference / ((math.sqrt(v1) + math.sqrt(v2)) / 2) * j, g
+    )
+
+    alpha = 1 - _value(row, "conf.level")
+    side = _alternative(case)
+    tail = alpha / 2 if side == "two.sided" else alpha
+    scale = se / s * j
+    t = difference / se
+    low = -math.inf if side == "less" else _ncp_at(t, df, 1 - tail) * scale
+    high = math.inf if side == "greater" else _ncp_at(t, df, tail) * scale
+    assert_close("noncentral_ci", low, _value(row, "conf.low"), what="g CI low")
+    assert_close("noncentral_ci", high, _value(row, "conf.high"), what="g CI high")
 
 
 @pytest.mark.parametrize("case", _params("parametric", two_groups=False))
@@ -115,29 +215,58 @@ def test_welch_anova_omega_and_games_howell(case: OracleCase) -> None:
         assert pair["test"] == "Games-Howell"
         assert pair["p.adjust.method"] == "Holm"
         assert_close("closed_form", q, number(pair["statistic"]), what=f"{what} q")
+        # The reference uses SciPy's exact studentized range; R's ptukey has its
+        # own absolute error in the far tail (ptukey_vs_exact, STATUS.md).
         assert_close(
-            "games_howell_p", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
+            "ptukey_vs_exact", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
         )
 
 
 @pytest.mark.parametrize("case", _params("nonparametric", two_groups=True))
 def test_mann_whitney(case: OracleCase) -> None:
+    # statsExpressions 2.2.1 calls wilcox.test(exact = FALSE): always the normal
+    # approximation with continuity correction, even without ties and with fewer
+    # than 50 values per group, where R's own default would be exact. The method
+    # string in the fixture does not say which was used.
     a, b = _groups(case)
+    side = SCIPY_ALTERNATIVE[_alternative(case)]
+    result = stats.mannwhitneyu(
+        a, b, alternative=side, method="asymptotic", use_continuity=True
+    )
     row = case.subtitle_data
-    # R's wilcox.test defaults: exact p when both samples have fewer than 50 values
-    # and there are no ties, otherwise the normal approximation with continuity
-    # correction. The method string in the fixture does not say which was used.
-    ties = np.unique(np.concatenate([a, b])).size < a.size + b.size
-    if a.size < 50 and b.size < 50 and not ties:
-        result = stats.mannwhitneyu(a, b, alternative="two-sided", method="exact")
-    else:
-        result = stats.mannwhitneyu(
-            a, b, alternative="two-sided", method="asymptotic", use_continuity=True
-        )
+    assert row["alternative"] == _alternative(case)
     assert_close(
         "closed_form", float(result.statistic), _value(row, "statistic"), what="W"
     )
     assert_close("closed_form", float(result.pvalue), _value(row, "p.value"), what="p")
+    ties = np.unique(np.concatenate([a, b])).size < a.size + b.size
+    if not ties and a.size < 50 and b.size < 50:
+        # Negative control: here R's default rule would have used the exact p.
+        exact = stats.mannwhitneyu(a, b, alternative=side, method="exact")
+        assert not is_close("closed_form", float(exact.pvalue), _value(row, "p.value"))
+
+
+@pytest.mark.parametrize("case", _params("nonparametric", two_groups=True))
+def test_rank_biserial(case: OracleCase) -> None:
+    # effectsize::rank_biserial, as statsExpressions 2.2.1 calls it: r = 2U/(n1 n2)
+    # - 1 with U the Mann-Whitney U of group 1 (Glass 1965; Kerby 2014). CI: tanh of
+    # atanh(r) -/+ z x sqrt((n1 + n2 + 1) / (3 n1 n2)), with ties ignored; a
+    # one-sided `alternative` gives a one-sided interval ending at -1 or 1.
+    a, b = _groups(case)
+    n1, n2 = a.size, b.size
+    u = float(stats.mannwhitneyu(a, b, method="asymptotic").statistic)
+    r = 2 * u / (n1 * n2) - 1
+    row = case.subtitle_data
+    assert row["effectsize"] == "r (rank biserial)"
+    assert_close("closed_form", r, _value(row, "estimate"), what="rank-biserial r")
+    z = math.atanh(r)
+    se = math.sqrt((n1 + n2 + 1) / (3 * n1 * n2))
+    q = _one_sided_quantile(case, row)
+    side = _alternative(case)
+    low = -1.0 if side == "less" else math.tanh(z - q * se)
+    high = 1.0 if side == "greater" else math.tanh(z + q * se)
+    assert_close("closed_form", low, _value(row, "conf.low"), what="r CI low")
+    assert_close("closed_form", high, _value(row, "conf.high"), what="r CI high")
 
 
 @pytest.mark.parametrize("case", _params("nonparametric", two_groups=False))
@@ -148,38 +277,79 @@ def test_kruskal_wallis(case: OracleCase) -> None:
     assert_close(
         "closed_form", float(result.statistic), _value(row, "statistic"), what="H"
     )
+    assert_close("closed_form", len(groups) - 1.0, _value(row, "df.error"), what="H df")
     assert_close("closed_form", float(result.pvalue), _value(row, "p.value"), what="p")
 
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=True))
 def test_yuen(case: OracleCase) -> None:
+    # WRS2::yuen reports |t|: mtcars am and edge_k2 have the smaller trimmed mean in
+    # group 1, yet a positive t, while the AKP effect size beside it is negative.
     a, b = _groups(case)
-    t, df, p = ref.yuen(a, b, tr=0.2)
+    t, df, _ = ref.yuen(a, b, tr=0.2)
     row = case.subtitle_data
-    assert_close("closed_form", t, _value(row, "statistic"), what="Yuen t")
+    assert_close("closed_form", abs(t), _value(row, "statistic"), what="Yuen |t|")
+    if t < 0:
+        assert _value(row, "estimate") < 0, "the effect size keeps its sign"
     assert_close("closed_form", df, _value(row, "df.error"), what="Yuen df")
-    assert_close("closed_form", p, _value(row, "p.value"), what="Yuen p")
+    p = 2 * _r_upper_tail(float(stats.t.sf(abs(t), df)))
+    assert_close("wrs2_p", p, _value(row, "p.value"), what="Yuen p")
 
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=False))
 def test_t1way(case: OracleCase) -> None:
-    f_stat, df1, df2, p = ref.t1way(_groups(case), tr=0.2)
+    f_stat, df1, df2, _ = ref.t1way(_groups(case), tr=0.2)
     row = case.subtitle_data
     assert_close("closed_form", f_stat, _value(row, "statistic"), what="t1way F")
     assert_close("closed_form", df1, _value(row, "df"), what="t1way df1")
     assert_close("closed_form", df2, _value(row, "df.error"), what="t1way df2")
-    assert_close("closed_form", p, _value(row, "p.value"), what="t1way p")
+    p = _r_upper_tail(float(stats.f.sf(f_stat, df1, df2)))
+    assert_close("wrs2_p", p, _value(row, "p.value"), what="t1way p")
+
+
+def _check_jzs(row: Row, a: FloatArray, b: FloatArray, *, what: str) -> None:
+    """BayesFactor::ttestBF on two groups: Student's t, r = 0.707, two-sided."""
+    assert number(row["prior.scale"]) == JZS_PRIOR, f"{what}: {row['prior.scale']}"
+    bf10 = _value(row, "bf10")
+    n_eff = a.size * b.size / (a.size + b.size)
+    df = float(a.size + b.size - 2)
+    student = float(stats.ttest_ind(a, b, equal_var=True).statistic)
+    got = ref.jzs_bf10_t(student, n_eff, df, r=JZS_PRIOR)
+    assert_close("ttest_bayes_factor", got, bf10, what=f"{what} BF10")
+    # Negative controls: BayesFactor's own "medium" prior sqrt(2)/2, and Welch's t
+    # (which equals Student's t only for equal group sizes), are both off.
+    medium = ref.jzs_bf10_t(student, n_eff, df, r=math.sqrt(2) / 2)
+    assert not is_close("ttest_bayes_factor", medium, bf10), f"{what}: sqrt(2)/2"
+    if a.size != b.size:
+        welch = float(stats.ttest_ind(a, b, equal_var=False).statistic)
+        welch_bf = ref.jzs_bf10_t(welch, n_eff, df, r=JZS_PRIOR)
+        assert not is_close("ttest_bayes_factor", welch_bf, bf10), f"{what}: Welch"
 
 
 @pytest.mark.parametrize("case", _params("bayes", two_groups=True))
 def test_jzs_bayes_factor(case: OracleCase) -> None:
     a, b = _groups(case)
-    t = float(stats.ttest_ind(a, b, equal_var=True).statistic)
-    n_eff = a.size * b.size / (a.size + b.size)
-    bf10 = ref.jzs_bf10_t(t, n_eff, float(a.size + b.size - 2), r=0.707)
-    row = case.subtitle_data
-    assert_close("bayes_factor", bf10, _value(row, "bf10"), what="BF10")
-    assert math.isfinite(bf10)
+    _check_jzs(case.subtitle_data, a, b, what=case.name)
+
+
+@pytest.mark.parametrize("case", _params("parametric", two_groups=True))
+def test_jzs_bayes_factor_caption(case: OracleCase) -> None:
+    # ggstatsplot's caption for a two-group parametric test is the same ttestBF call,
+    # without `alternative`: the Bayes factor stays two-sided.
+    caption = case.caption_data
+    assert caption is not None, "no Bayes caption"
+    a, b = _groups(case)
+    _check_jzs(caption, a, b, what=f"{case.name} caption")
+
+
+@pytest.mark.parametrize("case", _params("bayes", two_groups=False))
+def test_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
+    # Every pair gets its own ttestBF, always with prior 0.707 (SPEC.md section 4).
+    groups = dict(zip(case.analysis_levels, _groups(case), strict=True))
+    assert len(case.pairwise) == len(groups) * (len(groups) - 1) // 2
+    for row in case.pairwise:
+        g1, g2 = str(row["group1"]), str(row["group2"])
+        _check_jzs(row, groups[g1], groups[g2], what=f"{case.name} {g1}-{g2}")
 
 
 @pytest.mark.parametrize("case", _params("nonparametric", two_groups=False))
@@ -243,32 +413,51 @@ def _smm_cdf(c: float, n_comparisons: int, df: float) -> float:
     return value
 
 
+# The df rows of the two-decimal Studentized maximum modulus table lincon reads: every
+# df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40 and 60, and a last row placed at
+# df 200 that holds the infinite-df (normal) values. lincon interpolates linearly in
+# 1/df between the rows on either side of a pair's Yuen df. The fixtures confirm
+# rows 12/14, 18/20 and 40/60, and the 60/200 step (bugs_long, df 99 to 110: the
+# critical values lie on the line through the df-60 entry and the infinite-df entry
+# at 200 to 1.6e-14).
+SMM_TABLE_DF = (*range(2, 13), 14, 16, 18, 20, 24, 30, 40, 60, 200)
+SMM_INFINITE_DF_ROW = 200
+# Entries of the published table that differ from the rounded quantile, as the
+# fixtures show them: (alpha, C, df) -> entry. The quantile for C = 3 at df 5 is
+# 3.3992, which rounds to 3.40; edge_unbalanced a-b reproduces R only with 3.39.
+SMM_TABLE_EXCEPTIONS = {(0.05, 3, 5): 3.39}
+
+
 def _smm_table_entry(alpha: float, n_comparisons: int, df: int) -> float:
     """Upper ``alpha`` point of the Studentized maximum modulus, to two decimals."""
-    exact = float(
-        optimize.brentq(
-            lambda c: _smm_cdf(c, n_comparisons, df) - (1 - alpha),
-            1.0,
-            50.0,
-            xtol=1e-13,
+    known = SMM_TABLE_EXCEPTIONS.get((round(alpha, 10), n_comparisons, df))
+    if known is not None:
+        return known
+    if df == SMM_INFINITE_DF_ROW:
+        # max |Z_i| over C independent standard normals: (2 Phi(c) - 1)^C = 1 - alpha
+        exact = float(stats.norm.isf((1 - (1 - alpha) ** (1 / n_comparisons)) / 2))
+    else:
+        exact = float(
+            optimize.brentq(
+                lambda c: _smm_cdf(c, n_comparisons, df) - (1 - alpha),
+                1.0,
+                50.0,
+                xtol=1e-13,
+            )
         )
-    )
     assert abs(exact * 100 % 1 - 0.5) > 1e-6, f"{exact} is at a rounding boundary"
     return round(exact, 2)
 
 
 def _lincon_critical_value(alpha: float, n_comparisons: int, df: float) -> float:
-    """Critical value of WRS2::lincon's pairwise CIs, as the fixtures show it.
-
-    Two-decimal Studentized maximum modulus table entries at the integer df on either
-    side of the Yuen df, interpolated linearly in 1 / df. The exact quantile at the
-    Yuen df is up to 1.5e-3 (relative) from the critical value the fixtures imply,
-    and Bonferroni t up to 2.1e-2.
-    """
-    lo, hi = math.floor(df), math.ceil(df)
+    """Critical value of WRS2::lincon's pairwise CIs, as the fixtures show it."""
+    if df in SMM_TABLE_DF:
+        return _smm_table_entry(alpha, n_comparisons, int(df))
+    if not SMM_TABLE_DF[0] < df < SMM_TABLE_DF[-1]:
+        raise NotImplementedError(f"no fixture shows lincon at Yuen df {df}")
+    hi = next(row for row in SMM_TABLE_DF if row > df)
+    lo = max(row for row in SMM_TABLE_DF if row < df)
     at_lo = _smm_table_entry(alpha, n_comparisons, lo)
-    if hi == lo:
-        return at_lo
     at_hi = _smm_table_entry(alpha, n_comparisons, hi)
     return at_lo + (1 / lo - 1 / df) / (1 / lo - 1 / hi) * (at_hi - at_lo)
 
@@ -280,9 +469,8 @@ def test_lincon_holm(case: OracleCase) -> None:
     #   p.value   Holm over the per-pair Yuen p-values; Hochberg (lincon's own
     #             default) does not match the PlantGrowth fixture
     #   conf.*    estimate -/+ critical value x Yuen standard error, with the
-    #             critical value at the pair's Yuen df and C = number of pairs.
-    #             Both fixtures have 3 groups, so 3 pairs: they cannot tell C =
-    #             pairs from C = groups.
+    #             critical value at the pair's Yuen df and C = number of pairs
+    #             (edge_k5: 10 pairs of 5 groups; bugs_long: 6 pairs of 4)
     levels = case.analysis_levels
     groups = dict(zip(levels, _groups(case), strict=True))
     pairs = [
@@ -291,9 +479,11 @@ def test_lincon_holm(case: OracleCase) -> None:
         for j in range(i + 1, len(levels))
     ]
     yuen = {(g1, g2): ref.yuen(groups[g1], groups[g2], tr=0.2) for g1, g2 in pairs}
-    adjusted = dict(
-        zip(pairs, ref.holm([yuen[pair][2] for pair in pairs]), strict=True)
-    )
+    raw = [
+        2 * _r_upper_tail(float(stats.t.sf(abs(yuen[pair][0]), yuen[pair][1])))
+        for pair in pairs
+    ]
+    adjusted = dict(zip(pairs, ref.holm(raw), strict=True))
     assert len(case.pairwise) == len(pairs)
     for row in case.pairwise:
         g1, g2 = str(row["group1"]), str(row["group2"])
@@ -311,10 +501,7 @@ def test_lincon_holm(case: OracleCase) -> None:
             "closed_form", estimate, _value(row, "estimate"), what=f"{what} estimate"
         )
         assert_close(
-            "closed_form",
-            adjusted[(g1, g2)],
-            _value(row, "p.value"),
-            what=f"{what} Holm p",
+            "wrs2_p", adjusted[(g1, g2)], _value(row, "p.value"), what=f"{what} Holm p"
         )
         assert_close(
             "closed_form",

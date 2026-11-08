@@ -1,6 +1,6 @@
 # inferplot specification
 
-Status: draft 3, 2026-11-07 (Phase 0 oracle findings and review; ggbetweenstats variants read from the statsExpressions 2.2.1 source, MIT). Parity target: **ggstatsplot 1.1.4** (CRAN, 2026-10-22).
+Status: draft 4, 2026-11-08 (Phase 0 oracle findings and both Phase 0 reviews; ggbetweenstats variants read from the statsExpressions 2.2.1 source, MIT, and confirmed by fixtures where noted). Parity target: **ggstatsplot 1.1.4** (CRAN, 2026-10-22).
 When this document and the R oracle disagree, the oracle wins: fix this document and
 log the change in `DECISIONS.md`. Rows marked *(verify)* name the R function but not yet
 the exact variant (continuity correction, exact vs asymptotic p, CI method, sidedness);
@@ -42,7 +42,7 @@ fig.save("score.svg")
 | `digits` | `2` | subtitle formatting, as ggstatsplot |
 | `tr` | `0.2` | trimming for robust methods |
 | `bf_prior` | `0.707` | numeric, exactly as ggstatsplot (not sqrt(2)/2) |
-| `bf_message` | `None` | Bayes factor caption. `None` draws it when inferplot computes a Bayes factor for the design (v0.1: two groups, one sample, correlations) and otherwise adds a `warnings` entry saying the Bayes factor ggstatsplot would show arrives in v0.2; `True` requires it and raises `NotImplementedError` for those designs; `False` never draws it. See §5 item 5 |
+| `bf_message` | `None` | Bayes factor caption. ggstatsplot draws one only when `results_subtitle` is true and either the type is parametric (betweenstats, withinstats, histostats, scatterstats) or, in barstats, the type is not bayes, `paired=False` and `y` has more than one level; otherwise it draws none and says nothing. Within that condition `None` draws the caption when v0.1 computes the Bayes factor (two groups or conditions, one sample, correlation) and otherwise adds a `warnings` entry saying it arrives in v0.2 (ANOVA with three or more groups or conditions, contingency tables); outside it, `None` draws no caption and adds no warning. `True` raises `NotImplementedError` for the v0.2 designs and `ValueError` outside the condition; `False` never draws it. The caption's Bayes factor is two-sided whatever `alternative` says, as ggstatsplot's; with a one-sided `alternative`, `warnings` says so. See §5 item 5 |
 | `results_subtitle` | `True` | |
 | `alternative` | `"two-sided"` | `"less"`, `"greater"` only for two-group, paired, one-sample and correlation tests with type parametric or nonparametric; otherwise `ValueError` (ggstatsplot silently ignores it for robust and bayes types, for the Bayes caption and for pairwise comparisons) |
 | `seed` | `0` | every random step; recorded in provenance |
@@ -125,7 +125,7 @@ a docstring):
 | Welch t; Welch ANOVA | Welch 1947, *Biometrika*; Welch 1951, *Biometrika* |
 | Games-Howell | Games & Howell 1976, *Journal of Educational Statistics* |
 | Holm and other adjustments | Holm 1979; Hochberg 1988; Hommel 1988; Benjamini & Hochberg 1995; Benjamini & Yekutieli 2001 |
-| Hedges' g and its CI | Hedges 1981; Hedges & Olkin 1985; noncentral CIs: Steiger & Fouladi 1997, Smithson 2003 |
+| Hedges' g and its CI | Hedges 1981; Hedges & Olkin 1985; unpooled standardizer: Delacre, Lakens, Ley, Liu & Leys 2021; noncentral CIs: Steiger & Fouladi 1997, Smithson 2003 |
 | Omega squared and its CI | Olejnik & Algina 2003; Steiger 2004 |
 | Mann-Whitney, Wilcoxon | Mann & Whitney 1947; Wilcoxon 1945 |
 | Rank-biserial r | Kerby 2014; Glass 1965 |
@@ -150,27 +150,27 @@ a docstring):
 
 | type | Test (R reference) | Effect size + CI (R reference) | Centrality |
 | --- | --- | --- | --- |
-| parametric | Welch's t (`stats::t.test`, var.equal = FALSE) | Hedges' g (`effectsize::hedges_g(pooled_sd = FALSE)`): standardized by the average of the two SDs, not the pooled SD, with the exact small-sample correction at the Welch df; two-sided noncentral-t CI (reproduces 0.487778845179 on ToothGrowth; the pooled-df correction gives 0.48809) | mean |
-| nonparametric | Mann-Whitney U (`stats::wilcox.test(exact = FALSE)`): always the normal approximation with continuity correction, never exact; the fixture's method string omits "with continuity correction" | rank-biserial r (`effectsize::rank_biserial`), normal-approximation CI through Fisher's z (reproduces [-0.0081219, 0.5234469] on ToothGrowth) | median |
-| robust | Yuen, 20% trim (`WRS2::yuen`) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); bootstrap CI (ggstatsplot: 100 resamples) | trimmed mean |
-| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF`); deterministic, one-dimensional quadrature reproduces log BF10 to 3.5e-11 | v0.2: posterior median of the mean difference with a 95% equal-tailed interval from 4,000 posterior draws | MAP (`bayestestR::map_estimate`: kernel density, Sheather-Jones bandwidth, 2^10 grid points) |
+| parametric | Welch's t (`stats::t.test`, var.equal = FALSE); p follows `alternative` | Hedges' g (`effectsize::hedges_g(pooled_sd = FALSE)`): d = (mean1 - mean2) / sqrt((var1 + var2) / 2), the unpooled standardizer, not the pooled SD and not the average of the two SDs; g = d x J(df_W), with J Hedges' exact gamma-ratio correction at the Welch df df_W. CI: the noncentral-t interval for the noncentrality parameter at the Welch t and df_W, each bound times (Welch SE / sqrt((var1 + var2) / 2)) x J(df_W). The CI follows `alternative`: "greater" gives [lower bound, Inf] and "less" [-Inf, upper bound], one-sided at `conf_level`; the subtitle prints "Inf" and "-Inf". Reproduced in every two-group fixture, balanced and unbalanced (mtcars `am`, `edge_k2`): g to 1e-10, CI bounds to 7.5e-7 | mean |
+| nonparametric | Mann-Whitney U (`stats::wilcox.test(exact = FALSE)`): always the normal approximation with continuity correction, never exact, also without ties and with fewer than 50 values per group (`edge_k2`: ggstatsplot reports p = 0.0025; the exact p would be 0.0013); the fixture's method string omits "with continuity correction"; p follows `alternative` | rank-biserial r = 2U / (n1 n2) - 1 (`effectsize::rank_biserial`), U the Mann-Whitney U of group 1; CI tanh(atanh(r) -/+ z x sqrt((n1 + n2 + 1) / (3 n1 n2))), ties ignored; follows `alternative` ("greater" gives [lower bound, 1], "less" [-1, upper bound]); reproduced to 1e-10 | median |
+| robust | Yuen, 20% trim (`WRS2::yuen`): t is reported unsigned, \|t\|, even when group 1's trimmed mean is the smaller (mtcars `am`, `edge_k2`), while the AKP effect size keeps its sign; p is computed as 1 - pt (§10, `wrs2_p`) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); bootstrap CI (ggstatsplot: 100 resamples) | trimmed mean |
+| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces all 35 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 1.5e-9; Welch's t differs on every unbalanced pair (by 1.5e-4 to 412%) | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`: kernel density, Sheather-Jones bandwidth, 2^10 grid points) |
 
 ### betweenstats, three or more groups
 
 | type | Omnibus | Effect size + CI | Pairwise, then `p_adjust_method` | Centrality |
 | --- | --- | --- | --- | --- |
-| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared (`effectsize::omega_squared`); oracle shows CI [0, 1], so one-sided | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1) (1.1.1 reported abs(q)) | mean |
+| parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared (`effectsize::omega_squared`); oracle shows CI [0, 1], so one-sided | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1). p comes from R's `ptukey`, whose upper tail has absolute error up to about 5e-10: iris setosa-versicolor reads p = 1.41e-9 where the exact value is 1.9e-14, and ggstatsplot prints that number. Parity in the far tail means reproducing `ptukey` (STATUS) | mean |
 | nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), one-sided percentile bootstrap CI [lower, 1] (ggstatsplot: 100 iterations) | Dunn (`PMCMRplus::kwAllPairsDunnTest`): z = abs(mean-rank difference) / tie-corrected SE, reported unsigned; two-sided normal p (reproduced to 2.4e-15) | median |
-| robust | trimmed-means ANOVA (`WRS2::t1way`) | explanatory effect size (`WRS2::t1way`), bootstrap CI (ggstatsplot: 100 resamples, `alpha = 1 - conf.level` computed in floating point, 0.050000000000000044: with 100 resamples only that value, not 0.05, reproduces ggstatsplot's bounds, so the CI's order statistics depend on alpha / 2 x resamples rounding past 2.5); with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon`: estimate = trimmed mean(group1) - trimmed mean(group2); p = per-pair Yuen p, then `p_adjust_method` (lincon's own Hochberg is not used); CI = estimate -/+ c x Yuen SE, c from a two-decimal table of the Studentized maximum modulus (alpha, C = number of pairs) at the integer df either side of the pair's Yuen df, interpolated linearly in 1/df (reproduced to 2.3e-13) *(verify C = pairs rather than groups with a fixture of 4+ groups)* | trimmed mean |
-| bayes | v0.2: `BayesFactor::anovaBF`, deterministic (quadrature reproduces log BF10 to 5e-8) | v0.2: Bayesian R squared, posterior median with 95% HDI | v0.2: `ttestBF` per pair, unadjusted, always with prior 0.707 and 95% intervals whatever `bf_prior` and `conf_level` say | MAP |
+| robust | trimmed-means ANOVA (`WRS2::t1way`); p computed as 1 - pf (§10, `wrs2_p`) | explanatory effect size (`WRS2::t1way`), bootstrap CI (ggstatsplot: 100 resamples, `alpha = 1 - conf.level` computed in floating point, 0.050000000000000044: with 100 resamples only that value, not 0.05, reproduces ggstatsplot's bounds, so the CI's order statistics depend on alpha / 2 x resamples rounding past 2.5); with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon`: estimate = trimmed mean(group1) - trimmed mean(group2); p = per-pair Yuen p (1 - pt), then `p_adjust_method` (lincon's own Hochberg is not used); CI = estimate -/+ c x Yuen SE. c comes from a two-decimal table of the Studentized maximum modulus at (alpha, C = number of pairs, not groups: `edge_k5` has 10, `bugs_long` 6), whose rows are every df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40, 60 and a last row at df 200 holding the infinite-df (normal) values; c is interpolated linearly in 1/df between the rows on either side of the pair's Yuen df (fixtures: df 5.2 to 110, rows up to 60/200; reproduced to 1e-14). The entries are the published table's, not recomputed quantiles: for C = 3 at df 5 the table has 3.39 where the quantile, 3.3992, rounds to 3.40 *(verify: take the table from its published source; no fixture has df above 200 or alpha other than 0.05)* | trimmed mean |
+| bayes | v0.2: `BayesFactor::anovaBF` (method and precision to measure when implemented) | v0.2: Bayesian R squared, posterior median with 95% HDI (`conf.method` "HDI" in the fixtures) | v0.2: `ttestBF` per pair as for two groups, unadjusted, always with prior 0.707 and 95% intervals whatever `bf_prior` and `conf_level` say (every pair's Bayes factor is reproduced by `tools/reference`) | MAP |
 
 ### withinstats, two conditions
 
 | type | Test | Effect size + CI | Centrality |
 | --- | --- | --- | --- |
-| parametric | paired t (`stats::t.test`, paired) | Hedges' g, paired *(verify d_z vs d_av)* | mean |
-| nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired) *(verify exact/correct)* | rank-biserial r *(verify CI)* | median |
-| robust | Yuen for dependent samples (`WRS2::yuend`) | AKP (`WRS2::wmcpAKP`); 1.1.3 fixed this value | trimmed mean |
+| parametric | paired t (`stats::t.test`, paired) | Hedges' g, paired *(verify d_z vs d_av)*; the CI follows `alternative` as for two groups (ggwithinstats passes it to the same `two_sample_test`) | mean |
+| nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired) *(verify exact/correct)* | rank-biserial r *(verify CI)*; follows `alternative` as for two groups | median |
+| robust | Yuen for dependent samples (`WRS2::yuend`) | robust effect size for dependent groups, `WRS2::dep.effect` (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`), bootstrap CI (ggstatsplot: 100 resamples); 1.1.3 fixed this value | trimmed mean |
 | bayes | paired JZS Bayes factor (`ttestBF`) | posterior difference: v0.2 | MAP |
 
 ### withinstats, three or more conditions
@@ -187,7 +187,7 @@ a docstring):
 | type | Test | Effect size + CI | Centrality |
 | --- | --- | --- | --- |
 | parametric | one-sample t | Hedges' g (1.1.4: one-sided CI when `alternative` is one-sided) | mean |
-| nonparametric | one-sample Wilcoxon signed-rank | rank-biserial r | median |
+| nonparametric | one-sample Wilcoxon signed-rank | rank-biserial r (1.1.4: one-sided CI when `alternative` is one-sided, statsExpressions 2.2.1) | median |
 | robust | bootstrap-t trimmed-mean test (`WRS2::trimcibt`); statistic exact, p and CI bootstrap | trimmed mean with CI | trimmed mean |
 | bayes | one-sample JZS Bayes factor | posterior: v0.2 | MAP |
 
@@ -220,7 +220,18 @@ it as parametric).
 ### Defaults that look odd but are parity requirements
 
 - Games-Howell p-values get Holm adjustment on top (double adjustment). Replicate it.
+  Their far upper tail is R's `ptukey` value, which can be orders of magnitude above
+  the exact one (1.41e-9 for 1.9e-14 on iris), and the bracket label prints it.
 - `bf_prior=0.707` numeric. sqrt(2)/2 changes Bayes factors in the fifth significant figure.
+- Mann-Whitney p is always the corrected normal approximation, also where R's own
+  `wilcox.test` default would compute the exact p.
+- Yuen's t and Dunn's z are reported unsigned; Games-Howell's q and every effect size
+  keep their sign.
+- WRS2's p-values (Yuen, t1way, lincon) are 1 - cdf, rounded to the spacing of doubles
+  just below 1; lincon's CI uses a published two-decimal table with at least one entry
+  that is not the rounded quantile.
+- One-sided `alternative` makes the two-group effect-size CIs one-sided; the Bayes
+  caption stays two-sided.
 - Pairwise display defaults to significant pairs only: pairs whose adjusted p is strictly
   below `pairwise_alpha` get a bracket; with `type="bayes"` every pair does. Brackets
   exist only for three or more groups.
@@ -240,10 +251,11 @@ Statistical and behavioral differences are exactly these:
 4. Nothing is silently dropped or aliased: unknown arguments and `type` values without a
    distinct method raise.
 5. v0.1 only: where ggstatsplot's default adds a Bayes factor that inferplot computes only
-   from v0.2 (the Bayes ANOVA caption after a parametric test with three or more groups;
-   contingency tables), no Bayes caption is drawn by default and `warnings` says so;
-   `bf_message=True` raises `NotImplementedError` for those designs. Posterior estimates
-   in Bayes captions also arrive in v0.2 (§1).
+   from v0.2 (the Bayes ANOVA caption after a parametric test with three or more groups
+   or conditions; unpaired contingency tables with a type other than bayes), no Bayes
+   caption is drawn by default and `warnings` says so; `bf_message=True` raises
+   `NotImplementedError` for those designs (§2). Posterior estimates in Bayes captions
+   also arrive in v0.2 (§1).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -286,6 +298,14 @@ fields; confirm which keys each matplotlib backend accepts).
   equal the formatted strings in the oracle's `expression` output exactly (same
   rounding, same switch to scientific notation, same `digits`). Bootstrap-derived
   numbers are the exception described in §10.
+- **Degrees of freedom** are numbers, not strings, in ggstatsplot's expression:
+  statsExpressions rounds `df` and `df.error` to `digits` decimals where they are
+  fractional (Welch t and F, Yuen, t1way; within-subjects parametric and robust) and to
+  0 otherwise, and pastes them unquoted, so they print as R prints a number: without
+  trailing zeros or a bare decimal point (iris Welch F `(2, 97.4)` for 97.40; mtcars
+  `am` x `drat` Welch t `(27.2)`; mtcars `cyl` x `disp` t1way `(2, 10.4)`). Every other
+  number is a quoted string and keeps its zeros ("1.00"). An infinite one-sided bound
+  prints as "Inf" or "-Inf".
 - **Caption:** Bayes factor line as ggstatsplot (log_e BF01, prior r) when `bf_message`
   and a Bayes factor exists; then the pairwise line, e.g. "Pairwise: Games-Howell, Holm
   adjusted; showing 1 of 3 pairs (significant only)."
@@ -315,11 +335,14 @@ no problems.
 
 ## 9. R oracle
 
-- `oracle/generate.R` runs ggstatsplot 1.1.4 on `oracle/datasets/*.csv` for every
-  function × type × dataset ggstatsplot accepts and writes one JSON file per case:
-  inputs, arguments, R and package versions (ggstatsplot, statsExpressions, effectsize,
-  WRS2, BayesFactor, PMCMRplus, afex, correlation), `extract_stats()` tables, and the
-  subtitle and caption expression strings.
+- `oracle/generate.R` runs ggstatsplot 1.1.4 on `oracle/datasets/*.csv` and writes one
+  JSON file per case: inputs, arguments, R and package versions (ggstatsplot,
+  statsExpressions, effectsize, WRS2, BayesFactor, PMCMRplus, afex, correlation),
+  `extract_stats()` tables, and the subtitle and caption expression strings. It handles
+  ggbetweenstats. Each other function first needs its own bookkeeping (which rows it
+  analyzes: complete subjects for withinstats, one sample for histostats) and its own
+  bootstrap replay; until then the script stops on its cases instead of writing an
+  incomplete fixture.
 - For bootstrap-based CIs, the script first replays ggstatsplot's own bootstrap: the
   effect-size call is the first random draw inside `ggbetweenstats()`, so `set.seed()`
   with the case seed followed by the same call, with 100 resamples and the rows in
@@ -328,11 +351,25 @@ no problems.
   when several calls are plausible (`akp.effect`'s `EQVAR`) the one that reproduces it
   is kept. The script then runs that call with 20,000 resamples for a precise reference,
   and 50 more times with 2,000 resamples to measure the Monte Carlo SD of the estimate
-  and of each bound.
-- `.github/workflows/oracle.yml` (manual dispatch): `r-lib/actions/setup-r@v2` with R
-  4.5, CRAN pinned to a Posit Package Manager snapshot dated on or after 2026-10-23, and
-  a hard check `packageVersion("ggstatsplot") == "1.1.4"`. It uploads the JSON files as
-  artifact `oracle-fixtures`; they are committed to `tests/fixtures/oracle/` after review.
+  and of each bound. The bootstrapped designs are listed explicitly (AKP for two robust
+  groups, t1way's explanatory effect size for three or more, rank epsilon squared for
+  three or more nonparametric groups); a non-default `conf.level` or `tr` stops the
+  script.
+- ggstatsplot 1.1.4 computes the subtitle and the caption through an internal helper
+  that turns an error into a missing subtitle or caption and mutes warnings and
+  messages, and it mutes warnings around `centrality_description()` and
+  `pairwise_comparisons()`. The generator replaces these with recorders that make the
+  same calls (same arguments, same random-number stream) and logs what ggstatsplot hid
+  in `suppressed`. It stops when ggstatsplot swallows an error the case does not
+  declare, when a subtitle or Bayes caption ggstatsplot should draw is missing, or when
+  `n_per_level` differs from ggstatsplot's own `n.obs`.
+- `.github/workflows/oracle.yml` (manual dispatch, on the branch that changes the
+  generator): `r-lib/actions/setup-r@v2` with R 4.5.3, CRAN pinned to a Posit Package
+  Manager snapshot dated on or after 2026-10-23, and hard checks of R, ggstatsplot and
+  every installed package version. It uploads the JSON files as artifact
+  `oracle-fixtures`, and a separate job that runs no R code signs them with a
+  build-provenance attestation (`actions/attest`). They are committed to
+  `tests/fixtures/oracle/` on the same branch after review.
 - Datasets: mtcars, iris, ToothGrowth, PlantGrowth, morley, sleep, ggstatsplot's
   `bugs_long` and `Titanic_full`, plus edge cases: n = 2 per group, ties, all-negative
   outcome, empty factor level, missing values, unbalanced groups, k = 2, 3 and 5, a
@@ -350,15 +387,17 @@ no problems.
   number the fixture holds, using `tests/tolerances.py`. One parametrized test per
   function collects all its fixtures, so a new fixture is tested without new code.
 
-**Fixture schema (version 1).** One JSON object per case, named `<name>.json`:
+**Fixture schema (version 2).** One JSON object per case, named `<name>.json`:
 
 | Field | Content |
 | --- | --- |
-| `schema_version`, `name` | 1; `<R function>-<dataset label>-<type>` |
+| `schema_version`, `name` | 2; `<R function>-<dataset label>-<type>` |
 | `function`, `call`, `args`, `seed` | the R function, the deparsed call, its arguments (column names as strings), the `set.seed()` value used before it |
 | `dataset` | `file`, `sha256` of the CSV R read, `rows`, declared `factor_levels` or null |
-| `analysis_levels`, `n_per_level` | group order and counts after dropping incomplete rows and empty levels |
-| `error`, `r_warnings`, `r_messages` | conditions R signalled; `error` is null unless the case expects ggstatsplot to fail |
+| `analysis_levels`, `n_per_level` | group order and counts after dropping incomplete rows and empty levels; the generator checks the counts against ggstatsplot's own `n.obs` |
+| `error`, `r_warnings`, `r_messages` | conditions that reached the generator; `error` is null unless the case expects ggstatsplot to fail |
+| `suppressed` | what ggstatsplot hid, one entry per hidden call in call order: `component` (`subtitle`, `caption`, `centrality_description`, `pairwise_comparisons`), `error` (null unless ggstatsplot swallowed one; errors of the last two are not swallowed and end up in `error`), and the muted `warnings` and `messages` |
+| `expected_hidden_errors` | components whose error the case declares ggstatsplot swallows; empty for every current case |
 | `subtitle`, `caption` | deparsed plotmath from `extract_subtitle()` and `extract_caption()` |
 | `stats` | every `extract_stats()` table as an array of row objects; plotmath columns deparsed. In 1.1.4 `descriptive_data` is null |
 | `plot_layers` | the ggplot layers in order: `name`, `geom`, and the layer's own data (the centrality labels: value, n, `expression`, `n.expression`), null for layers that draw the main data. Bracket layers (`GeomSignif`) also carry `params` (`stat`, `geom`, `aes`; `stat.comparisons` lists the drawn pairs, `stat.annotations` their labels) and `built`, the rows ggplot2 computes for drawing |
@@ -366,14 +405,19 @@ no problems.
 | `versions` | R version, platform, OS, collation, repositories, package versions |
 
 Numbers carry 15 significant digits; R's NA is null; NaN, Inf and -Inf are the strings
-`"NaN"`, `"Inf"`, `"-Inf"`. `manifest.json` holds the SHA-256 of every fixture, the
-GitHub Actions run that produced them (`run`: repository, run id, attempt, commit), R's
-version and RNG kind, and every installed R package with its version (`r_library`).
-The loader (`tests/oracle_fixtures.py`) refuses a fixture whose own hash or whose
-dataset's hash differs, which catches accidental edits and dataset drift. Whenever
-fixtures or datasets change, `.github/workflows/fixtures.yml` downloads the artifacts of
-the run named in the manifest and requires the committed files to be byte-identical,
-which also catches an edit made together with a re-hashed manifest.
+`"NaN"`, `"Inf"`, `"-Inf"`. `manifest.json` (schema version 2) holds the SHA-256 of
+every fixture and of the generator files (`generator_files`: `oracle/generate.R`,
+`oracle/export_datasets.R`, `.github/workflows/oracle.yml`), the GitHub Actions run that
+produced them (`run`: repository, run id, attempt, commit), R's version and RNG kind,
+and every installed R package with its version (`r_library`). On every test run the
+loader (`tests/oracle_fixtures.py`) refuses fixtures whose own hash, whose dataset's
+hash or whose generator files' hashes differ from the manifest. On every push and pull
+request `.github/workflows/fixtures.yml` verifies the manifest's attestation (signed by
+`oracle.yml` in this repository, at the commit and by the run the manifest names),
+that this commit is in the branch's history, and that its generator files equal the
+committed ones. Together these catch a hand edit, even with a re-hashed manifest;
+fixtures from another run or an older generator; and a generator changed without a new
+oracle run. Attestations do not expire, unlike artifacts (90 days).
 
 ## 10. Tolerances
 
@@ -382,10 +426,13 @@ which also catches an edit made together with a re-hashed manifest.
 | Quantity | Tolerance | Reason |
 | --- | --- | --- |
 | closed-form statistics, df, t/F/chi-square/normal p-values | rtol 1e-10 | both sides exact to double precision |
-| Games-Howell p | rtol 1e-6 | R ptukey vs SciPy studentized_range measured 2.6e-7 |
-| noncentral-distribution CIs | start rtol 1e-6; set from measurement | R root-finding precision |
-| Bayes factors | rtol 1e-4 | BayesFactor numerical integration error |
-| bootstrap CIs and p-values | within 4 Monte Carlo SE of the 20,000-resample R reference | randomness |
+| Games-Howell p (`games_howell_p`) | rtol 1e-6 | R ptukey vs SciPy studentized_range measured 2.8e-7 away from the far tail; in the tail ptukey has absolute error up to about 5e-10, so inferplot must reproduce ptukey there |
+| R ptukey against the exact studentized range (`ptukey_vs_exact`, reference cross-check only) | rtol 1e-6, atol 3e-9 | measured up to 2.5e-9 absolute after Holm (`edge_k5`, iris) |
+| p-values WRS2 computes as 1 - pt or 1 - pf (`wrs2_p`: Yuen, t1way, lincon) | rtol 1e-10, atol 2^-52 | the tail rounded to the spacing of doubles just below 1 (2^-53); rounding the exact tail the same way matches all fixtures but iris t1way, which lands one grid step away |
+| noncentral-distribution CIs | start rtol 1e-6; set from measurement | R root-finding precision; Hedges' g bounds agree with a tight SciPy inversion to 7.5e-7 relative (1.6e-8 absolute, on a bound near 0) |
+| JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | `tools/reference` reproduces all 35 distinct two-sample `ttestBF` values in the fixtures to at most 1.5e-9; a prior of sqrt(2)/2 instead of 0.707 moves them by 3.8e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more |
+| other Bayes factors (correlation; v0.2 ANOVA and contingency) | own entry, measured when first implemented | not yet measured |
+| bootstrap CIs and p-values | within 4 Monte Carlo SDs of the 20,000-resample R reference, never less than the closed-form tolerance | randomness; a quantity whose replicate SD is 0 does not depend on the resamples (AKP and rank epsilon squared estimates, an upper bound of 1) and is stored to 15 significant digits |
 | MAP centrality | one grid step of the density grid | kernel density grid |
 | subtitle numbers | exact string match | formatting parity; see below for bootstrap-derived numbers |
 

@@ -412,7 +412,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.1" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.0" },
-    { name = "pyarrow", marker = "extra == 'pyarrow'", specifier = ">=14" },
+    { name = "pyarrow", marker = "extra == 'pyarrow'", specifier = ">=14.0.1" },
     { name = "scipy", specifier = ">=1.11" },
 ]
 provides-extras = ["pandas", "polars", "pyarrow"]

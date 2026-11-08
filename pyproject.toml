@@ -38,7 +38,8 @@ dependencies = [
 [project.optional-dependencies]
 pandas = ["pandas>=2.1"]
 polars = ["polars>=1.0"]
-pyarrow = ["pyarrow>=14"]
+# 14.0.1 fixes CVE-2023-47248 (DECISIONS.md D22).
+pyarrow = ["pyarrow>=14.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/sinkomr/inferplot"
@@ -66,8 +67,12 @@ packages = ["src/inferplot"]
 include = [
     "/src",
     "/tests",
-    # The tests read the oracle datasets and import the reference implementations.
+    # The tests read the oracle datasets, import the reference implementations, and
+    # check that the generator files are the ones that wrote the fixtures.
     "/oracle/datasets/*.csv",
+    "/oracle/generate.R",
+    "/oracle/export_datasets.R",
+    "/.github/workflows/oracle.yml",
     "/tools/reference/*.py",
     "/LICENSE",
     "/NOTICE",
@@ -100,6 +105,11 @@ select = [
     "T20",          # print
 ]
 
+[tool.ruff.lint.flake8-tidy-imports]
+# Optional extras (CLAUDE.md rule 5) are imported inside the functions that need
+# them, never at module level in the library.
+banned-module-level-imports = ["pandas", "polars", "pyarrow"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "matplotlib.pyplot".msg = "Library code never imports matplotlib.pyplot; use matplotlib.figure.Figure with FigureCanvasAgg."
 "seaborn".msg = "Do not use seaborn anywhere in this package."
@@ -108,9 +118,9 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may print through pytest and may use pyplot-based plugins.
-"tests/**" = ["T20", "TID251"]
+"tests/**" = ["T20", "TID251", "TID253"]
 # The audit script reports PASS/FAIL lines on stdout by design.
-"tools/**" = ["T20"]
+"tools/**" = ["T20", "TID253"]
 
 # --- pyright ----------------------------------------------------------------
 
@@ -129,6 +139,8 @@ minversion = "8.3"
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
+# A parametrization that selects no fixtures is an error, not a silent skip.
+empty_parameter_set_mark = "fail_at_collect"
 filterwarnings = ["error"]
 markers = [
     "slow: takes more than 5 seconds; simulation tests always carry it",

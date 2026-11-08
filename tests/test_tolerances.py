@@ -3,7 +3,7 @@
 import math
 
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from tests.tolerances import (
@@ -15,9 +15,17 @@ from tests.tolerances import (
     assert_within_grid,
     assert_within_monte_carlo,
     is_close,
+    monte_carlo_limit,
 )
 
-EXPECTED_KINDS = {"closed_form", "games_howell_p", "noncentral_ci", "bayes_factor"}
+EXPECTED_KINDS = {
+    "closed_form",
+    "games_howell_p",
+    "ptukey_vs_exact",
+    "wrs2_p",
+    "noncentral_ci",
+    "ttest_bayes_factor",
+}
 
 
 def test_registry_has_the_spec_entries() -> None:
@@ -38,8 +46,10 @@ def test_spec_values() -> None:
     expected = {
         "closed_form": (1e-10, 0.0),
         "games_howell_p": (1e-6, 0.0),
+        "ptukey_vs_exact": (1e-6, 3e-9),
+        "wrs2_p": (1e-10, 2.0**-52),
         "noncentral_ci": (1e-6, 0.0),
-        "bayes_factor": (1e-4, 0.0),
+        "ttest_bayes_factor": (1e-8, 0.0),
     }
     for kind, (rtol, atol) in expected.items():
         assert (TOLERANCES[kind].rtol, TOLERANCES[kind].atol) == (rtol, atol), kind
@@ -49,7 +59,7 @@ def test_spec_values() -> None:
 
 def test_registry_is_read_only() -> None:
     with pytest.raises(TypeError):
-        TOLERANCES["closed_form"] = TOLERANCES["bayes_factor"]  # type: ignore[index]
+        TOLERANCES["closed_form"] = TOLERANCES["ttest_bayes_factor"]  # type: ignore[index]
 
 
 finite = st.floats(
@@ -68,9 +78,19 @@ def test_a_value_is_close_to_itself(x: float) -> None:
     st.sampled_from(sorted(EXPECTED_KINDS)),
 )
 def test_relative_boundary(x: float, kind: str) -> None:
-    rtol = TOLERANCES[kind].rtol
-    assert is_close(kind, x * (1 + rtol / 2), x)
-    assert not is_close(kind, x * (1 + rtol * 2), x)
+    tol = TOLERANCES[kind]
+    assume(tol.rtol * x > 4 * tol.atol)  # where the relative part decides
+    assert is_close(kind, x * (1 + tol.rtol / 2), x)
+    assert not is_close(kind, x * (1 + tol.rtol * 2), x)
+
+
+@pytest.mark.parametrize(
+    "kind", sorted(k for k in EXPECTED_KINDS if TOLERANCES[k].atol > 0)
+)
+def test_absolute_boundary(kind: str) -> None:
+    atol = TOLERANCES[kind].atol
+    assert is_close(kind, atol / 2, 0.0)
+    assert not is_close(kind, atol * 2, 0.0)
 
 
 def test_special_values() -> None:
@@ -90,6 +110,28 @@ def test_monte_carlo_band() -> None:
     assert_within_monte_carlo(0.53, 0.50, 0.01, what="AKP lower bound")
     with pytest.raises(AssertionError, match="Monte Carlo SD"):
         assert_within_monte_carlo(0.55, 0.50, 0.01, what="AKP lower bound")
+
+
+def test_monte_carlo_band_without_spread_is_closed_form() -> None:
+    # A replicate SD of 0 means the quantity does not depend on the resamples (an
+    # AKP point estimate, an upper bound fixed at 1); the fixture stores it to 15
+    # significant digits, so the closed-form tolerance applies, not exact equality.
+    reference = 0.275456113785143
+    assert monte_carlo_limit(reference, 0.0) == pytest.approx(1e-10 * reference)
+    assert_within_monte_carlo(
+        reference * (1 + 2e-16), reference, 0.0, what="rank epsilon squared"
+    )
+    assert_within_monte_carlo(1.0, 1.0, 0.0, what="upper bound")
+    with pytest.raises(AssertionError, match="closed_form"):
+        assert_within_monte_carlo(
+            reference * (1 + 1e-9), reference, 0.0, what="rank epsilon squared"
+        )
+
+
+@pytest.mark.parametrize("sd", [-0.01, math.nan, math.inf])
+def test_monte_carlo_band_rejects_an_invalid_sd(sd: float) -> None:
+    with pytest.raises(ValueError, match="Monte Carlo SD"):
+        monte_carlo_limit(0.5, sd)
 
 
 def test_grid_band() -> None:

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-PlantGrowth-bayes",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = weight, type = \"bayes\")",
@@ -28,6 +28,27 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(log[e] * (BF[\"01\"]) == \"-1.30\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.16\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.38\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
   "caption": null,
   "stats": {

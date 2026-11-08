@@ -31,7 +31,10 @@ class MonteCarloTolerance:
 
     The standard deviation is the spread of a 2,000-resample bound across the
     oracle's replicate R runs (fixture field ``bootstrap_reference.replicates``),
-    and the center is the 20,000-resample R reference.
+    and the center is the 20,000-resample R reference. The band is never narrower
+    than the ``closed_form`` tolerance: a quantity whose replicate SD is 0 does not
+    depend on the resamples (AKP and rank epsilon squared point estimates, an upper
+    bound fixed at 1), and the fixture stores it to 15 significant digits.
     """
 
     n_sd: float
@@ -61,9 +64,36 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             rtol=1e-6,
             atol=0.0,
             reason=(
-                "R's ptukey and SciPy's studentized_range differ by up to 2.8e-7 "
-                "relative (measured on the ggstatsplot 1.1.4 PlantGrowth and mtcars "
-                "fixtures; 2.6e-7 on plotsalot's m3-between). Games-Howell p only."
+                "Games-Howell p in inferplot against ggstatsplot. R's ptukey and "
+                "SciPy's studentized_range agree to 2.8e-7 relative away from the far "
+                "upper tail (PlantGrowth and mtcars fixtures; 2.6e-7 on plotsalot's "
+                "m3-between), but ptukey's own absolute error reaches about 5e-10 in "
+                "the tail (see ptukey_vs_exact), so meeting this entry there means "
+                "reproducing ptukey (STATUS.md)."
+            ),
+        ),
+        "ptukey_vs_exact": Tolerance(
+            rtol=1e-6,
+            atol=3e-9,
+            reason=(
+                "Cross-check only: R's ptukey (PMCMRplus::gamesHowellTest) against "
+                "the exact studentized range (SciPy). ptukey's upper tail has "
+                "absolute error up to about 5e-10; after Holm the fixtures differ by "
+                "up to 2.5e-9 absolute (edge_k5 a-e: 2.34134e-5 vs exact 2.34158e-5; "
+                "iris setosa-versicolor: 1.41e-9 vs exact 1.9e-14). Never used for "
+                "inferplot's own numbers."
+            ),
+        ),
+        "wrs2_p": Tolerance(
+            rtol=1e-10,
+            atol=2.0**-52,
+            reason=(
+                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way, lincon): "
+                "the upper tail rounded to the spacing of doubles just below 1 "
+                "(2**-53). Rounding SciPy's exact tail the same way, 1 - (1 - sf), "
+                "matches every fixture to 2.4e-11 relative except iris t1way, where "
+                "R's tail rounds to the neighbouring grid point (1.1e-16 absolute, "
+                "1.6e-6 relative). The absolute part is two grid steps."
             ),
         ),
         "noncentral_ci": Tolerance(
@@ -76,12 +106,18 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "is implemented."
             ),
         ),
-        "bayes_factor": Tolerance(
-            rtol=1e-4,
+        "ttest_bayes_factor": Tolerance(
+            rtol=1e-8,
             atol=0.0,
             reason=(
-                "BayesFactor computes Bayes factors by numerical integration; its "
-                "reported relative error is of this order."
+                "JZS Bayes factors of t tests (BayesFactor::ttestBF, one-dimensional "
+                "quadrature). tools/reference reproduces all 35 distinct two-sample "
+                "values in the 45 ggstatsplot 1.1.4 fixtures to at most 1.5e-9 "
+                "relative (iris setosa-virginica, BF10 2.2e6). A prior scale of "
+                "sqrt(2)/2 instead of 0.707 moves them by 3.8e-6 or more, and "
+                "Welch's t instead of Student's moves every unbalanced pair by "
+                "1.5e-4 or more (bugs_long, 92 against 91), so both fail. Other Bayes "
+                "factor families need their own measured entry."
             ),
         ),
     }
@@ -103,7 +139,10 @@ MAP_CENTRALITY = GridTolerance(
 
 SUBTITLE_TEXT = (
     "Subtitle numbers are compared as exact strings: same rounding, same switch to "
-    "scientific notation, same digits (SPEC.md section 7)."
+    "scientific notation, same digits (SPEC.md section 7). Degrees of freedom are "
+    "numbers, not strings, in ggstatsplot's expression: rounded to `digits` decimals "
+    "when fractional (0 otherwise), then shown without trailing zeros (97.40 reads "
+    "97.4)."
 )
 
 
@@ -143,22 +182,35 @@ def assert_close(kind: str, actual: float, expected: float, *, what: str) -> Non
     )
 
 
+def monte_carlo_limit(reference: float, mc_sd: float) -> float:
+    """Largest accepted difference from ``reference`` for a bootstrap quantity.
+
+    ``BOOTSTRAP.n_sd`` Monte Carlo SDs, but never less than the ``closed_form``
+    tolerance, which applies alone when the replicate SD is 0 (see
+    ``MonteCarloTolerance``).
+    """
+    if not (math.isfinite(mc_sd) and mc_sd >= 0.0):
+        raise ValueError(f"Monte Carlo SD must be finite and >= 0, got {mc_sd!r}")
+    closed = TOLERANCES["closed_form"]
+    return max(BOOTSTRAP.n_sd * mc_sd, closed.atol + closed.rtol * abs(reference))
+
+
 def assert_within_monte_carlo(
     actual: float, reference: float, mc_sd: float, *, what: str
 ) -> None:
-    """Assert a bootstrap quantity is within ``BOOTSTRAP.n_sd`` Monte Carlo SDs."""
+    """Assert a bootstrap quantity is within ``monte_carlo_limit`` of the reference."""
     special = _equal_special(actual, reference)
     if special is not None:
         if special:
             return
         raise AssertionError(f"{what}: got {actual!r}, reference {reference!r}")
-    limit = BOOTSTRAP.n_sd * mc_sd
+    limit = monte_carlo_limit(reference, mc_sd)
     if abs(actual - reference) <= limit:
         return
     raise AssertionError(
         f"{what}: got {actual!r}, 20,000-resample reference {reference!r}; "
-        f"difference {abs(actual - reference):.3g} exceeds {BOOTSTRAP.n_sd:g} x "
-        f"Monte Carlo SD {mc_sd:.3g}"
+        f"difference {abs(actual - reference):.3g} exceeds the limit {limit:.3g} "
+        f"({BOOTSTRAP.n_sd:g} x Monte Carlo SD {mc_sd:.3g}, at least closed_form)"
     )
 
 

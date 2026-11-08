@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-PlantGrowth-parametric",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = weight, type = \"parametric\")",
@@ -28,6 +28,33 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(italic(\"F\")[\"Welch\"](2, 17.13) == \"5.18\", italic(p) == \"0.02\", widehat(omega[\"p\"]^2) == \"0.29\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"30\")",
   "caption": "list(log[e] * (BF[\"01\"]) == \"-1.30\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.16\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.38\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
   "stats": {

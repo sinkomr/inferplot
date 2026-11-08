@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-ToothGrowth-parametric",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = supp, y = len, type = \"parametric\")",
@@ -26,6 +26,27 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(italic(\"t\")[\"Welch\"] * \"(\" * 55.31 * \")\" == \"1.92\", italic(p) == \"0.06\", widehat(italic(\"g\"))[\"Hedges\"] == \"0.49\", CI[\"95%\"] ~ \"[\" * \"-0.02\", \"0.99\" * \"]\", italic(\"n\")[\"obs\"] == \"60\")",
   "caption": "list(log[e] * (BF[\"01\"]) == \"-0.18\", widehat(delta)[\"difference\"]^\"posterior\" == \"3.15\", CI[\"95%\"]^ETI ~ \"[\" * \"-0.25\", \"6.90\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
   "stats": {

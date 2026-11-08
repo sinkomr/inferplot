@@ -92,7 +92,7 @@ code.
 | Lint and format | `uv run ruff check . && uv run ruff format --check .` |
 | Types | `uv run pyright` |
 | Reference checks | `uv run python -I tools/reference/stats_reference.py` |
-| Regenerate R fixtures | `gh workflow run oracle.yml`, wait for it, then `gh run download <run-id> -n oracle-fixtures -D tests/fixtures/oracle` |
+| Regenerate R fixtures | on the branch that changes `oracle/`: `gh workflow run oracle.yml --ref <branch>`, wait for it, `gh run download <run-id> -n oracle-fixtures -D tests/fixtures/oracle`, commit on that branch |
 
 Review any fixture diff before committing it.
 
@@ -126,8 +126,10 @@ Review any fixture diff before committing it.
   shows in the fifth significant figure of Bayes factors.
 - ggstatsplot applies Holm on top of Games-Howell p-values, which are already
   family-wise. Replicate it; do not fix it.
-- SciPy's `studentized_range` and R's `ptukey` agree to about 3e-7. Register that
-  tolerance for Games-Howell only.
+- SciPy's `studentized_range` and R's `ptukey` agree to about 3e-7 away from the far
+  tail; there ptukey is off by up to about 5e-10 absolute, and ggstatsplot prints it
+  (1.41e-9 where the exact p is 1.9e-14). Games-Howell p must reproduce ptukey; its
+  tolerance is for Games-Howell only.
 - Exact versus normal-approximation p-values in rank tests, and continuity corrections
   in chi-square and McNemar tests, follow R's rules for the given input. Read the
   variant from the oracle; it is part of the method, not a choice.

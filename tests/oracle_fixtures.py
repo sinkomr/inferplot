@@ -1,10 +1,11 @@
 """Load and verify the R oracle fixtures in ``tests/fixtures/oracle/``.
 
 ``oracle/generate.R`` writes the fixtures in GitHub Actions; they are never edited by
-hand. Loading checks that every fixture's SHA-256 matches ``manifest.json`` and that
-the CSV each fixture recorded still has the same SHA-256, so a fixture can never
-drift silently from the data the Python tests read. The schema is described in
-``docs/design/SPEC.md`` section 9.
+hand. Loading checks that every fixture's SHA-256 matches ``manifest.json``, that the
+CSV each fixture recorded still has the same SHA-256, and that the generator files
+are the ones that wrote the fixtures, so a fixture can never drift silently from the
+data the Python tests read or from the committed generator. The schema is described
+in ``docs/design/SPEC.md`` section 9.
 
 Typical use in a parity test::
 
@@ -31,8 +32,15 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "oracle"
 DATASET_DIR = ROOT / "oracle" / "datasets"
 MANIFEST = "manifest.json"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PARITY_VERSION = "1.1.4"
+# Files that decide what the fixtures contain (repository-relative). The manifest
+# records their SHA-256 when the oracle runs.
+GENERATOR_FILES = (
+    "oracle/generate.R",
+    "oracle/export_datasets.R",
+    ".github/workflows/oracle.yml",
+)
 
 Backend = Literal["pandas", "polars", "pyarrow"]
 Row = Mapping[str, Any]
@@ -118,12 +126,36 @@ class OracleCase:
     def bootstrap_reference(self) -> Mapping[str, Any] | None:
         return self.raw["bootstrap_reference"]
 
+    @property
+    def suppressed(self) -> list[Row]:
+        """What ggstatsplot hid, one entry per hidden call, in call order.
+
+        Each entry has ``component`` (``subtitle``, ``caption``,
+        ``centrality_description`` or ``pairwise_comparisons``), ``error`` (null
+        unless ggstatsplot swallowed one) and the muted ``warnings`` and ``messages``.
+        """
+        return list(self.raw["suppressed"])
+
+    @property
+    def expected_hidden_errors(self) -> tuple[str, ...]:
+        """Components whose error the case declares ggstatsplot swallows."""
+        return tuple(self.raw["expected_hidden_errors"])
+
     def table(self, name: str) -> list[Row]:
-        """One ``extract_stats()`` table as row objects; empty when R gave NULL."""
+        """One ``extract_stats()`` table as row objects; empty when R gave NULL.
+
+        A name ``extract_stats()`` never returns raises ``KeyError``, so a misspelled
+        table cannot pass as an empty one.
+        """
         stats = self.raw["stats"]
         if stats is None:
             raise ValueError(f"{self.name}: ggstatsplot failed ({self.error})")
-        rows = stats.get(name)
+        if name not in stats:
+            raise KeyError(
+                f"{self.name}: extract_stats() has no table {name!r}; "
+                f"tables are {sorted(stats)}"
+            )
+        rows = stats[name]
         return [] if rows is None else list(rows)
 
     @property
@@ -161,7 +193,12 @@ class OracleCase:
         return [] if layers is None else list(layers)
 
     def layer_params(self, geom: str) -> list[Mapping[str, Any]]:
-        """Parameters (``stat``, ``geom``, ``aes``) of layers drawn with ``geom``."""
+        """Parameters (``stat``, ``geom``, ``aes``) of layers drawn with ``geom``.
+
+        Empty when this plot has no such layer; a geom no fixture draws raises
+        ``KeyError``.
+        """
+        _check_geom(geom)
         return [
             layer["params"]
             for layer in self.plot_layers
@@ -169,7 +206,12 @@ class OracleCase:
         ]
 
     def layer_data(self, geom: str) -> list[list[Row]]:
-        """Own data of every layer drawn with ``geom``, e.g. ``"GeomLabelRepel"``."""
+        """Own data of every layer drawn with ``geom``, e.g. ``"GeomLabelRepel"``.
+
+        Empty when this plot has no such layer; a geom no fixture draws raises
+        ``KeyError``.
+        """
+        _check_geom(geom)
         return [
             list(layer["data"])
             for layer in self.plot_layers
@@ -191,14 +233,36 @@ def load_manifest() -> Mapping[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def generator_problems(manifest: Mapping[str, Any]) -> list[str]:
+    """Generator files that differ from the ones that wrote the fixtures."""
+    recorded = manifest.get("generator_files")
+    if not isinstance(recorded, Mapping) or set(recorded) != set(GENERATOR_FILES):
+        return [
+            f"manifest generator_files {recorded!r}; expected the SHA-256 of "
+            f"{list(GENERATOR_FILES)}"
+        ]
+    problems: list[str] = []
+    for relative in GENERATOR_FILES:
+        path = ROOT / relative
+        if not path.exists():
+            problems.append(f"{relative} is missing")
+        elif sha256_file(path) != recorded[relative]:
+            problems.append(
+                f"{relative} differs from the generator that wrote these fixtures; "
+                "run the oracle on this branch and commit its fixtures (CLAUDE.md)"
+            )
+    return problems
+
+
 def integrity_problems() -> list[str]:
-    """Every way the fixture directory disagrees with its manifest or datasets."""
+    """Every way the fixtures disagree with their manifest, datasets or generator."""
     problems: list[str] = []
     manifest = load_manifest()
     if manifest.get("schema_version") != SCHEMA_VERSION:
         problems.append(f"manifest schema_version {manifest.get('schema_version')!r}")
     if manifest.get("parity_target") != f"ggstatsplot {PARITY_VERSION}":
         problems.append(f"manifest parity_target {manifest.get('parity_target')!r}")
+    problems.extend(generator_problems(manifest))
     listed: Mapping[str, str] = manifest.get("fixtures", {})
     present = {p.name for p in fixture_paths()}
     for name in sorted(present - listed.keys()):
@@ -241,14 +305,41 @@ def load_cases() -> tuple[OracleCase, ...]:
     return tuple(cases)
 
 
+@functools.cache
+def known_geoms() -> frozenset[str]:
+    """Every geom drawn by some fixture's plot."""
+    return frozenset(
+        str(layer["geom"]) for case in load_cases() for layer in case.plot_layers
+    )
+
+
+def _check_geom(geom: str) -> None:
+    if geom not in known_geoms():
+        raise KeyError(
+            f"no fixture draws a layer with {geom!r}; geoms are {sorted(known_geoms())}"
+        )
+
+
 def cases_for(function: str) -> tuple[OracleCase, ...]:
     """Fixtures for one R function, e.g. ``"ggbetweenstats"``."""
     return tuple(c for c in load_cases() if c.function == function)
 
 
+def require_cases(cases: Sequence[OracleCase], what: str) -> Sequence[OracleCase]:
+    """``cases``, or ``LookupError`` if there are none.
+
+    An empty parametrization would make pytest skip the test silently (CLAUDE.md
+    rule 2), so every fixture selection used to parametrize a test goes through here.
+    """
+    if not cases:
+        raise LookupError(f"no oracle fixtures for {what}; add cases to generate.R")
+    return cases
+
+
 def oracle_params(function: str) -> list[Any]:
     """``pytest.param`` per fixture of ``function``, with the case name as id."""
-    return [pytest.param(case, id=case.name) for case in cases_for(function)]
+    cases = require_cases(cases_for(function), repr(function))
+    return [pytest.param(case, id=case.name) for case in cases]
 
 
 def read_dataset(case: OracleCase, backend: Backend = "pandas") -> Any:

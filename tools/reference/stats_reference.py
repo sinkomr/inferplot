@@ -73,8 +73,11 @@ def omega2_partial_from_f(f_stat: float, df1: float, df2: float) -> float:
 def games_howell(groups: Sequence[ArrayLike]) -> list[tuple[int, int, float, float]]:
     """Games & Howell (1976) pairwise test via the studentized range distribution.
 
-    Returns (i, j, q, unadjusted_p) for each pair i < j. ggstatsplot additionally
-    applies Holm to these p-values; use ``holm`` on the result to reproduce it.
+    Returns (i, j, q, unadjusted_p) for each pair i < j, with q unsigned. ggstatsplot
+    additionally applies Holm to these p-values; use ``holm`` on the result to
+    reproduce it. ggstatsplot 1.1.4 signs q as mean(group j) - mean(group i)
+    (tests/test_reference_vs_oracle.py); the m3-between known answers below cannot
+    show a sign, because every pair there has mean(group j) > mean(group i).
     """
     arrays = [np.asarray(g, dtype=float) for g in groups]
     k = len(arrays)
@@ -187,20 +190,28 @@ def jzs_bf10_t(t: float, n_effective: float, df: float, r: float = 0.707) -> flo
     Two-sample: n_effective = n1 * n2 / (n1 + n2), df = n1 + n2 - 2.
     The default r = 0.707 is ggstatsplot's numeric bf.prior default, not sqrt(2)/2;
     the two give Bayes factors that differ in the fifth significant figure.
+
+    BF10 is the integral over g of the alternative's t likelihood divided by the
+    null's, times the inverse-gamma(1/2, 1/2) density of g. Taking the ratio inside
+    the integral (in logs) keeps the integrand near the size of BF10 even when both
+    likelihoods underflow, so a purely relative quadrature tolerance applies.
     """
+    log_null = -(df + 1) / 2 * math.log1p(t * t / df)
 
     def integrand(g: float) -> float:
+        if g <= 0.0:
+            return 0.0
         scale = 1 + n_effective * g * r**2
-        return (
-            scale**-0.5
-            * (1 + t**2 / (scale * df)) ** (-(df + 1) / 2)
-            * (2 * math.pi) ** -0.5
-            * g**-1.5
-            * math.exp(-1 / (2 * g))
+        log_alt = -0.5 * math.log(scale) - (df + 1) / 2 * math.log1p(
+            t * t / (scale * df)
         )
+        log_prior = -0.5 * math.log(2 * math.pi) - 1.5 * math.log(g) - 1 / (2 * g)
+        return math.exp(log_alt - log_null + log_prior)
 
-    numerator, _ = integrate.quad(integrand, 0, math.inf, limit=200)
-    return numerator / (1 + t**2 / df) ** (-(df + 1) / 2)
+    value, _ = integrate.quad(
+        integrand, 0.0, math.inf, epsabs=0.0, epsrel=1e-12, limit=500
+    )
+    return value
 
 
 def _known_answer_checks() -> None:

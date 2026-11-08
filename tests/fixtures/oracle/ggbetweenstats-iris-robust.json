@@ -1,0 +1,579 @@
+{
+  "schema_version": 2,
+  "name": "ggbetweenstats-iris-robust",
+  "function": "ggbetweenstats",
+  "call": "ggstatsplot::ggbetweenstats(data = data, x = Species, y = Sepal.Width, type = \"robust\")",
+  "dataset": {
+    "file": "iris.csv",
+    "sha256": "d440daded18634c1da2f05e6b1a30385f2aca6cd38455b31d263e1657260112a",
+    "rows": 150,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "Species",
+    "y": "Sepal.Width",
+    "type": "robust"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "setosa",
+    "versicolor",
+    "virginica"
+  ],
+  "n_per_level": {
+    "setosa": 50,
+    "versicolor": 50,
+    "virginica": 50
+  },
+  "error": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(italic(\"F\")[\"trimmed-means\"](2, 57.65) == \"36.04\", italic(p) == \"7.01e-11\", widehat(xi) == \"0.77\", CI[\"95%\"] ~ \"[\" * \"0.66\", \"0.93\" * \"]\", italic(\"n\")[\"obs\"] == \"150\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 36.0435729948075,
+        "df": 2,
+        "df.error": 57.6549818670954,
+        "p.value": 7.0094596793524e-11,
+        "method": "A heteroscedastic one-way ANOVA for trimmed means",
+        "effectsize": "Explanatory measure of effect size",
+        "estimate": 0.769492913918091,
+        "conf.level": 0.95,
+        "conf.low": 0.656450490525569,
+        "conf.high": 0.927094103263825,
+        "n.obs": 150,
+        "expression": "list(italic(\"F\")[\"trimmed-means\"](2, 57.65) == \"36.04\", italic(p) == \"7.01e-11\", widehat(xi) == \"0.77\", CI[\"95%\"] ~ \"[\" * \"0.66\", \"0.93\" * \"]\", italic(\"n\")[\"obs\"] == \"150\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": [
+      {
+        "group1": "setosa",
+        "group2": "versicolor",
+        "estimate": 0.613333333333333,
+        "conf.level": 0.95,
+        "conf.low": 0.433446531799854,
+        "conf.high": 0.793220134866812,
+        "p.value": 5.07440756081223e-11,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"5.07e-11\")"
+      },
+      {
+        "group1": "setosa",
+        "group2": "virginica",
+        "estimate": 0.446666666666667,
+        "conf.level": 0.95,
+        "conf.low": 0.271034124903472,
+        "conf.high": 0.622299208429862,
+        "p.value": 1.21073372660874e-07,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"1.21e-07\")"
+      },
+      {
+        "group1": "versicolor",
+        "group2": "virginica",
+        "estimate": -0.166666666666667,
+        "conf.level": 0.95,
+        "conf.low": -0.329374567056192,
+        "conf.high": -0.00395876627714117,
+        "p.value": 0.0147924725139688,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.01\")"
+      }
+    ],
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...4",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "Species": "setosa",
+          "Sepal.Width": 3.41,
+          "std.dev": 0.379064369096289,
+          "iqr": 0.525,
+          "conf.low": 3.3111875,
+          "conf.high": 3.5125,
+          "min": 2.3,
+          "max": 4.4,
+          "skewness": 0.0411665197123029,
+          "kurtosis": 0.954703262777218,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"3.41\")",
+          "n.expression": "setosa\n(n = 50)"
+        },
+        {
+          "Species": "versicolor",
+          "Sepal.Width": 2.79666666666667,
+          "std.dev": 0.313798323378411,
+          "iqr": 0.5,
+          "conf.low": 2.7009375,
+          "conf.high": 2.855,
+          "min": 2,
+          "max": 3.4,
+          "skewness": -0.362844843787258,
+          "kurtosis": -0.366237357221642,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"2.80\")",
+          "n.expression": "versicolor\n(n = 50)"
+        },
+        {
+          "Species": "virginica",
+          "Sepal.Width": 2.96333333333333,
+          "std.dev": 0.322496638172637,
+          "iqr": 0.4,
+          "conf.low": 2.88,
+          "conf.high": 3.0440625,
+          "min": 2.2,
+          "max": 3.8,
+          "skewness": 0.365949074466999,
+          "kurtosis": 0.706070510994423,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"2.96\")",
+          "n.expression": "virginica\n(n = 50)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "Species": "setosa",
+          "Sepal.Width": 3.41,
+          "std.dev": 0.379064369096289,
+          "iqr": 0.525,
+          "conf.low": 3.3111875,
+          "conf.high": 3.5125,
+          "min": 2.3,
+          "max": 4.4,
+          "skewness": 0.0411665197123029,
+          "kurtosis": 0.954703262777218,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"3.41\")",
+          "n.expression": "setosa\n(n = 50)"
+        },
+        {
+          "Species": "versicolor",
+          "Sepal.Width": 2.79666666666667,
+          "std.dev": 0.313798323378411,
+          "iqr": 0.5,
+          "conf.low": 2.7009375,
+          "conf.high": 2.855,
+          "min": 2,
+          "max": 3.4,
+          "skewness": -0.362844843787258,
+          "kurtosis": -0.366237357221642,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"2.80\")",
+          "n.expression": "versicolor\n(n = 50)"
+        },
+        {
+          "Species": "virginica",
+          "Sepal.Width": 2.96333333333333,
+          "std.dev": 0.322496638172637,
+          "iqr": 0.4,
+          "conf.low": 2.88,
+          "conf.high": 3.0440625,
+          "min": 2.2,
+          "max": 3.8,
+          "skewness": 0.365949074466999,
+          "kurtosis": 0.706070510994423,
+          "n.obs": 50,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"2.96\")",
+          "n.expression": "virginica\n(n = 50)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_signif",
+      "geom": "GeomSignif",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["setosa", "versicolor"],
+            ["setosa", "virginica"],
+            ["versicolor", "virginica"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": ["list(italic(p)[\"Holm\" - adj.] == \"5.07e-11\")", "list(italic(p)[\"Holm\" - adj.] == \"1.21e-07\")", "list(italic(p)[\"Holm\" - adj.] == \"0.01\")"],
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.0958333333333333,
+          "step_increase": 0.075,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 4.606,
+          "yend": 4.63,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"5.07e-11\")",
+          "group": "setosa-versicolor-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 2,
+          "y": 4.63,
+          "yend": 4.63,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"5.07e-11\")",
+          "group": "setosa-versicolor-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 4.63,
+          "yend": 4.606,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"5.07e-11\")",
+          "group": "setosa-versicolor-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 4.786,
+          "yend": 4.81,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.21e-07\")",
+          "group": "setosa-virginica-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 3,
+          "y": 4.81,
+          "yend": 4.81,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.21e-07\")",
+          "group": "setosa-virginica-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 4.81,
+          "yend": 4.786,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"1.21e-07\")",
+          "group": "setosa-virginica-2",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 4.966,
+          "yend": 4.99,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.01\")",
+          "group": "versicolor-virginica-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 3,
+          "y": 4.99,
+          "yend": 4.99,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.01\")",
+          "group": "versicolor-virginica-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 4.99,
+          "yend": 4.966,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.01\")",
+          "group": "versicolor-virginica-3",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "effect size confidence interval",
+    "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
+    "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 0.769492913918091,
+      "conf_low": 0.656450490525569,
+      "conf_high": 0.927094103263825,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+          "values": [
+            0.769492913918091,
+            0.656450490525569,
+            0.927094103263825
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = 0.05, nboot = R)",
+          "values": [
+            0.769492913918091,
+            0.652075985421486,
+            0.950683343478679
+          ],
+          "matches": false
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": 0.769492913918091,
+    "conf_low": 0.657148739411297,
+    "conf_high": 0.940789658790087,
+    "raw": {
+      "effsize": 0.769492913918091,
+      "effsize_ci": [0.657148739411297, 0.940789658790087]
+    },
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": 0.769492913918091,
+      "estimate_sd": 0,
+      "conf_low_mean": 0.656522928516127,
+      "conf_low_sd": 0.00360677305408558,
+      "conf_high_mean": 0.938986545438862,
+      "conf_high_sd": 0.00426403873756638
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

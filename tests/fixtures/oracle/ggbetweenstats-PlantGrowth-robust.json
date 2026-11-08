@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-PlantGrowth-robust",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = weight, type = \"robust\")",
@@ -28,6 +28,27 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(italic(\"F\")[\"trimmed-means\"](2, 9.64) == \"8.28\", italic(p) == \"8.07e-03\", widehat(xi) == \"0.67\", CI[\"95%\"] ~ \"[\" * \"0.38\", \"0.98\" * \"]\", italic(\"n\")[\"obs\"] == \"30\")",
   "caption": null,
   "stats": {

@@ -1,0 +1,440 @@
+{
+  "schema_version": 2,
+  "name": "ggbetweenstats-edge_unbalanced-nonparametric",
+  "function": "ggbetweenstats",
+  "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = value, type = \"nonparametric\")",
+  "dataset": {
+    "file": "edge_unbalanced.csv",
+    "sha256": "2b580baf9c7392bc19309e569e0ff9d44595925d4be6600b9089a0b4bc3bcc3c",
+    "rows": 41,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "group",
+    "y": "value",
+    "type": "nonparametric"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a",
+    "b",
+    "c"
+  ],
+  "n_per_level": {
+    "a": 4,
+    "b": 12,
+    "c": 25
+  },
+  "error": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(chi[\"Kruskal-Wallis\"]^2 * \"(\" * 2 * \")\" == \"8.67\", italic(p) == \"0.01\", widehat(epsilon)[\"ordinal\"]^2 == \"0.22\", CI[\"95%\"] ~ \"[\" * \"0.05\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"41\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "parameter1": "value",
+        "parameter2": "group",
+        "statistic": 8.67131242740999,
+        "df.error": 2,
+        "p.value": 0.013093279263988,
+        "method": "Kruskal-Wallis rank sum test",
+        "effectsize": "Epsilon2 (rank)",
+        "estimate": 0.21678281068525,
+        "conf.level": 0.95,
+        "conf.low": 0.0545309847314279,
+        "conf.high": 1,
+        "conf.method": "percentile bootstrap",
+        "conf.iterations": 100,
+        "n.obs": 41,
+        "expression": "list(chi[\"Kruskal-Wallis\"]^2 * \"(\" * 2 * \")\" == \"8.67\", italic(p) == \"0.01\", widehat(epsilon)[\"ordinal\"]^2 == \"0.22\", CI[\"95%\"] ~ \"[\" * \"0.05\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"41\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": [
+      {
+        "group1": "a",
+        "group2": "b",
+        "statistic": 0.168686942449158,
+        "p.value": 0.866042890006967,
+        "alternative": "two.sided",
+        "distribution": "z",
+        "p.adjust.method": "Holm",
+        "test": "Dunn",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.87\")"
+      },
+      {
+        "group1": "a",
+        "group2": "c",
+        "statistic": 1.88343800003822,
+        "p.value": 0.11928206931448,
+        "alternative": "two.sided",
+        "distribution": "z",
+        "p.adjust.method": "Holm",
+        "test": "Dunn",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.12\")"
+      },
+      {
+        "group1": "b",
+        "group2": "c",
+        "statistic": 2.61076618489623,
+        "p.value": 0.0271018908173207,
+        "alternative": "two.sided",
+        "distribution": "z",
+        "p.adjust.method": "Holm",
+        "test": "Dunn",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")"
+      }
+    ],
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...4",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "group": "a",
+          "value": 52.985,
+          "mad": 3.33585000000001,
+          "iqr": 8.135,
+          "conf.low": 46.59,
+          "conf.high": 56.340125,
+          "min": 46.59,
+          "max": 57.34,
+          "skewness": -0.677612611665947,
+          "kurtosis": 1.73705526643433,
+          "n.obs": 4,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"52.98\")",
+          "n.expression": "a\n(n = 4)"
+        },
+        {
+          "group": "b",
+          "value": 54.535,
+          "mad": 5.137209,
+          "iqr": 6.295,
+          "conf.low": 47.752,
+          "conf.high": 55.625,
+          "min": 37.09,
+          "max": 78.48,
+          "skewness": 1.06566426783762,
+          "kurtosis": 3.6591584284761,
+          "n.obs": 12,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"54.53\")",
+          "n.expression": "b\n(n = 12)"
+        },
+        {
+          "group": "c",
+          "value": 62.82,
+          "mad": 13.728876,
+          "iqr": 18.92,
+          "conf.low": 59.34225,
+          "conf.high": 69.209,
+          "min": 40.25,
+          "max": 79.76,
+          "skewness": -0.424471550018096,
+          "kurtosis": -0.439012502797503,
+          "n.obs": 25,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"62.82\")",
+          "n.expression": "c\n(n = 25)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "group": "a",
+          "value": 52.985,
+          "mad": 3.33585000000001,
+          "iqr": 8.135,
+          "conf.low": 46.59,
+          "conf.high": 56.340125,
+          "min": 46.59,
+          "max": 57.34,
+          "skewness": -0.677612611665947,
+          "kurtosis": 1.73705526643433,
+          "n.obs": 4,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"52.98\")",
+          "n.expression": "a\n(n = 4)"
+        },
+        {
+          "group": "b",
+          "value": 54.535,
+          "mad": 5.137209,
+          "iqr": 6.295,
+          "conf.low": 47.752,
+          "conf.high": 55.625,
+          "min": 37.09,
+          "max": 78.48,
+          "skewness": 1.06566426783762,
+          "kurtosis": 3.6591584284761,
+          "n.obs": 12,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"54.53\")",
+          "n.expression": "b\n(n = 12)"
+        },
+        {
+          "group": "c",
+          "value": 62.82,
+          "mad": 13.728876,
+          "iqr": 18.92,
+          "conf.low": 59.34225,
+          "conf.high": 69.209,
+          "min": 40.25,
+          "max": 79.76,
+          "skewness": -0.424471550018096,
+          "kurtosis": -0.439012502797503,
+          "n.obs": 25,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"62.82\")",
+          "n.expression": "c\n(n = 25)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_signif",
+      "geom": "GeomSignif",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["b", "c"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.0967307241621748,
+          "step_increase": 0.075,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 2,
+          "xend": 2,
+          "y": 83.4608,
+          "yend": 83.8875,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "b-c-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 2,
+          "xend": 3,
+          "y": 83.8875,
+          "yend": 83.8875,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "b-c-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 83.8875,
+          "yend": 83.4608,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "b-c-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "effect size confidence interval",
+    "call": "effectsize::rank_epsilon_squared(y ~ x, data, ci = 0.95, alternative = \"greater\", iterations = R)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
+    "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 0.21678281068525,
+      "conf_low": 0.0545309847314279,
+      "conf_high": 1,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "effectsize::rank_epsilon_squared(y ~ x, data, ci = 0.95, alternative = \"greater\", iterations = R)",
+          "values": [
+            0.21678281068525,
+            0.0545309847314279,
+            1
+          ],
+          "matches": true
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": 0.21678281068525,
+    "conf_low": 0.0710757590199689,
+    "conf_high": 1,
+    "raw": [
+      {
+        "rank_epsilon_squared": 0.21678281068525,
+        "CI": 0.95,
+        "CI_low": 0.0710757590199689,
+        "CI_high": 1
+      }
+    ],
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": 0.21678281068525,
+      "estimate_sd": 0,
+      "conf_low_mean": 0.0694108574396962,
+      "conf_low_sd": 0.00321840628518304,
+      "conf_high_mean": 1,
+      "conf_high_sd": 0
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-PlantGrowth-nonparametric",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = weight, type = \"nonparametric\")",
@@ -28,6 +28,27 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(chi[\"Kruskal-Wallis\"]^2 * \"(\" * 2 * \")\" == \"7.99\", italic(p) == \"0.02\", widehat(epsilon)[\"ordinal\"]^2 == \"0.28\", CI[\"95%\"] ~ \"[\" * \"0.07\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"30\")",
   "caption": null,
   "stats": {

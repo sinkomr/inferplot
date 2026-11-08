@@ -8,7 +8,7 @@ argument fails loudly until it is added here.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
@@ -63,7 +63,8 @@ KEYWORDS: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Argument values spelled differently in inferplot.
+# Argument values spelled differently in inferplot. Vector arguments (JSON arrays,
+# such as ``ratio``) pass through unchanged.
 VALUES: Mapping[str, Mapping[Any, Any]] = MappingProxyType(
     {"alternative": MappingProxyType({"two.sided": "two-sided"})}
 )
@@ -93,5 +94,8 @@ def translate(r_function: str, r_args: Mapping[str, Any]) -> InferplotCall:
     for r_name, value in r_args.items():
         if r_name in positional:
             continue
-        kwargs[KEYWORDS[r_name]] = VALUES.get(r_name, {}).get(value, value)
+        spellings = VALUES.get(r_name)
+        if spellings is not None and isinstance(value, Hashable):
+            value = spellings.get(value, value)
+        kwargs[KEYWORDS[r_name]] = value
     return InferplotCall(function=FUNCTIONS[r_function], args=args, kwargs=kwargs)

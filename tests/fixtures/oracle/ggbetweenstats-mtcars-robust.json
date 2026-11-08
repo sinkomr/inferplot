@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-mtcars-robust",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = cyl, y = mpg, type = \"robust\")",
@@ -28,6 +28,27 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(italic(\"F\")[\"trimmed-means\"](2, 9.77) == \"25.12\", italic(p) == \"1.41e-04\", widehat(xi) == \"1.11\", CI[\"95%\"] ~ \"[\" * \"0.84\", \"1.48\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")",
   "caption": null,
   "stats": {

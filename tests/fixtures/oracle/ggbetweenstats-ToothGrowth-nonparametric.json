@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "ggbetweenstats-ToothGrowth-nonparametric",
   "function": "ggbetweenstats",
   "call": "ggstatsplot::ggbetweenstats(data = data, x = supp, y = len, type = \"nonparametric\")",
@@ -26,6 +26,21 @@
   "error": null,
   "r_warnings": [],
   "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
   "subtitle": "list(italic(\"W\")[\"Mann-Whitney\"] == \"575.50\", italic(p) == \"0.06\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.28\", CI[\"95%\"] ~ \"[\" * \"-8.12e-03\", \"0.52\" * \"]\", italic(\"n\")[\"obs\"] == \"60\")",
   "caption": null,
   "stats": {

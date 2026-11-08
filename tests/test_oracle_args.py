@@ -35,6 +35,20 @@ def test_translate_histostats_has_one_positional_column() -> None:
     assert call.kwargs == {"test_value": 10}
 
 
+def test_vector_arguments_pass_through() -> None:
+    # jsonlite writes an R vector such as ratio = c(0.5, 0.5) as a JSON array.
+    call = translate("ggbarstats", {"x": "a", "ratio": [0.5, 0.5]})
+    assert call.kwargs == {"ratio": [0.5, 0.5]}
+    call = translate("ggbetweenstats", {"x": "a", "y": "b", "alternative": ["less"]})
+    assert call.kwargs == {"alternative": ["less"]}
+
+
+def test_one_sided_alternatives_keep_their_names() -> None:
+    for side in ("less", "greater"):
+        call = translate("ggbetweenstats", {"x": "a", "y": "b", "alternative": side})
+        assert call.kwargs == {"alternative": side}
+
+
 def test_unknown_argument_fails_loudly() -> None:
     with pytest.raises(KeyError, match=r"var\.equal"):
         translate("ggbetweenstats", {"x": "a", "y": "b", "var.equal": True})

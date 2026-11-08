@@ -1,8 +1,9 @@
-"""The committed oracle fixtures are intact, cover this phase, and read correctly.
+"""The committed oracle fixtures are intact, complete, and read correctly.
 
-These tests check the fixtures themselves, not inferplot: hashes against the manifest
-and datasets, the ggstatsplot version, the case list, and that every supported
-dataframe backend sees the same groups and counts that R analyzed.
+These tests check the fixtures themselves, not inferplot: hashes against the manifest,
+datasets and generator files, the ggstatsplot version, the case list, what
+ggstatsplot hid, and that every supported dataframe backend sees the same groups and
+counts that R analyzed.
 """
 
 from collections.abc import Sequence
@@ -16,8 +17,8 @@ from tests.oracle_fixtures import (
     PARITY_VERSION,
     Backend,
     OracleCase,
-    cases_for,
     integrity_problems,
+    load_cases,
     number,
     oracle_params,
     r_level_label,
@@ -25,20 +26,45 @@ from tests.oracle_fixtures import (
 )
 from tests.tolerances import assert_within_monte_carlo
 
-# Phase 0 checklist: ggbetweenstats, all types, three datasets.
-PHASE0_DATASETS = ("ToothGrowth", "PlantGrowth", "mtcars")
 TYPES = ("parametric", "nonparametric", "robust", "bayes")
 BACKENDS: Sequence[Backend] = ("pandas", "polars", "pyarrow")
 
+# The cases oracle/generate.R writes. The Phase 0 checklist asked for ggbetweenstats,
+# all types, on ToothGrowth, PlantGrowth and mtcars; the rest settle the SPEC.md
+# claims the Phase 0 review found untested (see the comments in generate.R).
+ALL_TYPE_LABELS = (
+    "ToothGrowth",
+    "PlantGrowth",
+    "mtcars",
+    "mtcars-am",
+    "edge_k2",
+    "iris",
+    "mtcars-disp",
+    "edge_unbalanced",
+    "edge_k5",
+    "bugs_long",
+)
+EXPECTED_CASES = frozenset(
+    {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
+    | {"ggbetweenstats-mtcars-am-drat-parametric"}
+    | {
+        f"ggbetweenstats-ToothGrowth-{side}-{t}"
+        for side in ("greater", "less")
+        for t in ("parametric", "nonparametric")
+    }
+)
 
-def test_fixtures_match_manifest_and_datasets() -> None:
+
+def test_fixtures_match_manifest_datasets_and_generator() -> None:
     assert integrity_problems() == []
 
 
-def test_phase0_cases_are_present() -> None:
-    names = {case.name for case in cases_for("ggbetweenstats")}
-    expected = {f"ggbetweenstats-{d}-{t}" for d in PHASE0_DATASETS for t in TYPES}
-    assert expected <= names, sorted(expected - names)
+def test_case_list_is_what_the_generator_writes() -> None:
+    names = {case.name for case in load_cases()}
+    assert names == EXPECTED_CASES, (
+        f"missing {sorted(EXPECTED_CASES - names)}, unexpected "
+        f"{sorted(names - EXPECTED_CASES)}"
+    )
 
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -48,6 +74,35 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     assert versions["R"].startswith("4.5.")
     assert case.error is None, case.error
     assert case.subtitle, "ggstatsplot drew no subtitle"
+
+    # What ggstatsplot hid (SPEC.md section 9), one entry per hidden call in call
+    # order; no call swallowed an error unless the case says so. ggstatsplot's
+    # bf.condition draws the Bayes caption only for type "parametric".
+    with_caption = case.type == "parametric" and case.args.get("bf.message", True)
+    expected_calls = ["subtitle"]
+    if with_caption:
+        expected_calls.append("caption")
+    if case.args.get("centrality.plotting", True):
+        expected_calls.append("centrality_description")
+    if (
+        len(case.analysis_levels) > 2
+        and case.args.get("pairwise.display", "significant") != "none"
+    ):
+        expected_calls.append("pairwise_comparisons")
+    assert [entry["component"] for entry in case.suppressed] == expected_calls
+    swallowed = {
+        entry["component"]: entry["error"]
+        for entry in case.suppressed
+        if entry["error"] is not None
+    }
+    assert set(swallowed) == set(case.expected_hidden_errors), swallowed
+    if with_caption:
+        assert case.caption, "no Bayes caption"
+        assert case.caption_data is not None, "no caption_data"
+    else:
+        assert case.caption is None
+        assert case.caption_data is None
+
     rows = case.subtitle_rows
     assert rows, "no subtitle_data"
     if case.type == "bayes":
