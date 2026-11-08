@@ -6,9 +6,9 @@ import math
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from inferplot.stats.descriptive import SampleLike, as_sample, variance
+from inferplot.stats.descriptive import SampleLike
 from inferplot.stats.noncentral import check_conf_level, f_ncp_bound, t_ncp_interval
-from inferplot.stats.parametric import Alternative, check_alternative, welch_t
+from inferplot.stats.parametric import Alternative, check_alternative, welch_t_scaled
 from inferplot.stats.srange import stirlerr
 
 __all__ = [
@@ -81,7 +81,11 @@ def hedges_g(
     the Welch df (Hedges 1981). CI: the noncentral-t interval for the Welch t at
     df_W (``t_ncp_interval``; Steiger & Fouladi 1997), each bound times
     (Welch SE / s) J(df_W). A one-sided ``alternative`` gives a one-sided interval
-    whose far bound is infinite. Matches R's ``effectsize::hedges_g(pooled_sd =
+    whose far bound is infinite. At df_W = 1 (one constant sample, the other of two
+    values) J = 0, so g and both bounds are 0 by construction; they are +0.0, never
+    -0.0. Computed on both samples times their ``common_scale``: g and its bounds
+    are the same, bit for bit, for the data times any power of two that keeps them
+    normal doubles. Matches R's ``effectsize::hedges_g(pooled_sd =
     FALSE, ci = conf_level, alternative = ...)`` as statsExpressions 2.2.1 calls it
     (SPEC.md section 4).
 
@@ -92,19 +96,19 @@ def hedges_g(
     """
     level = check_conf_level(conf_level)
     side = check_alternative(alternative)
-    x = as_sample(a, name="a", min_size=2)
-    y = as_sample(b, name="b", min_size=2)
-    welch = welch_t(x, y, alternative=side)
-    sd = math.sqrt(0.5 * (variance(x) + variance(y)))
+    welch = welch_t_scaled(a, b)
+    # Difference, SE and SD in the samples' common scale: g does not depend on it.
+    sd = math.sqrt(0.5 * (welch.v_a + welch.v_b))
     j = hedges_j(welch.df)
-    estimate = welch.mean_difference / sd * j
+    # + 0.0 turns a zero product with a negative factor (J = 0) into +0.0.
+    estimate = welch.difference / sd * j + 0.0
     low, high = t_ncp_interval(welch.t, welch.df, conf_level=level, alternative=side)
     scale = welch.se / sd * j
     return EffectSizeCI(
         estimate=estimate,
         # The far bound of a one-sided interval stays infinite (also when J = 0).
-        conf_low=low * scale if math.isfinite(low) else low,
-        conf_high=high * scale if math.isfinite(high) else high,
+        conf_low=low * scale + 0.0 if math.isfinite(low) else low,
+        conf_high=high * scale + 0.0 if math.isfinite(high) else high,
         conf_level=level,
         sidedness=side,
     )

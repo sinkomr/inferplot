@@ -18,6 +18,7 @@ What it reproduces is ggstatsplot 1.1.4's ``ggbetweenstats()`` (SPEC.md section 
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from typing import Final
 
@@ -100,6 +101,19 @@ _ADJUSTMENT_CITATIONS: Final[dict[str, str]] = {
 
 # ggstatsplot's default trimming; another value is allowed only where it is used.
 _DEFAULT_TR: Final = 0.2
+# Defaults of the arguments that can have no effect: a non-default value where it
+# has none gets a warnings entry (not an error, so code that loops over data sets
+# with two and with more groups keeps working; nothing reported would be wrong).
+_DEFAULT_P_ADJUST: Final = "holm"
+_DEFAULT_DISPLAY: Final = "significant"
+_DEFAULT_ALPHA: Final = 0.05
+_DEFAULT_BF_PRIOR: Final = 0.707
+
+_HEDGES_J_ZERO_WARNING: Final = (
+    "Hedges' g is 0 by construction at 1 degree of freedom (Welch's df is 1 here: "
+    "one group has no variability and the other has two values), so g and its "
+    "confidence interval carry no information about the size of the difference."
+)
 
 _BAYES_K3_WARNING: Final = (
     "The Bayes factor caption for three or more groups arrives in inferplot 0.2."
@@ -132,10 +146,23 @@ def _check_groups(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -
             f" fewer: {', '.join(small)}. Remove {'it' if len(small) == 1 else 'them'}"
             " from the data or collect more observations."
         )
+    huge = [
+        level
+        for level, v in zip(levels, values, strict=True)
+        if math.isinf(float(np.max(v)) - float(np.min(v)))
+    ]
+    if huge:
+        raise ValueError(
+            f"The values of y in the {_group_word(huge)} {_names(huge)} of x={x!r} "
+            "span more than the largest number a double can hold (about 1.8e308), "
+            "so their standard deviation cannot be represented. Rescale y, for "
+            "example by changing its units or dividing it by 1e10."
+        )
+    # Constant means every value equal, not a variance that rounds to 0.
     constant = [
         level
         for level, v in zip(levels, values, strict=True)
-        if stats.variance(v) == 0.0
+        if float(np.ptp(v)) == 0.0
     ]
     if len(levels) == 2 and len(constant) == 2:
         raise ValueError(
@@ -151,6 +178,70 @@ def _check_groups(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -
             f"{'that group' if len(constant) == 1 else 'those groups'} or analyze "
             "the groups that vary."
         )
+    if len(levels) >= 3:
+        # The statistics run on y times a power of two that brings the largest |y|
+        # near 1; a group whose spread is below about 1e-300 of that has variance 0
+        # there, and its weight 1 / variance would be infinite.
+        scale = stats.common_scale(*values)
+        tiny = [
+            level
+            for level, v in zip(levels, values, strict=True)
+            if stats.scaled_variance(v * scale) == 0.0
+        ]
+        if tiny:
+            raise ValueError(
+                f"The values of y in the {_group_word(tiny)} {_names(tiny)} of "
+                f"x={x!r} vary by less than double precision can represent next to "
+                "the largest values of y (about 1e-300 of them), so Welch's ANOVA "
+                "cannot weight "
+                f"{'that group' if len(tiny) == 1 else 'those groups'} by its "
+                "variance. Analyze groups of similar magnitude separately."
+            )
+
+
+def _no_effect_warnings(
+    *,
+    x: str,
+    k: int,
+    bayes_computed: bool,
+    subtitle_on: bool,
+    show_bf: bool | None,
+    passed: dict[str, object],
+    canonical: dict[str, object],
+) -> list[str]:
+    """One plain-English entry per argument that was changed from its default but
+    has no effect on these data (``passed``: the values as given; ``canonical``:
+    validated, to compare with the defaults)."""
+    out: list[str] = []
+    if k == 2:
+        reason = (
+            f"x={x!r} has 2 groups, so there are no pairwise comparisons to {{what}}."
+        )
+        for name, default, what in (
+            ("p_adjust_method", _DEFAULT_P_ADJUST, "adjust"),
+            ("pairwise_display", _DEFAULT_DISPLAY, "display"),
+            ("pairwise_alpha", _DEFAULT_ALPHA, "call significant"),
+        ):
+            if canonical[name] != default:
+                out.append(
+                    f"{name}={passed[name]!r} has no effect: "
+                    + reason.format(what=what)
+                )
+    if not bayes_computed and canonical["bf_prior"] != _DEFAULT_BF_PRIOR:
+        if k >= 3:
+            why = (
+                f"x={x!r} has {k} groups, and the Bayes factor for three or more "
+                "groups arrives in inferplot 0.2"
+            )
+        elif not subtitle_on:
+            why = "results_subtitle=False leaves the Bayes factor out"
+        else:
+            why = f"bf_message={show_bf!r} leaves the Bayes factor out"
+        out.append(
+            f"bf_prior={passed['bf_prior']!r} has no effect: no Bayes factor is "
+            f"computed ({why})."
+        )
+    return out
 
 
 def _alternative(value: str) -> stats.Alternative:
@@ -375,6 +466,8 @@ def betweenstats(
             sidedness=g.sidedness,
         )
         citations += [_WELCH_1947, _HEDGES_1981, _DELACRE_2021, _STEIGER_2004]
+        if stats.hedges_j(welch.df) == 0.0:
+            warnings.append(_HEDGES_J_ZERO_WARNING)
         if subtitle_on and show_bf is not False:
             bf10, log_bf01 = stats.jzs_bf10_two_sample(a, b, prior_scale=prior_scale)
             bayes = BayesFactor(
@@ -431,6 +524,26 @@ def betweenstats(
             citations.append(_ADJUSTMENT_CITATIONS[adjust])
         if subtitle_on and show_bf is None:
             warnings.append(_BAYES_K3_WARNING)
+
+    warnings += _no_effect_warnings(
+        x=x,
+        k=k,
+        bayes_computed=bayes is not None,
+        subtitle_on=subtitle_on,
+        show_bf=show_bf,
+        passed={
+            "p_adjust_method": p_adjust_method,
+            "pairwise_display": pairwise_display,
+            "pairwise_alpha": alpha,  # numbers as plain floats (NumPy scalars too)
+            "bf_prior": prior_scale,
+        },
+        canonical={
+            "p_adjust_method": adjust,
+            "pairwise_display": display,
+            "pairwise_alpha": alpha,
+            "bf_prior": prior_scale,
+        },
+    )
 
     descriptives = tuple(
         Descriptive(level=name, n=int(v.size), centrality="mean", value=stats.mean(v))

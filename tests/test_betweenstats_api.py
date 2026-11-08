@@ -732,3 +732,199 @@ def test_well_separated_low_noise_groups(sd: float) -> None:
     assert 0.99 < es.conf_low <= es.estimate <= 1.0
     assert es.conf_high == 1.0
     assert "CI_95% [1.00, 1.00]" in result.text.subtitle
+
+
+@pytest.mark.parametrize("base", [1e-300, 1e-160, 1e200, 1e300])
+def test_extreme_magnitudes_give_the_unit_scale_result(base: float) -> None:
+    # API-2: 1e-300 was called constant (its variance underflowed), 1e-160 raised
+    # ZeroDivisionError, 1e200 OverflowError and 1e300 "df must be > 0; got nan".
+    unit = betweenstats(frame({"a": [1.0, 2.0, 3.0], "b": [4.0, 6.0, 5.0]}), "g", "y")
+    data = frame({"a": [1.0, 2.0, 3.0], "b": [4.0, 6.0, 5.0]})
+    data["y"] = data["y"] * base
+    result = betweenstats(data, "g", "y")
+    assert result.text.subtitle == unit.text.subtitle
+    assert result.test.df_error == pytest.approx(unit.test.df_error, rel=1e-14)
+    assert result.effect_size.estimate == pytest.approx(
+        unit.effect_size.estimate, rel=1e-13
+    )
+
+
+@pytest.mark.parametrize("scale", [1e-80, 1e-90, 1e80, 1e160])
+def test_review_scales_end_to_end(scale: float) -> None:
+    # STAT-1: data times 1e-80 printed t_Welch(18.88); 1e-90 and 1e80 raised.
+    rng = np.random.default_rng(1)
+    y = np.r_[rng.normal(0.0, 1.0, 10), rng.normal(1.0, 2.0, 15)]
+    data = pd.DataFrame({"g": ["a"] * 10 + ["b"] * 15, "y": y * scale})
+    result = betweenstats(data, "g", "y")
+    assert result.text.subtitle.startswith("t_Welch(18.82) = -0.93, p = 0.37")
+
+
+def test_a_group_wider_than_the_largest_double_raises() -> None:
+    data = frame({"a": [-1.5e308, 1.5e308, 0.0], "b": [1.0, 2.0, 4.0]})
+    with pytest.raises(ValueError, match=r"'a' of x='g' span more than the largest"):
+        betweenstats(data, "g", "y")
+
+
+def test_a_group_too_small_next_to_the_others_raises() -> None:
+    groups = {"a": [1e300, 2e300, 3e300], "b": [1e-10, 2e-10, 4e-10]}
+    groups["c"] = [2e300, 5e300, 3e300]
+    with pytest.raises(ValueError, match=r"'b' of x='g' vary by less than double"):
+        betweenstats(frame(groups), "g", "y")
+
+
+def test_values_that_differ_are_not_constant() -> None:
+    # Constant means all values equal: a group at 1e-300 varies.
+    groups = {"a": [1e-300, 2e-300, 3e-300], "b": [5.0, 5.0], "c": [1.0, 2.0, 4.0]}
+    with pytest.raises(ValueError, match=r"variance, which is 0 for the group 'b'"):
+        betweenstats(frame(groups), "g", "y")
+
+
+def test_hedges_g_at_one_degree_of_freedom_warns() -> None:
+    # STAT-3: one constant group and one group of two values: Welch df = 1, J = 0.
+    result = betweenstats(frame({"a": [5.0, 5.0, 5.0], "b": [1.0, 3.0]}), "g", "y")
+    assert result.test.df_error == 1.0
+    es = result.effect_size
+    for value in (es.estimate, es.conf_low, es.conf_high):
+        assert value == 0.0
+        assert math.copysign(1.0, value) == 1.0
+    assert "CI_95% [0.00, 0.00]" in result.text.subtitle
+    assert "-0.00" not in result.text.subtitle
+    assert "95% CI [0.00, 0.00]" in result.text.apa
+    assert result.warnings == (
+        "Hedges' g is 0 by construction at 1 degree of freedom (Welch's df is 1 "
+        "here: one group has no variability and the other has two values), so g and "
+        "its confidence interval carry no information about the size of the "
+        "difference.",
+    )
+    assert '"-0.0' not in result.to_json()
+
+
+# --------------------------------------------------------------------------- #
+# arguments that have no effect on these data: a warnings entry each (STAT-2)
+
+
+def test_defaults_add_no_warning(two: StatsResult, anova: StatsResult) -> None:
+    assert two.warnings == ()
+    assert anova.warnings == (K3_BAYES_WARNING,)
+
+
+def test_default_aliases_add_no_warning(teeth: pd.DataFrame) -> None:
+    result = betweenstats(
+        teeth,
+        "supp",
+        "len",
+        pairwise_display="s",
+        p_adjust_method="holm",
+        pairwise_alpha=0.05,
+        bf_prior=0.707,
+    )
+    assert result.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("argument", "value", "message"),
+    [
+        (
+            "p_adjust_method",
+            "bonferroni",
+            "p_adjust_method='bonferroni' has no effect: x='supp' has 2 groups, so "
+            "there are no pairwise comparisons to adjust.",
+        ),
+        (
+            "pairwise_display",
+            "all",
+            "pairwise_display='all' has no effect: x='supp' has 2 groups, so there "
+            "are no pairwise comparisons to display.",
+        ),
+        (
+            "pairwise_display",
+            "ns",
+            "pairwise_display='ns' has no effect: x='supp' has 2 groups, so there "
+            "are no pairwise comparisons to display.",
+        ),
+        (
+            "pairwise_alpha",
+            0.01,
+            "pairwise_alpha=0.01 has no effect: x='supp' has 2 groups, so there are "
+            "no pairwise comparisons to call significant.",
+        ),
+        (
+            "pairwise_alpha",
+            np.float64(0.01),
+            "pairwise_alpha=0.01 has no effect: x='supp' has 2 groups, so there are "
+            "no pairwise comparisons to call significant.",
+        ),
+    ],
+)
+def test_pairwise_arguments_with_two_groups_warn(
+    teeth: pd.DataFrame, argument: str, value: object, message: str
+) -> None:
+    result = betweenstats(teeth, "supp", "len", **{argument: value})
+    assert result.warnings == (message,)
+    assert result.pairwise == ()
+
+
+def test_every_pairwise_argument_warns_once(teeth: pd.DataFrame) -> None:
+    result = betweenstats(
+        teeth,
+        "supp",
+        "len",
+        p_adjust_method="BH",
+        pairwise_display="none",
+        pairwise_alpha=0.1,
+    )
+    assert [w.split(" has no effect")[0] for w in result.warnings] == [
+        "p_adjust_method='BH'",
+        "pairwise_display='none'",
+        "pairwise_alpha=0.1",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"bf_message": False}, "bf_message=False leaves the Bayes factor out"),
+        (
+            {"results_subtitle": False},
+            "results_subtitle=False leaves the Bayes factor out",
+        ),
+    ],
+)
+def test_bf_prior_without_a_bayes_factor_warns(
+    teeth: pd.DataFrame, kwargs: dict[str, Any], reason: str
+) -> None:
+    result = betweenstats(teeth, "supp", "len", bf_prior=2.0, **kwargs)
+    assert result.bayes is None
+    assert result.warnings == (
+        f"bf_prior=2.0 has no effect: no Bayes factor is computed ({reason}).",
+    )
+
+
+def test_bf_prior_with_three_groups_warns(plants: pd.DataFrame) -> None:
+    result = betweenstats(plants, "group", "weight", bf_prior=1.0)
+    assert result.warnings == (
+        K3_BAYES_WARNING,
+        "bf_prior=1.0 has no effect: no Bayes factor is computed (x='group' has 3 "
+        "groups, and the Bayes factor for three or more groups arrives in "
+        "inferplot 0.2).",
+    )
+
+
+def test_bf_prior_with_a_bayes_factor_does_not_warn(teeth: pd.DataFrame) -> None:
+    result = betweenstats(teeth, "supp", "len", bf_prior=1.0)
+    assert result.bayes is not None
+    assert result.warnings == ()
+
+
+def test_pairwise_arguments_with_three_groups_do_not_warn(
+    plants: pd.DataFrame,
+) -> None:
+    result = betweenstats(
+        plants,
+        "group",
+        "weight",
+        p_adjust_method="BH",
+        pairwise_display="all",
+        pairwise_alpha=0.1,
+    )
+    assert result.warnings == (K3_BAYES_WARNING,)

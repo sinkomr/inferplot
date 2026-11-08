@@ -22,7 +22,14 @@ FloatArray = NDArray[np.float64]
 SampleLike: TypeAlias = NDArray[Any] | Sequence[float]
 """A sample: a one-dimensional NumPy array or a sequence of floats."""
 
-__all__ = ["SampleLike", "as_sample", "mean", "variance"]
+__all__ = [
+    "SampleLike",
+    "as_sample",
+    "common_scale",
+    "mean",
+    "scaled_variance",
+    "variance",
+]
 
 # Each double is m * 2^(e - 53) with an integer |m| < 2^53 (numpy.frexp). m is split
 # into a high part (multiple of 2^27, as an integer < 2^27 in magnitude) and a low part
@@ -82,20 +89,63 @@ def mean(x: SampleLike) -> float:
     return float(numerator / (n << -scale))
 
 
+def common_scale(*samples: FloatArray) -> float:
+    """The power of two 2^-e that brings the largest |value| of ``samples`` into
+    [1/2, 1) (1.0 when every value is 0).
+
+    Multiplying a double by a power of two is exact (unless the product leaves the
+    normal range), and so are the correctly rounded mean and the variance of the
+    scaled values, scaled back: computing in this common space gives results that do
+    not depend on the scale of the data, bit for bit for any data times 2^k that stay
+    normal doubles, and squares of deviations that neither overflow nor underflow.
+    Values below 2^-1021 times the largest lose bits; they are below the rounding
+    of anything computed from the largest. Subnormal data are scaled by at most
+    2^1023.
+    """
+    peak = max((float(np.max(np.abs(s))) for s in samples if s.size), default=0.0)
+    if peak == 0.0:
+        return 1.0
+    exponent = math.frexp(peak)[1]
+    return math.ldexp(1.0, min(-exponent, 1023))
+
+
+def scaled_variance(x: FloatArray) -> float:
+    """The sample variance of ``x`` without rescaling (see ``variance``).
+
+    For values already brought near 1 by ``common_scale``; on raw data the squares
+    can overflow (|x| above 1e154) or underflow (below 1e-154).
+    """
+    centred = x - mean(x)
+    n = x.size
+    correction = math.fsum(centred.tolist()) ** 2 / n
+    squares = math.fsum((centred * centred).tolist())
+    return max(0.0, (squares - correction) / (n - 1))
+
+
 def variance(x: SampleLike) -> float:
     """Sample variance with denominator n - 1, R's ``stats::var``.
 
     Corrected two-pass algorithm (Chan, Golub & LeVeque 1983, "Algorithms for
     computing the sample variance", The American Statistician 37: 242-247, eq. 1.7):
     sum((x - m)^2) minus the rounding correction (sum(x - m))^2 / n, with m the
-    correctly rounded mean.
+    correctly rounded mean. Computed on the values times ``common_scale(x)`` and
+    scaled back, so the squares neither overflow nor underflow: the result is
+    accurate whenever the variance itself is a double (a standard deviation up to
+    about 1.3e154) and equal, bit for bit, to the unscaled computation wherever
+    that one neither overflows nor underflows.
 
     Raises:
-        ValueError: fewer than two values, not one-dimensional or not finite.
+        ValueError: fewer than two values, not one-dimensional or not finite, or a
+            variance above the largest double.
     """
     arr = as_sample(x, min_size=2)
-    centred = arr - mean(arr)
-    n = arr.size
-    correction = math.fsum(centred.tolist()) ** 2 / n
-    squares = math.fsum((centred * centred).tolist())
-    return max(0.0, (squares - correction) / (n - 1))
+    scale = common_scale(arr)
+    # Two divisions: scale * scale can underflow (scale is 2^-1024 at the most).
+    value = scaled_variance(arr * scale) / scale / scale
+    if math.isinf(value):
+        raise ValueError(
+            "the variance of x exceeds the largest double (about 1.8e308): its "
+            "standard deviation is above about 1.3e154; rescale x, for example by "
+            "changing its units"
+        )
+    return value

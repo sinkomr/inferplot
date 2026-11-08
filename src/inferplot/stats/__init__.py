@@ -8,7 +8,12 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_two_sample, jzs_log_bf10
-from inferplot.stats.descriptive import mean, variance
+from inferplot.stats.descriptive import (
+    common_scale,
+    mean,
+    scaled_variance,
+    variance,
+)
 from inferplot.stats.effect_sizes import (
     EffectSizeCI,
     Sidedness,
@@ -42,6 +47,7 @@ __all__ = [
     "StudentT",
     "WelchAnova",
     "WelchT",
+    "common_scale",
     "f_ncp_bound",
     "games_howell",
     "hedges_g",
@@ -51,6 +57,7 @@ __all__ = [
     "mean",
     "p_adjust",
     "partial_omega_squared",
+    "scaled_variance",
     "srange_logsf",
     "srange_sf",
     "student_t",
