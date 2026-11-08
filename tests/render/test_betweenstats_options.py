@@ -1,0 +1,395 @@
+"""Renderer options: many levels, many points, ax=, palettes, user texts, errors."""
+
+from __future__ import annotations
+
+import dataclasses
+
+import matplotlib
+import numpy as np
+import pytest
+from matplotlib.axes import Axes
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.collections import PathCollection
+from matplotlib.colors import to_rgba
+from matplotlib.figure import Figure
+from matplotlib.patches import PathPatch, Polygon
+from matplotlib.text import Text
+
+from inferplot.render import StatsFigure, betweenstats
+from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
+from inferplot.render.theme import OKABE_ITO
+from inferplot.result import StatsResult
+from inferplot.text import figure_texts
+from tests.render._helpers import (
+    by_gid,
+    case_named,
+    figure_codes,
+    gids,
+    numbered_texts,
+    text_of,
+)
+from tests.render._results import (
+    build_result,
+    fixture_result,
+    many_levels_result,
+    many_points_result,
+)
+
+
+def _plant() -> StatsResult:
+    return fixture_result(case_named("PlantGrowth-display-all"))
+
+
+def _tooth() -> StatsResult:
+    return fixture_result(case_named("ToothGrowth"))
+
+
+def _points(fig: StatsFigure, i: int) -> PathCollection:
+    artist = by_gid(fig, f"points-{i}")
+    assert isinstance(artist, PathCollection)
+    return artist
+
+
+def _rgba(artist: PathCollection) -> tuple[float, ...]:
+    return tuple(np.asarray(artist.get_facecolor(), dtype=float)[0].tolist())
+
+
+# --------------------------------------------------------------------------- #
+# colors
+# --------------------------------------------------------------------------- #
+
+
+def test_default_palette_is_okabe_ito() -> None:
+    fig = betweenstats(_plant())
+    for i in range(3):
+        want = to_rgba(OKABE_ITO[i], alpha=0.6)
+        assert _rgba(_points(fig, i)) == pytest.approx(want)
+
+
+def test_more_than_eight_levels_use_tab20_and_warn() -> None:
+    result = many_levels_result(12)
+    fig = betweenstats(result)
+    tab20 = matplotlib.colormaps["tab20"]
+    for i in range(12):
+        assert _rgba(_points(fig, i))[:3] == pytest.approx(tab20(i)[:3])
+    (warning,) = fig.result.warnings[len(result.warnings) :]
+    assert "12 levels" in warning
+    assert "tab20" in warning
+    assert "palette=" in warning
+    # The input result is unchanged; only warnings differ.
+    assert result.warnings == fig.result.warnings[: len(result.warnings)]
+    assert dataclasses.replace(fig.result, warnings=result.warnings) == result
+    assert figure_codes(fig) == []
+    assert [t.get_text() for t in fig.axes["main"].get_xticklabels()] == list(
+        figure_texts(result).tick_labels
+    )
+
+
+def test_eight_levels_do_not_warn() -> None:
+    result = many_levels_result(8)
+    fig = betweenstats(result)
+    assert fig.result.warnings == result.warnings
+
+
+def test_palette_list_and_colormap_names() -> None:
+    result = _plant()
+    fig = betweenstats(result, palette=["red", "#00ff00", (0.0, 0.0, 1.0)])
+    assert _rgba(_points(fig, 1))[:3] == pytest.approx((0.0, 1.0, 0.0))
+    fig = betweenstats(result, palette="Set2")
+    set2 = matplotlib.colormaps["Set2"]
+    assert _rgba(_points(fig, 2))[:3] == pytest.approx(set2(2)[:3])
+    fig = betweenstats(result, palette="viridis")
+    viridis = matplotlib.colormaps["viridis"]
+    assert _rgba(_points(fig, 2))[:3] == pytest.approx(viridis(1.0)[:3])
+    assert fig.result.warnings == result.warnings
+
+
+@pytest.mark.parametrize(
+    ("palette", "error", "match"),
+    [
+        ("not_a_colormap", ValueError, "colormap"),
+        ("viridiss", ValueError, "Did you mean 'viridis'"),
+        (["red", "blue"], ValueError, "2 colors but the plot has 3 levels"),
+        (["red", "notacolor", "blue"], ValueError, "not a matplotlib color"),
+        (5, TypeError, "palette"),
+    ],
+)
+def test_bad_palettes(palette: object, error: type[Exception], match: str) -> None:
+    with pytest.raises(error, match=match):
+        betweenstats(_plant(), palette=palette)  # pyright: ignore[reportArgumentType]
+
+
+def test_qualitative_colormap_too_short() -> None:
+    with pytest.raises(ValueError, match="'Set1' has 9 colors but the plot has 12"):
+        betweenstats(many_levels_result(12), palette="Set1")
+
+
+# --------------------------------------------------------------------------- #
+# many points
+# --------------------------------------------------------------------------- #
+
+
+def test_many_points_are_subsampled_with_density() -> None:
+    result = many_points_result()
+    total = sum(len(v) for v in result.values)
+    assert total > MAX_POINTS
+    fig = betweenstats(result)
+    shown = [np.asarray(_points(fig, i).get_offsets()).shape[0] for i in range(3)]
+    assert sum(shown) == SUBSAMPLE_SIZE
+    present = gids(fig)
+    assert {"violin-0", "violin-1", "violin-2"} <= present
+    (warning,) = fig.result.warnings[len(result.warnings) :]
+    assert f"{total:,}" in warning
+    assert "2,000" in warning
+    assert "seed 0" in warning
+    issues = {i.code: i for i in fig.check()}
+    assert issues["points_subsampled"].severity == "info"
+    assert "2,000 of the 6,600" in issues["points_subsampled"].message
+    assert "label_overlap" not in issues
+    assert "text_clipped" not in issues
+    # Every point drawn is one of the values of its level.
+    for i in range(3):
+        ys = np.asarray(_points(fig, i).get_offsets())[:, 1]
+        assert set(ys.tolist()) <= set(result.values[i])
+
+
+def test_many_points_without_violin_draw_density_outlines() -> None:
+    fig = betweenstats(many_points_result(), layers=("box", "points"))
+    present = gids(fig)
+    assert {"density-0", "density-1", "density-2"} <= present
+    assert not any(g.startswith("violin-") for g in present)
+    assert "density outlines" in fig.result.warnings[-1]
+    density = by_gid(fig, "density-0")
+    assert isinstance(density, Polygon)
+    assert not density.get_fill()
+
+
+def test_many_values_without_points_are_not_subsampled() -> None:
+    result = many_points_result()
+    fig = betweenstats(result, layers=("violin", "box"))
+    assert fig.subsample is None
+    assert fig.result.warnings == result.warnings
+    assert "points_subsampled" not in {i.code for i in fig.check()}
+
+
+def test_subsample_and_jitter_follow_the_seed() -> None:
+    result = many_points_result()
+    a = np.asarray(_points(betweenstats(result), 0).get_offsets())
+    b = np.asarray(_points(betweenstats(result), 0).get_offsets())
+    assert np.array_equal(a, b)
+    other = dataclasses.replace(
+        result, settings=dataclasses.replace(result.settings, seed=7)
+    )
+    c = np.asarray(_points(betweenstats(other), 0).get_offsets())
+    assert not np.array_equal(a, c)
+
+
+def test_jitter_is_seeded_and_points_are_the_values() -> None:
+    result = _tooth()
+    a = np.asarray(_points(betweenstats(result), 0).get_offsets())
+    b = np.asarray(_points(betweenstats(result), 0).get_offsets())
+    assert np.array_equal(a, b)
+    assert a[:, 1].tolist() == list(result.values[0])
+    assert np.all(np.abs(a[:, 0]) <= 0.12)
+
+
+# --------------------------------------------------------------------------- #
+# ax=
+# --------------------------------------------------------------------------- #
+
+
+def _user_axes(width: float, height: float, n: int = 1) -> tuple[Figure, list[Axes]]:
+    figure = Figure(figsize=(width, height), dpi=100)
+    FigureCanvasAgg(figure)
+    axes = figure.subplots(1, n, squeeze=False)[0]
+    return figure, list(axes)
+
+
+def test_draw_into_a_given_axes() -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    fig = betweenstats(_plant(), ax=ax, title="Plant growth")
+    assert fig.figure is figure
+    assert fig.axes["main"] is ax
+    texts = figure_texts(_plant())
+    subtitle = by_gid(fig, "subtitle")
+    assert isinstance(subtitle, Text)
+    assert subtitle.get_text() == texts.subtitle
+    assert subtitle in fig.axes["main"].texts  # inside the Axes
+    assert numbered_texts(fig, "caption") == list(texts.caption_lines)
+    assert fig.axes["main"].get_title(loc="left") == "Plant growth"
+    assert figure_codes(fig) == []
+    assert figure.get_size_inches().tolist() == [7.5, 7.0]
+
+
+def test_given_axes_too_small_is_reported() -> None:
+    _, (ax,) = _user_axes(2.5, 2.0)
+    fig = betweenstats(_plant(), ax=ax)
+    codes = figure_codes(fig)
+    assert "text_clipped" in codes or "label_overlap" in codes
+    message = " ".join(i.message for i in fig.check() if i.code in codes)
+    assert "subtitle" in message
+
+
+def test_two_panels_report_a_subtitle_wider_than_its_axes() -> None:
+    figure, axes = _user_axes(9.0, 6.0, n=2)
+    left = betweenstats(_plant(), ax=axes[0])
+    betweenstats(_tooth(), ax=axes[1])
+    clipped = [i for i in left.check() if i.code == "text_clipped"]
+    assert clipped
+    assert "outside it" in clipped[0].message
+    assert len(figure.axes) == 2
+
+
+# --------------------------------------------------------------------------- #
+# user texts and artist arguments
+# --------------------------------------------------------------------------- #
+
+
+def test_user_texts() -> None:
+    result = fixture_result(case_named("PlantGrowth-nosubtitle"))
+    fig = betweenstats(
+        result,
+        title="Plant weight",
+        subtitle="Dried weight, three conditions",
+        caption="Source: PlantGrowth (R datasets).",
+        xlab="Condition",
+        ylab="Weight (g)",
+    )
+    assert text_of(fig, "title") == "Plant weight"
+    assert text_of(fig, "subtitle") == "Dried weight, three conditions"
+    captions = numbered_texts(fig, "caption")
+    assert captions == [
+        *figure_texts(result).caption_lines,
+        "Source: PlantGrowth (R datasets).",
+    ]
+    assert fig.axes["main"].get_xlabel() == "Condition"
+    assert fig.axes["main"].get_ylabel() == "Weight (g)"
+    assert figure_codes(fig) == []
+
+
+def test_long_subtitle_widens_the_figure() -> None:
+    result = fixture_result(case_named("ToothGrowth-nosubtitle"))
+    narrow = betweenstats(result)
+    wide = betweenstats(result, subtitle="A very long subtitle " * 8)
+    assert wide.figure.get_size_inches()[0] > narrow.figure.get_size_inches()[0] + 3
+    assert figure_codes(wide) == []
+
+
+def test_every_text_uses_dejavu_sans() -> None:
+    fig = betweenstats(_plant(), title="T", caption="C")
+    fig.check()
+    texts = [t for t in fig.figure.findobj(Text) if t.get_text()]
+    assert len(texts) > 15
+    for text in texts:
+        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_math_fontfamily() == "dejavusans", text.get_text()
+
+
+def test_artist_args_are_applied() -> None:
+    fig = betweenstats(
+        _plant(),
+        point_args={"alpha": 0.2, "sizes": [30.0]},
+        boxplot_args={"facecolor": "lightgray", "linewidth": 2.0},
+        violin_args={"alpha": 0.1},
+    )
+    assert _points(fig, 0).get_alpha() == 0.2
+    box = by_gid(fig, "box-1")
+    assert isinstance(box, PathPatch)
+    assert box.get_linewidth() == 2.0
+    violin = by_gid(fig, "violin-2")
+    assert isinstance(violin, Polygon)
+    assert violin.get_alpha() == 0.1
+
+
+@pytest.mark.parametrize("name", ["point_args", "boxplot_args", "violin_args"])
+def test_unknown_artist_property_raises(name: str) -> None:
+    with pytest.raises(TypeError, match=name):
+        betweenstats(_plant(), **{name: {"not_a_property": 1}})  # pyright: ignore[reportArgumentType]
+
+
+def test_constant_level_skips_its_violin_with_a_warning() -> None:
+    # A level whose values are all equal has no density to draw. (The statistics
+    # need a variance, so the values are swapped in after the analysis.)
+    built = build_result(
+        ["a", "b", "c"],
+        [np.array([1.0, 2.0, 3.0]), np.array([2.0, 2.5, 4.0]), np.array([1.0, 1.5])],
+    )
+    flat = dataclasses.replace(
+        built, values=((1.0, 2.0, 3.0), (2.0, 2.0, 2.0), (1.0, 1.5))
+    )
+    fig = betweenstats(flat)
+    present = gids(fig)
+    assert {"violin-0", "violin-2", "box-1", "points-1"} <= present
+    assert "violin-1" not in present
+    (warning,) = fig.result.warnings[len(flat.warnings) :]
+    assert "violin of level 'b' is not drawn" in warning
+
+
+# --------------------------------------------------------------------------- #
+# argument errors
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_keyword_suggests_the_closest() -> None:
+    with pytest.raises(TypeError, match="point_args"):
+        betweenstats(_plant(), pointargs={})  # pyright: ignore[reportCallIssue]
+    with pytest.raises(TypeError, match="snake_case"):
+        betweenstats(_plant(), **{"centrality.plotting": False})  # pyright: ignore[reportArgumentType]
+
+
+def test_extra_positional_argument() -> None:
+    with pytest.raises(TypeError, match="keyword-only"):
+        betweenstats(_plant(), False)  # pyright: ignore[reportCallIssue]
+
+
+@pytest.mark.parametrize(
+    ("layers", "error"),
+    [
+        (("violin", "boxes"), ValueError),
+        ((), ValueError),
+        ("box", TypeError),
+        (("box", "box"), ValueError),
+    ],
+)
+def test_bad_layers(layers: object, error: type[Exception]) -> None:
+    with pytest.raises(error, match="layers"):
+        betweenstats(_plant(), layers=layers)  # pyright: ignore[reportArgumentType]
+
+
+def test_result_of_another_analysis() -> None:
+    other = dataclasses.replace(_plant(), analysis="withinstats")
+    with pytest.raises(TypeError, match=r"ip\.render\.withinstats"):
+        betweenstats(other)
+    with pytest.raises(TypeError, match=r"analyze\.betweenstats"):
+        betweenstats({"analysis": "betweenstats"})  # pyright: ignore[reportArgumentType]
+
+
+def test_subtitle_with_results_subtitle_raises() -> None:
+    with pytest.raises(ValueError, match="results_subtitle=False"):
+        betweenstats(_plant(), subtitle="mine")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    [
+        ({"centrality_plotting": 1}, TypeError),
+        ({"xlab": 5}, TypeError),
+        ({"title": ["a"]}, TypeError),
+        ({"caption": 3.0}, TypeError),
+        ({"point_args": [("alpha", 1)]}, TypeError),
+        ({"ax": "axes"}, TypeError),
+    ],
+)
+def test_bad_values(kwargs: dict[str, object], error: type[Exception]) -> None:
+    with pytest.raises(error):
+        betweenstats(_plant(), **kwargs)  # pyright: ignore[reportArgumentType]
+
+
+def test_inconsistent_result() -> None:
+    broken = dataclasses.replace(_plant(), values=((1.0, 2.0),))
+    with pytest.raises(ValueError, match="inconsistent"):
+        betweenstats(broken)
+
+
+def test_repr() -> None:
+    assert "weight by group" in repr(betweenstats(_plant()))
