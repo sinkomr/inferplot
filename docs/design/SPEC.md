@@ -40,7 +40,7 @@ fig.save("score.svg")
 | `type` | `"parametric"` | also `"nonparametric"`, `"robust"`, `"bayes"`; aliases `"p"`, `"np"`, `"r"`, `"bf"` |
 | `conf_level` | `0.95` | |
 | `digits` | `2` | subtitle formatting, as ggstatsplot |
-| `tr` | `0.2` | trimming for robust methods; another value with a type that trims nothing raises `ValueError` (ggstatsplot silently ignores it) |
+| `tr` | `0.2` | trimming for robust methods (0 <= tr < 0.5); another value with a type that trims nothing raises `ValueError` (ggstatsplot silently ignores it). Type robust with three or more groups raises `NotImplementedError` at a `conf_level` other than 0.95 (lincon's critical values are tabulated at 95% only), when a pair has fewer than 2 df, and with more than 10 groups |
 | `bf_prior` | `0.707` | numeric, exactly as ggstatsplot (not sqrt(2)/2) |
 | `bf_message` | `None` | Bayes factor caption. ggstatsplot draws one only when `results_subtitle` is true and either the type is parametric (betweenstats, withinstats, histostats, scatterstats) or, in barstats, the type is not bayes, `paired=False` and `y` is None or has more than one level (ggstatsplot: `y` does not have exactly one level); otherwise it draws none and says nothing. Within that condition `None` draws the caption when v0.1 computes the Bayes factor (two groups or conditions, one sample, correlation) and otherwise adds a `warnings` entry saying it arrives in v0.2 (ANOVA with three or more groups or conditions, contingency tables, one-way goodness of fit); outside it, `None` draws no caption and adds no warning. `True` raises `NotImplementedError` for the v0.2 designs and `ValueError` outside the condition; `False` never draws it. The caption's Bayes factor is two-sided whatever `alternative` says, as ggstatsplot's; with a one-sided `alternative`, `warnings` says so. See §5 item 5 |
 | `results_subtitle` | `True` | |
@@ -391,10 +391,10 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `x`, `y`, `subject_id`, `levels` | column names and analyzed level order |
 | `values` | per level, the analyzed `y` values in data order; the renderer draws from them (D36) |
 | `descriptives` | per level: `n`, centrality name (`mean`, `median`, `trimmed_mean`, `map`) and value |
-| `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative |
-| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness |
+| `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45) |
+| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples` and `bootstrap_seed` (`None` without resampling); `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
-| `pairwise` | per pair: groups, statistic, p, adjusted p, adjust method, test name, significant, displayed |
+| `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46) |
 | `n_obs`, `n_dropped`, `dropped_subjects` | counts |
 | `warnings` | plain-English strings, no internal jargon |
 | `provenance` | inferplot, numpy, scipy, matplotlib and narwhals versions (read from package metadata, so matplotlib is not imported); seed; parity target `"ggstatsplot 1.1.4"`; method citations |
@@ -407,7 +407,10 @@ then each pair), `check()`, `__str__` (APA sentence plus pairwise table). `to_js
 strict ASCII JSON: inf as `"Inf"`, -inf as `"-Inf"`, NaN as null. `to_frame()` columns:
 test, label, group1, group2, statistic_name, statistic, df, df_error, p_value,
 p_adjusted, adjust_method, alternative, effect_size, estimate, conf_level, conf_low,
-conf_high, bf10, log_bf01, significant, displayed; missing values are nulls (pandas uses
+conf_high, bf10, log_bf01, significant, displayed; missing values are nulls. Type bayes:
+the main row is the two-group Bayes factor, and with three or more groups there is none;
+pair rows carry lincon's estimate and CI and a Bayes pair's bf10 and log_bf01. In a
+field that may be `None`, JSON null reads back as `None` (pandas uses
 nullable `boolean` columns).
 
 `save()` sets `svg.fonttype="none"`, `pdf.fonttype=42` and a fixed `svg.hashsalt`
@@ -457,7 +460,11 @@ from it has `values == ()` and cannot be drawn again.
   pairs (significant only).", "... showing 2 of 3 pairs (non-significant only)." or
   "... showing all 3 pairs."; adjustments read Holm, Hochberg, Hommel, Bonferroni,
   Benjamini-Hochberg (BH, fdr), Benjamini-Yekutieli (BY), and "Games-Howell,
-  unadjusted" for none. Bracket labels keep ggstatsplot's `p.adjust.method` labels
+  unadjusted" for none. The test name is ggstatsplot's `test` column: "Pairwise: Dunn,
+  Holm adjusted; ...", "Pairwise: Yuen's trimmed means, Holm adjusted; ...", and for
+  type bayes (D41, D48) "Pairwise: Bayes factors (Student's t, JZS prior 0.707),
+  unadjusted; showing all <m> pairs." (ggstatsplot draws no pairwise caption; these
+  lines are inferplot's own, §5 item 3). Bracket labels keep ggstatsplot's `p.adjust.method` labels
   (Holm, Bonferroni, Hochberg, Hommel, FDR for BH and fdr, BY, and `p_unadj.`).
 - **APA sentence (APA 7):** "Welch's t-test: t(9.62) = -2.35, p = .041, Hedges' g =
   -1.07, 95% CI [-2.01, -0.08], n = 12."; "Welch's ANOVA: F(2, 17.13) = 5.18, p = .017,
@@ -466,11 +473,28 @@ from it has `values == ()` and cannot be drawn again.
   quantities bounded by 1 (omega and eta squared, epsilon squared, correlations,
   rank-biserial r, Cramér's V, Kendall's W); non-integer df to two decimals, integer df
   bare; a one-sided test reads "Welch's t-test (one-sided, greater): ..."; ASCII only.
+  The other types: "Mann-Whitney U test: W = 575.50, p = .064, rank-biserial r = .28,
+  95% CI [-.01, .52], n = 60."; "Kruskal-Wallis test: chi2(2) = 7.99, p = .018, rank
+  epsilon squared = .28, 95% CI [.10, 1.00], n = 30."; "Yuen's t-test (20% trimmed
+  means): t(33.49) = 2.29, p = .029, AKP robust standardized difference = 0.68, 95% CI
+  [0.04, 2.00], n = 60."; "Trimmed-means ANOVA (20% trimmed means): F(2, 9.64) = 8.28,
+  p = .008, explanatory effect size xi = 0.67, 95% CI [0.28, 0.99], n = 30.";
+  "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18, n = 60.";
+  "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 = 0.65;
+  ...; n = 30." BF10 has two decimals, scientific from 1e5 and below 0.01; xi and AKP
+  keep the leading zero (not bounded by 1). Without a computed test (type bayes, two
+  groups, `results_subtitle=False`): "No test was computed (results_subtitle=False), n
+  = 60."
 - **Alt text:** two to four sentences, at most 400 characters: "Plot comparing <y>
   across the <k> groups of <x>: <level> (n = <n>, mean <value>), ...", then the APA
   sentence, then "<s> of <m> pairwise comparisons are significant (<test>,
   <adjustment>, alpha = <alpha>)." When that is longer than 400 characters the groups
   are summarized as ranges and long names are shortened with an ellipsis (U+2026).
+  The centrality reads "mean", "median", "<tr x 100>% trimmed mean" or "MAP
+  estimate". Type bayes with three or more groups replaces the result and pair
+  sentences with "Bayesian t-tests of each of the <m> pairs (JZS prior, r = 0.707,
+  Student's t): BF10 from <min> (<g1> vs <g2>) to <max> (<g1> vs <g2>); brackets show
+  log(BF01) for every pair."
 
 ## 8. `check()`
 
@@ -481,7 +505,7 @@ no problems.
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 |
-| `heavy_ties` | result | warning | rank-based test with more than 25% tied values |
+| `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.values`) |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed |
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
@@ -687,8 +711,13 @@ Every other subtitle number is compared as the exact string inferplot produces.
   polars and pyarrow inputs give identical results; standardized effect sizes invariant
   to location and positive scale.
 - **Rendering:** structural SVG assertions (layers present, label text equals result
-  text); a few pytest-mpl image baselines generated on Linux only (not yet generated:
-  STATUS).
+  text) on every OS; five pytest-mpl image baselines (`tests/render/test_images.py`:
+  ToothGrowth, PlantGrowth and InsectSprays with every pair bracketed, a subsampled
+  panel, an `ax=` figure), generated by ci.yml's `mpl-baselines` job and compared only
+  in the `--mpl` job (ubuntu-latest, newest Python) at RMS tolerance 0.1 on the 0-255
+  scale (D44). For a figure changed on purpose: `gh workflow run ci.yml --ref <branch>
+  -f mpl_generate=true`, then `gh run download <run-id> -n mpl-baselines -D
+  tests/render/baseline`, look at every image and commit them on that branch.
 
 ## 12. Documentation for AI users
 

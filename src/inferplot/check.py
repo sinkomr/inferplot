@@ -7,18 +7,22 @@ problems were found.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
 if TYPE_CHECKING:
     from inferplot.result import StatsResult
 
-__all__ = ["SMALL_N", "Issue", "Severity", "result_issues"]
+__all__ = ["HEAVY_TIES", "SMALL_N", "Issue", "Severity", "result_issues"]
 
 Severity = Literal["warning", "info"]
 
 # A group with fewer observations than this gets a small_n warning.
 SMALL_N: Final = 5
+# A rank-based test on data with more than this share of tied values gets a
+# heavy_ties warning (SPEC section 8).
+HEAVY_TIES: Final = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,10 +99,44 @@ def _pairs_hidden(result: StatsResult) -> Issue | None:
     )
 
 
-def result_issues(result: StatsResult) -> tuple[Issue, ...]:
-    """The statistical issues of ``result``: small_n, rows_dropped, pairs_hidden.
+def _heavy_ties(result: StatsResult) -> Issue | None:
+    """Rank-based tests (type nonparametric) on data where more than
+    ``HEAVY_TIES`` of the values are ties: values beyond the first of each
+    distinct value, n minus the number of distinct values (DECISIONS.md D47).
 
-    ``heavy_ties`` (rank-based tests) arrives with the nonparametric type.
+    Read from ``result.values``; a result read back without its observations
+    (``to_json(include_values=False)``) cannot be checked for ties.
     """
-    found = (_small_n(result), _rows_dropped(result), _pairs_hidden(result))
+    if result.type != "nonparametric" or not result.values:
+        return None
+    counts = Counter(v for level in result.values for v in level)
+    total = sum(counts.values())
+    tied = total - len(counts)
+    if total == 0 or tied / total <= HEAVY_TIES:
+        return None
+    return Issue(
+        code="heavy_ties",
+        severity="warning",
+        message=(
+            f"{result.y!r} has only {len(counts)} distinct values among {total}, so "
+            f"{tied} of them ({tied / total:.0%}) are ties. "
+            "The rank tests correct for ties, but with this many their normal "
+            "approximations are coarse and the ranks carry less information."
+        ),
+        fix=(
+            "Report the ties. If y takes only a few values (a rating or a count), "
+            "consider analyzing it as categories with barstats."
+        ),
+    )
+
+
+def result_issues(result: StatsResult) -> tuple[Issue, ...]:
+    """The statistical issues of ``result``: small_n, heavy_ties, rows_dropped,
+    pairs_hidden."""
+    found = (
+        _small_n(result),
+        _heavy_ties(result),
+        _rows_dropped(result),
+        _pairs_hidden(result),
+    )
     return tuple(issue for issue in found if issue is not None)

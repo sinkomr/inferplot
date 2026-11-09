@@ -12,6 +12,7 @@ from inferplot.stats.density import MapEstimate, bw_sj, map_estimate
 from inferplot.stats.descriptive import (
     common_scale,
     mean,
+    median,
     scaled_variance,
     variance,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "mann_whitney",
     "map_estimate",
     "mean",
+    "median",
     "p_adjust",
     "partial_omega_squared",
     "rank_biserial",
