@@ -54,8 +54,14 @@ def _log_integrand(
     if t == 0.0:
         log_alt = -0.5 * log_scale
     else:
-        ratio = np.exp(2.0 * math.log(abs(t)) - math.log(df) - log_scale)
-        log_alt = -0.5 * log_scale - 0.5 * (df + 1.0) * np.log1p(ratio)
+        log_ratio = 2.0 * math.log(abs(t)) - math.log(df) - log_scale
+        with np.errstate(over="ignore"):
+            log1p_ratio = np.log1p(np.exp(log_ratio))
+        # Where t^2 / ((1 + N r^2 g) df) overflows, log1p(ratio) is log(ratio) to
+        # double precision (ratio > 1.8e308).
+        overflowed = np.isinf(log1p_ratio)
+        log1p_ratio[overflowed] = log_ratio[overflowed]
+        log_alt = -0.5 * log_scale - 0.5 * (df + 1.0) * log1p_ratio
     with np.errstate(over="ignore"):
         log_prior = -_LOG_SQRT_2PI - 0.5 * u - 0.5 * np.exp(-u)
     return log_alt - log_null + log_prior
@@ -78,6 +84,15 @@ def _trapezoid(f: FloatArray, h: float) -> float:
     return _logsumexp(f) + math.log(h)
 
 
+def _log1p_t2_over_df(t: float, df: float) -> float:
+    """log(1 + t^2 / df), also where t^2 / df overflows (then 2 log|t| - log df,
+    since df / t^2 is below the rounding of the logarithm)."""
+    ratio = t * t / df
+    if math.isinf(ratio):
+        return 2.0 * math.log(abs(t)) - math.log(df)
+    return math.log1p(ratio)
+
+
 def jzs_log_bf10(t: float, n_eff: float, df: float, *, prior_scale: float) -> float:
     """Natural log of the JZS Bayes factor BF10 of a t statistic.
 
@@ -86,6 +101,12 @@ def jzs_log_bf10(t: float, n_eff: float, df: float, *, prior_scale: float) -> fl
     independent samples: n_eff = n_a n_b / (n_a + n_b), df = n_a + n_b - 2. The
     quantity ``BayesFactor::ttestBF(..., rscale = prior_scale)`` reports (R; its
     own quadrature error is about 1e-9 relative, tolerance ``ttest_bayes_factor``).
+
+    Any finite t works: where t^2 / df overflows (|t| above about 1.3e154 sqrt(df))
+    the logarithms are taken without forming it. For large |t| the result follows
+    the closed-form limit log BF10 = (df - 1) / 2 log(t^2 / df) + log(2 / (df - 1))
+    + log(n_eff r^2) / 2 - log(2 pi) / 2 (df > 1), within 1e-13 relative from
+    |t| = 1e100 to the largest double (tests/stats/test_bayes.py).
 
     Raises:
         ValueError: t is not finite or n_eff, df or prior_scale is not a finite
@@ -98,7 +119,7 @@ def jzs_log_bf10(t: float, n_eff: float, df: float, *, prior_scale: float) -> fl
         if not (math.isfinite(value) and value > 0.0):
             raise ValueError(f"{name} must be a finite number > 0; got {value!r}")
     log_nr2 = math.log(n_eff) + 2.0 * math.log(r)
-    log_null = -0.5 * (df + 1.0) * math.log1p(t * t / df) if t != 0.0 else 0.0
+    log_null = -0.5 * (df + 1.0) * _log1p_t2_over_df(t, df) if t != 0.0 else 0.0
 
     def f(u: FloatArray) -> FloatArray:
         return _log_integrand(u, t, log_nr2, df, log_null)
@@ -106,8 +127,8 @@ def jzs_log_bf10(t: float, n_eff: float, df: float, *, prior_scale: float) -> fl
     def f1(u: float) -> float:
         return float(f(np.array([u]))[0])
 
-    # Locate the peak: a coarse scan wide enough for |t| up to 1e150, then a
-    # bounded refinement.
+    # Locate the peak: a coarse scan wide enough for any finite t (the peak lies
+    # near u = log(t^2 / (df n_eff r^2))), then a bounded refinement.
     reach = 2.0 * math.log1p(abs(t)) + abs(log_nr2) + 40.0
     coarse = np.arange(-30.0, reach, 0.25)
     values = f(coarse)
@@ -165,7 +186,9 @@ def jzs_bf10_two_sample(
 
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value, both
-            are constant, or prior_scale is not a finite positive number.
+            are constant, one is constant and the other varies by less than double
+            precision resolves next to it (``student_t``), or prior_scale is not a
+            finite positive number.
     """
     x = as_sample(a, name="a", min_size=2)
     y = as_sample(b, name="b", min_size=2)

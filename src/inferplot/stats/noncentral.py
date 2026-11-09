@@ -110,6 +110,10 @@ _LARGE_A: Final = 1e5
 # Bounds above this noncentrality are searched from the large-lambda start value
 # (f_ncp_bound); below it from 0, as before.
 _TIGHT_BRACKET_FROM: Final = 1e4
+# t_ncp_interval accepts |t| up to this: a bound is at most about 25 |t| for df >= 0.1
+# at any conf_level (t times the root of a chi-square quantile over df), so every
+# bound and bracket stays a finite double.
+_T_MAX: Final = 1e300
 # Root finding: absolute tolerance on the noncentrality parameter.
 _XTOL: Final = 1e-13
 _MAX_EXPANSIONS: Final = 2000
@@ -364,7 +368,12 @@ def _clip(value: float) -> float:
 def _t_ncp(t: float, df: float, tail: float, *, upper: bool) -> float:
     """ncp with P(T' <= t) = tail (``upper`` False) or P(T' > t) = tail (True)."""
     log_tail = math.log(tail)
-    scale = math.sqrt(1.0 + t * t / (2.0 * df)) if math.isfinite(df) else 1.0
+    if not math.isfinite(df):
+        scale = 1.0
+    elif abs(t) < 1e150:
+        scale = math.sqrt(1.0 + t * t / (2.0 * df))
+    else:  # t * t would overflow; the 1 is far below the rounding of t^2 / (2 df)
+        scale = abs(t) / math.sqrt(2.0 * df)
     shrink = 1.0 - 1.0 / (4.0 * df) if df > 0.5 else 0.5
     # Normal approximation (Johnson, Kotz & Balakrishnan 1995, ch. 31) as the start.
     z = float(special.ndtri(tail))
@@ -401,13 +410,28 @@ def t_ncp_interval(
     construction ``effectsize`` uses for ``hedges_g`` (R: ``pt(t, df, ncp)``
     inverted in ``ncp``).
 
+    Range: |t| up to 1e300 (beyond it a bound can exceed the largest double). For
+    df >= 1 and |t| from 1e150 to 1e300 the bounds agree with the large-ncp limit
+    t sqrt(q / df) (q the chi-square(df) quantile of the tail) within 2e-15
+    relative; Welch's t of two samples stays below 2^512 (about 1.3e154,
+    ``welch_t_scaled``). Below df = 1, which Welch's df never is, large |t| is
+    not covered: at df = 1e-3 and |t| = 1e150 the integration takes minutes, and
+    at df = 0.1, t = 1e100 and conf_level 1 - 2^-53 the root search raises
+    RuntimeError.
+
     Raises:
-        ValueError: t is not finite, df is not positive, conf_level is not strictly
-            between 0 and 1, or alternative is not one of "two-sided", "less",
-            "greater".
+        ValueError: t is not finite or |t| > 1e300, df is not positive, conf_level
+            is not strictly between 0 and 1, or alternative is not one of
+            "two-sided", "less", "greater".
     """
     t, df = float(t), float(df)
     _check_t_args(t, df, 0.0)
+    if abs(t) > _T_MAX:
+        raise ValueError(
+            f"t = {t:.3g} is too large for a confidence interval: the bounds are "
+            "computed for |t| up to 1e300, and beyond it they can exceed the largest "
+            "double (about 1.8e308)"
+        )
     level = check_conf_level(conf_level)
     side = check_alternative(alternative)
     alpha = 1.0 - level

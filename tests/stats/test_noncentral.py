@@ -166,6 +166,39 @@ def test_extreme_t_is_finite_and_matches_the_large_ncp_limit(
     assert high == pytest.approx(expected[1], rel=5e-3, abs=3.0)
 
 
+@pytest.mark.parametrize("t", [1e150, 2.0**512, 1e200, 1e300, -1e300])
+@pytest.mark.parametrize("df", [1.0, 2.0, 30.0, 1e6, math.inf])
+@pytest.mark.parametrize("side", ["two-sided", "greater", "less"])
+def test_huge_t_matches_the_large_ncp_limit(t: float, df: float, side: Any) -> None:
+    # Was "t and ncp must be finite; got 1e+200 and -inf": the start value squared
+    # t. For |ncp| >> 1, P(T' <= t) = p at ncp = t sqrt(q / df), q the chi-square
+    # quantile (the normal shift t -+ z at df = inf).
+    low, high = t_ncp_interval(t, df, conf_level=0.95, alternative=side)
+    tail = 0.025 if side == "two-sided" else 0.05
+    if math.isinf(df):
+        z = float(stats.norm.isf(tail))
+        expected = (t - z, t + z)
+    else:
+        s_lo = math.sqrt(float(stats.chi2.ppf(tail, df)) / df)
+        s_hi = math.sqrt(float(stats.chi2.isf(tail, df)) / df)
+        expected = tuple(sorted((t * s_lo, t * s_hi)))
+    if side != "less":
+        assert low == pytest.approx(expected[0], rel=4e-15)
+    else:
+        assert low == -math.inf
+    if side != "greater":
+        assert high == pytest.approx(expected[1], rel=4e-15)
+    else:
+        assert high == math.inf
+
+
+@pytest.mark.parametrize("t", [1.0000000001e300, -1e301, 1.7e308])
+def test_t_beyond_1e300_raises_plainly(t: float) -> None:
+    with pytest.raises(ValueError, match=r"too large for a confidence interval") as e:
+        t_ncp_interval(t, 4.0, conf_level=0.95, alternative="two-sided")
+    assert "inf" not in str(e.value)
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

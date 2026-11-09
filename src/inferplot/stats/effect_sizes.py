@@ -89,10 +89,16 @@ def hedges_g(
     FALSE, ci = conf_level, alternative = ...)`` as statsExpressions 2.2.1 calls it
     (SPEC.md section 4).
 
+    Limits: Welch's t, and with it the interval, needs a squared standard error
+    of at least 2^-1022 in the common scale (``welch_t_scaled``), so |t| stays
+    below 2^512 (about 1.3e154), inside ``t_ncp_interval``'s range.
+
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value, both
-            are constant, conf_level is not strictly between 0 and 1, or alternative
-            is not one of "two-sided", "less", "greater".
+            are constant, one is constant and the other varies by less than double
+            precision resolves next to it (a standard deviation below roughly
+            1e-154 times its |value|), conf_level is not strictly between 0 and 1,
+            or alternative is not one of "two-sided", "less", "greater".
     """
     level = check_conf_level(conf_level)
     side = check_alternative(alternative)

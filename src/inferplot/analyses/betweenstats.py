@@ -52,6 +52,7 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
+from inferplot.stats.parametric import TINY
 from inferplot.text import build_texts
 
 __all__ = ["betweenstats"]
@@ -132,8 +133,34 @@ def _group_word(levels: Sequence[str]) -> str:
     return "group" if len(levels) == 1 else "groups"
 
 
-def _check_groups(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -> None:
-    """Raise ``ValueError`` naming the levels the parametric methods cannot use."""
+# What a group needs next to the others, in plain words. The statistics run on y
+# times one power of two that brings the largest |y| into [1/2, 1); there a
+# variance term v / n below the smallest normal double (2^-1022) cannot be computed
+# accurately. In units of y that is roughly a standard deviation below 1e-154 times
+# the largest |y| (between 1.5e-154 and 3e-154 times sqrt(n)).
+_TOO_LITTLE: Final = (
+    "vary by less than double precision can resolve next to the largest |y| (a "
+    "standard deviation below roughly 1e-154 times it)"
+)
+_NO_RESCALING: Final = (
+    "Rescaling y does not help, since it multiplies the spread and the largest |y| "
+    "alike; check y for entry or unit errors"
+)
+
+
+def _scaled_variances(values: Sequence[FloatArray]) -> list[float]:
+    """Each group's variance in the common scale of all groups, as the methods
+    compute it (the expressions below repeat theirs, so the checks agree bit for
+    bit)."""
+    scale = stats.common_scale(*values)
+    return [stats.scaled_variance(v * scale) for v in values]
+
+
+def _check_groups(
+    x: str, levels: Sequence[str], values: Sequence[FloatArray], *, bayes: bool
+) -> None:
+    """Raise ``ValueError`` naming the levels the parametric methods cannot use
+    (``bayes``: the two-group Bayes factor, on Student's t, will be computed)."""
     small = [
         f"{level!r} (n = {v.size})"
         for level, v in zip(levels, values, strict=True)
@@ -178,24 +205,52 @@ def _check_groups(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -
             f"{'that group' if len(constant) == 1 else 'those groups'} or analyze "
             "the groups that vary."
         )
+    variances = _scaled_variances(values)
+    if len(levels) == 2:
+        # One group is constant (both constant raised above) and the other varies
+        # too little next to it: the standard error is below what doubles resolve.
+        # Only possible when the group with the largest |y| is the constant one.
+        (v_a, v_b), (n_a, n_b) = variances, (values[0].size, values[1].size)
+        varying = [level for level in levels if level not in constant]
+        welch_term = v_a / n_a + v_b / n_b  # as stats.welch_t_scaled
+        pooled = ((n_a - 1) * v_a + (n_b - 1) * v_b) / (n_a + n_b - 2)
+        student_term = pooled * (1.0 / n_a + 1.0 / n_b)  # as stats.student_t
+        if welch_term < TINY or (bayes and student_term < TINY):
+            which = (
+                "Welch's t-test"
+                if welch_term < TINY
+                else "the Bayes factor (on Student's t)"
+            )
+            fix = (
+                ""
+                if welch_term < TINY
+                else " Or leave the Bayes factor out with bf_message=False."
+            )
+            raise ValueError(
+                f"The values of y in the {_group_word(varying)} {_names(varying)} of "
+                f"x={x!r} {_TOO_LITTLE}, and the {_group_word(constant)} "
+                f"{_names(constant)} has no variability, so {which} has no accurate "
+                f"standard error. {_NO_RESCALING}.{fix}"
+            )
     if len(levels) >= 3:
-        # The statistics run on y times a power of two that brings the largest |y|
-        # near 1; a group whose spread is below about 1e-300 of that has variance 0
-        # there, and its weight 1 / variance would be infinite.
-        scale = stats.common_scale(*values)
+        # Welch's ANOVA weights each group by n / v: a variance term below 2^-1022
+        # in the common scale would give an inaccurate or infinite weight.
         tiny = [
             level
-            for level, v in zip(levels, values, strict=True)
-            if stats.scaled_variance(v * scale) == 0.0
+            for level, v, sample in zip(levels, variances, values, strict=True)
+            if not v / sample.size >= TINY  # as stats.scaled_weight_terms
         ]
         if tiny:
+            whose = (
+                "that group by its variance"
+                if len(tiny) == 1
+                else "those groups by their variances"
+            )
             raise ValueError(
                 f"The values of y in the {_group_word(tiny)} {_names(tiny)} of "
-                f"x={x!r} vary by less than double precision can represent next to "
-                "the largest values of y (about 1e-300 of them), so Welch's ANOVA "
-                "cannot weight "
-                f"{'that group' if len(tiny) == 1 else 'those groups'} by its "
-                "variance. Analyze groups of similar magnitude separately."
+                f"x={x!r} {_TOO_LITTLE}, so Welch's ANOVA and the Games-Howell "
+                f"comparisons cannot weight {whose}. {_NO_RESCALING}, or analyze "
+                "groups of similar magnitude separately."
             )
 
 
@@ -425,7 +480,9 @@ def betweenstats(
             "Bayesian ANOVA) arrives in inferplot 0.2. Remove bf_message=True; the "
             "default (None) leaves the caption out and says so in result.warnings."
         )
-    _check_groups(x, levels, values)
+    _check_groups(
+        x, levels, values, bayes=k == 2 and subtitle_on and show_bf is not False
+    )
 
     warnings: list[str] = []
     if between.empty_levels:
