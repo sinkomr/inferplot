@@ -218,10 +218,20 @@ def _targeted(
             f"{arg}= was renamed digits in ggstatsplot 0.12.3; pass digits={example} "
             "instead."
         )
+    # A function without ax= only computes; drawing options belong elsewhere.
+    draws = "ax" in valid
+    drawing = f"ip.{fn}(...) or ip.render.{fn}(result, ...)"
     if key == "package":
+        if "palette" in valid or draws:
+            return TypeError(
+                f"{arg}= was removed in ggstatsplot 1.0.0; pass palette= instead: a "
+                "list of colors or a matplotlib colormap name, for example "
+                f"palette='tab10'. Remove {arg}=."
+            )
         return TypeError(
-            f"{arg}= was removed in ggstatsplot 1.0.0; pass palette= instead: a list "
-            "of colors or a matplotlib colormap name, for example palette='tab10'. "
+            f"{arg}= was removed in ggstatsplot 1.0.0; colors are a drawing option: "
+            "pass palette= (a list of colors or a matplotlib colormap name) to "
+            f"{drawing}; ip.analyze.{fn}() only computes the statistics. "
             f"Remove {arg}=."
         )
     if key == "plot_type":
@@ -230,8 +240,13 @@ def _targeted(
                 "use layers=, a tuple of 'violin', 'box' and 'points', for example "
                 "layers=('box', 'points')."
             )
-        else:
+        elif draws:
             rest = f"{fn}() draws a fixed set of layers and has no plot type option."
+        else:
+            rest = (
+                f"ip.analyze.{fn}() only computes the statistics. What is drawn is "
+                f"chosen when drawing, with {drawing}."
+            )
         return TypeError(_removed(arg, "0.12.0", rest))
     if key == "pairwise_comparisons":
         if "pairwise_display" in valid:
@@ -380,14 +395,33 @@ def _positional_problem(
     )
 
 
+def _type_name(value: object) -> str:
+    """``a pandas.DataFrame``; a short repr for builtins such as dicts."""
+    cls = type(value)
+    if cls.__module__ == "builtins":
+        return _show(value)
+    return f"a {cls.__module__.split('.')[0]}.{cls.__name__}"
+
+
+def _not_a_result(fn: str, value: object) -> TypeError:
+    return TypeError(
+        f"render.{fn}() draws the result of ip.analyze.{fn}(data, x, y); got "
+        f"{_type_name(value)}. Compute it first with "
+        f"result = ip.analyze.{fn}(data, x, y, ...) and pass result, or use "
+        f"ip.{fn}(data, x, y, ...) to analyze and draw in one call."
+    )
+
+
 def checked(fn: Callable[P, R]) -> Callable[P, R]:
     """Check keyword names and the positional count of every call to ``fn``.
 
     Unknown keywords raise ``TypeError`` (``NotImplementedError`` for
     ``grouping_var``) with SPEC.md section 2's targeted message, the snake_case
     spelling of an R-style name, or the closest valid keyword. When several
-    keywords are wrong, the first one in call order is reported. Values are not
-    checked here; the value validators below do that.
+    keywords are wrong, the first one in call order is reported. A drawing
+    function (first parameter ``result``) given something other than a
+    ``StatsResult`` says so before the positional count is checked. Values are not
+    checked here otherwise; the value validators below do that.
     """
     signature = inspect.signature(fn)
     kinds = inspect.Parameter
@@ -409,12 +443,20 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
     )
     valid = frozenset(order)
     name = fn.__name__
+    draws_result = bool(positional) and positional[0] == "result"
 
     @functools.wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         for arg, value in kwargs.items():
             if arg not in valid:
                 raise _keyword_problem(arg, value, name, valid, order)
+        if draws_result:
+            from inferplot.result import StatsResult
+
+            if args or "result" in kwargs:
+                given = args[0] if args else kwargs["result"]
+                if not isinstance(given, StatsResult):
+                    raise _not_a_result(name, given)
         if len(args) > len(positional):
             raise _positional_problem(name, positional, args[len(positional) :], valid)
         return fn(*args, **kwargs)
@@ -496,13 +538,17 @@ def check_probability(value: object, name: str) -> float:
     return number
 
 
-def check_positive(value: object, name: str) -> float:
-    """A finite number greater than 0, such as ``bf_prior``."""
-    number = _real(value, name, "0.707")
+def check_positive(value: object, name: str, *, example: str = "0.707") -> float:
+    """A finite number greater than 0, such as ``bf_prior`` or ``dpi``.
+
+    ``example`` is the value the error messages suggest (``bf_prior``'s default
+    unless given).
+    """
+    number = _real(value, name, example)
     if not (math.isfinite(number) and number > 0.0):
         raise ValueError(
             f"{name} must be a finite number greater than 0, for example "
-            f"{name}=0.707; got {_show(value)}."
+            f"{name}={example}; got {_show(value)}."
         )
     return number
 

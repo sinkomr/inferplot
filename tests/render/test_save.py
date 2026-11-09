@@ -130,8 +130,14 @@ def test_other_extensions_raise(name: str, tmp_path: Path) -> None:
 
 def test_bad_save_arguments(tmp_path: Path) -> None:
     fig = default_figure("ToothGrowth")
-    with pytest.raises(ValueError, match="dpi"):
+    with pytest.raises(ValueError, match="dpi") as info:
         fig.save(tmp_path / "f.png", dpi=0)
+    assert str(info.value) == (
+        "dpi must be a finite number greater than 0, for example dpi=300; got 0."
+    )
+    with pytest.raises(TypeError) as info:
+        fig.save(tmp_path / "f.png", dpi="300")  # pyright: ignore[reportArgumentType]
+    assert str(info.value) == "dpi must be a number, for example dpi=300; got '300'."
     with pytest.raises(TypeError, match="transparent"):
         fig.save(tmp_path / "f.png", transparent=1)  # pyright: ignore[reportArgumentType]
     with pytest.raises(TypeError, match="path"):

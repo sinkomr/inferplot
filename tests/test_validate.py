@@ -13,7 +13,7 @@ import math
 import types
 from collections.abc import Callable, Sequence
 from decimal import Decimal
-from typing import Any, assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import pandas as pd
@@ -301,14 +301,115 @@ def test_subject_names_point_to_subject_id_where_it_exists() -> None:
 
 
 def test_layout_messages_adapt_to_the_function() -> None:
+    # A drawing function (it takes ax=) without layers= or pairwise comparisons.
     @checked
-    def histostats(data: object, x: str, *, conf_level: float = 0.95) -> None:
-        del data, x, conf_level
+    def histostats(
+        data: object, x: str, *, conf_level: float = 0.95, ax: object = None
+    ) -> None:
+        del data, x, conf_level, ax
 
     with pytest.raises(TypeError, match=r"histostats\(\) draws a fixed set of layers"):
         histostats("frame", "x", plot_type="box")  # type: ignore[call-arg]
     with pytest.raises(TypeError, match=r"histostats\(\) has no pairwise comparisons"):
         histostats("frame", "x", pairwise_comparisons=False)  # type: ignore[call-arg]
+
+
+def _analysis(
+    data: object,
+    x: str,
+    y: str,
+    *,
+    type: str = "parametric",
+    conf_level: float = 0.95,
+    seed: int = 0,
+) -> None:
+    """Stand-in for ``ip.analyze.betweenstats``: analysis arguments only, no ax."""
+    del data, x, y, type, conf_level, seed
+
+
+ANALYSIS = checked(_analysis)
+
+
+def analysis_call(**kwargs: Any) -> None:
+    ANALYSIS("frame", "g", "y", **kwargs)
+
+
+def test_drawing_options_on_an_analysis_function_point_to_the_drawing_functions() -> (
+    None
+):
+    for name in ("plot.type", "plot_type"):
+        bad = {name: "box"}
+        text = message(TypeError, lambda bad=bad: analysis_call(**bad))
+        assert text == (
+            f"{name}= was removed in ggstatsplot 0.12.0; ip.analyze._analysis() only "
+            "computes the statistics. What is drawn is chosen when drawing, with "
+            "ip._analysis(...) or ip.render._analysis(result, ...). "
+            f"Remove {name}=."
+        )
+    text = message(TypeError, lambda: analysis_call(package="x"))
+    assert text == (
+        "package= was removed in ggstatsplot 1.0.0; colors are a drawing option: "
+        "pass palette= (a list of colors or a matplotlib colormap name) to "
+        "ip._analysis(...) or ip.render._analysis(result, ...); "
+        "ip.analyze._analysis() only computes the statistics. Remove package=."
+    )
+
+
+def test_real_analysis_function_points_to_the_drawing_functions() -> None:
+    from inferplot import analyze
+
+    frame = pd.DataFrame({"g": list("aabbcc") * 2, "y": range(12)})
+    analysis = cast("Callable[..., object]", analyze.betweenstats)
+    text = message(TypeError, lambda: analysis(frame, "g", "y", **{"plot.type": "box"}))
+    assert "ip.betweenstats(...) or ip.render.betweenstats(result, ...)" in text
+    assert "no plot type option" not in text
+    text = message(TypeError, lambda: analysis(frame, "g", "y", package="x"))
+    assert "palette= (a list of colors" in text
+    assert "ip.betweenstats(...) or ip.render.betweenstats(result, ...)" in text
+
+
+def test_a_drawing_function_given_data_says_it_draws_a_result() -> None:
+    from inferplot.result import StatsResult
+
+    @checked
+    def betweenstats(result: StatsResult, *, ax: object = None) -> StatsResult:
+        del ax
+        return result
+
+    draw = cast("Callable[..., object]", betweenstats)
+    frame = pd.DataFrame({"g": list("aabbcc") * 2, "y": range(12)})
+    expected = (
+        "render.betweenstats() draws the result of "
+        "ip.analyze.betweenstats(data, x, y); got a pandas.DataFrame. Compute it "
+        "first with result = ip.analyze.betweenstats(data, x, y, ...) and pass "
+        "result, or use ip.betweenstats(data, x, y, ...) to analyze and draw in one "
+        "call."
+    )
+    for thunk in (
+        lambda: draw(frame, "g", "y"),
+        lambda: draw(frame),
+        lambda: draw(result=frame),
+        lambda: draw(frame, ax=None),
+    ):
+        assert message(TypeError, thunk) == expected
+    text = message(TypeError, lambda: draw({"a": 1}))
+    assert "got {'a': 1}" in text
+    # Python's own message for a missing result is left alone.
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        draw()
+
+
+def test_real_render_function_given_data_says_it_draws_a_result() -> None:
+    from inferplot import render
+
+    draw = cast("Callable[..., object]", render.betweenstats)
+    frame = pd.DataFrame({"g": list("aabbcc") * 2, "y": range(12)})
+    text = message(TypeError, lambda: draw(frame, "g", "y"))
+    assert text.startswith(
+        "render.betweenstats() draws the result of ip.analyze.betweenstats(data, x, y)"
+    )
+    assert "ip.betweenstats(data, x, y, ...)" in text
+    assert "keyword-only" not in text
 
 
 @pytest.mark.parametrize(
@@ -697,6 +798,18 @@ def test_positive_bounds(value: float) -> None:
         "bf_prior must be a finite number greater than 0, for example "
         f"bf_prior=0.707; got {value!r}."
     )
+
+
+def test_positive_example_follows_the_argument() -> None:
+    text = message(ValueError, lambda: v.check_positive(0, "dpi", example="300"))
+    assert text == (
+        "dpi must be a finite number greater than 0, for example dpi=300; got 0."
+    )
+    text = message(TypeError, lambda: v.check_positive("300", "dpi", example="300"))
+    assert text == "dpi must be a number, for example dpi=300; got '300'."
+    # The default example is bf_prior's.
+    text = message(TypeError, lambda: v.check_positive("x", "bf_prior"))
+    assert text == "bf_prior must be a number, for example bf_prior=0.707; got 'x'."
 
 
 @pytest.mark.parametrize("value", [0, 0.0, 0.2, 0.1, math.nextafter(0.5, 0.0)])

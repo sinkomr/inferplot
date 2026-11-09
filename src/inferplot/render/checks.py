@@ -2,7 +2,8 @@
 
 Measured on the drawn figure from the rendered bounding boxes of its texts:
 
-* ``label_overlap`` (warning): two texts' boxes intersect;
+* ``label_overlap`` (warning): two texts' boxes intersect, or a bracket label's
+  box crosses the line (bar or leg) of another bracket;
 * ``text_clipped`` (warning): a text extends outside the figure, or a text drawn
   inside the Axes (labels, and the subtitle and caption when ``ax=`` was given)
   extends outside that Axes;
@@ -11,10 +12,13 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final, cast
+import itertools
+from typing import TYPE_CHECKING, Any, Final, cast
 
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
+from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from matplotlib.transforms import Bbox, BboxBase
 
@@ -119,6 +123,58 @@ def _overlaps(extents: list[tuple[Text, str, Bbox]]) -> list[str]:
     return found
 
 
+def _intersect(a: BboxBase, b: BboxBase) -> bool:
+    width = min(a.x1, b.x1) - max(a.x0, b.x0)
+    height = min(a.y1, b.y1) - max(a.y0, b.y0)
+    return width > 0 and height > 0
+
+
+def _segments(line: Line2D, dpi: float) -> list[Bbox]:
+    """Each straight piece of a drawn line, as a box in pixels as thick as the line."""
+    # matplotlib's stubs leave these partly Unknown; both are float arrays.
+    data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
+    pixels = np.asarray(cast("Any", line.get_transform()).transform(data))
+    points = [(float(x), float(y)) for x, y in pixels]
+    half = float(line.get_linewidth()) * dpi / 72.0 / 2.0
+    return [
+        Bbox.from_extents(
+            min(x0, x1) - half,
+            min(y0, y1) - half,
+            max(x0, x1) + half,
+            max(y0, y1) + half,
+        )
+        for (x0, y0), (x1, y1) in itertools.pairwise(points)
+    ]
+
+
+def _crossings(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> list[tuple[int, str]]:
+    """Bracket labels whose box crosses the bar or a leg of another bracket.
+
+    One entry per label and bracket crossed: the label's position among the
+    brackets and the crossing in words. A label may sit inside the area an
+    enclosing bracket spans (between its legs, below its bar); only the drawn
+    lines count.
+    """
+    boxes = {id(text): (described, box) for text, described, box in extents}
+    dpi = float(root_figure(fig.figure).dpi)
+    lines = [
+        _segments(line, dpi) if line.get_visible() and line.axes is not None else []
+        for _, line, _ in fig.brackets
+    ]
+    found: list[tuple[int, str]] = []
+    for n, (label, _, _) in enumerate(fig.brackets):
+        drawn = boxes.get(id(label))
+        if drawn is None:
+            continue
+        described, box = drawn
+        for m, (_, _, bracket) in enumerate(fig.brackets):
+            if m != n and any(_intersect(box, piece) for piece in lines[m]):
+                found.append((n, f"{described} crosses {bracket}"))
+    return found
+
+
 def _outside(box: BboxBase, frame: BboxBase) -> bool:
     tol = _CLIP_TOLERANCE
     return (
@@ -151,20 +207,33 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     extents = text_extents(fig)
     issues: list[Issue] = []
     overlaps = _overlaps(extents)
+    crossings = _crossings(fig, extents)
     room = (
         "Give the plot more room (a larger Axes passed as ax=, or inferplot's own "
         "figure by leaving ax out), shorten the texts, or draw fewer brackets "
         "with pairwise_display='significant' or 'none'."
     )
+    found: list[str] = []
     if overlaps:
         noun = (
             "pair of texts overlaps" if len(overlaps) == 1 else "pairs of texts overlap"
         )
+        found.append(f"{len(overlaps)} {noun}: {_listing(overlaps)}")
+    if crossings:
+        labels = len({n for n, _ in crossings})
+        noun = (
+            "bracket label crosses the line of another bracket"
+            if labels == 1
+            else "bracket labels cross the lines of other brackets"
+        )
+        listed = _listing([words for _, words in crossings])
+        found.append(f"{labels} {noun}: {listed}")
+    if found:
         issues.append(
             Issue(
                 code="label_overlap",
                 severity="warning",
-                message=f"{len(overlaps)} {noun}: {_listing(overlaps)}.",
+                message=". ".join(found) + ".",
                 fix=room,
             )
         )

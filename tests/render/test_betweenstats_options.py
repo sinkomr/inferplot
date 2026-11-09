@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 
 import matplotlib
 import numpy as np
@@ -12,11 +13,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.text import Text
 
 from inferplot.render import StatsFigure, betweenstats
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
+from inferplot.render.checks import figure_issues
 from inferplot.render.theme import OKABE_ITO
 from inferplot.result import StatsResult
 from inferplot.text import figure_texts
@@ -240,6 +243,104 @@ def test_two_panels_report_a_subtitle_wider_than_its_axes() -> None:
     assert len(figure.axes) == 2
 
 
+def _three_groups() -> StatsResult:
+    """The review's repro: three groups of 12, every pair shown."""
+    rng = np.random.default_rng(0)
+    groups = [rng.normal(i, 1, 12) for i in range(3)]
+    return frame_result(["a", "b", "c"], groups, x="g", y="y", pairwise_display="all")
+
+
+def _given_axes(kind: str) -> Axes:
+    if kind == "add_axes":
+        figure = Figure(figsize=(10, 4))
+        return figure.add_axes((0.08, 0.2, 0.9, 0.75))
+    figure = Figure(figsize=(9, 3.5), layout="constrained")
+    return figure.add_subplot()
+
+
+@pytest.mark.parametrize("kind", ["add_axes", "constrained"])
+def test_bracket_label_drawn_across_another_bracket_is_reported(kind: str) -> None:
+    # A short Axes: the label of b-c sits on the bar of a-c. (With matplotlib 3.8
+    # the label of a-b crosses that bar too; the layout differs by a pixel.)
+    fig = betweenstats(_three_groups(), ax=_given_axes(kind))
+    (issue,) = [i for i in fig.check() if i.code == "label_overlap"]
+    assert issue.severity == "warning"
+    assert re.match(
+        r"[12] bracket labels? cross(es)? the lines? of (another bracket|other "
+        r"brackets): ",
+        issue.message,
+    ), issue.message
+    assert (
+        "bracket label of 'b' and 'c' 'p_Holm-adj. = 0.02' crosses the bracket of "
+        "'a' and 'c'"
+    ) in issue.message
+    assert "pairwise_display" in issue.fix
+    # inferplot's own figure makes room for it.
+    assert figure_codes(betweenstats(_three_groups())) == []
+
+
+def _two_brackets(label_x: float, label_y: float) -> StatsFigure:
+    """Brackets a-b (legs 5 to 6) and a-c (legs 8 to 9) in a 320-pixel-high Axes
+    showing y from 0 to 10, with the label of a-b at (label_x, label_y)."""
+    figure = Figure(figsize=(6.0, 4.0), dpi=100)
+    FigureCanvasAgg(figure)
+    ax = figure.add_axes((0.1, 0.1, 0.8, 0.8))
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(0.0, 10.0)
+    inner = ax.add_line(Line2D([0, 0, 1, 1], [5, 6, 6, 5]))
+    outer = ax.add_line(Line2D([0, 0, 2, 2], [8, 9, 9, 8]))
+    inner_label = ax.text(label_x, label_y, "p = 0.5", ha="center", va="bottom")
+    outer_label = ax.text(1.0, 9.2, "p = 0.01", ha="center", va="bottom")
+    return StatsFigure(
+        figure=figure,
+        axes={"main": ax},
+        result=_plant(),
+        own=False,
+        roles={id(inner_label): "label a-b", id(outer_label): "label a-c"},
+        inside=(),
+        subsample=None,
+        brackets=(
+            (inner_label, inner, "bracket a-b"),
+            (outer_label, outer, "bracket a-c"),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "in_box", "crosses"),
+    [
+        (0.5, 6.2, False, False),  # above its own bar, below the other bracket
+        (0.5, 8.1, True, False),  # inside a-c's box: between its legs, below its bar
+        (1.0, 8.75, True, True),  # across a-c's bar
+        (0.0, 8.2, True, True),  # across a-c's left leg
+        (2.0, 8.2, True, True),  # across a-c's right leg
+    ],
+)
+def test_bracket_crossing_needs_a_line_not_its_box(
+    x: float, y: float, in_box: bool, crosses: bool
+) -> None:
+    fig = _two_brackets(x, y)
+    found = [i.message for i in figure_issues(fig) if i.code == "label_overlap"]
+    (label, _, _), (_, outer, _) = fig.brackets
+    renderer = fig.figure.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+    box = label.get_window_extent(renderer)
+    assert bool(box.overlaps(outer.get_window_extent(renderer))) is in_box
+    if crosses:
+        assert found == [
+            "1 bracket label crosses the line of another bracket: label a-b crosses "
+            "bracket a-c."
+        ]
+    else:
+        assert found == []
+
+
+def test_a_tall_given_axes_fits_the_brackets() -> None:
+    _, (ax,) = _user_axes(10.0, 7.0)
+    fig = betweenstats(_three_groups(), ax=ax)
+    assert len(fig.brackets) == 3
+    assert figure_codes(fig) == []
+
+
 # --------------------------------------------------------------------------- #
 # user texts and artist arguments
 # --------------------------------------------------------------------------- #
@@ -305,6 +406,125 @@ def test_artist_args_are_applied() -> None:
 def test_unknown_artist_property_raises(name: str) -> None:
     with pytest.raises(TypeError, match=name):
         betweenstats(_plant(), **{name: {"not_a_property": 1}})  # pyright: ignore[reportArgumentType]
+
+
+@pytest.mark.parametrize(
+    ("name", "layers", "missing"),
+    [
+        ("point_args", ("box",), "points"),
+        ("point_args", ("violin", "box"), "points"),
+        ("boxplot_args", ("points",), "box"),
+        ("boxplot_args", ("violin", "points"), "box"),
+        ("violin_args", ("box", "points"), "violin"),
+    ],
+)
+def test_artist_args_for_a_layer_not_drawn_raise(
+    name: str, layers: tuple[str, ...], missing: str
+) -> None:
+    with pytest.raises(ValueError, match=f"^{name} styles the {missing} layer") as info:
+        betweenstats(_plant(), layers=layers, **{name: {"alpha": 0.5}})  # pyright: ignore[reportArgumentType]
+    message = str(info.value)
+    assert f"layers={layers!r}" in message
+    assert f"add {missing!r} to layers" in message
+    # An empty dict styles nothing and is accepted.
+    betweenstats(_plant(), layers=layers, **{name: {}})  # pyright: ignore[reportArgumentType]
+
+
+def test_violin_args_do_not_style_density_outlines() -> None:
+    # With many points and no violin layer, density outlines are drawn instead of
+    # violins; violin_args has nothing to style.
+    with pytest.raises(ValueError, match="violin_args styles the violin layer"):
+        betweenstats(
+            many_points_result(),
+            layers=("box", "points"),
+            violin_args={"alpha": 0.5},
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "layers"),
+    [
+        ("point_args", ("points",)),
+        ("boxplot_args", ("box",)),
+        ("violin_args", ("violin",)),
+    ],
+)
+def test_artist_args_are_checked_before_drawing(
+    name: str, layers: tuple[str, ...]
+) -> None:
+    with pytest.raises(TypeError, match=f"{name} has a property"):
+        betweenstats(_plant(), layers=layers, **{name: {"bogus": 1}})  # pyright: ignore[reportArgumentType]
+    with pytest.raises(ValueError, match=f"{name} has a value matplotlib rejects"):
+        betweenstats(_plant(), layers=layers, **{name: {"facecolor": "notacolor"}})  # pyright: ignore[reportArgumentType]
+
+
+def _state(ax: Axes) -> tuple[object, ...]:
+    return (
+        len(ax.patches),
+        len(ax.collections),
+        len(ax.lines),
+        len(ax.texts),
+        ax.get_xlim(),
+        ax.get_ylim(),
+        ax.get_title(loc="left"),
+        ax.get_title(),
+        ax.get_xlabel(),
+        ax.get_ylabel(),
+        tuple(ax.get_xticks()),
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"point_args": {"bogus": 1}},
+        {"boxplot_args": {"bogus": 1}},
+        {"violin_args": {"bogus": 1}},
+        {"violin_args": {"facecolor": "notacolor"}},
+        {"layers": ("box",), "point_args": {"alpha": 0.5}},
+        {"title": r"$\frac$"},
+        {"xlab": r"$\frac$"},
+        {"caption": r"$\notacommand$"},
+    ],
+    ids=lambda kwargs: "-".join(kwargs),
+)
+def test_a_failed_call_leaves_the_given_axes_unchanged(
+    kwargs: dict[str, object],
+) -> None:
+    _, (ax,) = _user_axes(6.0, 4.0)
+    ax.plot([0.0, 1.0], [0.0, 1.0])
+    before = _state(ax)
+    with pytest.raises((TypeError, ValueError)):
+        betweenstats(_plant(), ax=ax, **kwargs)  # pyright: ignore[reportArgumentType]
+    assert _state(ax) == before
+
+
+@pytest.mark.parametrize("own", [True, False], ids=["own-figure", "ax"])
+@pytest.mark.parametrize("name", ["title", "subtitle", "caption", "xlab", "ylab"])
+def test_invalid_mathtext_in_user_text_raises_at_the_call(name: str, own: bool) -> None:
+    result = fixture_result(case_named("PlantGrowth-nosubtitle"))
+    ax = None if own else _user_axes(7.5, 7.0)[1][0]
+    with pytest.raises(
+        ValueError, match=f"^{name} is drawn as matplotlib mathtext"
+    ) as info:
+        betweenstats(result, ax=ax, **{name: r"Mass $\frac$ in g"})  # pyright: ignore[reportArgumentType]
+    message = str(info.value)
+    assert "\\$" in message  # how to write a literal dollar sign
+
+
+@pytest.mark.parametrize("own", [True, False], ids=["own-figure", "ax"])
+def test_user_texts_are_mathtext(own: bool) -> None:
+    result = fixture_result(case_named("PlantGrowth-nosubtitle"))
+    ax = None if own else _user_axes(7.5, 7.0)[1][0]
+    fig = betweenstats(
+        result,
+        ax=ax,
+        title=r"Revenue in \$ by region (in \$1000s)",
+        ylab=r"Weight $\mu$g",
+        caption=r"$R^2$ in \$",
+    )
+    assert text_of(fig, "title") == r"Revenue in \$ by region (in \$1000s)"
+    assert figure_codes(fig) == []
 
 
 def test_constant_level_skips_its_violin_with_a_warning() -> None:

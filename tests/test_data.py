@@ -40,6 +40,7 @@ from tests.oracle_fixtures import (
     read_dataset,
     require_cases,
 )
+from tests.tolerances import assert_close
 
 BACKENDS = ("pandas", "polars", "pyarrow")
 CASES = require_cases(cases_for("ggbetweenstats"), "ggbetweenstats")
@@ -122,10 +123,15 @@ def test_fixture_levels_and_counts(case: OracleCase, backend: str) -> None:
         assert row["max"] == values.max()
         if "std.dev" in row:  # the bayes label layer has none
             sd = float(np.std(values, ddof=1))
-            assert math.isclose(row["std.dev"], sd, rel_tol=1e-13)
+            assert_close(
+                "closed_form", sd, row["std.dev"], what=f"{case.name} {level} SD"
+            )
         if case.type == "parametric":
-            assert math.isclose(
-                row[case.args["y"]], float(values.mean()), rel_tol=1e-13
+            assert_close(
+                "closed_form",
+                float(values.mean()),
+                row[case.args["y"]],
+                what=f"{case.name} {level} mean",
             )
         assert values.dtype == np.float64
         assert not values.flags.writeable
@@ -513,8 +519,79 @@ def test_order(backend: str) -> None:
         read_between(frame, "g", "y", order=["8", "4", "6", "4"])
     with pytest.raises(TypeError, match="list of level names"):
         read_between(frame, "g", "y", order="846")
-    with pytest.raises(TypeError, match="level names"):
-        read_between(frame, "g", "y", order=[8.0, 4, 6])  # type: ignore[list-item]
+    with pytest.raises(TypeError, match="list of level names"):
+        read_between(frame, "g", "y", order=846)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="level names, not True"):
+        read_between(frame, "g", "y", order=[True, 4, 6])
+    with pytest.raises(TypeError, match="level names, not None"):
+        read_between(frame, "g", "y", order=[None, 4, 6])
+    with pytest.raises(TypeError, match="level names, not nan"):
+        read_between(frame, "g", "y", order=[math.nan, 4, 6])
+    with pytest.raises(ValueError, match=r"\['8.5'\] are not levels of x"):
+        read_between(frame, "g", "y", order=[8.5, 4, 6])
+
+
+def _unique_descending(frame: Any, backend: str) -> Any:
+    """The distinct values of column g, largest first, as the backend returns them."""
+    if backend == "pandas":
+        return sorted(frame["g"].unique(), reverse=True)  # NumPy scalars
+    if backend == "polars":
+        return frame["g"].unique().sort(descending=True)  # a polars Series
+    return frame["g"].unique().sort(order="descending")  # pyarrow scalars
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_order_takes_the_values_x_holds(backend: str) -> None:
+    # order=sorted(df[x].unique()) and the like: NumPy integers and floats, whole
+    # Python floats, arrays, pandas Index, polars Series and pyarrow scalars.
+    ints = make(backend, {"g": [4, 6, 8, 4], "y": [1.0, 2.0, 3.0, 4.0]})
+    floats = make(backend, {"g": [4.0, 6.0, 8.0, 4.0], "y": [1.0, 2.0, 3.0, 4.0]})
+    want = ("8", "6", "4")
+    orders: list[Any] = [
+        _unique_descending(ints, backend),
+        [np.int64(8), np.int32(6), np.uint8(4)],
+        [8.0, 6.0, 4.0],
+        [np.float64(8.0), np.float32(6.0), 4],
+        np.array([8, 6, 4]),
+        np.array([8.0, 6.0, 4.0]),
+        np.array(["8", "6", "4"]),
+        pd.Index([8, 6, 4]),
+        pl.Series([8, 6, 4]),
+        pa.array([8, 6, 4]),
+        (n for n in (8, 6, 4)),
+    ]
+    for frame in (ints, floats):
+        for order in orders:
+            if hasattr(order, "__next__"):
+                order = (n for n in (8, 6, 4))  # a generator is used up once
+            out = read_between(frame, "g", "y", order=order)
+            assert out.levels == want, order
+            assert out.level_source == "order"
+            assert out.n_per_level == (1, 1, 2)
+    text = make(backend, {"g": ["a", "b", "c", "a"], "y": [1.0, 2.0, 3.0, 4.0]})
+    for order in (np.array(["c", "a", "b"]), pd.Index(["c", "a", "b"])):
+        out = read_between(text, "g", "y", order=order)
+        assert out.levels == ("c", "a", "b")
+        assert all(type(level) is str for level in out.levels)
+
+
+def test_order_from_the_column_through_the_analysis() -> None:
+    from inferplot import analyze
+
+    num = pd.DataFrame(
+        {"g": [4, 6, 8] * 4, "y": np.random.default_rng(1).normal(size=12)}
+    )
+    result = analyze.betweenstats(
+        num, "g", "y", order=sorted(num["g"].unique(), reverse=True)
+    )
+    assert result.levels == ("8", "6", "4")
+    result = analyze.betweenstats(
+        num.astype({"g": float}),
+        "g",
+        "y",
+        order=[8.0, 6.0, 4.0],  # type: ignore[list-item]
+    )
+    assert result.levels == ("8", "6", "4")
 
 
 def test_order_naming_an_empty_level() -> None:

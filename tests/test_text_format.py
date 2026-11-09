@@ -33,6 +33,7 @@ from tests.oracle_fixtures import (
     require_cases,
 )
 from tests.plotmath import parse
+from tests.tolerances import assert_close
 
 Row = Mapping[str, Any]
 
@@ -409,7 +410,9 @@ def test_decimal_ties_are_recomputed_and_correct() -> None:
                 continue
             ties += 1
             value = centrality_from_data(case, str(row[x]))
-            assert value == pytest.approx(stored, rel=1e-13)
+            assert_close(
+                "closed_form", value, stored, what=f"{case.name} {row[x]} centrality"
+            )
             expected = _EQ_RE.findall(str(row["expression"]))[0]
             assert tx.format_value(value, case_digits(case)) == expected
     assert ties >= 20

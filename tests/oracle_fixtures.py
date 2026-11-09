@@ -133,8 +133,11 @@ class OracleCase:
     def partial(self, component: str) -> Any:
         """What a hidden call returned before ggstatsplot failed (failed cases only).
 
-        ``component`` is ``subtitle``, ``caption`` or ``centrality_description``;
-        the value is in the fixture's JSON form (a data frame as row objects).
+        ``component`` is ``subtitle``, ``caption`` or ``centrality_description``
+        for the hidden calls that completed; the value is in the fixture's JSON form
+        (a data frame as row objects). The failing call (``expected_error``'s
+        component, ``pairwise_comparisons`` in ``edge_n2``) appears last, with value
+        None.
         """
         entries = self.raw["partial"]
         if entries is None:
