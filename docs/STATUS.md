@@ -97,16 +97,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   statistics findings and the wide-range follow-up are confirmed closed; of the five
   unjudged leads, three were false alarms (subnormal variance, df2 = 0.5, the one-sided
   bound at 50%) and two are real but minor (below)
-- [ ] new, major: t, F, Games-Howell q and Hedges' g subtract means that were each
-  rounded first, so groups that differ only in the last digits get silently wrong
+- [x] new, major: t, F, Games-Howell q and Hedges' g subtracted means that were each
+  rounded first, so groups that differ only in the last digits got silently wrong
   results (0.3 against 0.1 + 0.2 data: p = 0.04 where the exact p on the same doubles
-  is 0.54; 1.7e9 timestamps lose six digits). R has the same flaw, so the oracle cannot
-  catch it. Being fixed (exact differences, rounded once), also checked in the robust
-  layer
-- [ ] minor, being fixed: the noncentral F distribution function is inaccurate or turns
-  a NaN into P = 1 in deep tails and at extreme df2 that no shipped number reaches;
-  three analysis messages state wrong reasons (the span error, an overflow message in
-  stats words, the Hedges' g J = 0 warning)
+  is 0.54; 1.7e9 timestamps lost six digits). R has the same flaw, so the oracle
+  cannot catch it. Fixed (D49): every mean and trimmed-mean difference is formed
+  exactly and rounded once, in the parametric and robust layers; checked against
+  exact fraction arithmetic (`tests/stats/test_exact_differences.py`, at most 9.2 ulp);
+  the fixtures move by at most 1.5e-13
+- [x] minor: the noncentral F distribution function was inaccurate or turned a NaN
+  into P = 1 in deep tails and at extreme df2 that no shipped number reaches; three
+  analysis messages stated wrong reasons (the span error, an overflow message in
+  stats words, the Hedges' g J = 0 warning). Fixed: beta factors in log space, deep
+  tails by continued fraction, a NaN raises (5.0e-14 up to ncp 2e12, 3.1e-13 at df2
+  1e8, log P to 2.3e-15 down to -2000; the worst omega squared interval now takes
+  0.23 s instead of 37 ms); messages reworded; robust equivariance tested exactly on
+  dyadic data
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 

@@ -237,7 +237,20 @@ a Poisson mixture of beta distributions; from a Poisson mean of 1e4 on it is sum
 on every h-th term, h = floor(sqrt(mu) / 8), the trapezoidal rule on an analytic
 summand (Trefethen & Weideman 2014) with Loader's (2000) saddle-point weights, and
 beta factors with a >= 1e5 max(b, 1) use an expansion through a^-2, so the interval
-takes at most about 0.04 s at any F (DECISIONS log).
+takes at most about 0.25 s at any F (DECISIONS log). Beta factors with one
+parameter at least 1e4 and at least 10 times the other are computed in log space by
+quadrature, and incomplete beta values below 1e-250 by a continued fraction in log
+space, so the distribution function keeps relative accuracy for tails >= 1e-20 at any
+ncp up to 1e300 and df2 up to at least 1e8, and its log far below the doubles (tested
+to log P = -2000); a NaN is never returned as a probability.
+
+**Differences of means.** Every difference of means or trimmed means, and every
+deviation from a weighted centre, is formed from the exact means and rounded once
+(D49), in the parametric and robust statistics alike, so groups that differ by about
+the rounding of their common level (timestamps, values near 2^50, last-bit
+differences) get the correct t, F and q. Welch's t, df and p in betweenstats do not
+depend on the magnitude of y, also when the difference of the means exceeds the
+largest double.
 
 ### withinstats, two conditions
 
@@ -378,6 +391,9 @@ Statistical and behavioral differences are exactly these:
     unchanged.
 12. A group whose MAP has no density estimate (bw.SJ fails on zero IQR) gets no
     centrality label and a `warnings` entry; ggstatsplot draws an empty label (D55).
+13. Differences of means are exact up to one rounding (D49), where R subtracts rounded
+    means; the fixtures agree within 1.5e-13, but data whose groups differ by about
+    the rounding of their level (0.1 + 0.2 against 0.3) get the correct statistic.
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
