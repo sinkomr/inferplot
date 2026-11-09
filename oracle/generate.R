@@ -32,18 +32,31 @@ BOOT_SEED <- 1L # reference run; replicate i uses BOOT_SEED + i
 BOOT_REFERENCE_RESAMPLES <- 20000L
 BOOT_REPLICATE_RESAMPLES <- 2000L # inferplot's resample count (SPEC.md section 5)
 BOOT_REPLICATES <- 50L
+# Processes for the replicates (each sets its own seed, so the count does not change
+# any value). GitHub's ubuntu-24.04 runners have 4 cores.
+BOOT_CORES <- max(1L, min(4L, parallel::detectCores(), na.rm = TRUE))
 # Resamples ggbetweenstats uses for every bootstrap CI: statsExpressions 2.2.1's nboot
 # default, which it passes as nboot (akp.effect, t1way) or iterations
 # (rank_epsilon_squared).
 GG_RESAMPLES <- 100L
+# ggbetweenstats' defaults for the arguments the bootstrapped effect sizes take.
+DEFAULT_CONF_LEVEL <- 0.95
+DEFAULT_TR <- 0.2
 # statsExpressions passes alpha = 1.0 - conf.level to WRS2. In floating point that is
-# 0.050000000000000044, not 0.05, which can change which bootstrap order statistic a
-# CI uses (alpha / 2 * 100 = 2.500000000000002). Candidates try both spellings.
-CONF_LEVEL <- 0.95
-ALPHAS <- list(
-  list(text = "1 - 0.95", value = 1.0 - CONF_LEVEL),
-  list(text = "0.05", value = 0.05)
-)
+# 0.050000000000000044 for 0.95, not 0.05 (0.09999999999999998 for 0.90, not 0.1),
+# which can change which bootstrap order statistic a CI uses (alpha / 2 * 100 =
+# 2.500000000000002). Candidates try both spellings, the computed one first.
+alpha_spellings <- function(conf_level) {
+  rounded <- format(signif(1 - conf_level, 10))
+  list(
+    list(text = paste("1 -", format(conf_level)), value = 1.0 - conf_level),
+    list(text = rounded, value = as.numeric(rounded))
+  )
+}
+case_conf_level <- function(case) {
+  if (is.null(case$args$conf.level)) DEFAULT_CONF_LEVEL else case$args$conf.level
+}
+case_tr <- function(case) if (is.null(case$args$tr)) DEFAULT_TR else case$args$tr
 
 RECORDED_PACKAGES <- c(
   "ggstatsplot", "statsExpressions", "effectsize", "parameters", "bayestestR",
@@ -114,6 +127,23 @@ parametric_case <- function(dataset, x, y, label = dataset, extra_args = list(),
   )
   cases[[1L]]$expect_error <- expect_error
   cases
+}
+
+# Phase 2 (betweenstats nonparametric, robust and bayes): one case per type in
+# `types`. `expect_error` maps a type to the failure that case declares, as above.
+PHASE2_TYPES <- c("nonparametric", "robust", "bayes")
+phase2_cases <- function(dataset, x, y, label = dataset, types = PHASE2_TYPES,
+                         extra_args = list(), factor_levels = NULL, expect_error = list()) {
+  unknown <- setdiff(names(expect_error), types)
+  if (length(unknown) > 0L) stop(label, ": expect_error for types without a case: ", unknown)
+  cases <- between_cases(
+    dataset, x = x, y = y, label = label, types = types,
+    extra_args = extra_args, factor_levels = factor_levels
+  )
+  lapply(cases, function(case) {
+    case$expect_error <- expect_error[[case$args$type]]
+    case
+  })
 }
 
 CASES <- c(
@@ -258,6 +288,155 @@ CASES <- c(
   parametric_case(
     "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-prior08",
     extra_args = list(bf.prior = 0.8)
+  ),
+  # Phase 2 (betweenstats nonparametric, robust, bayes): the Phase 1 edge data and
+  # every argument these types take.
+  phase2_cases("edge_missing", x = "group", y = "value"),
+  phase2_cases(
+    "edge_empty_level", x = "group", y = "value",
+    factor_levels = list(group = c("c", "empty", "a", "b"))
+  ),
+  # Declared order: pair order and the sign of lincon's differences.
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-declared",
+    factor_levels = list(group = c("trt2", "ctrl", "trt1"))
+  ),
+  # Two values per group: Dunn on tiny groups, MAP of two values. Every pair's Yuen df
+  # is below 2, where lincon's critical-value table stops with an error, and
+  # BayesFactor's pairwise tests leave the pairwise table without rows. The subtitle
+  # (and its bootstrap) and the centrality labels come first; `partial` keeps them.
+  phase2_cases(
+    "edge_n2", x = "group", y = "value",
+    expect_error = list(
+      robust = list(
+        component = "pairwise_comparisons",
+        message = "The degrees of freedom must be greater than or equal to 2",
+        reason = paste(
+          "Yuen df below 2 in every pair: WRS2::lincon's Studentized maximum modulus",
+          "table starts at df 2 and stops with an error below it"
+        )
+      ),
+      bayes = list(
+        component = "pairwise_comparisons",
+        message = "arguments imply differing number of rows",
+        reason = paste(
+          "two values per group: pairwise_comparisons() fails while building the",
+          "table of pairwise Bayes factors"
+        )
+      )
+    )
+  ),
+  # Heavy ties: Dunn's tie correction, medians on ties, MAP on integers.
+  phase2_cases("edge_ties", x = "group", y = "score"),
+  # Small groups dominated by one value (9 of 13 are 1): some bootstrap resamples of
+  # rank epsilon squared have every value tied.
+  phase2_cases(
+    "edge_ties_small", x = "group", y = "score", types = "nonparametric"
+  ),
+  phase2_cases("edge_negative", x = "group", y = "value"),
+  phase2_cases("edge_outliers", x = "group", y = "value"),
+  # Six groups, fifteen pairs (lincon at C = 15), counts with zeros and ties.
+  phase2_cases("InsectSprays", x = "spray", y = "count"),
+  phase2_cases("edge_null", x = "group", y = "value"),
+  # Yuen df of about 1,400 in every lincon pair: past the last row (200) of the
+  # Studentized maximum modulus table.
+  phase2_cases("edge_large_n", x = "group", y = "value"),
+  # t1way F of about 1,500: 1 - pf is exactly 0, as are lincon's setosa pairs.
+  phase2_cases("iris", x = "Species", y = "Petal.Length", label = "iris-petal"),
+  # Two groups with Yuen p near 6e-15 (Petal.Length) and 5e-16 (Petal.Width), where
+  # 1 - pt and the exact upper tail differ by 1% or more.
+  phase2_cases(
+    "iris_no_setosa", x = "Species", y = "Petal.Length", label = "iris_no_setosa-petal"
+  ),
+  phase2_cases(
+    "iris_no_setosa", x = "Species", y = "Petal.Width",
+    label = "iris_no_setosa-petalwidth", types = "robust"
+  ),
+  # Every other p.adjust method on Dunn's and lincon's p-values.
+  unlist(lapply(
+    c("bonferroni", "hochberg", "hommel", "BH", "BY", "fdr", "none"),
+    function(method) {
+      phase2_cases(
+        "PlantGrowth", x = "group", y = "weight",
+        label = paste0("PlantGrowth-padj-", method),
+        types = c("nonparametric", "robust"),
+        extra_args = list(p.adjust.method = method)
+      )
+    }
+  ), recursive = FALSE),
+  # A 90% confidence level: rank-biserial and rank epsilon squared CIs, the AKP and
+  # t1way bootstrap CIs with alpha = 1 - 0.9, lincon's alpha, the Bayes intervals.
+  phase2_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-cl90",
+    extra_args = list(conf.level = 0.90)
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-cl90",
+    extra_args = list(conf.level = 0.90)
+  ),
+  # 10% trimming: Yuen, AKP, t1way, lincon and the trimmed-mean labels.
+  phase2_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-tr01",
+    types = "robust", extra_args = list(tr = 0.1)
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-tr01",
+    types = "robust", extra_args = list(tr = 0.1)
+  ),
+  # Three digits in every printed number.
+  phase2_cases(
+    "mtcars", x = "am", y = "mpg", label = "mtcars-am-digits3",
+    extra_args = list(digits = 3L)
+  ),
+  phase2_cases(
+    "mtcars", x = "cyl", y = "mpg", label = "mtcars-digits3",
+    extra_args = list(digits = 3L)
+  ),
+  # Which pairs get brackets (bayes: whether the display argument applies at all).
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-display-all",
+    extra_args = list(pairwise.display = "all")
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-display-ns",
+    extra_args = list(pairwise.display = "non-significant")
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-display-none",
+    extra_args = list(pairwise.display = "none")
+  ),
+  # No statistical subtitle: no test, no effect size, no bootstrap.
+  phase2_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  # One-sided Mann-Whitney on unbalanced groups without ties (9 + 12).
+  phase2_cases(
+    "edge_k2", x = "group", y = "value", label = "edge_k2-greater",
+    types = "nonparametric", extra_args = list(alternative = "greater")
+  ),
+  phase2_cases(
+    "edge_k2", x = "group", y = "value", label = "edge_k2-less",
+    types = "nonparametric", extra_args = list(alternative = "less")
+  ),
+  # Whether the robust and Bayes tests take `alternative` at all.
+  phase2_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-greater",
+    types = c("robust", "bayes"), extra_args = list(alternative = "greater")
+  ),
+  # Another Cauchy prior scale: the two-group Bayes factor, and with three groups the
+  # Bayes ANOVA and whether the pairs keep 0.707.
+  phase2_cases(
+    "ToothGrowth", x = "supp", y = "len", label = "ToothGrowth-prior08",
+    types = "bayes", extra_args = list(bf.prior = 0.8)
+  ),
+  phase2_cases(
+    "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-prior08",
+    types = "bayes", extra_args = list(bf.prior = 0.8)
   )
 )
 
@@ -268,7 +447,7 @@ if (anyDuplicated(case_names)) stop("duplicate case names: ", case_names[duplica
 # ggbetweenstats makes, which outputs it draws). Fail closed on any other.
 KNOWN_ARGS <- c(
   "x", "y", "type", "alternative", "conf.level", "digits", "p.adjust.method",
-  "pairwise.display", "results.subtitle", "bf.message", "bf.prior"
+  "pairwise.display", "results.subtitle", "bf.message", "bf.prior", "tr"
 )
 for (case in CASES) {
   unknown <- setdiff(names(case$args), KNOWN_ARGS)
@@ -598,16 +777,16 @@ statsexpressions_rows <- function(analysis) {
   data.frame(y = long[["y"]], x = long[["x"]])
 }
 
-akp_candidate <- function(analysis, eqvar, alpha) {
+akp_candidate <- function(analysis, eqvar, alpha, tr) {
   list(
     call = sprintf(
-      "WRS2::akp.effect(y ~ x, data, EQVAR = %s, tr = 0.2, nboot = R, alpha = %s)",
-      eqvar, alpha$text
+      "WRS2::akp.effect(y ~ x, data, EQVAR = %s, tr = %s, nboot = R, alpha = %s)",
+      eqvar, format(tr), alpha$text
     ),
     run = function(resamples) {
       r <- WRS2::akp.effect(
         y ~ x,
-        data = analysis, EQVAR = eqvar, tr = 0.2, nboot = resamples, alpha = alpha$value
+        data = analysis, EQVAR = eqvar, tr = tr, nboot = resamples, alpha = alpha$value
       )
       effect <- as.numeric(r$AKPeffect)
       ci <- r$AKPci
@@ -642,32 +821,33 @@ bootstrap_candidates <- function(case, analysis, subtitle_row) {
   if (type %in% c("parametric", "bayes") || (type == "nonparametric" && k == 2L)) {
     return(list())
   }
-  if (length(case$expect_hidden_errors) > 0L) {
-    # A swallowed subtitle leaves nothing to replay against (STATUS.md).
-    stop(case$name, " declares a swallowed error; skip its bootstrap reference first")
+  # Without a subtitle ggstatsplot computes no effect size (results.subtitle = FALSE,
+  # or a subtitle error it swallowed): there is no CI to replay or reference.
+  if (length(subtitle_row) == 0L) {
+    return(list())
   }
-  for (argument in c("conf.level", "tr")) {
-    if (!is.null(case$args[[argument]])) {
-      stop(case$name, " sets ", argument, "; the replays assume its default")
-    }
-  }
+  # statsExpressions passes conf.level (to WRS2 as alpha = 1 - conf.level) and tr on
+  # to these calls.
+  conf_level <- case_conf_level(case)
+  tr <- case_tr(case)
+  alphas <- alpha_spellings(conf_level)
   if (type == "robust" && k == 2L) {
     # statsExpressions' own call first: EQVAR = FALSE, alpha = 1 - conf.level.
     return(c(
-      lapply(ALPHAS, function(alpha) akp_candidate(analysis, FALSE, alpha)),
-      lapply(ALPHAS, function(alpha) akp_candidate(analysis, TRUE, alpha))
+      lapply(alphas, function(alpha) akp_candidate(analysis, FALSE, alpha, tr)),
+      lapply(alphas, function(alpha) akp_candidate(analysis, TRUE, alpha, tr))
     ))
   }
   if (type == "robust") {
-    return(lapply(ALPHAS, function(alpha) {
+    return(lapply(alphas, function(alpha) {
       list(
         call = sprintf(
-          "WRS2::t1way(y ~ x, data, tr = 0.2, alpha = %s, nboot = R)", alpha$text
+          "WRS2::t1way(y ~ x, data, tr = %s, alpha = %s, nboot = R)", format(tr), alpha$text
         ),
         run = function(resamples) {
           r <- WRS2::t1way(
             y ~ x,
-            data = analysis, tr = 0.2, alpha = alpha$value, nboot = resamples
+            data = analysis, tr = tr, alpha = alpha$value, nboot = resamples
           )
           list(
             values = c(r$effsize, r$effsize_ci),
@@ -683,13 +863,13 @@ bootstrap_candidates <- function(case, analysis, subtitle_row) {
     alternative <- if (isTRUE(subtitle_row$conf.high == 1)) "greater" else "two.sided"
     return(list(list(
       call = sprintf(
-        "effectsize::rank_epsilon_squared(y ~ x, data, ci = 0.95, alternative = \"%s\", iterations = R)",
-        alternative
+        "effectsize::rank_epsilon_squared(y ~ x, data, ci = %s, alternative = \"%s\", iterations = R)",
+        format(conf_level), alternative
       ),
       run = function(resamples) {
         r <- effectsize::rank_epsilon_squared(
           y ~ x,
-          data = analysis, ci = 0.95, alternative = alternative,
+          data = analysis, ci = conf_level, alternative = alternative,
           iterations = resamples, verbose = FALSE
         )
         list(values = c(r[[1L]], r$CI_low, r$CI_high), raw = r)
@@ -737,21 +917,40 @@ bootstrap_reference <- function(case, analysis, stats) {
     set.seed(BOOT_SEED)
     chosen$run(BOOT_REFERENCE_RESAMPLES)
   })
-  replicates <- run_or_stop(case, "bootstrap replicates", t(vapply(
+  # Each replicate sets its own seed, so running them in parallel processes gives the
+  # same values as running them in turn; warnings are collected in replicate order.
+  runs <- parallel::mclapply(
     seq_len(BOOT_REPLICATES),
     function(i) {
-      set.seed(BOOT_SEED + i)
-      unname(chosen$run(BOOT_REPLICATE_RESAMPLES)$values)
+      out <- capture({
+        set.seed(BOOT_SEED + i)
+        unname(chosen$run(BOOT_REPLICATE_RESAMPLES)$values)
+      })
+      list(
+        values = if (inherits(out$value, "error")) NULL else out$value,
+        error = if (inherits(out$value, "error")) conditionMessage(out$value) else NULL,
+        warnings = out$warnings
+      )
     },
-    numeric(3L)
-  )))
+    mc.cores = BOOT_CORES
+  )
+  for (run in runs) {
+    if (!is.list(run)) stop("bootstrap replicates failed for ", case$name, ": ", run)
+    if (!is.null(run$error)) {
+      stop("bootstrap replicates failed for ", case$name, ": ", run$error)
+    }
+  }
+  replicates <- list(
+    value = t(vapply(runs, function(run) run$values, numeric(3L))),
+    warnings = unlist(lapply(runs, function(run) run$warnings))
+  )
   ref <- unname(reference$value$values)
   reps <- replicates$value
   list(
     quantity = "effect size confidence interval",
     call = chosen$call,
     data_order = "rows ordered by the levels of x, as statsExpressions passes them",
-    conf_level = 0.95,
+    conf_level = case_conf_level(case),
     ggstatsplot = list(
       estimate = gg_values[[1L]],
       conf_low = gg_values[[2L]],
@@ -883,7 +1082,21 @@ run_case <- function(case) {
     caption = if (failed) NULL else to_json_value(outcome$value$caption),
     stats = if (failed) NULL else to_json_value(outcome$value$stats),
     plot_layers = if (failed) NULL else outcome$value$layers,
-    bootstrap_reference = if (failed) NULL else bootstrap_reference(case, analysis, outcome$value$stats),
+    # When ggstatsplot failed after computing the subtitle, its effect-size CI is in
+    # `partial` and is referenced the same way.
+    bootstrap_reference = if (failed) {
+      partial_subtitle <- NULL
+      for (i in seq_along(hidden)) {
+        if (identical(hidden[[i]]$component, "subtitle")) partial_subtitle <- HIDDEN$values[[i]]
+      }
+      if (is.null(partial_subtitle)) {
+        NULL
+      } else {
+        bootstrap_reference(case, analysis, list(subtitle_data = partial_subtitle))
+      }
+    } else {
+      bootstrap_reference(case, analysis, outcome$value$stats)
+    },
     versions = VERSIONS
   )
   fixture
@@ -1423,6 +1636,763 @@ omega_probe <- function() {
   )
 }
 
+# Phase 2 probes ----------------------------------------------------------------------
+#
+# What the nonparametric, robust and Bayes types need beyond the cases: lincon's
+# critical values (probe-smm), how WRS2 computes its p-values (probe-wrs2p), the
+# AKP scaling constant (probe-akp), the MAP centrality (probe-map), and Mann-Whitney,
+# rank-biserial, Kruskal-Wallis and Dunn on tied data (probe-ranks). Doubles are hex
+# text as above. Where a probe draws random numbers it sets its own seed first.
+
+# One oracle CSV, read as read_dataset() reads it, and its `datasets` entry.
+probe_dataset <- function(name) {
+  path <- file.path(dataset_dir, paste0(name, ".csv"))
+  data <- utils::read.csv(
+    path,
+    na.strings = "", stringsAsFactors = FALSE, check.names = FALSE,
+    fileEncoding = "UTF-8"
+  )
+  list(data = data, entry = list(file = basename(path), sha256 = file_sha256(path)))
+}
+
+# The complete values of `y` in group `level` of `x`, in file order.
+group_values <- function(data, x, y, level) {
+  keep <- !is.na(data[[x]]) & !is.na(data[[y]]) & as.character(data[[x]]) == level
+  as.numeric(data[[y]][keep])
+}
+
+hex_list <- function(x) as.list(hex(as.numeric(x)))
+
+# Normal scores: a smooth, deterministic sample of size n.
+normal_scores <- function(n) stats::qnorm(stats::ppoints(n))
+
+two_group_frame <- function(a, b, labels = c("a", "b")) {
+  data.frame(
+    g = factor(rep(labels, c(length(a), length(b))), levels = labels),
+    y = c(a, b)
+  )
+}
+
+# Run `run()` while every function in WRS2's namespace is replaced by a recorder, then
+# restore the originals. Records how often each function was called and, for calls
+# that return a single number, the arguments that evaluate to single numbers and the
+# value (at most `keep` calls per function). Only names, argument values and return
+# values are recorded: no function's code is read or printed.
+record_wrs2_calls <- function(run, keep = 20L) {
+  ns <- asNamespace("WRS2")
+  names <- Filter(function(n) {
+    f <- get(n, envir = ns, inherits = FALSE)
+    is.function(f) && !is.primitive(f)
+  }, ls(ns, all.names = TRUE))
+  originals <- mget(names, envir = ns, inherits = FALSE)
+  state <- new.env()
+  state$counts <- list()
+  state$calls <- list()
+  make <- function(name, f) {
+    force(name)
+    force(f)
+    wrapper <- function() {
+      call <- sys.call()
+      caller <- parent.frame()
+      call[[1L]] <- f
+      value <- eval(call, caller)
+      count <- if (is.null(state$counts[[name]])) 1L else state$counts[[name]] + 1L
+      state$counts[[name]] <- count
+      if (is.numeric(value) && length(value) == 1L && count <= keep) {
+        matched <- tryCatch(
+          as.list(match.call(f, call, envir = caller))[-1L],
+          error = function(e) list()
+        )
+        args <- list()
+        for (arg in names(matched)) {
+          if (!nzchar(arg)) next
+          v <- tryCatch(eval(matched[[arg]], caller), error = function(e) NULL)
+          # Single numbers, and short numeric vectors (such as a df per comparison).
+          if (is.numeric(v) && length(v) >= 1L && length(v) <= 64L) {
+            args[[arg]] <- as.numeric(v)
+          }
+        }
+        state$calls[[length(state$calls) + 1L]] <- list(
+          name = name, args = args, value = as.numeric(value)
+        )
+      }
+      value
+    }
+    formals(wrapper) <- formals(f)
+    wrapper
+  }
+  for (n in names) {
+    unlockBinding(n, ns)
+    assign(n, make(n, originals[[n]]), envir = ns)
+  }
+  on.exit({
+    for (n in names) {
+      assign(n, originals[[n]], envir = ns)
+      lockBinding(n, ns)
+    }
+  })
+  value <- tryCatch(run(), error = function(e) e)
+  list(value = value, counts = state$counts, calls = state$calls)
+}
+
+# probe-smm: the Studentized maximum modulus critical values behind WRS2::lincon's
+# pairwise CIs, estimate -/+ c x Yuen SE, with c for C comparisons (pairs) at the
+# pair's Yuen df.
+#
+# 1. lincon on constructed data with 2 to 10 groups (C = 1 to 45), at several alphas,
+#    with each pair's Yuen SE (|diff / t|) and df from WRS2::yuen on that pair: c is
+#    lincon's half-width divided by the SE.
+# 2. Which WRS2 functions lincon calls there (record_wrs2_calls), and which call
+#    returns c: a function with one argument equal to the pair's df and one equal to C.
+# 3. Each function found in 2, on a grid of df (every table row, values between rows,
+#    below 2 and far beyond 200) and C = 1 to 50, its other arguments as lincon passed
+#    them.
+SMM_ALPHAS <- list(
+  list(text = "0.05", value = 0.05), list(text = "1 - 0.95", value = 1 - 0.95),
+  list(text = "0.01", value = 0.01), list(text = "1 - 0.99", value = 1 - 0.99),
+  list(text = "0.1", value = 0.1), list(text = "1 - 0.9", value = 1 - 0.9)
+)
+SMM_DF_GRID <- sort(unique(c(
+  1, 1.5, 2, 2.5, 3:5, 5.2, 6:7, 7.7, 8:11, 11.9, 12, 12.9, 13:20, 22, 24, 27, 30, 35,
+  40, 50, 59.9, 60, 61, 80, 100, 110, 150, 199.5, 200, 201, 250, 500, 1000, 1e4, 1e6
+)))
+SMM_C_GRID <- 1:50
+
+# k groups of 8 to 17 values with different spreads: every pair has a non-integer
+# Yuen df.
+smm_data <- function(k) {
+  labels <- sprintf("g%02d", seq_len(k))
+  y <- unlist(lapply(seq_len(k), function(j) {
+    normal_scores(7L + j) * (1 + 0.17 * j) + 0.4 * j
+  }))
+  data.frame(g = factor(rep(labels, 7L + seq_len(k)), levels = labels), y = y)
+}
+
+lincon_pairs <- function(data, alpha, tr = 0.2) {
+  set.seed(1L)
+  out <- probe_attempt(WRS2::lincon(y ~ g, data = data, tr = tr, alpha = alpha))
+  if (is.null(out$value)) {
+    return(list(error = out$error, warnings = out$warnings, pairs = list()))
+  }
+  comp <- out$value$comp
+  labels <- levels(data$g)
+  pairs <- lapply(seq_len(nrow(comp)), function(i) {
+    g1 <- labels[[comp[i, 1L]]]
+    g2 <- labels[[comp[i, 2L]]]
+    pair_data <- droplevels(data[data$g %in% c(g1, g2), , drop = FALSE])
+    yu <- WRS2::yuen(y ~ g, data = pair_data, tr = tr)
+    se <- abs(yu$diff / yu$test)
+    critical <- (comp[i, "ci.upper"] - comp[i, "psihat"]) / se
+    list(
+      group1 = g1, group2 = g2,
+      psihat_hex = hex(comp[i, "psihat"]), ci_lower_hex = hex(comp[i, "ci.lower"]),
+      ci_upper_hex = hex(comp[i, "ci.upper"]), p_value_hex = hex(comp[i, "p.value"]),
+      yuen_test_hex = hex(yu$test), yuen_df_hex = hex(yu$df), yuen_df = yu$df,
+      yuen_diff_hex = hex(yu$diff), yuen_p_value_hex = hex(yu$p.value),
+      critical_value = critical, critical_value_hex = hex(critical)
+    )
+  })
+  list(
+    error = NULL, warnings = out$warnings, alpha_reported = out$value$alpha,
+    columns = as.list(colnames(comp)), pairs = pairs
+  )
+}
+
+# Calls among `calls` that returned a pair's critical value and took its df and C.
+critical_calls <- function(calls, pairs, n_comparisons) {
+  found <- list()
+  for (call in calls) {
+    for (pair in pairs) {
+      if (!isTRUE(abs(call$value - pair$critical_value) <= 1e-9 * abs(pair$critical_value))) next
+      df_arg <- names(Filter(function(v) isTRUE(abs(v - pair$yuen_df) <= 1e-12 * pair$yuen_df), call$args))
+      c_arg <- names(Filter(function(v) isTRUE(v == n_comparisons), call$args))
+      if (length(df_arg) == 1L && length(c_arg) == 1L) {
+        other <- call$args[setdiff(names(call$args), c(df_arg, c_arg))]
+        found[[length(found) + 1L]] <- list(
+          name = call$name, df_arg = df_arg, c_arg = c_arg, other_args = other
+        )
+        break
+      }
+    }
+  }
+  unique(found)
+}
+
+smm_grid <- function(spec) {
+  f <- get(spec$name, envir = asNamespace("WRS2"), inherits = FALSE)
+  value_at <- function(df, n_comparisons, seed = 1L) {
+    args <- spec$other_args
+    args[[spec$df_arg]] <- df
+    args[[spec$c_arg]] <- n_comparisons
+    set.seed(seed)
+    probe_attempt(do.call(f, args))
+  }
+  # A simulated critical value differs between seeds, or (with a seed of its own)
+  # takes long: then only a small grid.
+  started <- proc.time()[["elapsed"]]
+  first <- value_at(10, 6L, 1L)$value
+  seconds <- proc.time()[["elapsed"]] - started
+  second <- value_at(10, 6L, 2L)$value
+  random <- !identical(first, second)
+  small <- random || seconds > 0.05
+  df_grid <- if (small) c(5, 10, 30) else SMM_DF_GRID
+  c_grid <- if (small) c(1L, 3L, 6L, 10L) else SMM_C_GRID
+  rows <- lapply(df_grid, function(df) {
+    values <- character()
+    errors <- list()
+    warnings <- character()
+    for (n_comparisons in c_grid) {
+      out <- value_at(df, n_comparisons)
+      v <- out$value
+      values <- c(values, if (is.numeric(v) && length(v) == 1L) hex(as.numeric(v)) else "NA")
+      if (!is.null(out$error)) {
+        errors[[length(errors) + 1L]] <- list(C = n_comparisons, error = out$error)
+      }
+      warnings <- c(warnings, unlist(out$warnings))
+    }
+    list(
+      df = encode_doubles(df), df_hex = hex(df), values_hex = as.list(values),
+      errors = errors, warnings = as.list(unique(warnings))
+    )
+  })
+  list(
+    name = spec$name, df_arg = spec$df_arg, c_arg = spec$c_arg,
+    other_args = lapply(spec$other_args, function(v) list(value = v, hex = hex(v))),
+    random = random, small_grid = small, c_grid = as.list(c_grid), rows = rows
+  )
+}
+
+smm_probe <- function() {
+  ns_names <- ls(asNamespace("WRS2"), all.names = TRUE)
+  backout <- list()
+  census <- list()
+  specs <- list()
+  for (k in 2:10) {
+    data <- smm_data(k)
+    n_comparisons <- k * (k - 1L) / 2L
+    for (alpha in SMM_ALPHAS) {
+      result <- lincon_pairs(data, alpha$value)
+      entry <- list(
+        groups = k, comparisons = n_comparisons, alpha = alpha$text,
+        alpha_hex = hex(alpha$value), result = result
+      )
+      # Which functions lincon calls, with 2, 4 and 10 groups.
+      if (k %in% c(2L, 4L, 10L)) {
+        recorded <- record_wrs2_calls(function() {
+          set.seed(1L)
+          WRS2::lincon(y ~ g, data = data, tr = 0.2, alpha = alpha$value)
+        })
+        found <- critical_calls(recorded$calls, result$pairs, n_comparisons)
+        specs <- c(specs, found)
+        census[[length(census) + 1L]] <- list(
+          groups = k, comparisons = n_comparisons, alpha = alpha$text,
+          error = if (inherits(recorded$value, "error")) conditionMessage(recorded$value),
+          call_counts = recorded$counts,
+          scalar_calls = lapply(recorded$calls, function(call) {
+            list(
+              name = call$name,
+              args = lapply(call$args, function(v) list(value = v, hex = hex(v))),
+              value_hex = hex(call$value)
+            )
+          }),
+          critical_value_calls = lapply(found, function(spec) {
+            list(name = spec$name, df_arg = spec$df_arg, c_arg = spec$c_arg)
+          })
+        )
+      }
+      backout[[length(backout) + 1L]] <- entry
+    }
+  }
+  specs <- unique(specs)
+  # Whether lincon's critical values off the table (an alpha other than 0.05 or 0.01,
+  # or more comparisons than the table has) depend on the random seed.
+  seeds <- list()
+  for (setting in list(
+    list(groups = 4L, alpha = SMM_ALPHAS[[2L]]), list(groups = 4L, alpha = SMM_ALPHAS[[5L]]),
+    list(groups = 10L, alpha = SMM_ALPHAS[[1L]])
+  )) {
+    data <- smm_data(setting$groups)
+    for (seed in 1:3) {
+      set.seed(seed)
+      out <- probe_attempt(WRS2::lincon(y ~ g, data = data, tr = 0.2, alpha = setting$alpha$value))
+      comp <- if (is.null(out$value)) NULL else out$value$comp
+      seeds[[length(seeds) + 1L]] <- list(
+        groups = setting$groups, alpha = setting$alpha$text, seed = seed,
+        error = out$error,
+        ci_upper_hex = if (is.null(comp)) NULL else hex_list(comp[, "ci.upper"]),
+        psihat_hex = if (is.null(comp)) NULL else hex_list(comp[, "psihat"])
+      )
+    }
+  }
+  probe_file(
+    "probe-smm",
+    "WRS2::lincon critical values backed out from its CIs, the WRS2 functions it calls, and those functions on a df x C grid",
+    list(
+      namespace_functions = as.list(grep("smm|crit", ns_names, value = TRUE)),
+      df_grid_hex = as.list(hex(SMM_DF_GRID)),
+      lincon = backout,
+      calls = census,
+      grids = lapply(specs, smm_grid),
+      seed_dependence = seeds
+    )
+  )
+}
+
+# probe-wrs2p: WRS2's p-values next to the exact upper tail and 1 - cdf. yuen on two
+# groups, and t1way and lincon on three, over shifts that take |t| from 0 to about
+# 40 (p from 1 to 0) at small, moderate and large df. `shift` is in units of an
+# approximate SE of the difference. lincon's pairs come with yuen's t and df on the
+# same two groups.
+WRS2P_SHIFTS <- c(
+  0, 0.25, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 9, 10, 11,
+  12, 14, 16, 20, 25, 30, 40
+)
+
+wrs2p_probe <- function() {
+  t_tails <- function(t, df) {
+    list(
+      one_minus_cdf_hex = hex(1 - stats::pt(abs(t), df)),
+      upper_tail_hex = hex(stats::pt(abs(t), df, lower.tail = FALSE))
+    )
+  }
+  two_designs <- list(
+    list(n = c(6L, 7L), scale = c(1, 1.5)),
+    list(n = c(20L, 20L), scale = c(1, 1.3)),
+    list(n = c(400L, 350L), scale = c(1, 1.2))
+  )
+  yuen_rows <- list()
+  for (design in two_designs) {
+    unit <- 1.4 * sqrt(sum(design$scale^2 / design$n))
+    for (shift in WRS2P_SHIFTS) {
+      d <- two_group_frame(
+        normal_scores(design$n[[1L]]) * design$scale[[1L]],
+        normal_scores(design$n[[2L]]) * design$scale[[2L]] + shift * unit
+      )
+      r <- probe_call("yuen", WRS2::yuen(y ~ g, data = d))$value
+      yuen_rows[[length(yuen_rows) + 1L]] <- c(
+        list(
+          n = as.list(design$n), shift = shift,
+          test_hex = hex(r$test), df_hex = hex(r$df), p_value_hex = hex(r$p.value),
+          p_value = r$p.value, diff_hex = hex(r$diff)
+        ),
+        t_tails(r$test, r$df)
+      )
+    }
+  }
+  three_designs <- list(
+    list(n = c(5L, 6L, 7L), scale = c(1, 1.3, 0.8)),
+    list(n = c(15L, 15L, 15L), scale = c(1, 1.2, 0.8)),
+    list(n = c(300L, 250L, 280L), scale = c(1, 1.2, 0.8))
+  )
+  t1way_rows <- list()
+  lincon_rows <- list()
+  for (design in three_designs) {
+    unit <- 1.4 * sqrt(sum(design$scale[1:2]^2 / design$n[1:2]))
+    for (shift in WRS2P_SHIFTS) {
+      labels <- c("a", "b", "c")
+      d <- data.frame(
+        g = factor(rep(labels, design$n), levels = labels),
+        y = c(
+          normal_scores(design$n[[1L]]) * design$scale[[1L]],
+          normal_scores(design$n[[2L]]) * design$scale[[2L]] + shift * unit,
+          normal_scores(design$n[[3L]]) * design$scale[[3L]] + 2 * shift * unit
+        )
+      )
+      set.seed(1L)
+      r <- probe_call("t1way", WRS2::t1way(y ~ g, data = d, nboot = 20L))$value
+      t1way_rows[[length(t1way_rows) + 1L]] <- list(
+        n = as.list(design$n), shift = shift,
+        test_hex = hex(r$test), df1_hex = hex(r$df1), df2_hex = hex(r$df2),
+        p_value_hex = hex(r$p.value), p_value = r$p.value,
+        one_minus_cdf_hex = hex(1 - stats::pf(r$test, r$df1, r$df2)),
+        upper_tail_hex = hex(stats::pf(r$test, r$df1, r$df2, lower.tail = FALSE))
+      )
+      # Unadjusted (method = "none"), and with lincon's default adjustment.
+      comp <- probe_call("lincon", WRS2::lincon(y ~ g, data = d, method = "none"))$value$comp
+      default <- probe_call("lincon", WRS2::lincon(y ~ g, data = d))$value$comp
+      pairs <- lapply(seq_len(nrow(comp)), function(i) {
+        g1 <- labels[[comp[i, 1L]]]
+        g2 <- labels[[comp[i, 2L]]]
+        yu <- WRS2::yuen(y ~ g, data = droplevels(d[d$g %in% c(g1, g2), , drop = FALSE]))
+        c(
+          list(
+            group1 = g1, group2 = g2, p_value_hex = hex(comp[i, "p.value"]),
+            p_value = comp[i, "p.value"],
+            p_value_default_method_hex = hex(default[i, "p.value"]),
+            psihat_hex = hex(comp[i, "psihat"]),
+            yuen_test_hex = hex(yu$test), yuen_df_hex = hex(yu$df),
+            yuen_p_value_hex = hex(yu$p.value)
+          ),
+          t_tails(yu$test, yu$df)
+        )
+      })
+      lincon_rows[[length(lincon_rows) + 1L]] <- list(
+        n = as.list(design$n), shift = shift, pairs = pairs
+      )
+    }
+  }
+  probe_file(
+    "probe-wrs2p",
+    "WRS2 yuen, t1way and lincon p-values next to 1 - pt / 1 - pf and the exact upper tail",
+    list(yuen = yuen_rows, t1way = t1way_rows, lincon = lincon_rows)
+  )
+}
+
+# probe-akp: WRS2::akp.effect on varied two-group data at several trimming levels,
+# with both EQVAR settings, next to the trimmed means and winsorized SDs computed
+# here, so the scaling constant WRS2 applies can be measured against the exact
+# winsorized-normal value. The estimate does not depend on the resamples (nboot 10,
+# seed 1).
+AKP_TR <- c(0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4)
+
+winsorized_sd <- function(x, tr) {
+  n <- length(x)
+  g <- floor(tr * n)
+  s <- sort(x)
+  stats::sd(pmin(pmax(x, s[[g + 1L]]), s[[n - g]]))
+}
+
+akp_probe <- function() {
+  tooth <- probe_dataset("ToothGrowth")
+  cars <- probe_dataset("mtcars")
+  k2 <- probe_dataset("edge_k2")
+  designs <- list(
+    normal = list(normal_scores(20L), normal_scores(25L) * 1.4 + 0.8),
+    skewed = list(stats::qexp(stats::ppoints(30L)), stats::qexp(stats::ppoints(24L)) * 1.5 + 0.3),
+    ties = list(c(1, 2, 2, 3, 3, 3, 4, 4, 5, 6), c(2, 3, 3, 4, 4, 4, 5, 6, 6, 7, 8)),
+    small = list(c(3.1, 4.5, 2.2, 5.9, 4.4), c(6.1, 5.2, 7.7, 6.6, 5.0, 8.1)),
+    reversed = list(normal_scores(25L) * 1.4 + 0.8, normal_scores(20L)),
+    ToothGrowth = list(
+      group_values(tooth$data, "supp", "len", "OJ"), group_values(tooth$data, "supp", "len", "VC")
+    ),
+    mtcars_am = list(
+      group_values(cars$data, "am", "mpg", "0"), group_values(cars$data, "am", "mpg", "1")
+    ),
+    edge_k2 = list(
+      group_values(k2$data, "group", "value", "a"), group_values(k2$data, "group", "value", "b")
+    )
+  )
+  rows <- list()
+  for (name in names(designs)) {
+    a <- designs[[name]][[1L]]
+    b <- designs[[name]][[2L]]
+    d <- two_group_frame(a, b)
+    for (tr in AKP_TR) {
+      wa <- winsorized_sd(a, tr)
+      wb <- winsorized_sd(b, tr)
+      difference <- mean(a, trim = tr) - mean(b, trim = tr)
+      effects <- lapply(c(FALSE, TRUE), function(eqvar) {
+        set.seed(1L)
+        out <- probe_attempt(WRS2::akp.effect(
+          y ~ g, data = d, EQVAR = eqvar, tr = tr, nboot = 10L
+        ))
+        effect <- if (is.null(out$value)) NULL else as.numeric(out$value$AKPeffect)
+        list(
+          EQVAR = eqvar,
+          effect_hex = if (is.null(effect)) NULL else hex_list(effect),
+          # The first effect over the trimmed-mean difference in units of group 1's
+          # winsorized SD: the constant WRS2 multiplies by, if it scales that way.
+          ratio_to_group1_hex = if (is.null(effect)) NULL else hex(effect[[1L]] / (difference / wa)),
+          error = out$error, warnings = out$warnings
+        )
+      })
+      rows[[length(rows) + 1L]] <- list(
+        data = name, n = list(length(a), length(b)), tr = tr, tr_hex = hex(tr),
+        trimmed_mean_difference_hex = hex(difference),
+        winsorized_sd_hex = list(hex(wa), hex(wb)),
+        akp = effects
+      )
+    }
+  }
+  # The constant alone on a fine grid of tr (normal design, EQVAR = FALSE).
+  pair <- designs$normal
+  d <- two_group_frame(pair[[1L]], pair[[2L]])
+  constants <- lapply(seq(0.01, 0.49, by = 0.01), function(tr) {
+    set.seed(1L)
+    out <- probe_attempt(WRS2::akp.effect(y ~ g, data = d, EQVAR = FALSE, tr = tr, nboot = 10L))
+    difference <- mean(pair[[1L]], trim = tr) - mean(pair[[2L]], trim = tr)
+    list(
+      tr = tr, tr_hex = hex(tr), error = out$error,
+      ratio_to_group1_hex = if (is.null(out$value)) NULL else {
+        hex(as.numeric(out$value$AKPeffect)[[1L]] / (difference / winsorized_sd(pair[[1L]], tr)))
+      }
+    )
+  })
+  probe_file(
+    "probe-akp",
+    "WRS2::akp.effect at several tr, both EQVAR settings, with trimmed-mean differences and winsorized SDs",
+    list(
+      constants = constants,
+      tr_grid = as.list(AKP_TR),
+      data = lapply(designs, function(pair) list(a_hex = hex_list(pair[[1L]]), b_hex = hex_list(pair[[2L]]))),
+      rows = rows
+    ),
+    datasets = list(tooth$entry, cars$entry, k2$entry)
+  )
+}
+
+# probe-map: the MAP centrality of type "bayes". For each vector: what
+# statsExpressions::centrality_description(type = "bayes") reports for it as a single
+# group; bayestestR::map_estimate() with its defaults; the Sheather-Jones and nrd0
+# bandwidths; and stats::density with bw = "SJ" and n = 1024 on two grids (from
+# min(x) to max(x), and density's default range), each with its grid ends, bandwidth,
+# the index and location of its maximum and the densities around it, so a Python
+# implementation can be pinned down. Six vectors also keep their full density values.
+map_vectors <- function() {
+  tooth <- probe_dataset("ToothGrowth")
+  plant <- probe_dataset("PlantGrowth")
+  cars <- probe_dataset("mtcars")
+  iris_data <- probe_dataset("iris")
+  ties <- probe_dataset("edge_ties")
+  insects <- probe_dataset("InsectSprays")
+  n2 <- probe_dataset("edge_n2")
+  outliers <- probe_dataset("edge_outliers")
+  large <- probe_dataset("edge_large_n")
+  from_data <- function(set, x, y, levels, prefix) {
+    out <- lapply(levels, function(level) group_values(set$data, x, y, level))
+    names(out) <- paste(prefix, levels, sep = "_")
+    out
+  }
+  vectors <- c(
+    from_data(tooth, "supp", "len", c("OJ", "VC"), "ToothGrowth"),
+    from_data(plant, "group", "weight", c("ctrl", "trt1", "trt2"), "PlantGrowth"),
+    from_data(cars, "cyl", "mpg", c("4", "6", "8"), "mtcars_cyl"),
+    from_data(iris_data, "Species", "Sepal.Width", c("setosa", "versicolor", "virginica"), "iris_sepal_width"),
+    from_data(ties, "group", "score", c("a", "b", "c"), "edge_ties"),
+    from_data(insects, "spray", "count", c("A", "B", "C", "D", "E", "F"), "InsectSprays"),
+    from_data(n2, "group", "value", "a", "edge_n2"),
+    from_data(outliers, "group", "value", "c", "edge_outliers"),
+    from_data(large, "group", "value", "a", "edge_large_n"),
+    list(
+      normal_n3 = normal_scores(3L),
+      normal_n5 = normal_scores(5L),
+      normal_n10 = normal_scores(10L),
+      normal_n50 = normal_scores(50L),
+      normal_n1000 = normal_scores(1000L),
+      normal_n5000 = normal_scores(5000L),
+      exponential_40 = stats::qexp(stats::ppoints(40L)),
+      lognormal_100 = stats::qlnorm(stats::ppoints(100L)),
+      negative_skew_30 = -stats::qexp(stats::ppoints(30L)),
+      uniform_100 = stats::ppoints(100L),
+      t2_60 = stats::qt(stats::ppoints(60L), 2),
+      bimodal_equal = c(normal_scores(30L) - 2.5, normal_scores(30L) + 2.5),
+      bimodal_unequal = c(normal_scores(20L) - 2.5, normal_scores(40L) + 2.5),
+      integers_with_ties = c(1, 1, 2, 2, 2, 3, 3, 4, 5),
+      two_values = c(1, 2),
+      two_tied_values = c(2, 2, 2, 5, 5),
+      constant = rep(3, 5),
+      zero_iqr = c(1, 1, 1, 1, 1, 1, 1, 5),
+      scaled_small = 1e-8 * normal_scores(25L),
+      shifted_large = 1e8 + normal_scores(25L),
+      # |x| / (range / 1000) far above 2^31: timestamps with a spread of about 1.
+      timestamps = 1.7e9 + 0.5 * normal_scores(40L),
+      all_negative = -20 + stats::qexp(stats::ppoints(35L)) * 2,
+      spanning_zero = stats::qlnorm(stats::ppoints(45L)) - 1.5,
+      symmetric_grid = seq(-1, 1, length.out = 21L),
+      normal_n501 = normal_scores(501L),
+      normal_n1e5 = normal_scores(100000L),
+      # Three tight clusters: bw.SJ's solution lies below a tenth of its
+      # normal-reference starting bandwidth, so its search widens downward.
+      tight_clusters = c(
+        0.01 * normal_scores(30L), 1 + 0.01 * normal_scores(30L),
+        5 + 0.01 * normal_scores(30L)
+      ),
+      tighter_clusters = c(
+        0.003 * normal_scores(30L), 1 + 0.003 * normal_scores(30L),
+        5 + 0.003 * normal_scores(30L)
+      ),
+      outlier_tail = c(0.1 * normal_scores(95L), 10, 12, 15, 20, 30)
+    )
+  )
+  list(
+    vectors = vectors,
+    datasets = list(
+      tooth$entry, plant$entry, cars$entry, iris_data$entry, ties$entry, insects$entry,
+      n2$entry, outliers$entry, large$entry
+    )
+  )
+}
+
+MAP_FULL_DENSITY <- c(
+  "ToothGrowth_OJ", "edge_ties_a", "InsectSprays_C", "normal_n10", "bimodal_unequal",
+  "integers_with_ties", "timestamps", "tight_clusters"
+)
+
+density_summary <- function(x, full, ...) {
+  out <- probe_attempt(stats::density(x, bw = "SJ", n = 1024L, ...))
+  d <- out$value
+  if (is.null(d)) {
+    return(list(error = out$error, warnings = out$warnings))
+  }
+  top <- which.max(d$y)
+  near <- max(1L, top - 2L):min(length(d$y), top + 2L)
+  list(
+    error = NULL, warnings = out$warnings,
+    n = length(d$x), from_hex = hex(d$x[[1L]]), to_hex = hex(d$x[[length(d$x)]]),
+    bw_hex = hex(d$bw), argmax = top, x_at_max_hex = hex(d$x[[top]]),
+    x_at_max = d$x[[top]],
+    y_near_max_index = as.list(near), y_near_max_hex = hex_list(d$y[near]),
+    # Other grid points within 1e-9 (relative) of the maximum: near-ties.
+    near_ties = as.list(which(d$y >= d$y[[top]] * (1 - 1e-9))),
+    y_hex = if (full) hex_list(d$y) else NULL
+  )
+}
+
+map_probe <- function() {
+  collected <- map_vectors()
+  rows <- lapply(names(collected$vectors), function(name) {
+    x <- collected$vectors[[name]]
+    full <- name %in% MAP_FULL_DENSITY
+    map <- probe_attempt(as.numeric(bayestestR::map_estimate(x)))
+    single <- data.frame(g = factor(rep("a", length(x))), y = x)
+    centrality <- probe_attempt(statsExpressions::centrality_description(
+      single, g, y, type = "bayes"
+    ))
+    estimate <- probe_attempt(bayestestR::estimate_density(x))
+    density_of_estimate <- estimate$value
+    list(
+      name = name, n = length(x), x_hex = hex_list(x),
+      map_estimate_hex = if (is.null(map$value)) NULL else hex(map$value),
+      map_estimate_error = map$error, map_estimate_warnings = map$warnings,
+      centrality_hex = if (is.null(centrality$value)) NULL else hex(as.numeric(centrality$value$y)),
+      centrality_label = if (is.null(centrality$value)) NULL else to_json_value(centrality$value$expression),
+      centrality_error = centrality$error, centrality_warnings = centrality$warnings,
+      bw_sj = {
+        out <- probe_attempt(stats::bw.SJ(x))
+        list(hex = if (is.null(out$value)) NULL else hex(out$value), error = out$error, warnings = out$warnings)
+      },
+      bw_nrd0_hex = {
+        out <- probe_attempt(stats::bw.nrd0(x))
+        if (is.null(out$value)) NULL else hex(out$value)
+      },
+      density_data_range = density_summary(x, full, from = min(x), to = max(x)),
+      density_default_range = density_summary(x, full),
+      estimate_density = if (is.null(density_of_estimate)) {
+        list(error = estimate$error, warnings = estimate$warnings)
+      } else {
+        list(
+          error = NULL, warnings = estimate$warnings, n = nrow(density_of_estimate),
+          from_hex = hex(density_of_estimate$x[[1L]]),
+          to_hex = hex(density_of_estimate$x[[nrow(density_of_estimate)]]),
+          x_at_max_hex = hex(density_of_estimate$x[[which.max(density_of_estimate$y)]])
+        )
+      }
+    )
+  })
+  probe_file(
+    "probe-map",
+    "MAP centrality for type bayes: centrality_description, bayestestR::map_estimate, bw.SJ and stats::density summaries",
+    list(full_density = as.list(MAP_FULL_DENSITY), rows = rows),
+    datasets = collected$datasets
+  )
+}
+
+# probe-ranks: Mann-Whitney (wilcox.test, exact = FALSE, with and without the
+# continuity correction, every alternative) and effectsize::rank_biserial on tied and
+# untied pairs; kruskal.test and PMCMRplus::kwAllPairsDunnTest (unadjusted) on tied
+# data with three to six groups.
+ranks_probe <- function() {
+  ties <- probe_dataset("edge_ties")
+  insects <- probe_dataset("InsectSprays")
+  cars <- probe_dataset("mtcars")
+  k2 <- probe_dataset("edge_k2")
+  tv <- function(level) group_values(ties$data, "group", "score", level)
+  iv <- function(level) group_values(insects$data, "spray", "count", level)
+  pairs <- list(
+    edge_ties_a_b = list(tv("a"), tv("b")),
+    edge_ties_a_c = list(tv("a"), tv("c")),
+    edge_ties_b_c = list(tv("b"), tv("c")),
+    InsectSprays_C_D = list(iv("C"), iv("D")),
+    InsectSprays_A_B = list(iv("A"), iv("B")),
+    mtcars_am = list(
+      group_values(cars$data, "am", "mpg", "0"), group_values(cars$data, "am", "mpg", "1")
+    ),
+    edge_k2 = list(
+      group_values(k2$data, "group", "value", "a"), group_values(k2$data, "group", "value", "b")
+    ),
+    small_ties = list(c(1, 2, 2, 3), c(2, 3, 3, 4, 5)),
+    mostly_tied = list(c(1, 1, 1, 2), c(1, 1, 2, 2, 2))
+  )
+  two_sample <- lapply(names(pairs), function(name) {
+    a <- pairs[[name]][[1L]]
+    b <- pairs[[name]][[2L]]
+    tests <- list()
+    for (alternative in c("two.sided", "less", "greater")) {
+      for (correct in c(TRUE, FALSE)) {
+        out <- probe_attempt(stats::wilcox.test(
+          a, b, exact = FALSE, correct = correct, alternative = alternative
+        ))
+        tests[[length(tests) + 1L]] <- list(
+          alternative = alternative, correct = correct,
+          statistic_hex = if (is.null(out$value)) NULL else hex(unname(out$value$statistic)),
+          p_value_hex = if (is.null(out$value)) NULL else hex(out$value$p.value),
+          method = if (is.null(out$value)) NULL else out$value$method,
+          error = out$error, warnings = out$warnings
+        )
+      }
+    }
+    biserial <- lapply(c("two.sided", "less", "greater"), function(alternative) {
+      out <- probe_attempt(effectsize::rank_biserial(
+        a, b, ci = 0.95, alternative = alternative, verbose = FALSE
+      ))
+      r <- out$value
+      list(
+        alternative = alternative,
+        estimate_hex = if (is.null(r)) NULL else hex(r[[1L]]),
+        conf_low_hex = if (is.null(r)) NULL else hex(r$CI_low),
+        conf_high_hex = if (is.null(r)) NULL else hex(r$CI_high),
+        error = out$error, warnings = out$warnings
+      )
+    })
+    list(
+      name = name, a_hex = hex_list(a), b_hex = hex_list(b), wilcox = tests,
+      rank_biserial = biserial
+    )
+  })
+  designs <- list(
+    edge_ties = list(set = ties, x = "group", y = "score"),
+    InsectSprays = list(set = insects, x = "spray", y = "count"),
+    mtcars_cyl = list(set = cars, x = "cyl", y = "mpg")
+  )
+  k_sample <- lapply(names(designs), function(name) {
+    design <- designs[[name]]
+    analysis <- between_analysis(design$set$data, design$x, design$y)
+    kw <- probe_call("kruskal.test", stats::kruskal.test(y ~ x, data = analysis))
+    dunn <- probe_call(
+      "kwAllPairsDunnTest",
+      PMCMRplus::kwAllPairsDunnTest(x = analysis$y, g = analysis$x, p.adjust.method = "none")
+    )
+    levels <- levels(analysis$x)
+    k <- length(levels)
+    dunn_pairs <- list()
+    for (i in seq_len(k - 1L)) {
+      for (j in (i + 1L):k) {
+        dunn_pairs[[length(dunn_pairs) + 1L]] <- list(
+          group1 = levels[[i]], group2 = levels[[j]],
+          statistic_hex = hex(dunn$value$statistic[levels[[j]], levels[[i]]]),
+          p_value_hex = hex(dunn$value$p.value[levels[[j]], levels[[i]]])
+        )
+      }
+    }
+    list(
+      name = name, levels = as.list(levels), n_per_level = as.list(table(analysis$x)),
+      kruskal_statistic_hex = hex(unname(kw$value$statistic)),
+      kruskal_parameter = unname(kw$value$parameter),
+      kruskal_p_value_hex = hex(kw$value$p.value),
+      kruskal_warnings = as.list(unique(kw$warnings)),
+      dunn_method = to_json_value(dunn$value$method),
+      dunn_warnings = as.list(unique(dunn$warnings)),
+      dunn_pairs = dunn_pairs
+    )
+  })
+  probe_file(
+    "probe-ranks",
+    "wilcox.test (exact = FALSE), effectsize::rank_biserial, kruskal.test and kwAllPairsDunnTest on tied data",
+    list(two_sample = two_sample, k_sample = k_sample),
+    datasets = list(ties$entry, insects$entry, cars$entry, k2$entry)
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -1432,20 +2402,54 @@ games_howell_cases <- Filter(function(case) {
   analysis <- between_analysis(read_dataset(case)$data, case$args$x, case$args$y)
   case$args$type == "parametric" && nlevels(analysis$x) > 2L
 }, CASES)
-PROBES <- list(
-  format_probe(), padjust_probe(), ptukey_probe(games_howell_cases), omega_probe()
+PROBE_BUILDERS <- list(
+  "probe-format" = format_probe,
+  "probe-padjust" = padjust_probe,
+  "probe-ptukey" = function() ptukey_probe(games_howell_cases),
+  "probe-omega" = omega_probe,
+  "probe-smm" = smm_probe,
+  "probe-wrs2p" = wrs2p_probe,
+  "probe-akp" = akp_probe,
+  "probe-map" = map_probe,
+  "probe-ranks" = ranks_probe
 )
-for (probe in PROBES) {
-  message("== ", probe$name)
-  write_json_file(probe, file.path(out_dir, paste0(probe$name, ".json")))
+
+# Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
+# probes and cases whose names match it and writes no manifest, so the Python loader
+# refuses the output. The oracle workflow never sets it.
+SUBSET <- Sys.getenv("ORACLE_SUBSET")
+if (nzchar(SUBSET)) {
+  PROBE_BUILDERS <- PROBE_BUILDERS[grepl(SUBSET, names(PROBE_BUILDERS))]
+  CASES <- Filter(function(case) grepl(SUBSET, case$name), CASES)
+  case_names <- vapply(CASES, function(case) case$name, character(1L))
 }
-probe_files <- vapply(PROBES, function(probe) paste0(probe$name, ".json"), character(1L))
+
+probe_files <- character()
+for (probe_name in names(PROBE_BUILDERS)) {
+  message("== ", probe_name)
+  probe <- PROBE_BUILDERS[[probe_name]]()
+  if (!identical(probe$name, probe_name)) stop(probe_name, " names itself ", probe$name)
+  write_json_file(probe, file.path(out_dir, paste0(probe$name, ".json")))
+  probe_files <- c(probe_files, paste0(probe$name, ".json"))
+  rm(probe)
+}
 
 summary_rows <- character()
 problems <- character()
 for (case in CASES) {
   message("== ", case$name)
-  fixture <- run_case(case)
+  started <- proc.time()[["elapsed"]]
+  # A failure of the generator itself (not of ggstatsplot, which run_case records) is
+  # reported with the other problems at the end, so one run shows every case.
+  fixture <- tryCatch(run_case(case), error = function(e) e)
+  if (inherits(fixture, "error")) {
+    problems <- c(problems, paste0(case$name, ": generator failed: ", conditionMessage(fixture)))
+    summary_rows <- c(summary_rows, sprintf(
+      "| %s | generator failed: %s | | | | |",
+      case$name, gsub("|", "/", conditionMessage(fixture), fixed = TRUE)
+    ))
+    next
+  }
   write_json_file(fixture, file.path(out_dir, paste0(case$name, ".json")))
   case_problems <- outcome_problems(case, fixture)
   if (length(case_problems) > 0L) {
@@ -1458,18 +2462,19 @@ for (case in CASES) {
   }, numeric(1L)))
   boot <- fixture$bootstrap_reference
   summary_rows <- c(summary_rows, sprintf(
-    "| %s | %s | %d | %d | %s |",
+    "| %s | %s | %d | %d | %s | %.0f |",
     case$name, gsub("|", "/", status, fixed = TRUE), length(fixture$r_warnings),
     as.integer(hidden_conditions),
-    if (is.null(boot)) "" else sprintf("replay matches ggstatsplot: %s", boot$replay$matches)
+    if (is.null(boot)) "" else sprintf("replay matches ggstatsplot: %s", boot$replay$matches),
+    proc.time()[["elapsed"]] - started
   ))
 }
 
 summary_text <- c(
   sprintf("ggstatsplot %s, R %s", PARITY_VERSION, VERSIONS$R),
   "",
-  "| case | result | R warnings | conditions ggstatsplot hid | bootstrap reference |",
-  "| --- | --- | --- | --- | --- |",
+  "| case | result | R warnings | conditions ggstatsplot hid | bootstrap reference | seconds |",
+  "| --- | --- | --- | --- | --- | --- |",
   summary_rows
 )
 cat(summary_text, sep = "\n")
@@ -1480,6 +2485,10 @@ if (length(problems) > 0L) {
   # No manifest: the Python fixture loader refuses a directory without one.
   message("Unexpected case outcomes:\n", paste(problems, collapse = "\n"))
   quit(status = 1L)
+}
+if (nzchar(SUBSET)) {
+  message("ORACLE_SUBSET is set: no manifest written")
+  quit(status = 0L)
 }
 
 fixture_files <- sort(setdiff(

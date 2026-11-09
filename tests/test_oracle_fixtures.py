@@ -75,6 +75,45 @@ PARAMETRIC_LABELS = (
     "ToothGrowth-nobf",
     "ToothGrowth-prior08",
 )
+# Phase 2 (betweenstats nonparametric, robust, bayes): the Phase 1 edge data and every
+# argument these types take, with the types each label runs (see generate.R).
+PHASE2_TYPES = ("nonparametric", "robust", "bayes")
+PHASE2_LABELS: dict[str, tuple[str, ...]] = {
+    "edge_missing": PHASE2_TYPES,
+    "edge_empty_level": PHASE2_TYPES,
+    "PlantGrowth-declared": PHASE2_TYPES,
+    "edge_n2": PHASE2_TYPES,
+    "edge_ties": PHASE2_TYPES,
+    "edge_ties_small": ("nonparametric",),
+    "edge_negative": PHASE2_TYPES,
+    "edge_outliers": PHASE2_TYPES,
+    "InsectSprays": PHASE2_TYPES,
+    "edge_null": PHASE2_TYPES,
+    "edge_large_n": PHASE2_TYPES,
+    "iris-petal": PHASE2_TYPES,
+    "iris_no_setosa-petal": PHASE2_TYPES,
+    "iris_no_setosa-petalwidth": ("robust",),
+    **{
+        f"PlantGrowth-padj-{method}": ("nonparametric", "robust")
+        for method in P_ADJUST_METHODS
+    },
+    "ToothGrowth-cl90": PHASE2_TYPES,
+    "PlantGrowth-cl90": PHASE2_TYPES,
+    "ToothGrowth-tr01": ("robust",),
+    "PlantGrowth-tr01": ("robust",),
+    "mtcars-am-digits3": PHASE2_TYPES,
+    "mtcars-digits3": PHASE2_TYPES,
+    "PlantGrowth-display-all": PHASE2_TYPES,
+    "PlantGrowth-display-ns": PHASE2_TYPES,
+    "PlantGrowth-display-none": PHASE2_TYPES,
+    "ToothGrowth-nosubtitle": PHASE2_TYPES,
+    "PlantGrowth-nosubtitle": PHASE2_TYPES,
+    "edge_k2-greater": ("nonparametric",),
+    "edge_k2-less": ("nonparametric",),
+    "ToothGrowth-greater": ("robust", "bayes"),
+    "ToothGrowth-prior08": ("bayes",),
+    "PlantGrowth-prior08": ("bayes",),
+}
 EXPECTED_CASES = frozenset(
     {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
     | {"ggbetweenstats-mtcars-am-drat-parametric"}
@@ -84,11 +123,26 @@ EXPECTED_CASES = frozenset(
         for t in ("parametric", "nonparametric")
     }
     | {f"ggbetweenstats-{label}-parametric" for label in PARAMETRIC_LABELS}
+    | {
+        f"ggbetweenstats-{label}-{t}"
+        for label, types in PHASE2_LABELS.items()
+        for t in types
+    }
 )
 # Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
 EXPECTED_FAILURES = frozenset({"ggbetweenstats-edge_n2-parametric"})
 EXPECTED_PROBES = frozenset(
-    {"probe-format", "probe-padjust", "probe-ptukey", "probe-omega"}
+    {
+        "probe-format",
+        "probe-padjust",
+        "probe-ptukey",
+        "probe-omega",
+        "probe-smm",
+        "probe-wrs2p",
+        "probe-akp",
+        "probe-map",
+        "probe-ranks",
+    }
 )
 
 
@@ -103,6 +157,7 @@ def test_case_list_is_what_the_generator_writes() -> None:
         f"{sorted(names - EXPECTED_CASES)}"
     )
     assert len(PARAMETRIC_LABELS) == 28
+    assert sum(len(types) for types in PHASE2_LABELS.values()) == 87
 
 
 ALL_CASES = [
@@ -472,14 +527,22 @@ def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
 def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     ref = case.bootstrap_reference
     k = len(case.analysis_levels)
-    expects_reference = (case.type == "robust") or (
-        case.type == "nonparametric" and k > 2
-    )
-    if not expects_reference:
+    # Bootstrapped designs (SPEC.md section 9), and only when ggstatsplot computed the
+    # effect size: without a subtitle (results.subtitle = FALSE) there is no CI.
+    bootstrapped = (case.type == "robust") or (case.type == "nonparametric" and k > 2)
+    with_subtitle = case.args.get("results.subtitle", True) is not False
+    if not (bootstrapped and with_subtitle):
         assert ref is None
         return
     assert ref is not None
     assert ref["resamples"] >= 20000
+    # The reference runs at the case's own confidence level and trimming.
+    assert ref["conf_level"] == case.args.get("conf.level", 0.95)
+    tr = case.args.get("tr", 0.2)
+    if case.type == "robust":
+        assert f"tr = {tr:g}," in ref["call"], ref["call"]
+    else:
+        assert f"ci = {ref['conf_level']:g}," in ref["call"], ref["call"]
     reps = ref["replicates"]
     assert reps["resamples"] == 2000
     # The oracle replayed ggstatsplot's own bootstrap (set.seed, then the same call

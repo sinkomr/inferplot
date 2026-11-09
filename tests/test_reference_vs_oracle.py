@@ -148,6 +148,15 @@ def _alternative(case: OracleCase) -> str:
     return str(case.args.get("alternative", "two.sided"))
 
 
+def _tr(case: OracleCase) -> float:
+    """The trimming of the robust tests and labels (ggstatsplot's default 0.2)."""
+    return float(case.args.get("tr", 0.2))
+
+
+def _adjust_method(case: OracleCase) -> str:
+    return str(case.args.get("p.adjust.method", "holm"))
+
+
 def _one_sided_quantile(case: OracleCase, row: Row) -> float:
     """Normal quantile for the CI's level: alpha/2 per side, or alpha when one-sided."""
     alpha = 1 - _value(row, "conf.level")
@@ -503,7 +512,7 @@ def test_yuen(case: OracleCase) -> None:
     # WRS2::yuen reports |t|: mtcars am and edge_k2 have the smaller trimmed mean in
     # group 1, yet a positive t, while the AKP effect size beside it is negative.
     a, b = _groups(case)
-    t, df, _ = ref.yuen(a, b, tr=0.2)
+    t, df, _ = ref.yuen(a, b, tr=_tr(case))
     row = case.subtitle_data
     assert_close("closed_form", abs(t), _value(row, "statistic"), what="Yuen |t|")
     if t < 0:
@@ -515,7 +524,7 @@ def test_yuen(case: OracleCase) -> None:
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=False))
 def test_t1way(case: OracleCase) -> None:
-    f_stat, df1, df2, _ = ref.t1way(_groups(case), tr=0.2)
+    f_stat, df1, df2, _ = ref.t1way(_groups(case), tr=_tr(case))
     row = case.subtitle_data
     assert_close("closed_form", f_stat, _value(row, "statistic"), what="t1way F")
     assert_close("closed_form", df1, _value(row, "df"), what="t1way df1")
@@ -621,7 +630,8 @@ def test_dunn_holm(case: OracleCase) -> None:
         / math.sqrt(s2 * (1 / sizes[i] + 1 / sizes[j]))
         for i, j in pairs
     ]
-    adjusted = ref.holm([float(2 * stats.norm.sf(z)) for z in z_values])
+    method = _adjust_method(case)
+    adjusted = _p_adjust([float(2 * stats.norm.sf(z)) for z in z_values], method)
     levels = case.analysis_levels
     expected = {
         (levels[i], levels[j]): (z, p_adj)
@@ -633,10 +643,10 @@ def test_dunn_holm(case: OracleCase) -> None:
         what = f"Dunn {pair['group1']}-{pair['group2']}"
         assert pair["test"] == "Dunn"
         assert pair["distribution"] == "z"
-        assert pair["p.adjust.method"] == "Holm"
+        assert pair["p.adjust.method"] == P_ADJUST_LABELS[method]
         assert_close("closed_form", z, number(pair["statistic"]), what=f"{what} z")
         assert_close(
-            "closed_form", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
+            "closed_form", p_adj, number(pair["p.value"]), what=f"{what} {method} p"
         )
 
 
