@@ -62,7 +62,7 @@ def test_spec_values() -> None:
     for kind, (rtol, atol) in expected.items():
         assert (TOLERANCES[kind].rtol, TOLERANCES[kind].atol) == (rtol, atol), kind
     assert BOOTSTRAP.n_sd == 4.0
-    assert MAP_CENTRALITY.steps == 1.0
+    assert (MAP_CENTRALITY.steps, MAP_CENTRALITY.on_grid) == (0, 1e-6)
 
 
 def test_registry_is_read_only() -> None:
@@ -154,9 +154,16 @@ def test_monte_carlo_band_rejects_an_invalid_sd(sd: float) -> None:
 
 
 def test_grid_band() -> None:
-    assert_within_grid(1.04, 1.0, 0.05, what="MAP")
+    # Grid 1 + i x 0.25: the same point, stored to 15 digits, passes.
+    assert_within_grid(1.75, 1.75 + 1e-14, origin=1.0, step=0.25, what="MAP")
     with pytest.raises(AssertionError, match="grid step"):
-        assert_within_grid(1.11, 1.0, 0.05, what="MAP")
+        assert_within_grid(2.0, 1.75, origin=1.0, step=0.25, what="MAP")
+    with pytest.raises(AssertionError, match="not on the grid"):
+        assert_within_grid(1.75, 1.8, origin=1.0, step=0.25, what="MAP")
+    with pytest.raises(AssertionError, match="not on the grid"):
+        assert_within_grid(1.8, 1.75, origin=1.0, step=0.25, what="MAP")
+    with pytest.raises(ValueError, match="grid step"):
+        assert_within_grid(1.75, 1.75, origin=1.0, step=0.0, what="MAP")
 
 
 def test_text_is_exact() -> None:

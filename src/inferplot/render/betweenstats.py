@@ -14,17 +14,23 @@ With ``ax=`` the subtitle and caption go inside that Axes and ``fig.check()``
 reports anything that does not fit.
 
 Every argument is checked before anything is drawn, so a call that raises leaves a
-given Axes as it was: the artist dicts are applied to throwaway artists of the
-classes that receive them, and the user's texts are laid out once as mathtext.
+given Axes as it was: each artist dict styles a scratch artist made as the drawing
+makes it, which is drawn on a scratch figure and written as SVG and PDF (matplotlib
+checks some values only then), and the user's texts are laid out once as mathtext.
+With ``ax=`` only the texts inferplot draws get its font; the user's own texts in
+that Axes keep theirs.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import io
+import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import numpy as np
+from matplotlib.artist import ArtistInspector
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
@@ -33,7 +39,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.path import Path
 from matplotlib.text import Text
-from matplotlib.transforms import Bbox, IdentityTransform, offset_copy
+from matplotlib.transforms import Bbox, offset_copy
 from numpy.typing import NDArray
 
 from inferplot import _validate as v
@@ -71,8 +77,11 @@ MARGIN_PT: Final = 10.0
 GAP_PT: Final = 5.0
 LABEL_PAD_PT: Final = 3.0  # between a bracket and its label, and around labels
 LABEL_BOX_PAD: Final = 0.3  # centrality label box padding, in font sizes
+BRACKET_TIP_PT: Final = 4.0  # length of a bracket's legs
+BRACKET_LINEWIDTH_PT: Final = 0.8
 MIN_LEVEL_SPACING_IN: Final = 1.1
 MIN_AXES_HEIGHT_IN: Final = 3.2
+MIN_DATA_HEIGHT_IN: Final = 2.5  # the data region; bracket levels go on top
 KDE_GRID: Final = 256
 KDE_BINS: Final = 2_048
 
@@ -173,8 +182,8 @@ def betweenstats(
             f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
         )
     colors, palette_warning = theme.resolve_palette(palette, k)
-    _check_artist_args(options)
     with theme.context():
+        _check_artist_args(options)
         _check_mathtext(options)
         return _Drawing(result, options, colors, palette_warning, ax).run()
 
@@ -194,46 +203,158 @@ class _Options:
 
 
 def _apply(artist: Artist, args: Mapping[str, object], name: str) -> None:
-    """``artist.set(**args)``, with a message naming the argument on failure."""
+    """``artist.set(**args)``, with a message naming the argument on failure.
+
+    A name the artist has no setter for is an unknown property (``TypeError``);
+    any error from setting a known property is a rejected value (``ValueError``),
+    whatever exception type matplotlib uses for it.
+    """
     if not args:
         return
+    kind = type(artist).__name__
+    for key in args:
+        if not callable(getattr(artist, f"set_{key}", None)):
+            close = v.closest_name(key, ArtistInspector(artist).get_setters())
+            hint = (
+                f" Did you mean {close!r}?"
+                if close is not None
+                else f" matplotlib's documentation of {kind} lists its properties."
+            )
+            raise TypeError(
+                f"{name} has a property matplotlib's {kind} does not have: "
+                f"{key!r}.{hint}"
+            )
     try:
         artist.set(**args)
-    except (AttributeError, TypeError) as error:
-        raise TypeError(
-            f"{name} has a property matplotlib's {type(artist).__name__} does not "
-            f"accept: {error}"
-        ) from error
-    except ValueError as error:
+    except Exception as error:
         raise ValueError(f"{name} has a value matplotlib rejects: {error}") from error
 
 
-# The layer each artist dict styles, and a throwaway artist of the class that
-# receives it there (ax.scatter's PathCollection, the box PathPatch, the violin
-# Polygon).
+# The layer each artist dict styles (SPEC.md section 2).
 _ARTIST_LAYERS: Final = (
     ("point_args", "points"),
     ("boxplot_args", "box"),
     ("violin_args", "violin"),
 )
 
+# The vector formats a scratch drawing is also written to: matplotlib checks some
+# values only there (a NaN line width passes Agg and fails in PDF).
+_SCRATCH_FORMATS: Final = ("svg", "pdf")
+_SCRATCH_VALUES: Final = (0.0, 1.0, 2.0, 3.0, 4.0)
 
-def _throwaway(layer: str) -> Artist:
+
+def _points_artist(
+    ax: Axes, x: FloatArray, y: FloatArray, color: theme.Color, i: int
+) -> PathCollection:
+    """One level's points, before ``point_args``."""
+    return ax.scatter(
+        x,
+        y,
+        s=14.0,
+        color=color,
+        alpha=0.6,
+        linewidths=0.0,
+        zorder=3.0,
+        gid=f"points-{i}",
+    )
+
+
+def _box_artist(x: FloatArray, center: float, i: int) -> PathPatch:
+    """One level's box, before ``boxplot_args``."""
+    return PathPatch(
+        _box_path(x, center),
+        facecolor=(1.0, 1.0, 1.0, 0.85),
+        edgecolor=theme.SOFT_INK,
+        linewidth=0.9,
+        zorder=2.0,
+        gid=f"box-{i}",
+    )
+
+
+def _violin_artist(outline: FloatArray, color: theme.Color, i: int) -> Polygon:
+    """One level's violin, before ``violin_args``."""
+    return Polygon(
+        outline,
+        closed=True,
+        facecolor=(*color[:3], 0.25),
+        edgecolor=color,
+        linewidth=0.8,
+        zorder=1.0,
+        gid=f"violin-{i}",
+    )
+
+
+def _scratch(layer: str) -> tuple[Figure, Artist]:
+    """A scratch figure holding one artist of ``layer``, made as the drawing makes
+    it; nothing of it reaches the user."""
+    figure = Figure(figsize=(2.0, 2.0), dpi=100)
+    FigureCanvasAgg(figure)
+    ax = figure.add_axes((0.1, 0.1, 0.8, 0.8))
+    ax.set_axis_off()  # no texts, so writing it embeds no fonts
+    values = np.array(_SCRATCH_VALUES)
+    color: theme.Color = (0.0, 0.0, 0.0, 1.0)
     if layer == "points":
-        return PathCollection(
-            (Path.unit_circle(),),
-            sizes=[14.0],
-            offsets=np.zeros((1, 2)),
-            offset_transform=IdentityTransform(),
-        )
+        return figure, _points_artist(ax, np.zeros_like(values), values, color, 0)
     if layer == "box":
-        return PathPatch(_box_path(np.array([0.0, 1.0]), 0.0))
-    return Polygon(np.zeros((3, 2)), closed=True)
+        artist: Artist = _box_artist(values, 0.0, 0)
+    else:
+        outline = np.array([[-0.4, 0.0], [0.4, 0.0], [0.0, 4.0]])
+        artist = _violin_artist(outline, color, 0)
+    ax.add_artist(artist)
+    return figure, artist
+
+
+def _draw_error(figure: Figure) -> Exception | None:
+    """The error matplotlib raises when it draws ``figure`` (Agg) or writes it as
+    SVG or PDF; None when it draws. Warnings are left to the real drawing."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            figure.canvas.draw()
+            for fmt in _SCRATCH_FORMATS:
+                figure.savefig(io.BytesIO(), format=fmt)
+        # The same scratch figure draws without the user's properties, so whatever
+        # fails here is one of their values.
+        except Exception as error:
+            return error
+    return None
+
+
+def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> None:
+    """Apply ``args`` to a scratch artist of ``layer`` and draw it.
+
+    ``Artist.set`` stores some values without checking them (a line width of
+    "bad" for points); matplotlib rejects them only when drawing, which with ``ax=``
+    would be the user's later ``savefig``.
+    """
+    figure, artist = _scratch(layer)
+    _apply(artist, args, name)
+    error = _draw_error(figure)
+    if error is None:
+        return
+    culprits: list[str] = []
+    for key, value in args.items():
+        alone, single = _scratch(layer)
+        try:
+            single.set(**{key: value})
+        except Exception:  # this one value is then a culprit
+            culprits.append(key)
+            continue
+        if _draw_error(alone) is not None:
+            culprits.append(key)
+    shown = ", ".join(
+        f"{key}={v.describe_value(args[key])}" for key in culprits or args
+    )
+    raise ValueError(
+        f"{name} has a value matplotlib rejects when it draws the {layer}: {shown} "
+        f"({type(error).__name__}: {error}). Use a value of the kind matplotlib "
+        f"documents for that property, or remove it from {name}."
+    ) from error
 
 
 def _check_artist_args(options: _Options) -> None:
-    """Each non-empty artist dict styles a layer that is drawn and is accepted by
-    the class of artist it is applied to; checked before anything is drawn."""
+    """Each non-empty artist dict styles a layer that is drawn, and an artist of
+    that layer styled with it draws; checked before anything is drawn."""
     for name, layer in _ARTIST_LAYERS:
         args: dict[str, object] = getattr(options, name)
         if not args:
@@ -247,7 +368,7 @@ def _check_artist_args(options: _Options) -> None:
                 f"does not draw. To style it, add {layer!r} to layers, for example "
                 f"layers={with_layer!r}; otherwise remove {name}=."
             )
-        _apply(_throwaway(layer), args, name)
+        _check_drawn(name, layer, args)
 
 
 _USER_TEXTS: Final = ("title", "subtitle", "caption", "xlab", "ylab")
@@ -481,30 +602,14 @@ class _Drawing:
             if outline:
                 self.draw_density(i, level, x, color)
             if "box" in layers and x.size > 0:
-                box = PathPatch(
-                    _box_path(x, float(i)),
-                    facecolor=(1.0, 1.0, 1.0, 0.85),
-                    edgecolor=theme.SOFT_INK,
-                    linewidth=0.9,
-                    zorder=2.0,
-                    gid=f"box-{i}",
-                )
+                box = _box_artist(x, float(i), i)
                 ax.add_patch(box)
                 _apply(box, options.boxplot_args, "boxplot_args")
             if "points" in layers and shown[i].size > 0:
                 jitter = rng.uniform(
                     -JITTER_HALF_WIDTH, JITTER_HALF_WIDTH, size=shown[i].size
                 )
-                points = ax.scatter(
-                    i + jitter,
-                    shown[i],
-                    s=14.0,
-                    color=color,
-                    alpha=0.6,
-                    linewidths=0.0,
-                    zorder=3.0,
-                    gid=f"points-{i}",
-                )
+                points = _points_artist(ax, i + jitter, shown[i], color, i)
                 _apply(points, options.point_args, "point_args")
         if options.centrality:
             self.draw_centrality()
@@ -525,15 +630,7 @@ class _Drawing:
         xs = np.concatenate([i - half, (i + half)[::-1]])
         ys = np.concatenate([grid, grid[::-1]])
         if what == "violin":
-            patch = Polygon(
-                np.column_stack([xs, ys]),
-                closed=True,
-                facecolor=(*color[:3], 0.25),
-                edgecolor=color,
-                linewidth=0.8,
-                zorder=1.0,
-                gid=f"violin-{i}",
-            )
+            patch = _violin_artist(np.column_stack([xs, ys]), color, i)
             self.ax.add_patch(patch)
             _apply(patch, self.options.violin_args, "violin_args")
         else:
@@ -796,6 +893,7 @@ class _Drawing:
             (self.extent(t).height / 2 for t in self.centrality_labels), default=0.0
         )
         label_h = max((self.extent(t).height for t in self.bracket_labels), default=0.0)
+        fixed = height_px is not None
         return vertical_layout(
             data_min=data_min,
             data_max=data_max,
@@ -804,11 +902,12 @@ class _Drawing:
             center_half_px=center_half,
             label_px=label_h,
             pad_px=_px(LABEL_PAD_PT, self.dpi),
+            tip_px=_px(BRACKET_TIP_PT, self.dpi),
+            line_px=_px(BRACKET_LINEWIDTH_PT, self.dpi),
             top_px=top_px,
             bottom_px=bottom_px,
-            min_height_px=None
-            if height_px is not None
-            else MIN_AXES_HEIGHT_IN * self.dpi,
+            min_height_px=None if fixed else MIN_AXES_HEIGHT_IN * self.dpi,
+            data_height_px=MIN_DATA_HEIGHT_IN * self.dpi,
             height_px=height_px,
         )
 
@@ -826,7 +925,7 @@ class _Drawing:
                 [i, i, j, j],
                 [y - layout.tip, y, y, y - layout.tip],
                 color=theme.INK,
-                linewidth=0.8,
+                linewidth=BRACKET_LINEWIDTH_PT,
                 zorder=4.0,
                 gid=f"bracket-{m}",
             )
@@ -933,9 +1032,23 @@ class _Drawing:
         self.apply_limits(left, right, layout, levels)
 
     def finish_fonts(self) -> None:
-        """DejaVu Sans, also for mathtext, on every text of the Axes and figure."""
-        # The own figure was drawn by the layout, so its tick labels exist.
-        owner = self.figure if self.own else self.ax
-        for item in owner.findobj(Text):
+        """DejaVu Sans, also for mathtext, on every text inferplot draws.
+
+        With inferplot's own figure that is every text of the figure. With ``ax=``
+        it is the axis texts (labels and tick labels, which inferplot sets) and the
+        texts this drawing created; texts the user placed before the call, such as
+        their own title or annotations, keep their font.
+        """
+        # The own figure was drawn by the layout, so its tick labels exist; tick
+        # labels made later copy their font from the existing ones.
+        if self.own:
+            texts = self.figure.findobj(Text)
+        else:
+            texts = [
+                *self.ax.xaxis.findobj(Text),
+                *self.ax.yaxis.findobj(Text),
+                *(t for t in self.ax.findobj(Text) if id(t) in self.roles),
+            ]
+        for item in texts:
             item.set_fontfamily(theme.FONT_FAMILY)
             item.set_math_fontfamily(theme.MATH_FONT_FAMILY)

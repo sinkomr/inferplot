@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import io
 import re
 
 import matplotlib
@@ -16,6 +17,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.text import Text
+from matplotlib.transforms import Bbox
 
 from inferplot.render import StatsFigure, betweenstats
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
@@ -29,6 +31,7 @@ from tests.render._helpers import (
     figure_codes,
     gids,
     numbered_texts,
+    stroke_reach,
     text_of,
 )
 from tests.render._results import (
@@ -251,17 +254,21 @@ def _three_groups() -> StatsResult:
 
 
 def _given_axes(kind: str) -> Axes:
+    # 1.6 and 1.7 in high: too short for the three levels at full spacing, so the
+    # levels are pushed closer together. (The review's 10 x 4 and 9 x 3.5 in
+    # figures now fit them: the levels are spaced in pixels, not by 7% of the
+    # data range.)
     if kind == "add_axes":
-        figure = Figure(figsize=(10, 4))
-        return figure.add_axes((0.08, 0.2, 0.9, 0.75))
-    figure = Figure(figsize=(9, 3.5), layout="constrained")
+        figure = Figure(figsize=(10, 2.6))
+        return figure.add_axes((0.08, 0.3, 0.9, 0.62))
+    figure = Figure(figsize=(9, 2.4), layout="constrained")
     return figure.add_subplot()
 
 
 @pytest.mark.parametrize("kind", ["add_axes", "constrained"])
 def test_bracket_label_drawn_across_another_bracket_is_reported(kind: str) -> None:
-    # A short Axes: the label of b-c sits on the bar of a-c. (With matplotlib 3.8
-    # the label of a-b crosses that bar too; the layout differs by a pixel.)
+    # A short Axes: the label of b-c sits on the bar of a-c. (The label of a-b
+    # may cross that bar too; a pixel decides.)
     fig = betweenstats(_three_groups(), ax=_given_axes(kind))
     (issue,) = [i for i in fig.check() if i.code == "label_overlap"]
     assert issue.severity == "warning"
@@ -334,11 +341,105 @@ def test_bracket_crossing_needs_a_line_not_its_box(
         assert found == []
 
 
+def _move_box(fig: StatsFigure, label: Text, **edges: float) -> Bbox:
+    """Move ``label`` so its drawn box has the given edges (pixels): x0, x1, cx
+    for the horizontal and y0, y1 for the vertical; returns the drawn box."""
+    ax = fig.axes["main"]
+    renderer = fig.figure.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+    box = label.get_window_extent(renderer)
+    dx = dy = 0.0
+    if "x0" in edges:
+        dx = edges["x0"] - box.x0
+    if "x1" in edges:
+        dx = edges["x1"] - box.x1
+    if "cx" in edges:
+        dx = edges["cx"] - (box.x0 + box.x1) / 2
+    if "y0" in edges:
+        dy = edges["y0"] - box.y0
+    if "y1" in edges:
+        dy = edges["y1"] - box.y1
+    x, y = ax.transData.transform(label.get_position())
+    label.set_position(tuple(ax.transData.inverted().transform((x + dx, y + dy))))
+    fig.draw()
+    return label.get_window_extent(renderer)
+
+
+def _leg_stroke(fig: StatsFigure, line: Line2D, end: int) -> Bbox:
+    """The drawn stroke of a bracket's left (end 0) or right (end 1) leg, caps in."""
+    xy = line.get_transform().transform(np.asarray(line.get_xydata(), dtype=float))
+    half = float(line.get_linewidth()) * fig.figure.dpi / 72 / 2
+    (xa, ya), (xb, yb) = (xy[0], xy[1]) if end == 0 else (xy[3], xy[2])
+    return Bbox.from_extents(
+        min(xa, xb) - half, min(ya, yb) - half, max(xa, xb) + half, max(ya, yb) + half
+    )
+
+
+@pytest.mark.parametrize("x", [0.0, 2.0])  # a-c's left and right leg
+@pytest.mark.parametrize(("depth", "crosses"), [(0.3, False), (1.0, True)])
+def test_bracket_crossing_allows_subpixel_contact(
+    x: float, depth: float, crosses: bool
+) -> None:
+    # The box of label a-b, centered on a leg of a-c, reaches ``depth`` pixels
+    # into the leg's projecting cap from below.
+    fig = _two_brackets(x, 7.0)
+    (label, _, _), (_, outer, _) = fig.brackets
+    leg = _leg_stroke(fig, outer, 0 if x == 0.0 else 1)
+    box = _move_box(fig, label, cx=(leg.x0 + leg.x1) / 2, y1=leg.y0 + depth)
+    assert box.y1 - leg.y0 == pytest.approx(depth, abs=0.02)
+    found = [i.message for i in figure_issues(fig) if i.code == "label_overlap"]
+    reach, _ = stroke_reach(fig)
+    assert bool(found) is crosses is (reach > 0.5)
+
+
+@pytest.mark.parametrize("dpi", [72, 100, 200])
+@pytest.mark.parametrize(
+    ("where", "depth", "crosses"),
+    [
+        ("tip", 0.3, False),  # box top 0.3 px into the leg's cap: contact
+        ("tip", 1.0, True),  # one pixel into the leg: drawn across it
+        ("tip", 3.0, True),
+        ("side", 0.3, False),  # box edge 0.3 px into the leg's side
+        ("side", 1.0, True),  # one pixel into the leg's side
+    ],
+)
+def test_a_given_axes_reports_a_label_across_a_leg(
+    dpi: int, where: str, depth: float, crosses: bool
+) -> None:
+    # A tall Axes: nothing crosses. Then the label of b-c (lowest level) is moved
+    # onto the right leg of a-c (the level above), as deep as given, and check()
+    # must agree with the dense sampling of the drawn line.
+    figure = Figure(figsize=(10.0, 7.0), dpi=dpi)
+    FigureCanvasAgg(figure)
+    fig = betweenstats(_three_groups(), ax=figure.add_subplot())
+    assert figure_codes(fig) == []
+    assert len(fig.brackets) == 3
+    (label,) = [t for t, _, n in fig.brackets if n == "the bracket of 'b' and 'c'"]
+    (outer,) = [ln for _, ln, n in fig.brackets if n == "the bracket of 'a' and 'c'"]
+    leg = _leg_stroke(fig, outer, 1)
+    if where == "tip":
+        box = _move_box(fig, label, cx=(leg.x0 + leg.x1) / 2, y1=leg.y0 + depth)
+        assert box.y1 - leg.y0 == pytest.approx(depth, abs=0.02)
+    else:
+        # Just below the bar of a-c, the box's right edge in the leg's left side.
+        box = _move_box(fig, label, x1=leg.x0 + depth, y1=leg.y1 - leg.width - 1.0)
+        assert box.x1 - leg.x0 == pytest.approx(depth, abs=0.02)
+    reach, _ = stroke_reach(fig)
+    found = [i.message for i in fig.check() if i.code == "label_overlap"]
+    assert bool(found) is crosses is (reach > 0.5)
+    if crosses:
+        assert len(found) == 1
+        assert "label of 'b' and 'c'" in found[0]
+        assert "crosses the bracket of 'a' and 'c'" in found[0]
+
+
 def test_a_tall_given_axes_fits_the_brackets() -> None:
     _, (ax,) = _user_axes(10.0, 7.0)
     fig = betweenstats(_three_groups(), ax=ax)
     assert len(fig.brackets) == 3
     assert figure_codes(fig) == []
+    deepest, clearance = stroke_reach(fig)
+    assert deepest == 0.0
+    assert clearance >= 3.0  # a label pad and half a line width at 100 dpi
 
 
 # --------------------------------------------------------------------------- #
@@ -456,6 +557,105 @@ def test_artist_args_are_checked_before_drawing(
         betweenstats(_plant(), layers=layers, **{name: {"bogus": 1}})  # pyright: ignore[reportArgumentType]
     with pytest.raises(ValueError, match=f"{name} has a value matplotlib rejects"):
         betweenstats(_plant(), layers=layers, **{name: {"facecolor": "notacolor"}})  # pyright: ignore[reportArgumentType]
+
+
+# Values that Artist.set() stores without checking; matplotlib rejects them only
+# when it draws (Agg) or writes a vector file (PDF). Found by trying bad values for
+# every settable property of the three artist classes.
+_REJECTED_WHEN_DRAWN = [
+    ("point_args", {"linewidth": "bad"}),
+    ("point_args", {"linewidths": "bad"}),
+    ("point_args", {"lw": (1, "a")}),
+    ("point_args", {"linewidths": 1e9}),
+    ("point_args", {"linewidth": float("nan")}),
+    ("point_args", {"linewidths": 1.0, "linestyle": {}}),
+    ("boxplot_args", {"linewidth": float("nan")}),
+    ("violin_args", {"lw": float("nan")}),
+]
+
+
+@pytest.mark.parametrize("own", [True, False], ids=["own-figure", "ax"])
+@pytest.mark.parametrize(
+    ("name", "args"),
+    _REJECTED_WHEN_DRAWN,
+    ids=[f"{n}-{'-'.join(a)}" for n, a in _REJECTED_WHEN_DRAWN],
+)
+def test_a_value_rejected_only_when_drawn_raises_at_the_call(
+    name: str, args: dict[str, object], own: bool
+) -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    ax.plot([0.0, 1.0], [0.0, 1.0])
+    before = _state(ax)
+    with pytest.raises(ValueError, match=f"^{name} has a value matplotlib rejects"):
+        betweenstats(_plant(), ax=None if own else ax, **{name: args})  # pyright: ignore[reportArgumentType]
+    assert _state(ax) == before
+    figure.savefig(io.BytesIO(), format="pdf")  # the user's figure still saves
+
+
+@pytest.mark.parametrize("name", ["point_args", "boxplot_args", "violin_args"])
+def test_a_wrongly_typed_value_of_a_known_property_is_a_rejected_value(
+    name: str,
+) -> None:
+    with pytest.raises(ValueError, match=f"^{name} has a value matplotlib rejects"):
+        betweenstats(_plant(), **{name: {"alpha": "x"}})  # pyright: ignore[reportArgumentType]
+    with pytest.raises(TypeError, match=f"^{name} has a property") as info:
+        betweenstats(_plant(), **{name: {"alpah": 0.5}})  # pyright: ignore[reportArgumentType]
+    assert "'alpah'" in str(info.value)
+    assert "Did you mean 'alpha'?" in str(info.value)
+
+
+def test_artist_args_that_draw_are_accepted_with_ax() -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    fig = betweenstats(
+        _plant(),
+        ax=ax,
+        point_args={"linewidths": 0.5, "edgecolor": "black", "sizes": [20.0]},
+        boxplot_args={"linewidth": 1.5, "linestyle": "--", "hatch": "//"},
+        violin_args={"alpha": 0.4, "lw": 2.0},
+    )
+    assert np.asarray(_points(fig, 0).get_linewidth()).tolist() == [0.5]
+    assert figure_codes(fig) == []
+    figure.savefig(io.BytesIO(), format="svg")
+
+
+def test_texts_the_user_drew_before_keep_their_font() -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    user_title = ax.set_title("My panel", fontfamily="serif", loc="right")
+    note = ax.annotate(
+        "note", (0.02, 0.5), xycoords="axes fraction", fontfamily="monospace"
+    )
+    fig = betweenstats(_plant(), ax=ax, title="Plant growth")
+    assert user_title.get_fontfamily() == ["serif"]
+    assert note.get_fontfamily() == ["monospace"]
+    assert user_title.get_text() == "My panel"
+    # Every text inferplot drew is DejaVu Sans, and check() measures them.
+    canvas = figure.canvas
+    assert isinstance(canvas, FigureCanvasAgg)
+    canvas.draw()
+    own = [
+        *ax.xaxis.findobj(Text),
+        *ax.yaxis.findobj(Text),
+        *(t for t in ax.texts if t is not note),
+    ]
+    title = by_gid(fig, "title")  # the title inferplot set (left)
+    assert isinstance(title, Text)
+    assert title.get_text() == "Plant growth"
+    own = [t for t in [*own, title] if t.get_text()]
+    assert len(own) > 10
+    for text in own:
+        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_math_fontfamily() == "dejavusans", text.get_text()
+    assert figure_codes(fig) == []
+
+
+def test_check_still_reports_inferplots_texts_beside_user_texts() -> None:
+    _, (ax,) = _user_axes(2.5, 2.0)
+    ax.set_title("Mine", fontfamily="serif", loc="right")
+    fig = betweenstats(_plant(), ax=ax)
+    codes = figure_codes(fig)
+    assert "text_clipped" in codes or "label_overlap" in codes
+    message = " ".join(i.message for i in fig.check() if i.code in codes)
+    assert "subtitle" in message
 
 
 def _state(ax: Axes) -> tuple[object, ...]:

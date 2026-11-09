@@ -78,14 +78,16 @@ confirmed 9 problems. The four documentation ones are fixed on main (a broken SP
 table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 of
 106, a stale large-|t| note). Open:
 
-- [ ] `point_args` values matplotlib checks only when drawing (`{'linewidth': 'bad'}`)
+- [x] `point_args` values matplotlib checks only when drawing (`{'linewidth': 'bad'}`)
   pass the pre-draw check: with `ax=` the call draws into the user's Axes and a later
-  `savefig` fails; without it the user gets matplotlib's raw message (SPEC §2; major)
-- [ ] a known property with a wrongly typed value (`alpha='x'`) is reported as an
+  `savefig` fails; without it the user gets matplotlib's raw message (SPEC §2; major).
+  Fixed: each artist dict styles a scratch artist that is drawn and written as SVG and
+  PDF first; all 603 bad values tried are refused as `ValueError`
+- [x] a known property with a wrongly typed value (`alpha='x'`) is reported as an
   unknown property, `TypeError` instead of `ValueError` (SPEC §2)
-- [ ] `ip.render.betweenstats(df, x='g', y='y')` suggests `ax='g'` instead of saying
+- [x] `ip.render.betweenstats(df, x='g', y='y')` suggests `ax='g'` instead of saying
   it draws the result of `ip.analyze.betweenstats`
-- [ ] `ip.analyze.betweenstats(df, 'g', 'y', ax=None)` suggests `x=None`, which the
+- [x] `ip.analyze.betweenstats(df, 'g', 'y', ax=None)` suggests `x=None`, which the
   call already gives
 - [ ] `fig.check()` reports sub-pixel contact (under 0.5 px) between a bracket leg and
   a label as a crossing on large figures
@@ -97,9 +99,15 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 
-- [ ] nonparametric (Mann-Whitney / Kruskal-Wallis, Dunn)
+- [ ] nonparametric (Mann-Whitney / Kruskal-Wallis, Dunn). Statistics layer done
+  (`inferplot.stats.nonparametric`): every nonparametric fixture reproduced, closed-form
+  values within 1.9e-14 relative, the rank epsilon squared lower bound within 1.21
+  Monte Carlo SDs of the 20,000-resample reference; analysis, text and rendering next
 - [ ] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes with bootstrap CIs)
-- [ ] bayes (two-group JZS Bayes factor; MAP centrality)
+- [ ] bayes (two-group JZS Bayes factor; MAP centrality). MAP centrality done
+  (`inferplot.stats.map_estimate`): all 30 MAP labels of the 10 bayes fixtures on
+  ggstatsplot's grid point; v0.1 behaviour decided (D41); analysis, text and rendering
+  next
 
 ## Phase 3 — withinstats, all types
 
@@ -137,8 +145,9 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 - Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
   ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
   figure). Figures with several bracket levels are tall (three levels 7.3 in,
-  InsectSprays 8.6 in), because a 9 pt label must fit in the 7% level step. With `ax=`
-  the renderer sets DejaVu Sans on every text of that Axes, including the user's.
+  InsectSprays 8.6 in), because a 9 pt label must fit in the 7% level step. With `ax=`,
+  inferplot sets its font only on the axis texts and the texts it draws; the user's own
+  texts keep theirs.
 - Negative zero in number formatting is not pinned (R received the probe's -0 as +0);
   inferplot prints "-0.00" as C `sprintf` does.
 - Wide dynamic range: one constant group with a value of at least about 1e154 times the
@@ -171,8 +180,17 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 - AKP: WRS2's scaling constant differs from the exact winsorized-normal value by
   1.2e-9 relative (review measurement), which is above the 1e-10 closed-form tolerance.
   Phase 2 must match WRS2's constant or register a measured tolerance.
-- MAP centrality: the oracle records the values; the grid behind SPEC §10's "one grid
-  step" tolerance is bayestestR's 2^10-point density (help page), to confirm in Phase 2.
+- MAP centrality: reproduced at the same grid point on all 30 fixture labels
+  (`MAP_CENTRALITY`, 0 steps), by matching the fixtures. Not yet pinned (every fixture
+  value is positive, n <= 93): bins of negative values (truncation toward zero
+  assumed), R's binning above n = 500, the tolerance after the lower search end is
+  enlarged, integer bins once |x| exceeds 2^31 bin widths, and what bayestestR does
+  when bw.SJ has no answer (n = 2, ties, zero IQR; inferplot raises `ValueError`).
+  probe-map settles these.
+- Rank epsilon squared: the resampling scheme (within groups) and percentile rule are
+  settled by Monte Carlo agreement and the boot.ci help page, not by exact replay. A
+  resample with every value tied raises; R's handling of it is unverified until a
+  heavy-ties fixture arrives.
 - ggstatsplot's own bootstrap CIs use 100 resamples, so they differ from the 20,000-
   resample references by Monte Carlo noise; parity tests compare against the
   references (SPEC §10, D29), not against ggstatsplot's 100-resample values.

@@ -40,13 +40,12 @@ from inferplot.stats.descriptive import (
     variance,
 )
 from inferplot.stats.noncentral import check_conf_level
+from inferplot.stats.nonparametric import BOOTSTRAP_RESAMPLES, BootstrapEffectSizeCI
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import TINY, satterthwaite_df
 
 __all__ = [
-    "BOOTSTRAP_RESAMPLES",
     "SMM_ROWS",
-    "BootstrapEffectSize",
     "LinconPair",
     "TrimmedMeansAnova",
     "YuenT",
@@ -60,9 +59,6 @@ __all__ = [
     "winsorized_variance",
     "yuen_t",
 ]
-
-BOOTSTRAP_RESAMPLES: Final = 2000
-"""Resamples of every robust bootstrap (ggstatsplot uses 100; SPEC.md section 5)."""
 
 # Upper bound on the values one bootstrap chunk draws (2^22 doubles, 32 MiB).
 _CHUNK_VALUES: Final = 1 << 22
@@ -93,18 +89,6 @@ class TrimmedMeansAnova:
     df1: float
     df2: float
     p_value: float
-
-
-@dataclass(frozen=True, slots=True)
-class BootstrapEffectSize:
-    """An effect size with a percentile bootstrap CI and the seed that drew it."""
-
-    estimate: float
-    conf_low: float
-    conf_high: float
-    conf_level: float
-    resamples: int
-    seed: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,7 +653,7 @@ def akp_effect(
     tr: float = 0.2,
     conf_level: float = 0.95,
     seed: int = 0,
-) -> BootstrapEffectSize:
+) -> BootstrapEffectSizeCI:
     """AKP robust standardized difference with a percentile bootstrap CI.
 
     Algina, Keselman & Penfield (2005, Psychological Methods 10: 317-328):
@@ -719,13 +703,14 @@ def akp_effect(
     values = _replicates(rng, (x, y), (x.size, y.size), deltas)
     _check_replicates(values, method)
     low, high = _floor_percentile_bounds(_sorted(values), level)
-    return BootstrapEffectSize(
+    return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
         conf_high=high,
         conf_level=level,
-        resamples=BOOTSTRAP_RESAMPLES,
+        sidedness="two-sided",
         seed=rng_seed,
+        resamples=BOOTSTRAP_RESAMPLES,
     )
 
 
@@ -735,7 +720,7 @@ def explanatory_effect(
     tr: float = 0.2,
     conf_level: float = 0.95,
     seed: int = 0,
-) -> BootstrapEffectSize:
+) -> BootstrapEffectSizeCI:
     """Wilcox & Tian's (2011, Journal of Applied Statistics 38: 1359-1368)
     explanatory measure of effect size xi with a percentile bootstrap CI, as
     ``WRS2::t1way`` reports it (``effsize``, ``effsize_ci``).
@@ -812,11 +797,12 @@ def explanatory_effect(
     else:
         estimate = float(np.median(values))
     low, high = _rounded_percentile_bounds(values, level)
-    return BootstrapEffectSize(
+    return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
         conf_high=high,
         conf_level=level,
-        resamples=BOOTSTRAP_RESAMPLES,
+        sidedness="two-sided",
         seed=rng_seed,
+        resamples=BOOTSTRAP_RESAMPLES,
     )

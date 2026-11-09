@@ -420,6 +420,119 @@ def test_real_render_function_given_data_says_it_draws_a_result() -> None:
     assert "keyword-only" not in text
 
 
+def _frame() -> pd.DataFrame:
+    return pd.DataFrame({"g": list("aabbcc") * 2, "y": range(12)})
+
+
+def test_real_render_function_given_data_by_keyword_says_it_draws_a_result() -> None:
+    # Data-style keywords are reported as data given to a drawing function, never
+    # as a misspelled drawing keyword (x= is not ax=).
+    from inferplot import render
+
+    draw = cast("Callable[..., object]", render.betweenstats)
+    frame = _frame()
+    expected = (
+        "render.betweenstats() draws the result of "
+        "ip.analyze.betweenstats(data, x, y); got a pandas.DataFrame. Compute it "
+        "first with result = ip.analyze.betweenstats(data, x, y, ...) and pass "
+        "result, or use ip.betweenstats(data, x, y, ...) to analyze and draw in one "
+        "call."
+    )
+    for thunk in (
+        lambda: draw(frame, x="g", y="y"),
+        lambda: draw(data=frame, x="g", y="y"),
+        lambda: draw(frame, y="y"),
+        lambda: draw(frame, "g", "y", pairwise_display="all"),
+        lambda: draw(frame, pointargs={}),
+    ):
+        assert message(TypeError, thunk) == expected
+    text = message(TypeError, lambda: draw(x="g", y="y"))
+    assert text.startswith(
+        "render.betweenstats() draws the result of ip.analyze.betweenstats(data, x, "
+        "y); got x='g', y='y' and no result."
+    )
+
+
+def test_analysis_keywords_given_to_a_drawing_function_point_to_the_analysis() -> None:
+    from inferplot import analyze, render
+
+    draw = cast("Callable[..., object]", render.betweenstats)
+    result = analyze.betweenstats(_frame(), "g", "y")
+    text = message(TypeError, lambda: draw(result, x="g"))
+    assert text == (
+        "x= is an argument of the analysis, ip.analyze.betweenstats(data, x, y, "
+        "...); render.betweenstats() draws a result that already holds it. Pass x= "
+        "to ip.analyze.betweenstats() or ip.betweenstats() and draw that result. "
+        "Remove x=."
+    )
+    for name in ("pairwise_display", "conf_level", "seed", "data", "order"):
+        bad = {name: 1}
+        text = message(TypeError, lambda bad=bad: draw(result, **bad))
+        assert text.startswith(f"{name}= is an argument of the analysis"), text
+    # A real typo of a drawing keyword still gets its did-you-mean.
+    text = message(TypeError, lambda: draw(result, pointargs={}))
+    assert text.endswith("Did you mean point_args={}?")
+
+
+def test_drawing_keywords_given_to_an_analysis_function_point_to_the_drawing() -> None:
+    from inferplot import analyze
+
+    analysis = cast("Callable[..., object]", analyze.betweenstats)
+    frame = _frame()
+    text = message(TypeError, lambda: analysis(frame, "g", "y", ax=None))
+    assert text == (
+        "ax= is a drawing option of ip.betweenstats(...) and "
+        "ip.render.betweenstats(result, ...); ip.analyze.betweenstats() only "
+        "computes the statistics. Pass ax= when drawing, or remove it."
+    )
+    for name in (
+        "palette",
+        "layers",
+        "title",
+        "subtitle",
+        "caption",
+        "xlab",
+        "ylab",
+        "point_args",
+        "boxplot_args",
+        "violin_args",
+        "centrality_plotting",
+    ):
+        bad = {name: None}
+        text = message(TypeError, lambda bad=bad: analysis(frame, "g", "y", **bad))
+        assert text.startswith(f"{name}= is a drawing option of ip.betweenstats("), text
+
+
+def test_drawing_and_analysis_keyword_sets_cover_the_real_signatures() -> None:
+    import inferplot as ip
+
+    def names(fn: Callable[..., object]) -> set[str]:
+        return set(inspect.signature(fn).parameters)
+
+    analysis = names(ip.analyze.betweenstats)
+    drawing = names(ip.render.betweenstats) - {"result"}
+    assert names(ip.betweenstats) == analysis | drawing
+    assert drawing - analysis <= v.DRAWING_KEYWORDS["betweenstats"]
+    assert analysis - drawing <= v.ANALYSIS_KEYWORDS
+
+
+def test_did_you_mean_never_suggests_an_argument_the_call_fills() -> None:
+    # x is given positionally, so ax= must not become "Did you mean x=None?".
+    text = message(TypeError, lambda: analysis_call(ax=None))
+    assert "x=None" not in text
+    assert "drawing option" in text
+    # Nor a keyword given in the same call.
+    loose = cast("Callable[..., object]", ANALYSIS)
+    text = message(TypeError, lambda: loose("frame", "g", "y", seeds=1, seed=2))
+    assert "Did you mean" not in text
+    # A snake_case spelling of an argument the call already gives says so.
+    text = message(TypeError, lambda: loose("frame", "g", "y", X="g"))
+    assert text == (
+        "_analysis() got an unexpected keyword argument 'X', and x is already given. "
+        "Remove X=."
+    )
+
+
 @pytest.mark.parametrize(
     ("name", "phrase"),
     [
@@ -531,8 +644,9 @@ def test_first_bad_keyword_in_call_order_is_reported() -> None:
 def test_long_values_are_named_by_type() -> None:
     frame = pd.DataFrame({"a": range(100)})
     with pytest.raises(TypeError) as info:
-        call(dataa=frame)
-    assert "data=a pandas.DataFrame?" in str(info.value)
+        # (data is given positionally, so dataa= would not suggest it.)
+        call(palete=frame)
+    assert "palette=a pandas.DataFrame?" in str(info.value)
     assert "\n" not in str(info.value)
 
 

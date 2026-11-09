@@ -44,9 +44,15 @@ class MonteCarloTolerance:
 
 @dataclass(frozen=True)
 class GridTolerance:
-    """Quantities read off a grid: within ``steps`` grid steps."""
+    """Quantities read off a grid: grid points at most ``steps`` apart.
 
-    steps: float
+    Both values are located on the grid ``origin + i * step``; the oracle's must lie
+    on it to within ``on_grid`` steps (the fixtures store 15 significant digits),
+    and the two grid indices may differ by at most ``steps``.
+    """
+
+    steps: int
+    on_grid: float
     reason: str
 
 
@@ -219,8 +225,24 @@ BOOTSTRAP = MonteCarloTolerance(
 )
 
 MAP_CENTRALITY = GridTolerance(
-    steps=1.0,
-    reason="The MAP estimate is the peak of a kernel density evaluated on a grid.",
+    steps=0,
+    on_grid=1e-6,
+    reason=(
+        "The MAP estimate (bayestestR::map_estimate) is the peak of a kernel density "
+        "evaluated on 1,024 points from min(x) to max(x), so it is a grid point and "
+        "parity means the same grid point. Measured: inferplot.stats.map_estimate "
+        "puts all 30 MAP labels of the 10 ggbetweenstats bayes fixtures on the "
+        "grid point ggstatsplot chose (0 steps; the fixture values sit within "
+        "1.3e-11 steps of their grid points, the rounding of their 15 significant "
+        "digits, hence on_grid 1e-6). Zero steps separates the method variants, "
+        "each of which moves some of the 30 labels (count, largest move): bins "
+        "anchored at min(x) instead of zero (3, 1 step), pilot constants 1.241 "
+        "and 1.230 instead of 1.24 and 1.23 (3, 3), a bin width of range / 1000 "
+        "instead of 1.01 x range / 1000 (1, 13), netlib's Fortran zeroin instead "
+        "of its C translation (2, 2), hmax constant 1.06 instead of 1.144 (3, 2), "
+        "an FFT grid spacing of 2 (up - lo) / 2047 (13, 2). SPEC.md section 10's "
+        "starting value was one step, which the first two variants would pass."
+    ),
 )
 
 SUBTITLE_TEXT = (
@@ -312,14 +334,31 @@ def assert_within_monte_carlo(
 
 
 def assert_within_grid(
-    actual: float, expected: float, step: float, *, what: str
+    actual: float, expected: float, *, origin: float, step: float, what: str
 ) -> None:
-    """Assert a grid-based quantity is within ``MAP_CENTRALITY.steps`` grid steps."""
-    if abs(actual - expected) <= MAP_CENTRALITY.steps * step:
+    """Assert two values on the grid ``origin + i * step`` are at most
+    ``MAP_CENTRALITY.steps`` grid points apart (the oracle's must lie on the grid)."""
+    if not (math.isfinite(step) and step > 0.0):
+        raise ValueError(f"grid step must be finite and > 0, got {step!r}")
+    tol = MAP_CENTRALITY
+    at_expected = (expected - origin) / step
+    if abs(at_expected - round(at_expected)) > tol.on_grid:
+        raise AssertionError(
+            f"{what}: oracle {expected!r} is not on the grid {origin!r} + i x "
+            f"{step!r} (position {at_expected!r})"
+        )
+    at_actual = (actual - origin) / step
+    if abs(at_actual - round(at_actual)) > tol.on_grid:
+        raise AssertionError(
+            f"{what}: {actual!r} is not on the grid {origin!r} + i x {step!r}"
+        )
+    apart = abs(round(at_actual) - round(at_expected))
+    if apart <= tol.steps:
         return
     raise AssertionError(
-        f"{what}: got {actual!r}, oracle {expected!r}; more than "
-        f"{MAP_CENTRALITY.steps:g} grid step(s) of {step:.3g} apart"
+        f"{what}: got {actual!r} (grid point {round(at_actual)}), oracle "
+        f"{expected!r} (grid point {round(at_expected)}); {apart} grid step(s) "
+        f"of {step:.3g} apart, more than {tol.steps}"
     )
 
 

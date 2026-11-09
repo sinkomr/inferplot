@@ -8,6 +8,7 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.density import MapEstimate, bw_sj, map_estimate
 from inferplot.stats.descriptive import (
     common_scale,
     mean,
@@ -22,6 +23,18 @@ from inferplot.stats.effect_sizes import (
     partial_omega_squared,
 )
 from inferplot.stats.noncentral import f_ncp_bound, t_ncp_interval
+from inferplot.stats.nonparametric import (
+    BOOTSTRAP_RESAMPLES,
+    BootstrapEffectSizeCI,
+    DunnPair,
+    KruskalWallis,
+    MannWhitney,
+    dunn,
+    kruskal_wallis,
+    mann_whitney,
+    rank_biserial,
+    rank_epsilon_squared,
+)
 from inferplot.stats.padjust import P_ADJUST_METHODS, PAdjustMethod, p_adjust
 from inferplot.stats.pairwise import PairResult, games_howell
 from inferplot.stats.parametric import (
@@ -35,8 +48,6 @@ from inferplot.stats.parametric import (
     welch_t,
 )
 from inferplot.stats.robust import (
-    BOOTSTRAP_RESAMPLES,
-    BootstrapEffectSize,
     LinconPair,
     TrimmedMeansAnova,
     YuenT,
@@ -57,9 +68,13 @@ __all__ = [
     "BOOTSTRAP_RESAMPLES",
     "P_ADJUST_METHODS",
     "Alternative",
-    "BootstrapEffectSize",
+    "BootstrapEffectSizeCI",
+    "DunnPair",
     "EffectSizeCI",
+    "KruskalWallis",
     "LinconPair",
+    "MannWhitney",
+    "MapEstimate",
     "PAdjustMethod",
     "PairResult",
     "Sidedness",
@@ -69,7 +84,9 @@ __all__ = [
     "WelchT",
     "YuenT",
     "akp_effect",
+    "bw_sj",
     "common_scale",
+    "dunn",
     "explanatory_effect",
     "f_ncp_bound",
     "games_howell",
@@ -77,10 +94,15 @@ __all__ = [
     "hedges_j",
     "jzs_bf10_two_sample",
     "jzs_log_bf10",
+    "kruskal_wallis",
     "lincon",
+    "mann_whitney",
+    "map_estimate",
     "mean",
     "p_adjust",
     "partial_omega_squared",
+    "rank_biserial",
+    "rank_epsilon_squared",
     "scaled_variance",
     "smm_critical_value",
     "srange_logsf",

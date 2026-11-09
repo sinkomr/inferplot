@@ -1,14 +1,23 @@
 """Where significance brackets go: stacking levels and the y-axis layout.
 
-Pure geometry, no matplotlib. Our own algorithm (rendering rules):
+Pure geometry, no matplotlib. Our own algorithm (rendering rules, D38):
 
 * brackets are processed shortest span first and each takes the lowest level
   above every bracket it encloses at which neither it nor its label comes within
   ``gap`` of another bracket or label on that level;
-* levels are spaced by 7% of the data range, starting above the data and above
-  every centrality label;
-* the y-limits are extended so that every label fits, and the axes are made tall
-  enough (pixels per data unit) that a label never reaches the next level.
+* the bracket stack is laid out in pixels, not in data units: a level is as tall
+  as a bracket's legs, its label, the padding on both sides of the label and the
+  line width, so a label never reaches the legs of the level above at any data
+  range;
+* the first level sits above the data and above every centrality label; the
+  y-limits are extended so that every label fits.
+
+With inferplot's own figure the data region gets a fixed minimum height and the
+Axes grows by exactly what the stack needs. In a given Axes of fixed height the
+stack keeps its full pixel spacing while the data keep that minimum height or
+half of the height left after the subtitle and caption, whichever is less; below
+that the levels are pushed closer together and ``check()`` reports the labels
+that then cross a line. So an Axes as tall as inferplot's own never pushes them.
 """
 
 from __future__ import annotations
@@ -19,18 +28,20 @@ from dataclasses import dataclass
 from typing import Final
 
 __all__ = [
-    "LEVEL_STEP",
-    "TIP",
+    "DATA_PAD",
+    "MIN_DATA_SHARE",
     "Bracket",
     "VerticalLayout",
+    "level_step_px",
     "stack",
     "vertical_layout",
 ]
 
-# Fractions of the data range.
-LEVEL_STEP: Final = 0.07  # between bracket levels (rendering rules)
-TIP: Final = 0.02  # length of a bracket's legs
-DATA_PAD: Final = 0.05  # space below the data and above it when there is no bracket
+DATA_PAD: Final = 0.05  # data range fraction of space below and above the data
+# In a given Axes, the data keep the minimum data height or this share of the
+# height left after the subtitle and caption, whichever is less, before the bracket
+# levels are pushed closer together.
+MIN_DATA_SHARE: Final = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +97,18 @@ def stack(brackets: Sequence[Bracket], *, gap: float) -> tuple[int, ...]:
     return tuple(levels)
 
 
+def level_step_px(
+    *, label_px: float, pad_px: float, tip_px: float, line_px: float
+) -> float:
+    """Pixels between two bracket levels.
+
+    From a bar upwards: ``pad_px`` to its label, the label, ``pad_px`` plus half a
+    line width of clearance, and the legs of the next bracket (``tip_px`` long,
+    their projecting caps half a line width more).
+    """
+    return pad_px + label_px + pad_px + line_px + tip_px
+
+
 @dataclass(frozen=True, slots=True)
 class VerticalLayout:
     """y-limits, bracket level heights and the scale (pixels per data unit)."""
@@ -96,6 +119,8 @@ class VerticalLayout:
     levels: tuple[float, ...]  # y of each bracket level
     tip: float  # leg length in data units
     label_pad: float  # data units between a bracket and its label
+    step_px: float  # pixels between two levels as laid out (full or pushed closer)
+    data_px: float  # pixels of the data region (data, padding, centrality labels)
 
     @property
     def height_px(self) -> float:
@@ -138,71 +163,102 @@ def vertical_layout(
     center_half_px: float,
     label_px: float,
     pad_px: float,
+    tip_px: float,
+    line_px: float,
     top_px: float = 0.0,
     bottom_px: float = 0.0,
     min_height_px: float | None = None,
+    data_height_px: float,
     height_px: float | None = None,
 ) -> VerticalLayout:
     """The y-axis layout for data in [data_min, data_max].
 
     ``centers`` are the centrality values whose labels (``center_half_px`` half
-    height) must stay below the brackets; ``label_px`` is the bracket label height;
-    ``top_px`` / ``bottom_px`` reserve room inside the axes (a subtitle or caption
-    drawn inside a given Axes). Give ``min_height_px`` to choose the axes height
-    (at least that, and tall enough that labels never reach the next level), or
-    ``height_px`` to fit an Axes of fixed height.
+    height) must stay below the brackets; ``label_px`` is the bracket label height,
+    ``pad_px`` the padding around it, ``tip_px`` the leg length and ``line_px`` the
+    bracket line width, all in pixels. ``top_px`` / ``bottom_px`` reserve room
+    inside the axes (a subtitle or caption drawn inside a given Axes).
+
+    The data region (data, padding and centrality labels) gets at least
+    ``data_height_px`` and the bracket levels sit :func:`level_step_px` apart on
+    top of it. Give ``min_height_px`` to choose the axes height (at least that), or
+    ``height_px`` to fit an Axes of fixed height; there the levels keep their full
+    spacing while the data keep ``data_height_px`` or :data:`MIN_DATA_SHARE` of
+    the height left after ``top_px`` and ``bottom_px``, whichever is less.
     """
     r = _data_range(data_min, data_max)
-    step, tip = LEVEL_STEP * r, TIP * r
+    full_step = level_step_px(
+        label_px=label_px, pad_px=pad_px, tip_px=tip_px, line_px=line_px
+    )
     has_centers = len(centers) > 0
     c_hi = max(centers) if has_centers else data_max
     c_lo = min(centers) if has_centers else data_min
     reach = center_half_px + pad_px if has_centers else 0.0
 
-    def y0(ppu: float) -> float:
-        base = data_max + step
-        return max(base, c_hi + reach / ppu + tip) if has_centers else base
+    def ceiling(ppu: float) -> float:
+        """Top of the data region: the data, their padding, centrality labels."""
+        value = data_max + DATA_PAD * r
+        return max(value, c_hi + reach / ppu) if has_centers else value
 
-    def top(ppu: float) -> float:
+    def floor(ppu: float) -> float:
+        value = data_min - DATA_PAD * r
+        return min(value, c_lo - reach / ppu) if has_centers else value
+
+    def y0(ppu: float) -> float:
+        # The legs of the first bracket (with their caps) end at the ceiling.
+        return ceiling(ppu) + (tip_px + line_px / 2) / ppu
+
+    def top(ppu: float, step: float) -> float:
         if n_levels > 0:
-            value = y0(ppu) + (n_levels - 1) * step + (2 * pad_px + label_px) / ppu
+            value = y0(ppu) + ((n_levels - 1) * step + 2 * pad_px + label_px) / ppu
         else:
-            value = data_max + DATA_PAD * r
-            if has_centers:
-                value = max(value, c_hi + reach / ppu)
+            value = ceiling(ppu)
         return value + top_px / ppu
 
     def bottom(ppu: float) -> float:
-        value = data_min - DATA_PAD * r
-        if has_centers:
-            value = min(value, c_lo - reach / ppu)
-        return value - bottom_px / ppu
+        return floor(ppu) - bottom_px / ppu
 
-    def height(ppu: float) -> float:
-        return (top(ppu) - bottom(ppu)) * ppu
+    def height(ppu: float, step: float = full_step) -> float:
+        return (top(ppu, step) - bottom(ppu)) * ppu
 
+    def data_px(ppu: float) -> float:
+        return (ceiling(ppu) - floor(ppu)) * ppu
+
+    step = full_step
     if height_px is not None:
+        available = height_px - top_px - bottom_px
+        floor_px = max(min(data_height_px, MIN_DATA_SHARE * available), 1.0)
         found = _solve(height, height_px)
-        # The reserved pixels alone overflow the Axes: give the data half of it and
-        # let check() report what does not fit.
-        ppu = found if found is not None else 0.5 * height_px / (1.2 * r)
+        if found is None or data_px(found) < floor_px * (1 - 1e-9):
+            # The stack at full spacing leaves the data too little room: give the
+            # data their share and push the levels closer together; check()
+            # reports the labels that then cross a line, or do not fit.
+            share = _solve(data_px, floor_px)
+            ppu = share if share is not None else MIN_DATA_SHARE * height_px / r
+            spare = height(ppu, 0.0)
+            per_step = height(ppu, 1.0) - spare
+            step = 0.0
+            if per_step > 0 and height_px > spare:
+                step = min(full_step, (height_px - spare) / per_step)
+        else:
+            ppu = found
     else:
         if min_height_px is None:
             raise ValueError("give min_height_px or height_px")
-        # A label plus its padding must fit between two levels (legs included).
-        need = (2 * pad_px + label_px) / ((LEVEL_STEP - TIP) * r)
-        ppu = need if n_levels > 1 else 0.0
-        found = _solve(height, min_height_px)
-        if found is not None:
-            ppu = max(ppu, found)
-        if ppu <= 0.0:
-            ppu = min_height_px / (1.2 * r)
-    levels = tuple(y0(ppu) + n * step for n in range(n_levels))
+        candidates = [
+            p
+            for p in (_solve(data_px, data_height_px), _solve(height, min_height_px))
+            if p is not None
+        ]
+        ppu = max(candidates) if candidates else data_height_px / (1.2 * r)
+    levels = tuple(y0(ppu) + n * step / ppu for n in range(n_levels))
     return VerticalLayout(
         bottom=bottom(ppu),
-        top=top(ppu),
+        top=top(ppu, step),
         ppu=ppu,
         levels=levels,
-        tip=tip,
+        tip=tip_px / ppu,
         label_pad=pad_px / ppu,
+        step_px=step,
+        data_px=data_px(ppu),
     )
