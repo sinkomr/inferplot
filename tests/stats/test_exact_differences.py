@@ -52,9 +52,10 @@ FloatArray = NDArray[np.float64]
 Exact = Fraction
 
 _U = 2.0**-53
-# Measured worst over every case below: 9.2 units (Hedges' g, where J(df) adds
-# its own rounding), at most 2.0 for every other statistic. Subtracting rounded
-# means was off by up to 27 relative (2.4e17 units) on the same data.
+# Measured worst over every case below: 2.0 units (Welch's t); Hedges' g 1.5 since
+# J(df) is evaluated to a few units (it was 9.2 on macOS and 16.9 on Linux and Windows
+# with J from a difference of lgammas). Subtracting rounded means was off by up to 27
+# relative (2.4e17 units) on the same data.
 _ULPS = 16.0
 
 THIRD = 0.1 + 0.2  # 0.30000000000000004, one ulp above 0.3

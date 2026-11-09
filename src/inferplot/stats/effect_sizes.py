@@ -48,9 +48,17 @@ def hedges_j(df: float) -> float:
     For a = df / 2 >= 15.5 it is evaluated as
     log J = -(a - 1) log1p(-1 / (2a)) - 1/2 + stirlerr(a) - stirlerr(a - 1/2),
     which follows from Stirling's formula with its remainder and keeps full relative
-    accuracy for large df. J(1) = 0 (Gamma(0) is infinite), and so is J for df <= 1,
-    where the ratio is not defined; R's ``exp(lgamma(.) - ...)`` also gives 0 at
-    df = 1.
+    accuracy for large df. Below, a is shifted up by m whole steps with
+    Gamma(x + 1) = x Gamma(x):
+    log J(2a) = log J(2(a + m)) + log1p(m / a) / 2 + sum_k log1p(-1 / (2 (a + k))),
+    summed with ``math.fsum``. The terms nearly cancel, so log J keeps its absolute
+    accuracy and J its relative accuracy; ``exp(lgamma(a) - lgamma(a - 1/2) - ...)``
+    loses about |lgamma| units in the last place, and differently on each platform's
+    libm. Measured against 40-digit mpmath: at most 5.3 units of 2^-53 for df from 1.1
+    to 1e6 (the lgamma difference lost up to 86 below df 31), 1.5 from df 31 on; the
+    error grows with |log J| as df falls to 1 (9.4 units at df 1.0001).
+    J(1) = 0 (Gamma(0) is infinite), and so is J for df <= 1, where the ratio is not
+    defined; R's ``exp(lgamma(.) - ...)`` also gives 0 at df = 1.
     """
     df = float(df)
     if math.isnan(df) or df <= 0.0:
@@ -60,10 +68,20 @@ def hedges_j(df: float) -> float:
     if df <= 1.0:
         return 0.0
     a = 0.5 * df
-    if a < _STIRLING_FROM:
-        return math.exp(math.lgamma(a) - 0.5 * math.log(a) - math.lgamma(a - 0.5))
-    log_j = -(a - 1.0) * math.log1p(-0.5 / a) - 0.5 + stirlerr(a) - stirlerr(a - 0.5)
-    return math.exp(log_j)
+    if a >= _STIRLING_FROM:
+        return math.exp(_log_j_stirling(a))
+    steps = math.ceil(_STIRLING_FROM - a)
+    terms = [_log_j_stirling(a + steps), 0.5 * math.log1p(steps / a)]
+    for k in range(steps):
+        x = a + k
+        # log((x - 1/2) / x); below x = 1, x - 1/2 is exact and log1p(-1/(2x)) is not.
+        terms.append(math.log1p(-0.5 / x) if x >= 1.0 else math.log((x - 0.5) / x))
+    return math.exp(math.fsum(terms))
+
+
+def _log_j_stirling(a: float) -> float:
+    """log J(2a) for a >= 15.5, from Stirling's formula with its remainder."""
+    return -(a - 1.0) * math.log1p(-0.5 / a) - 0.5 + stirlerr(a) - stirlerr(a - 0.5)
 
 
 def hedges_g(

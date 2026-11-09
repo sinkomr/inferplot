@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 import math
 import time
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -39,6 +40,27 @@ def test_hedges_j_large_df(df: float) -> None:
     # rounding of J, 1.1e-16 absolute (1.5e-6 relative at df = 1e10).
     ratio = (1.0 - hedges_j(df)) * (4.0 * df - 1.0) / 3.0
     assert ratio == pytest.approx(1.0, abs=1.0 / (12.0 * df) + 1e-5 * (df > 1e8))
+
+
+@pytest.mark.parametrize("df", range(2, 61))
+def test_hedges_j_at_whole_df(df: int) -> None:
+    # Closed forms from Gamma at whole and half-whole arguments: J is a rational
+    # times sqrt(pi) or 1 / sqrt(pi) over a square root, so the reference rounds a
+    # few times only. The bound is 6 units of 2^-53; measured at most 5.3 against
+    # 40-digit mpmath for df 1.1 to 1e6 (the lgamma difference it replaced lost up
+    # to 86 below df 31, differently on each platform's libm).
+    n = df // 2
+    if df % 2 == 0:  # a = n: Gamma(n) / (sqrt(n) Gamma(n - 1/2))
+        ratio = Fraction(
+            math.factorial(n - 1) ** 2 * 4 ** (n - 1), math.factorial(2 * n - 2)
+        )
+        want = float(ratio) / math.sqrt(math.pi * n)
+    else:  # a = n + 1/2: Gamma(n + 1/2) / (sqrt(n + 1/2) Gamma(n))
+        ratio = Fraction(
+            math.factorial(2 * n), 4**n * math.factorial(n) * math.factorial(n - 1)
+        )
+        want = float(ratio) * math.sqrt(math.pi / (n + 0.5))
+    assert abs(hedges_j(float(df)) / want - 1.0) <= 6 * 2.0**-53, df
 
 
 def test_hedges_j_limits() -> None:
