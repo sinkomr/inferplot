@@ -27,11 +27,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     env:
-      # R links OpenBLAS, which picks its kernels by the runner's CPU and splits work
-      # across threads; BayesFactor's Bayes ANOVA then differed in the last digits
-      # between runners, and its posterior sampler amplified that (Phase 2 run
-      # 42564644835). One thread and one kernel family make the arithmetic the same on
-      # every x86-64 runner GitHub uses.
+      # R links OpenBLAS, which picks its kernels by the runner's CPU. BayesFactor's
+      # Bayes ANOVA depends on them in the last digits, and its posterior sampler can
+      # amplify that to the printed digits: the Phase 0 and Phase 1 runs gave other
+      # values for 9 fixtures than three Phase 2 runs on AMD EPYC 9V74 runners without
+      # AVX-512, unpinned and pinned alike, also with those cases run alone. Haswell
+      # kernels run on every x86-64 runner GitHub uses, so pinning them (and one
+      # thread) makes the arithmetic the same whatever runner the job gets.
       OPENBLAS_NUM_THREADS: "1"
       OPENBLAS_CORETYPE: "Haswell"
     steps:
@@ -108,6 +110,8 @@ jobs:
         run: |
           lscpu
           Rscript -e 'print(La_library()); print(extSoftVersion()[["BLAS"]]); print(sessionInfo())'
+          # OpenBLAS names the kernel family it uses ("Core: ...").
+          OPENBLAS_VERBOSE=2 Rscript -e 'invisible(crossprod(matrix(1, 2, 2)))'
 
       - name: Export R-provided datasets
         run: Rscript oracle/export_datasets.R oracle/datasets
@@ -118,9 +122,6 @@ jobs:
           git diff --exit-code --stat -- oracle/datasets
 
       - name: Generate fixtures
-        env:
-          # Temporary experiment: these cases alone in a fresh session.
-          ORACLE_SUBSET: '^ggbetweenstats-(edge_k5|bugs_long|InsectSprays)-(parametric|bayes)$'
         run: Rscript oracle/generate.R oracle/datasets oracle/out
 
       - name: Upload fixtures
