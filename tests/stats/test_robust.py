@@ -495,13 +495,15 @@ def test_p_values_are_accurate_where_one_minus_cdf_is_zero() -> None:
     anova = trimmed_means_anova([setosa, versicolor, virginica])
     assert_close("closed_form", anova.f, 1510.6836909956144, what="t1way F")
     assert_close("closed_form", anova.df2, 45.87618043707867, what="t1way df2")
-    assert 1.0 - float(special.fdtr(anova.df1, anova.df2, anova.f)) == 0.0
+    # 1 - cdf can only be 0 or a multiple of 2^-53 here (which one depends on the
+    # SciPy version: 0 at 1.18, 2^-53 at 1.11), never the true tail.
+    assert 1.0 - float(special.fdtr(anova.df1, anova.df2, anova.f)) <= 2.0**-53
     assert anova.p_value > 0.0
     assert_close("closed_form", anova.p_value, 1.3623605417577488e-42, what="p")
     yuen = yuen_t(setosa, virginica)
     assert_close("closed_form", yuen.t, 45.12516909123536, what="Yuen t")
     assert_close("closed_form", yuen.df, 34.46263814754606, what="Yuen df")
-    assert 2.0 * (1.0 - float(special.stdtr(yuen.df, yuen.t))) == 0.0
+    assert 2.0 * (1.0 - float(special.stdtr(yuen.df, yuen.t))) <= 2.0 * 2.0**-53
     assert yuen.p_value > 0.0
     assert_close("closed_form", yuen.p_value, 3.0399821392506091e-32, what="p")
     pairs = lincon([setosa, versicolor, virginica])
