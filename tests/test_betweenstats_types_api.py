@@ -158,7 +158,11 @@ def test_heavy_ties_check() -> None:
     result = betweenstats(tied, "g", "y", type="np")
     (issue,) = [i for i in result.check() if i.code == "heavy_ties"]
     assert issue.severity == "warning"
-    assert "11 of 12 values" in issue.message
+    assert "4 distinct values among 12, so 8 of them (67%) are ties" in issue.message
+    # Ties are the values beyond the first of each distinct value: here 4 of 10
+    # values sit in a tie, but only 2 (20%) repeat one, which is not heavy.
+    pairs = frame({"a": [1.0, 1, 2, 2, 3], "b": [4.0, 5, 6, 7, 8]})
+    assert "heavy_ties" not in _codes(betweenstats(pairs, "g", "y", type="np"))
     # Only rank-based tests get it.
     assert "heavy_ties" not in _codes(betweenstats(tied, "g", "y"))
     distinct = frame({"a": [1.0, 2, 3, 4, 5], "b": [6.0, 7, 8, 9, 9]})

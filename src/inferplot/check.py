@@ -101,7 +101,8 @@ def _pairs_hidden(result: StatsResult) -> Issue | None:
 
 def _heavy_ties(result: StatsResult) -> Issue | None:
     """Rank-based tests (type nonparametric) on data where more than
-    ``HEAVY_TIES`` of the values share their value with another observation.
+    ``HEAVY_TIES`` of the values are ties: values beyond the first of each
+    distinct value, n minus the number of distinct values (DECISIONS.md D47).
 
     Read from ``result.values``; a result read back without its observations
     (``to_json(include_values=False)``) cannot be checked for ties.
@@ -110,15 +111,15 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
         return None
     counts = Counter(v for level in result.values for v in level)
     total = sum(counts.values())
-    tied = sum(c for c in counts.values() if c > 1)
+    tied = total - len(counts)
     if total == 0 or tied / total <= HEAVY_TIES:
         return None
     return Issue(
         code="heavy_ties",
         severity="warning",
         message=(
-            f"{tied} of {total} values of {result.y!r} ({tied / total:.0%}) share "
-            f"their value with another observation ({len(counts)} distinct values). "
+            f"{result.y!r} has only {len(counts)} distinct values among {total}, so "
+            f"{tied} of them ({tied / total:.0%}) are ties. "
             "The rank tests correct for ties, but with this many their normal "
             "approximations are coarse and the ranks carry less information."
         ),
