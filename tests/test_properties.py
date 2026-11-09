@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from fractions import Fraction
 from typing import Any
 
 import pandas as pd
@@ -175,19 +176,44 @@ def test_backends_give_identical_json(groups: Groups, missing: bool) -> None:
 @settings(max_examples=60)
 @given(
     groups=_groups(),
-    shift=st.floats(min_value=-100.0, max_value=100.0),
-    scale=st.floats(min_value=0.1, max_value=10.0),
+    shift=st.integers(min_value=-800, max_value=800).map(lambda v: v / 8),
+    scale=st.integers(min_value=1, max_value=80).map(lambda v: v / 8),
 )
 def test_effect_sizes_invariant_to_location_and_scale(
     groups: Groups, shift: float, scale: float
 ) -> None:
+    # Multiples of 1/8 shifted by a multiple of 1/8 and scaled by one: every moved
+    # value is exact, so the only differences are the statistics' own roundings
+    # (differences of means are exact, DECISIONS.md, exact differences). With
+    # arbitrary floats the rounding of the moved data is amplified without bound
+    # when the effect is near 0.
     original = betweenstats(_frame(groups), "group", "score")
     moved = [[shift + scale * v for v in values] for values in groups]
+    for values, new in zip(groups, moved, strict=True):
+        assert [Fraction(m) for m in new] == [
+            Fraction(shift) + Fraction(scale) * Fraction(v) for v in values
+        ]
     result = betweenstats(_frame(moved), "group", "score")
     es, reference = result.effect_size, original.effect_size
     assert es.name == reference.name
     assert es.name in {"hedges_g", "partial_omega_squared"}
-    assert_close("closed_form", es.estimate, reference.estimate, what="estimate")
+    if es.name == "partial_omega_squared":
+        # omega = (F - 1) df1 / (F df1 + df2 + 1): F is accurate to a few units of
+        # 2^-53 relative, and F - 1 cancels when F is near 1, so the allowance
+        # adds 64 units of F's share to closed_form's relative part.
+        f, df1, df2 = (
+            original.test.statistic,
+            original.test.df,
+            original.test.df_error,
+        )
+        assert df1 is not None
+        assert df2 is not None
+        slack = 64 * 2.0**-53 * f * df1 / (f * df1 + df2 + 1.0)
+        assert abs(es.estimate - reference.estimate) <= slack + 1e-10 * abs(
+            reference.estimate
+        )
+    else:
+        assert_close("closed_form", es.estimate, reference.estimate, what="estimate")
     for bound in ("conf_low", "conf_high"):
         assert_close(
             "noncentral_ci",

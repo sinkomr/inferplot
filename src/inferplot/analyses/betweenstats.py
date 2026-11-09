@@ -122,9 +122,10 @@ _DEFAULT_ALPHA: Final = 0.05
 _DEFAULT_BF_PRIOR: Final = 0.707
 
 _HEDGES_J_ZERO_WARNING: Final = (
-    "Hedges' g is 0 by construction at 1 degree of freedom (Welch's df is 1 here: "
-    "one group has no variability and the other has two values), so g and its "
-    "confidence interval carry no information about the size of the difference."
+    "Hedges' g is 0 by construction at 1 degree of freedom. Welch's df is 1 here "
+    "because one group has two values and the other group's variance is 0 or "
+    "negligible next to it, so g and its confidence interval carry no information "
+    "about the size of the difference."
 )
 
 # ggstatsplot 1.1.4 does not pass conf.level to WRS2's lincon, so the robust pairwise
@@ -207,9 +208,9 @@ def _check_groups(
     if huge:
         raise ValueError(
             f"The values of y in the {_group_word(huge)} {_names(huge)} of x={x!r} "
-            "span more than the largest number a double can hold (about 1.8e308), "
-            "so their standard deviation cannot be represented. Rescale y, for "
-            "example by changing its units or dividing it by 1e10."
+            "range more widely than a double can represent: their largest minus "
+            "their smallest value exceeds the largest double (about 1.8e308). "
+            "Rescale y, for example by changing its units or dividing it by 1e10."
         )
     # Constant means every value equal, not a variance that rounds to 0.
     constant = [
@@ -465,7 +466,9 @@ def _parametric(
     pairwise: tuple[PairwiseComparison, ...] = ()
     if len(levels) == 2:
         a, b = values
-        welch = stats.welch_t(a, b, alternative=side)
+        # Welch's t in the samples' common scale: t, df and p are reported, never
+        # the mean difference, which can exceed the largest double in y units.
+        welch = stats.welch_t_scaled(a, b)
         g = stats.hedges_g(a, b, conf_level=level, alternative=side)
         test = TestResult(
             name="welch_t",
@@ -475,7 +478,7 @@ def _parametric(
             statistic=welch.t,
             df=None,
             df_error=welch.df,
-            p_value=welch.p_value,
+            p_value=stats.t_p_value(welch.t, welch.df, side),
             alternative=side,
         )
         effect_size = EffectSize(

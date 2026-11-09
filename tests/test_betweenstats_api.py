@@ -764,9 +764,28 @@ def test_review_scales_end_to_end(scale: float) -> None:
 
 
 def test_a_group_wider_than_the_largest_double_raises() -> None:
+    # NEW-6: the range overflows, not the standard deviation (1.5e308 here).
     data = frame({"a": [-1.5e308, 1.5e308, 0.0], "b": [1.0, 2.0, 4.0]})
-    with pytest.raises(ValueError, match=r"'a' of x='g' span more than the largest"):
+    with pytest.raises(
+        ValueError,
+        match=r"'a' of x='g' range more widely than a double can represent: their "
+        r"largest minus their smallest value exceeds the largest double",
+    ):
         betweenstats(data, "g", "y")
+
+
+def test_a_mean_difference_beyond_the_largest_double_is_analyzed() -> None:
+    # NEW-7: the difference of the means (-2.7e308) overflows in y units, but the
+    # analysis reports t, df and p only, which do not depend on the units: the same
+    # numbers as for the data divided by 2^100.
+    a, b = [-1.5e308, -1.2e308, -1.0e308], [1.0e308, 1.2e308, 1.5e308]
+    result = betweenstats(frame({"a": a, "b": b}), "g", "y")
+    small = [[math.ldexp(v, -100) for v in g] for g in (a, b)]
+    unit = betweenstats(frame({"a": small[0], "b": small[1]}), "g", "y")
+    for field in ("statistic", "df_error", "p_value"):
+        assert getattr(result.test, field) == getattr(unit.test, field)
+    assert result.test.statistic < -10.0
+    assert result.effect_size.estimate == unit.effect_size.estimate
 
 
 def test_a_group_too_small_next_to_the_others_raises() -> None:
@@ -794,13 +813,27 @@ def test_hedges_g_at_one_degree_of_freedom_warns() -> None:
     assert "CI_95% [0.00, 0.00]" in result.text.subtitle
     assert "-0.00" not in result.text.subtitle
     assert "95% CI [0.00, 0.00]" in result.text.apa
-    assert result.warnings == (
-        "Hedges' g is 0 by construction at 1 degree of freedom (Welch's df is 1 "
-        "here: one group has no variability and the other has two values), so g and "
-        "its confidence interval carry no information about the size of the "
-        "difference.",
-    )
+    assert result.warnings == (HEDGES_J_ZERO,)
     assert '"-0.0' not in result.to_json()
+
+
+def test_hedges_g_at_one_degree_of_freedom_with_a_varying_group() -> None:
+    # The warning names the condition tested (Welch's df is 1), which also holds
+    # when the other group varies, but negligibly next to the two-value group.
+    a, b = [5.0 - 1e-6, 5.0, 5.0 + 1e-6], [1e3, 3e3]
+    result = betweenstats(frame({"a": a, "b": b}), "g", "y")
+    assert result.test.df_error == 1.0
+    assert result.effect_size.estimate == 0.0
+    assert result.warnings == (HEDGES_J_ZERO,)
+    assert "no variability" not in result.warnings[0]
+
+
+HEDGES_J_ZERO = (
+    "Hedges' g is 0 by construction at 1 degree of freedom. Welch's df is 1 here "
+    "because one group has two values and the other group's variance is 0 or "
+    "negligible next to it, so g and its confidence interval carry no information "
+    "about the size of the difference."
+)
 
 
 # --------------------------------------------------------------------------- #

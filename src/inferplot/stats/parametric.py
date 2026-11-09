@@ -15,7 +15,8 @@ from inferplot.stats.descriptive import (
     SampleLike,
     as_sample,
     common_scale,
-    mean,
+    deviations_from_weighted_mean,
+    exact_mean,
     scaled_variance,
 )
 
@@ -194,7 +195,8 @@ def welch_t_scaled(a: SampleLike, b: SampleLike) -> ScaledWelch:
     w_a, w_b = v_a / n_a, v_b / n_b
     check_variance_term(w_a + w_b, raw_a, raw_b, "Welch's t")
     se = math.sqrt(w_a + w_b)
-    difference = mean(x) - mean(y)
+    # The exact difference of the exact means, rounded once (``exact_mean``).
+    difference = float(exact_mean(x) - exact_mean(y))
     return ScaledWelch(
         t=difference / se,
         df=satterthwaite_df(w_a, n_a, w_b, n_b),
@@ -221,6 +223,13 @@ def welch_t(
     power of two, exact), so t, df and p are the same, bit for bit, for the data
     times any power of two that keeps them normal doubles, and ``mean_difference``
     and ``se`` scale exactly with the data.
+
+    Exact differences: mean(a) - mean(b) is formed from the exact means (the exact
+    sums of the doubles over n) and rounded once (``exact_mean``), so t keeps its
+    relative accuracy when the means differ by about the rounding of their common
+    level: on [0.1 + 0.2, 0.3, 0.3, 0.3] against [0.3, 0.3, 0.1 + 0.2, 0.1 + 0.2]
+    t is -0.655 (p = 0.537), where the difference of the rounded means gave -2.62
+    (p = 0.040). R's ``t.test`` subtracts the rounded means.
 
     Limits: |t| stays below 2^512 (about 1.3e154): when one sample is constant and
     the other varies by less than about 1e-154 times the constant |value| the
@@ -261,7 +270,8 @@ def student_t(a: SampleLike, b: SampleLike) -> StudentT:
     the statistic of R's ``stats::t.test(var.equal = TRUE)``, which
     ``BayesFactor::ttestBF`` uses for two independent samples. Computed on both
     samples times their ``common_scale``, so t does not depend on the scale of the
-    data (bit for bit under powers of two).
+    data (bit for bit under powers of two). The mean difference is exact, rounded
+    once (``welch_t``, exact differences).
 
     Limits: the scaled squared standard error s_p^2 (1/n_a + 1/n_b) must be at
     least :data:`TINY` (``check_variance_term``), so it is accurate to about 2^-53
@@ -278,7 +288,7 @@ def student_t(a: SampleLike, b: SampleLike) -> StudentT:
     pooled = ((n_a - 1) * scaled_variance(x) + (n_b - 1) * scaled_variance(y)) / df
     term = pooled * (1.0 / n_a + 1.0 / n_b)
     check_variance_term(term, raw_a, raw_b, "Student's t")
-    t = (mean(x) - mean(y)) / math.sqrt(term)
+    t = float(exact_mean(x) - exact_mean(y)) / math.sqrt(term)
     return StudentT(t=t, df=float(df))
 
 
@@ -321,7 +331,10 @@ def welch_anova(groups: Sequence[SampleLike]) -> WelchAnova:
     df1 = k - 1, df2 = (k^2 - 1) / (3 lambda); p = P(F(df1, df2) > F). Matches R's
     ``stats::oneway.test(y ~ x, var.equal = FALSE)``. Computed on the groups times
     their ``common_scale``, so F, df and p do not depend on the scale of the data
-    (bit for bit under powers of two).
+    (bit for bit under powers of two). Each deviation mean_i - m is formed exactly
+    from the exact means and the weights as doubles, and rounded once
+    (``deviations_from_weighted_mean``; ``welch_t``, exact differences); R's
+    ``oneway.test`` subtracts rounded means from a rounded centre.
 
     Limits: every group's scaled variance term v_i / n_i must be at least
     :data:`TINY` (accurate to about 2^-53 relative; a standard deviation above
@@ -347,7 +360,7 @@ def welch_anova(groups: Sequence[SampleLike]) -> WelchAnova:
     samples = [s * scale for s in raw]
     k = len(samples)
     n = [float(s.size) for s in samples]
-    means = [mean(s) for s in samples]
+    means = [exact_mean(s) for s in samples]
     variances = checked_scaled_variances(raw, samples, "Welch's ANOVA")
     weights = [ni / vi for ni, vi in zip(n, variances, strict=True)]
     # Weights n_i / v_i are at most 1 / TINY = 2^1022 and at least 1/2 (v <= 2 for
@@ -360,10 +373,12 @@ def welch_anova(groups: Sequence[SampleLike]) -> WelchAnova:
     if shift:
         weights = [math.ldexp(w, -shift) for w in weights]
     total = math.fsum(weights)
-    centre = math.fsum(w * m for w, m in zip(weights, means, strict=True)) / total
-    between = math.fsum(
-        w * (m - centre) ** 2 for w, m in zip(weights, means, strict=True)
-    ) / (k - 1)
+    # Each mean's deviation from the weighted centre, formed exactly from the exact
+    # means and rounded once (``deviations_from_weighted_mean``).
+    deviations = deviations_from_weighted_mean(weights, means)
+    between = math.fsum(w * d * d for w, d in zip(weights, deviations, strict=True)) / (
+        k - 1
+    )
     lam = math.fsum(
         (1.0 - w / total) ** 2 / (ni - 1.0) for w, ni in zip(weights, n, strict=True)
     )

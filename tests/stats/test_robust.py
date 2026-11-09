@@ -42,6 +42,12 @@ from tests.tolerances import assert_close
 
 FloatArray = NDArray[np.float64]
 
+# Agreement of a statistic on exactly transformed data, in units of 2^-53
+# relative (test_location_and_scale_equivariance): the winsorized variances are
+# accurate to 4 units and t, df and F add a few roundings; measured worst 5.9
+# over 2,000 random examples (and identical bootstrap bounds in the 200 checked).
+_EQUIVARIANCE_ULPS = 16.0
+
 
 def _rng(seed: int) -> np.random.Generator:
     return np.random.Generator(np.random.PCG64(seed))
@@ -420,30 +426,60 @@ def test_power_of_two_scaling_is_exact(power: int, seed: int) -> None:
 
 @settings(max_examples=25, deadline=None)
 @given(
-    shift=st.floats(-1e3, 1e3),
-    scale=st.floats(0.01, 100),
+    shift=st.integers(-(2**20), 2**20),
+    power=st.integers(-8, 8),
     seed=st.integers(0, 2**16),
 )
-def test_location_and_scale_equivariance(shift: float, scale: float, seed: int) -> None:
-    data = _draw([8, 12, 10], seed)
-    moved = [d * scale + shift for d in data]
+def test_location_and_scale_equivariance(shift: int, power: int, seed: int) -> None:
+    # Dyadic data (distinct integers / 64), an integer shift and a power-of-two
+    # scale: the transformation is exact (asserted below), so every difference
+    # must come out exact. Differences of trimmed means are formed exactly and
+    # rounded once, so they scale exactly; the bootstrap draws from the data minus
+    # one of its values (exact here), so its resampled statistics are the same
+    # bits. What remains are the winsorized variances, accurate to 4 units of
+    # 2^-53 relative on any data (test_exact_differences.py), and a few roundings
+    # of products and square roots: statistics agree within _EQUIVARIANCE_ULPS.
+    # The old property (arbitrary floats, rel=1e-9) failed on a statistic near 0,
+    # where rounding the transformed data is amplified (lowest-direct CI).
+    rng = _rng(seed)
+    data = [
+        rng.choice(np.arange(-4000, 4000), size=n, replace=False) / 64.0
+        for n in (8, 12, 10)
+    ]
+    factor = math.ldexp(1.0, power)
+    moved = [d * factor + shift for d in data]
+    for d, m in zip(data, moved, strict=True):
+        assert np.array_equal((m - shift) / factor, d)  # exact transformation
+
+    def close(ours: float, base: float) -> None:
+        assert abs(ours - base) <= _EQUIVARIANCE_ULPS * 2.0**-53 * abs(base)
+
     y0, y1 = yuen_t(data[0], data[1]), yuen_t(moved[0], moved[1])
-    # The data are rounded once by the transformation, so the comparison allows
-    # for it: rtol 1e-9 on statistics that are ratios of differences.
-    assert y1.t == pytest.approx(y0.t, rel=1e-9)
-    assert y1.df == pytest.approx(y0.df, rel=1e-9)
-    assert y1.difference == pytest.approx(y0.difference * scale, rel=1e-9, abs=1e-9)
+    assert y1.difference == y0.difference * factor
+    close(y1.t, y0.t)
+    close(y1.df, y0.df)
     f0, f1 = trimmed_means_anova(data), trimmed_means_anova(moved)
-    assert f1.f == pytest.approx(f0.f, rel=1e-9)
-    assert f1.df2 == pytest.approx(f0.df2, rel=1e-9)
+    close(f1.f, f0.f)
+    close(f1.df2, f0.df2)
+    for p0, p1 in zip(lincon(data), lincon(moved), strict=True):
+        assert p1.estimate == p0.estimate * factor
+        close(p1.t, p0.t)
     e0, e1 = akp_effect(data[0], data[1]), akp_effect(moved[0], moved[1])
-    assert e1.estimate == pytest.approx(e0.estimate, rel=1e-9)
-    assert e1.conf_low == pytest.approx(e0.conf_low, rel=1e-9)
-    assert e1.conf_high == pytest.approx(e0.conf_high, rel=1e-9)
+    close(e1.estimate, e0.estimate)
+    assert (e1.conf_low, e1.conf_high) == (e0.conf_low, e0.conf_high)
+    # Unequal sizes: xi is the median of the bootstrap values, the same bits.
     x0, x1 = explanatory_effect(data), explanatory_effect(moved)
-    assert x1.estimate == pytest.approx(x0.estimate, rel=1e-9)
-    assert x1.conf_low == pytest.approx(x0.conf_low, rel=1e-9)
-    assert x1.conf_high == pytest.approx(x0.conf_high, rel=1e-9)
+    assert (x1.estimate, x1.conf_low, x1.conf_high) == (
+        x0.estimate,
+        x0.conf_low,
+        x0.conf_high,
+    )
+    # Equal sizes: xi of the data, from the exact variance of the trimmed means.
+    same = [d[:8] for d in data]
+    x0 = explanatory_effect(same)
+    x1 = explanatory_effect([d * factor + shift for d in same])
+    close(x1.estimate, x0.estimate)
+    assert (x1.conf_low, x1.conf_high) == (x0.conf_low, x0.conf_high)
 
 
 def test_sign_flip() -> None:

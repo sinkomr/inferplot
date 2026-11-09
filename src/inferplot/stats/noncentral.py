@@ -54,17 +54,37 @@ over a window of +/- (15 sqrt(mu) + 30) terms around the mode, mu = lambda / 2.
   independently computed weights (tests/stats/test_noncentral.py, mu up to 2.5e6,
   both tails) they agree within 1e-12 relative. The window holds about 250 nodes
   whatever mu is.
-* Beta factors with a large first parameter, a >= 1e5 max(b, 1) (a = df1 / 2 + j,
-  b = df2 / 2): SciPy's ``betainc`` loses accuracy there (up to 2.8e-10 absolute at
-  b = 3 and 30, a = 3e5 to 3e8, in SciPy 1.18; 1e-3 at a = 1e14 in SciPy 1.11, NaN
-  beyond), so I_y(b, a) = P(G_b <= r G_a) with independent gamma variables,
-  r = y / (1 - y), is expanded in the relative fluctuation of G_a around a:
-  I = P(b, z) + p(z) z [c / (2a) + (c^2 - (b - 1)) / (3a^2)
-  + (c^3 - 3c(b - 1) + 2(b - 1)) / (8a^2)] + O((b/a)^3), z = r a, c = b - 1 - z,
-  with P and p the regularized gamma function and density of shape b (the moments of
-  G_a / a - 1 are 1/a, 2/a^2 and 3/a^2 + O(a^-3)). Against mpmath (50 digits) at
-  b = 0.5 to 1150, a = 1e5 to 1e14 and z within 3 SDs of b: absolute error at most
-  1e-12 for a / b >= 1e3 and 1.2e-15 for a / b >= 1e5.
+* Beta factors with one parameter at least 1e4 and at least 10 times the other
+  (and 1): SciPy's
+  ``betainc`` loses accuracy there (up to 2.8e-10 absolute at b = 3 and 30,
+  a = 3e5 to 3e8, and 1e-10 relative at a = 10, b = 5e7, in SciPy 1.18; 1e-3 at
+  a = 1e14 in SciPy 1.11, NaN beyond). With independent gamma variables, the
+  factor with the large parameter a is I_y(b, a) = P(G_b <= r G_a), r = y / x,
+  or its complement I_x(a, b) (``_log_gamma_ratio``; a large b swaps the roles,
+  I_x(a, b) = P(G_a <= G_b x / y)). With z = r a, the side below its median is
+  computed and the other as log(1 - exp(.)): I_y(b, a) = E[P(b, r G_a)] for
+  z <= b and I_x(a, b) = E[Q(b, r G_a)] above (P, Q the regularized incomplete
+  gamma functions), by 32-node Gauss-Hermite quadrature in log G_a, centred on
+  the peak of the integrand and scaled by its curvature (the log-gamma density's
+  skewness is a^-1/2, so the integrand is close to Gaussian there;
+  ``_log_gamma_ratio_side``). Everything is in log
+  space with Loader's (2000) saddle-point forms, so no factor underflows and
+  nothing cancels at a = 1e14. Against mpmath (40 digits; I_x(a, b) by an
+  independent integral over G_a, I_y(b, a) by its betainc) at b = 0.25 to 1150
+  with a / b from 1e2 to 1e12 and at b = 1e3 with a / b = 10 and 30 (a >= 1e4),
+  both sides from 1/2 down to 1e-300: log P within 6.9e-15 max(1, |log P|). At
+  a = b = 1e4 the quadrature is not accurate (3e-2 at log P = -56), hence the
+  factor 10.
+* Far tails: SciPy's ``betainc`` values below 1e-250 (it underflows to 0 near
+  1e-280) are recomputed in log space by the continued fraction DLMF 8.17.22
+  (``_log_beta_cf``), which converges quickly there. Where the beta factors shift
+  the dominant terms out of the window around mu (far in a tail: at f = 1e-100,
+  df = (2, 2) and ncp = 2e5 the largest term is j = 0), the sum is taken over a
+  window around the largest term instead (``_tilted_window``). Against the
+  chi'^2 x chi^2 integral in mpmath (tests/data/noncentral_reference.json) at
+  ncp up to 2e12 for tails from 1e-3 to 1e-20 the relative error is at most
+  5.0e-14 (3.1e-13 against exact sums at df2 = 1e6 and 1e8, df1 = 2), and log P
+  is within 2.3e-15 relative of the reference down to log P = -2000.
 """
 
 from __future__ import annotations
@@ -79,7 +99,11 @@ from numpy.typing import NDArray
 from scipy import optimize, special
 
 from inferplot.stats.parametric import Alternative, check_alternative
-from inferplot.stats.srange import log_scaled_chi_density, stirlerr_large
+from inferplot.stats.srange import (
+    expm1_minus_x,
+    log_scaled_chi_density,
+    stirlerr_large,
+)
 
 FloatArray = NDArray[np.float64]
 
@@ -105,8 +129,35 @@ _POISSON_PAD: Final = 30.0
 # docstring), h = floor(sqrt(mu) / _NODES_PER_SD).
 _SUBSAMPLE_FROM: Final = 1e4
 _NODES_PER_SD: Final = 8.0
-# Beta factors with a >= _LARGE_A max(b, 1) use the large-a expansion.
-_LARGE_A: Final = 1e5
+# Beta factors with one parameter at least this many times the other (and 1) are
+# computed as gamma ratios (``_log_gamma_ratio``), not with SciPy's betainc
+# (measured accurate from a factor 10 on; at a = b = 1e4 it is not).
+_LARGE_RATIO: Final = 10.0
+# ... and the larger parameter at least this large (the quadrature in log G needs
+# a near-Gaussian log-gamma density).
+_LARGE_MIN: Final = 1e4
+# SciPy's betainc values below this are recomputed in log space (it underflows to
+# 0 near 1e-280 and loses digits among the subnormals).
+_BETAINC_FLOOR: Final = 1e-250
+# SciPy's gammaincc values below this are recomputed in log space.
+_GAMMA_FLOOR: Final = 1e-250
+# Series and continued fractions: relative size of the last term or step, and the
+# iteration limit (far above any input's needs; reaching it raises).
+_SERIES_EPS: Final = 1e-17
+_LENTZ_EPS: Final = 2.0**-52
+_LENTZ_TINY: Final = 1e-300
+_MAX_ITERATIONS: Final = 1_000_000
+# Gauss-Hermite rule for the large-parameter lower side, and the fixed-point steps
+# that centre it.
+_HERMITE_NODES: Final = 32
+_HERMITE_T, _HERMITE_W = np.polynomial.hermite.hermgauss(_HERMITE_NODES)
+_HERMITE_LOG_W: Final = np.log(_HERMITE_W) + _HERMITE_T * _HERMITE_T
+_PEAK_STEPS: Final = 4
+# A window end within e^-_EDGE_DROP of the largest term means terms are missing.
+_EDGE_DROP: Final = 50.0
+_LOG_SQRT_2PI: Final = 0.5 * math.log(2.0 * math.pi)
+_LOG_PI: Final = math.log(math.pi)
+_LOG2: Final = math.log(2.0)
 # Bounds above this noncentrality are searched from the large-lambda start value
 # (f_ncp_bound); below it from 0, as before.
 _TIGHT_BRACKET_FROM: Final = 1e4
@@ -186,7 +237,9 @@ def noncentral_t_logcdf(
     with np.errstate(over="ignore"):
         x = t * np.exp(u) - ncp
     terms = log_w.ravel() + log_scaled_chi_density(u, df) + special.log_ndtr(sign * x)
-    return min(0.0, _logsumexp(terms))
+    return _checked_log_probability(
+        _logsumexp(terms), f"t'(df={df!r}, ncp={ncp!r}) at t={t!r}"
+    )
 
 
 def _check_f_args(f: float, df1: float, df2: float, ncp: float) -> None:
@@ -249,31 +302,283 @@ def _log_poisson_window(mu: float) -> tuple[FloatArray, FloatArray]:
     return j.astype(np.float64), rel - _logsumexp(rel)
 
 
-def _beta_large_a(a: FloatArray, b: float, r: float, *, upper: bool) -> FloatArray:
-    """I_y(b, a) (``upper``) or I_{1-y}(a, b), r = y / (1 - y), for a >> b.
+def _broadcast(x: FloatArray, y: FloatArray) -> tuple[FloatArray, FloatArray]:
+    """``x`` and ``y`` broadcast to their common shape (as new arrays)."""
+    zeros = np.zeros(np.broadcast_shapes(x.shape, y.shape))
+    return x + zeros, y + zeros
 
-    The expansion of P(G_b <= r G_a) in the fluctuation of G_a / a through a^-2
-    (module docstring).
-    """
-    z = r * a
-    bm1 = b - 1.0
-    c = bm1 - z
-    with np.errstate(divide="ignore", under="ignore"):
-        density = np.exp(bm1 * np.log(z) - z - special.gammaln(b))
-    inv = 1.0 / a
-    correction = (
-        density
-        * z
-        * inv
-        * (
-            0.5 * c
-            + inv * (c * c - bm1) / 3.0
-            + inv * (c * c * c - 3.0 * c * bm1 + 2.0 * bm1) / 8.0
-        )
+
+def _stirlerr(x: FloatArray) -> FloatArray:
+    """log Gamma(x) - (x - 1/2) log x + x - log sqrt(2 pi), element-wise (x > 0)."""
+    out = np.empty_like(x)
+    large = x >= 15.0
+    if bool(large.any()):
+        out[large] = stirlerr_large(x[large])
+    small = ~large
+    if bool(small.any()):
+        xs = x[small]
+        out[small] = special.gammaln(xs) - (xs - 0.5) * np.log(xs) + xs - _LOG_SQRT_2PI
+    return out
+
+
+def _bd0(x: FloatArray, m: FloatArray) -> FloatArray:
+    """x log(x / m) + m - x >= 0 for x, m > 0, without cancellation (Loader 2000,
+    "Fast and accurate computation of binomial probabilities"): m phi((x - m) / m)
+    near x = m, x log1p((x - m) / m) - (x - m) within a factor of 2, the direct
+    form beyond."""
+    x, m = _broadcast(x, m)
+    out = np.empty(x.shape)
+    near = np.abs(x - m) < 0.1 * m
+    if bool(near.any()):
+        mn = m[near]
+        out[near] = mn * _phi((x[near] - mn) / mn)
+    # Within a factor of 2 x - m is exact (Sterbenz), so x log1p((x - m) / m)
+    # - (x - m) keeps its relative accuracy where the two terms nearly cancel.
+    mid = ~near & (x >= 0.5 * m) & (x <= 2.0 * m)
+    if bool(mid.any()):
+        xm, mm = x[mid], m[mid]
+        diff = xm - mm
+        out[mid] = xm * np.log1p(diff / mm) - diff
+    far = ~near & ~mid
+    if bool(far.any()):
+        xf, mf = x[far], m[far]
+        out[far] = xf * (np.log(xf) - np.log(mf)) + mf - xf
+    return out
+
+
+def _log_beta_prefactor(p: FloatArray, q: FloatArray, x: float, y: float) -> FloatArray:
+    """log(x^p y^q / (p B(p, q))), y = 1 - x given separately, in Loader's form
+    -bd0(p, n x) - bd0(q, n y) + log sqrt(p q / (2 pi n)) + stirlerr(n)
+    - stirlerr(p) - stirlerr(q) - log p, n = p + q (the terms n x - p and n y - q
+    cancel because x + y = 1), so neither p log x nor log B(p, q) loses digits
+    when p or q is large."""
+    n = p + q
+    return (
+        -_bd0(p, n * x)
+        - _bd0(q, n * y)
+        + 0.5 * (np.log(p) + np.log(q) - np.log(n))
+        - _LOG_SQRT_2PI
+        + _stirlerr(n)
+        - _stirlerr(p)
+        - _stirlerr(q)
+        - np.log(p)
     )
-    if upper:
-        return special.gammainc(b, z) + correction
-    return special.gammaincc(b, z) - correction
+
+
+def _log1mexp(x: FloatArray) -> FloatArray:
+    """log(1 - exp(x)) for x <= 0 (Maechler 2012, "Accurately computing
+    log(1 - exp(-|a|))"), -inf at x = 0."""
+    out = np.empty_like(x)
+    near = x > -_LOG2
+    with np.errstate(divide="ignore"):
+        out[near] = np.log(-np.expm1(x[near]))
+    out[~near] = np.log1p(-np.exp(x[~near]))
+    return out
+
+
+def _converged(done: bool, what: str) -> None:
+    if not done:  # pragma: no cover - far above the iterations any input needs
+        raise ArithmeticError(f"the {what} did not converge")
+
+
+def _log_beta_cf(p: FloatArray, q: FloatArray, x: float, y: float) -> FloatArray:
+    """log I_x(p, q) by the continued fraction (DLMF 8.17.22)
+    I_x(p, q) = x^p y^q / (p B(p, q)) / (1 + d_1 / (1 + d_2 / (1 + ...))),
+    d_(2m+1) = -(p + m)(p + q + m) x / ((p + 2m)(p + 2m + 1)),
+    d_(2m) = m (q - m) x / ((p + 2m - 1)(p + 2m)), evaluated by the modified Lentz
+    algorithm (Thompson & Barnett 1986, Journal of Computational Physics 64:
+    490-509), the prefactor by ``_log_beta_prefactor``. Used far in a tail, where
+    x is well below (p + 1) / (p + q + 2) and it converges in a few dozen terms.
+    """
+    p, q = _broadcast(p, q)
+    n = p + q
+    f = np.ones(p.shape)
+    c = np.ones(p.shape)
+    d = np.zeros(p.shape)
+    done = False
+    for i in range(1, _MAX_ITERATIONS):
+        m = i // 2
+        if i % 2:
+            coef = -(p + m) * (n + m) * x / ((p + 2 * m) * (p + 2 * m + 1.0))
+        else:
+            coef = m * (q - m) * x / ((p + 2 * m - 1.0) * (p + 2 * m))
+        d = 1.0 + coef * d
+        d[d == 0.0] = _LENTZ_TINY
+        c = 1.0 + coef / c
+        c[c == 0.0] = _LENTZ_TINY
+        d = 1.0 / d
+        delta = c * d
+        f = f * delta
+        if i % 2 == 0 and bool((np.abs(delta - 1.0) <= _LENTZ_EPS).all()):
+            done = True
+            break
+    _converged(done, "continued fraction of the incomplete beta function")
+    return _log_beta_prefactor(p, q, x, y) - np.log(f)
+
+
+def _log_gamma_density(b: FloatArray, w: FloatArray) -> FloatArray:
+    """log of the gamma(b) density at w in Loader's form, -bd0(b, w) - log(w / b)
+    - log sqrt(2 pi b) - stirlerr(b) (= (b - 1) log w - w - log Gamma(b))."""
+    return -_bd0(b, w) - np.log(w / b) - 0.5 * np.log(b) - _LOG_SQRT_2PI - _stirlerr(b)
+
+
+def _log_gamma_tail(
+    b: FloatArray, w: FloatArray, *, upper: bool
+) -> tuple[FloatArray, FloatArray]:
+    """log T(b, w) and log(T(b, w) / p(w)), T the regularized upper incomplete
+    gamma function Q (``upper``) or the lower one P, p the gamma(b) density.
+
+    SciPy's ``gammaincc`` / ``gammainc`` where T is at least ``_GAMMA_FLOOR``.
+    Below, where it underflows, the ratio T / p directly: for Q (far above the
+    mean) w K with Legendre's continued fraction Gamma(b, w) = e^-w w^b K,
+    K = 1 / (w + 1 - b - 1 (1 - b) / (w + 3 - b - 2 (2 - b) / (w + 5 - b - ...)))
+    (DLMF 8.9.2, even part) by the modified Lentz algorithm; for P (far below the
+    mean) (w / b) M with Kummer's series M = sum_k w^k / ((b + 1) ... (b + k))
+    (DLMF 8.7.1); both converge quickly there. The ratio stays accurate where
+    log T and log p are both huge (w = 1e274) and their difference is not.
+    """
+    b, w = _broadcast(b, w)
+    with np.errstate(under="ignore"):
+        if upper:
+            tail = np.asarray(special.gammaincc(b, w), dtype=np.float64)
+        else:
+            tail = np.asarray(special.gammainc(b, w), dtype=np.float64)
+    log_tail = np.empty(w.shape)
+    log_ratio = np.empty(w.shape)
+    direct = tail >= _GAMMA_FLOOR
+    if bool(direct.any()):
+        log_tail[direct] = np.log(tail[direct])
+        log_ratio[direct] = log_tail[direct] - _log_gamma_density(b[direct], w[direct])
+    deep = ~direct
+    if bool(deep.any()):
+        bd, wd = b[deep], w[deep]
+        done = False
+        if upper:
+            coef = wd + 1.0 - bd
+            f = coef.copy()
+            c = coef.copy()
+            d = np.zeros_like(wd)
+            for n in range(1, _MAX_ITERATIONS):
+                an = -n * (n - bd)
+                coef = coef + 2.0
+                d = coef + an * d
+                d[d == 0.0] = _LENTZ_TINY
+                c = coef + an / c
+                c[c == 0.0] = _LENTZ_TINY
+                d = 1.0 / d
+                delta = c * d
+                f = f * delta
+                if bool((np.abs(delta - 1.0) <= _LENTZ_EPS).all()):
+                    done = True
+                    break
+            ratio = np.log(wd) - np.log(f)
+        else:
+            term = np.ones(bd.shape)
+            total = np.ones(bd.shape)
+            for k in range(1, _MAX_ITERATIONS):
+                term = term * wd / (bd + k)
+                total = total + term
+                if bool((term <= _SERIES_EPS * total).all()):
+                    done = True
+                    break
+            ratio = np.log(wd / bd) + np.log(total)
+        _converged(done, "incomplete gamma function's continued fraction or series")
+        log_ratio[deep] = ratio
+        log_tail[deep] = _log_gamma_density(bd, wd) + ratio
+    return log_tail, log_ratio
+
+
+def _log_gamma_ratio_side(
+    big: FloatArray, small: FloatArray, z: FloatArray, *, upper: bool
+) -> FloatArray:
+    """log P(G_small > G_big z / big) (``upper``) or log P(G_small <= G_big z / big)
+    for independent gamma variables, big large: the beta factors I_x(big, small)
+    and I_y(small, big), z / big = y / x.
+
+    The integral of Q(small, w) (or P(small, w)), w = z g / big, against the
+    gamma(big) density, in u = log(g / big), by Gauss-Hermite quadrature
+    (``_HERMITE_NODES`` nodes) centred on the peak of the integrand and scaled by
+    its curvature. The integrand is close to Gaussian in u: the log-gamma density
+    has skewness about big^-1/2, and the gamma(small) tail varies far more slowly
+    in u (on a scale of about 1 / sqrt(small) in the bulk and 1 / w in the far
+    upper tail, against the 1 / sqrt(big) of the density). The peak solves
+    big (e^u - 1) = -/+ w p(w) / T(w) (T the tail, p the gamma(small) density),
+    found by a few fixed-point steps from u = 0; the curvature by a second
+    difference over about one standard deviation. The gamma(big) density times g
+    is exp(-big (e^u - 1 - u)) / (sqrt(2 pi / big) e^stirlerr(big)) (Loader's
+    form, evaluated at the nodes u, so big = 1e14 loses nothing to the rounding
+    of g), and T is evaluated in log space (``_log_gamma_tail``),
+    so either side keeps its relative accuracy however far in its tail.
+    """
+
+    def log_tail(b: FloatArray, w: FloatArray) -> FloatArray:
+        return _log_gamma_tail(b, w, upper=upper)[0]
+
+    centre = np.zeros(big.shape)
+    w = z
+    for _ in range(_PEAK_STEPS):
+        w = z * np.exp(centre)
+        # The tail's pull on the peak, w p(w) / T(w) over big, in logs (rr = z / big
+        # reaches 1e300): e^u = 1 / (1 + rr p / Q) or 1 + w p / (P big).
+        log_ratio = _log_gamma_tail(small, w, upper=upper)[1]
+        if upper:
+            centre = -np.logaddexp(0.0, np.log(z) - np.log(big) - log_ratio)
+        else:
+            centre = np.logaddexp(0.0, np.log(w) - np.log(big) - log_ratio)
+
+    def log_integrand(u: FloatArray) -> FloatArray:
+        return -big * expm1_minus_x(u) + log_tail(small, z * np.exp(u))
+
+    delta = 1.0 / np.sqrt(big * np.exp(centre) + w + 1.0)
+    curvature = -(
+        log_integrand(centre + delta)
+        - 2.0 * log_integrand(centre)
+        + log_integrand(centre - delta)
+    ) / (delta * delta)
+    if not bool((curvature > 0.0).all()):  # pragma: no cover - log-concave
+        raise ArithmeticError("the gamma-ratio integrand is not log-concave")
+    u = centre[:, None] + np.sqrt(2.0 / curvature)[:, None] * _HERMITE_T
+    terms = (
+        _HERMITE_LOG_W
+        - big[:, None] * expm1_minus_x(u)
+        + log_tail(small[:, None], z[:, None] * np.exp(u))
+    )
+    peak = terms.max(axis=1)
+    total = np.log(np.exp(terms - peak[:, None]).sum(axis=1))
+    return (
+        peak
+        + total
+        + 0.5 * (np.log(big) - np.log(curvature) - _LOG_PI)
+        - _stirlerr(big)
+    )
+
+
+def _log_gamma_ratio(
+    big: FloatArray, small: FloatArray, rr: float
+) -> tuple[FloatArray, FloatArray]:
+    """log U and log L, U = P(G_small <= rr G_big) = I_y(small, big) and
+    L = 1 - U = I_x(big, small) with x = 1 / (1 + rr), y = rr / (1 + rr), for
+    big >= ``_LARGE_RATIO`` max(small, 1): the side below its median by
+    ``_log_gamma_ratio_side`` (U for z = rr big <= small, L above), the other as
+    log(1 - exp(.))."""
+    big, small = _broadcast(big, small)
+    log_u = np.zeros(big.shape)
+    log_l = np.zeros(big.shape)
+    with np.errstate(over="ignore"):
+        z = rr * big
+    # The limits: z = 0 (x = 1) gives U = 0; z beyond the largest double gives
+    # L = 0 to double precision (log L is about -z).
+    log_u[z == 0.0] = -math.inf
+    log_l[np.isinf(z)] = -math.inf
+    low = (z <= small) & (z > 0.0)
+    if bool(low.any()):
+        log_u[low] = _log_gamma_ratio_side(big[low], small[low], z[low], upper=False)
+        log_l[low] = _log1mexp(log_u[low])
+    high = (z > small) & np.isfinite(z)
+    if bool(high.any()):
+        log_l[high] = _log_gamma_ratio_side(big[high], small[high], z[high], upper=True)
+        log_u[high] = _log1mexp(log_l[high])
+    return log_u, log_l
 
 
 def log_beta_factors(
@@ -281,31 +586,77 @@ def log_beta_factors(
 ) -> FloatArray:
     """log I_y(b, a) (``upper``) or log I_x(a, b), with y = 1 - x and r = y / x
     given separately (all accurate), per element of a: the beta factors of the
-    noncentral F mixture (module docstring)."""
-    large = a >= _LARGE_A * max(b, 1.0)
-    values = np.empty_like(a)
-    if bool(large.any()):
-        values[large] = _beta_large_a(a[large], b, r, upper=upper)
-    if not bool(large.all()):
-        small = a[~large]
+    noncentral F mixture (module docstring).
+
+    * a >= ``_LARGE_RATIO`` max(b, 1): I_y(b, a) = P(G_b <= r G_a) and its
+      complement, as gamma ratios (``_log_gamma_ratio``); b >= ``_LARGE_RATIO``
+      max(a, 1): the same with the roles swapped, I_x(a, b) = P(G_a <= G_b x / y).
+    * otherwise SciPy's ``betainc``; values below ``_BETAINC_FLOOR``, where it
+      underflows, from the continued fraction in log space (``_log_beta_cf``).
+
+    Equal values of a (far out, the Poisson nodes round to the same double) are
+    computed once.
+    """
+    order = a.argsort(kind="stable")
+    ordered = a[order]
+    first = np.ones(a.shape, dtype=bool)
+    first[1:] = ordered[1:] != ordered[:-1]
+    if not bool(first.all()):
+        values = log_beta_factors(ordered[first], b, x, y, r, upper=upper)
+        out = np.empty_like(a)
+        out[order] = values[first.cumsum() - 1]
+        return out
+    out = np.empty_like(a)
+    small_b = np.full_like(a, b)
+    large_a = (a >= _LARGE_RATIO * max(b, 1.0)) & (a >= _LARGE_MIN)
+    large_b = ~large_a & (b / _LARGE_RATIO >= np.maximum(a, 1.0)) & (b >= _LARGE_MIN)
+    if bool(large_a.any()):
+        log_u, log_l = _log_gamma_ratio(a[large_a], small_b[large_a], r)
+        out[large_a] = log_u if upper else log_l
+    if bool(large_b.any()):
+        with np.errstate(divide="ignore"):
+            rr = x / y
+        log_u, log_l = _log_gamma_ratio(small_b[large_b], a[large_b], rr)
+        out[large_b] = log_l if upper else log_u
+    rest = ~(large_a | large_b)
+    if bool(rest.any()):
+        small = a[rest]
         if upper:
-            values[~large] = special.betainc(b, small, y)
+            values = np.asarray(special.betainc(b, small, y), dtype=np.float64)
         elif x > 0.5:
             # I_x(a, b) = 1 - I_y(b, a) from y, which keeps the digits that x has
             # lost, where that complement is at least 1/2 (so 1 - c keeps its
             # relative accuracy); below 1/2, from x as before.
-            lower: FloatArray = 1.0 - np.asarray(
-                special.betainc(b, small, y), dtype=np.float64
-            )
-            direct = lower < 0.5
+            values = 1.0 - np.asarray(special.betainc(b, small, y), dtype=np.float64)
+            direct = values < 0.5
             if bool(direct.any()):
-                lower[direct] = special.betainc(small[direct], b, x)
-            values[~large] = lower
+                values[direct] = special.betainc(small[direct], b, x)
         else:
-            values[~large] = special.betainc(small, b, x)
-    with np.errstate(divide="ignore"):
-        # A large-a value can only fall below 0 far in a tail, where P is ~0.
-        return np.log(np.maximum(values, 0.0))
+            values = np.asarray(special.betainc(small, b, x), dtype=np.float64)
+        with np.errstate(divide="ignore"):
+            logs = np.log(values)
+        deep = values < _BETAINC_FLOOR
+        if bool(deep.any()):
+            # The requested side is far in its tail, where the continued fraction
+            # converges quickly.
+            if upper:
+                logs[deep] = _log_beta_cf(
+                    np.full(int(deep.sum()), b), small[deep], y, x
+                )
+            else:
+                logs[deep] = _log_beta_cf(
+                    small[deep], np.full(int(deep.sum()), b), x, y
+                )
+        out[rest] = logs
+    return out
+
+
+def _checked_log_probability(value: float, what: str) -> float:
+    """``value`` capped at 0 (log 1); ArithmeticError if it is NaN, which must
+    never pass as a probability (min(0.0, nan) is 0.0)."""
+    if math.isnan(value):
+        raise ArithmeticError(f"the log probability of {what} is not a number")
+    return min(0.0, value)
 
 
 def noncentral_f_logcdf(
@@ -320,8 +671,7 @@ def noncentral_f_logcdf(
     _check_f_args(f, df1, df2, ncp)
     if f == 0.0:
         return 0.0 if upper else -math.inf
-    j, log_w = _log_poisson_window(0.5 * ncp)
-    a = 0.5 * df1 + j
+    mu = 0.5 * ncp
     b = 0.5 * df2
     denom = df1 * f + df2
     if math.isfinite(denom):
@@ -329,8 +679,110 @@ def noncentral_f_logcdf(
     else:  # df1 f overflows: 1 - x = r / (1 + r) = r to double precision
         r = df2 / df1 / f
         y, x = r, 1.0
-    log_i = log_beta_factors(a, b, x, y, r, upper=upper)
-    return min(0.0, _logsumexp(log_w + log_i))
+    what = f"F'(df1={df1!r}, df2={df2!r}, ncp={ncp!r}) at f={f!r}"
+
+    def log_factors(j: FloatArray) -> FloatArray:
+        return log_beta_factors(0.5 * df1 + j, b, x, y, r, upper=upper)
+
+    j, log_w = _log_poisson_window(mu)
+    terms = log_w + log_factors(j)
+    if mu > 0.0 and _misses_terms(j, log_w, terms):
+        # Far in a tail the beta factors shift the dominant terms out of the
+        # window around mu: sum around them instead (``_tilted_window``).
+        j, log_w = _tilted_window(mu, log_factors, upper=upper)
+        terms = log_w + log_factors(j)
+        if _misses_terms(j, log_w, terms):  # pragma: no cover - not reached
+            raise ArithmeticError(f"the Poisson sum of {what} could not be bracketed")
+    return _checked_log_probability(_logsumexp(terms), what)
+
+
+def _misses_terms(j: FloatArray, log_w: FloatArray, terms: FloatArray) -> bool:
+    """Whether an end of the window (other than j = 0) holds a term within
+    e^-``_EDGE_DROP`` of the largest although its Poisson weight is not: the beta
+    factors have then shifted the dominant terms towards that end, and the sum
+    misses terms beyond it. (A window whose weights do not vary, as at mu = 1e50,
+    where the nodes round to mu, needs no check.) The summand is log-concave in
+    j, so terms beyond an end that is that far below the peak fall at least
+    geometrically and add less than e^-50 / (slope)."""
+    peak = float(np.max(terms))
+    if not math.isfinite(peak):
+        return False
+    weight_peak = float(np.max(log_w))
+
+    def open_end(i: int) -> bool:
+        return (
+            float(terms[i]) > peak - _EDGE_DROP
+            and float(log_w[i]) < weight_peak - _EDGE_DROP
+        )
+
+    return (float(j[0]) > 0.0 and open_end(0)) or open_end(-1)
+
+
+def _log_poisson_pmf(j: FloatArray, mu: float) -> FloatArray:
+    """log P(J = j), J ~ Poisson(mu), for integers j >= 0 (as floats), in Loader's
+    saddle-point form -stirlerr(j) - bd0(j, mu) - log sqrt(2 pi j) (Loader 2000)."""
+    out = np.full(j.shape, -mu)
+    positive = j > 0.0
+    if bool(positive.any()):
+        jp = j[positive]
+        out[positive] = (
+            -_stirlerr(jp) - _bd0(jp, np.full(jp.shape, mu)) - 0.5 * np.log(jp)
+        ) - _LOG_SQRT_2PI
+    return out
+
+
+def _tilted_window(
+    mu: float, log_factors: Callable[[FloatArray], FloatArray], *, upper: bool
+) -> tuple[FloatArray, FloatArray]:
+    """Nodes j and log Poisson(mu) weights around the dominant term of
+    sum_j w_j I_j when it lies outside the window around mu.
+
+    The log of the summand has slope log mu - digamma(j + 1) + d/dj log I_j in j,
+    zero at the largest term (below mu for the lower tail, whose beta factors fall
+    with j, above it for the upper). The slope is found by Brent's method, with
+    differences over Delta = sqrt(j) terms (about one standard deviation of the
+    summand), so that the rounding of log I_j (about 1e-16 |log I_j|) does not
+    move the root; the digamma term is taken at the midpoint, which matches the
+    difference of log j! over Delta to O(Delta^2 / j^3). The summand is
+    log-concave with curvature at least that of the Poisson weights, 1 / j, so the
+    window j* +/- (15 sqrt(j*) + 30) holds it as the window around mu holds the
+    weights, subsampled the same way from j* = 1e4 on; it is centred once more on
+    its largest term.
+    """
+
+    def slope(j: float) -> float:
+        delta = max(1.0, math.floor(math.sqrt(j)))
+        pair = log_factors(np.array([j, j + delta]))
+        rise = float(pair[1] - pair[0]) / delta
+        return math.log(mu) - float(special.digamma(j + 1.0 + 0.5 * delta)) + rise
+
+    if upper:
+        lo, hi = mu, 2.0 * mu + 1.0
+        while slope(hi) > 0.0:
+            lo, hi = hi, 2.0 * hi
+        centre = optimize.brentq(slope, lo, hi, xtol=0.5)
+    elif slope(0.0) <= 0.0:
+        centre = 0.0
+    else:
+        centre = optimize.brentq(slope, 0.0, mu, xtol=0.5)
+    j, log_w = _window_at(centre, mu)
+    terms: FloatArray = log_w + log_factors(j)
+    largest = float(j[int(terms.argmax())])
+    return _window_at(largest, mu)
+
+
+def _window_at(centre: float, mu: float) -> tuple[FloatArray, FloatArray]:
+    """Nodes j +/- (15 sqrt(j) + 30) around ``centre`` (every h-th from 1e4 on,
+    h = floor(sqrt(centre) / 8)) and their log Poisson(mu) weights times h."""
+    spread = math.sqrt(max(centre, 1.0))
+    half = _POISSON_SD * spread + _POISSON_PAD
+    step = (
+        float(math.floor(spread / _NODES_PER_SD)) if centre >= _SUBSAMPLE_FROM else 1.0
+    )
+    first = max(0.0, math.floor(centre) - step * math.ceil(half / step))
+    count = math.ceil((math.floor(centre) + half - first) / step) + 1
+    j = first + step * np.arange(count, dtype=np.float64)
+    return j, _log_poisson_pmf(j, mu) + math.log(step)
 
 
 def _solve_increasing(
@@ -486,7 +938,7 @@ def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
     is at least 1e4, the bracket is lambda_0 +/- 4 sqrt(lambda_0), widened four-fold
     until it holds the root; otherwise it runs from 0 to 2 f df1, doubled until it
     holds the root. With the subsampled Poisson sum (module docstring) the search
-    takes 1 to 40 ms at any f. Returns ``math.inf`` when the root lies
+    takes 1 ms to 0.25 s at any f. Returns ``math.inf`` when the root lies
     beyond the largest double.
 
     Raises:
