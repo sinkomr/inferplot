@@ -22,13 +22,13 @@ EXPECTED_KINDS = {
     "closed_form",
     "games_howell_p",
     "wrs2_p",
-    "wrs2_akp_constant",
     "wrs2_xi_constant",
     "noncentral_ci",
     "noncentral_cdf",
     "studentized_range_tail",
     "ttest_bayes_factor",
     "akp_constant",
+    "smm_quantile",
 }
 
 
@@ -48,18 +48,19 @@ def test_spec_values() -> None:
     # SPEC.md section 10 values; a change needs a measured reason. Both rtol and
     # atol are pinned: a nonzero atol would make every small p-value "close".
     # noncentral_ci's atol, noncentral_cdf and studentized_range_tail were
-    # measured in Phase 1; wrs2_akp_constant and wrs2_xi_constant in Phase 2.
+    # measured in Phase 1; wrs2_xi_constant, akp_constant and smm_quantile in
+    # Phase 2.
     expected = {
         "closed_form": (1e-10, 0.0),
         "games_howell_p": (1e-6, 3e-9),
         "wrs2_p": (1e-10, 2.0**-53),
-        "wrs2_akp_constant": (1.3e-9, 0.0),
         "wrs2_xi_constant": (3.3e-8, 0.0),
         "noncentral_ci": (1e-6, 4e-8),
         "noncentral_cdf": (2e-11, 0.0),
         "studentized_range_tail": (4e-13, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),
         "akp_constant": (5e-7, 0.0),
+        "smm_quantile": (3e-14, 0.0),
     }
     for kind, (rtol, atol) in expected.items():
         assert (TOLERANCES[kind].rtol, TOLERANCES[kind].atol) == (rtol, atol), kind
