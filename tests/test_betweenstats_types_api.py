@@ -311,3 +311,177 @@ def test_robust_seed_and_order(plants: pd.DataFrame) -> None:
     assert again.effect_size == base.effect_size
     assert again.pairwise == base.pairwise
     assert again.text == base.text
+
+
+# --------------------------------------------------------------------------- #
+# type bayes
+# --------------------------------------------------------------------------- #
+
+POSTERIOR_WARNING = (
+    "The posterior difference and its credible interval, which ggstatsplot adds to "
+    "the Bayes factor subtitle, arrive in inferplot 0.2."
+)
+
+
+def test_bayes_two_groups(teeth: pd.DataFrame) -> None:
+    result = betweenstats(teeth, "supp", "len", type="bayes")
+    assert betweenstats(teeth, "supp", "len", type="bf") == result
+    assert result.type == "bayes"
+    assert result.test is None
+    assert result.effect_size is None
+    assert result.pairwise == ()
+    oj = teeth.loc[teeth["supp"] == "OJ", "len"].to_numpy(dtype=float)
+    vc = teeth.loc[teeth["supp"] == "VC", "len"].to_numpy(dtype=float)
+    bf10, log_bf01 = stats.jzs_bf10_two_sample(oj, vc, prior_scale=0.707)
+    assert result.bayes is not None
+    assert (result.bayes.bf10, result.bayes.log_bf01) == (bf10, log_bf01)
+    assert result.bayes.prior_scale == 0.707
+    assert [d.centrality for d in result.descriptives] == ["map", "map"]
+    assert result.descriptives[0].value == stats.map_estimate(oj).estimate
+    assert result.text.subtitle == "log_e(BF_01) = -0.18, r_Cauchy^JZS = 0.71"
+    assert result.text.caption is None
+    assert result.text.apa == (
+        "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18, "
+        "n = 60."
+    )
+    assert "MAP estimate 24.91" in result.text.alt_text
+    assert result.warnings == (POSTERIOR_WARNING,)
+    frame_rows = result.to_frame()
+    assert list(frame_rows["test"]) == ["jzs_two_sample"]
+    assert frame_rows.loc[0, "bf10"] == bf10
+    assert StatsResult.from_json(result.to_json()) == result
+
+
+def test_bayes_prior_and_no_subtitle(teeth: pd.DataFrame) -> None:
+    wide = betweenstats(teeth, "supp", "len", type="bayes", bf_prior=0.8)
+    assert wide.bayes is not None
+    assert wide.bayes.prior_scale == 0.8
+    assert wide.text.subtitle is not None
+    assert wide.text.subtitle.endswith("r_Cauchy^JZS = 0.80")
+    bare = betweenstats(teeth, "supp", "len", type="bayes", results_subtitle=False)
+    assert bare.bayes is None
+    assert bare.text.subtitle is None
+    assert bare.warnings == ()
+    assert bare.text.apa.startswith("No test was computed")
+    unused = betweenstats(
+        teeth, "supp", "len", type="bayes", results_subtitle=False, bf_prior=0.8
+    )
+    assert unused.warnings == (
+        "bf_prior=0.8 has no effect: no Bayes factor is computed "
+        "(results_subtitle=False leaves the Bayes factor out).",
+    )
+
+
+def test_bayes_three_groups_needs_results_subtitle_false(plants: pd.DataFrame) -> None:
+    with pytest.raises(NotImplementedError, match=r"Bayesian ANOVA.*0\.2") as info:
+        betweenstats(plants, "group", "weight", type="bayes")
+    assert "results_subtitle=False" in str(info.value)
+    result = betweenstats(
+        plants, "group", "weight", type="bayes", results_subtitle=False
+    )
+    assert result.test is None
+    assert result.effect_size is None
+    assert result.bayes is None
+    assert result.warnings == ()
+    groups = {g: v["weight"].to_numpy(dtype=float) for g, v in plants.groupby("group")}
+    assert len(result.pairwise) == 3
+    for pair in result.pairwise:
+        assert pair.bayes is not None
+        assert pair.p_value is None
+        assert pair.p_adjusted is None
+        assert pair.significant is None
+        assert pair.displayed
+        assert pair.adjust_method == "none"
+        assert pair.test_label == "Student's t"
+        a, b = groups[pair.group1], groups[pair.group2]
+        bf10, _ = stats.jzs_bf10_two_sample(a, b, prior_scale=0.707)
+        assert pair.bayes.bf10 == bf10
+        student = stats.student_t(a, b)
+        assert (pair.statistic, pair.df) == (student.t, student.df)
+    assert result.text.caption == (
+        "Pairwise: Bayes factors (Student's t, JZS prior 0.707), unadjusted; "
+        "showing all 3 pairs."
+    )
+    assert result.text.pairwise_labels[0] == "log_e(BF_01) = 0.43"
+    assert result.text.apa.startswith(
+        "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, "
+        "BF10 = 0.65; "
+    )
+    assert result.check() == ()
+    table = str(result)
+    assert "Pairwise Bayes factors (Student's t, JZS prior 0.707):" in table
+    assert list(result.to_frame()["test"]) == ["jzs_two_sample"] * 3
+    assert StatsResult.from_json(result.to_json()) == result
+    hidden = betweenstats(
+        plants,
+        "group",
+        "weight",
+        type="bayes",
+        results_subtitle=False,
+        pairwise_display="none",
+    )
+    assert not any(pair.displayed for pair in hidden.pairwise)
+    assert hidden.text.caption is None
+
+
+def test_bayes_argument_rules(plants: pd.DataFrame, teeth: pd.DataFrame) -> None:
+    with pytest.raises(ValueError, match="Bayes factor is always two-sided"):
+        betweenstats(teeth, "supp", "len", type="bayes", alternative="less")
+    with pytest.raises(ValueError, match="trims nothing"):
+        betweenstats(teeth, "supp", "len", type="bayes", tr=0.1)
+    with pytest.raises(ValueError, match="reports the Bayes factor in the subtitle"):
+        betweenstats(teeth, "supp", "len", type="bayes", bf_message=True)
+    two = betweenstats(teeth, "supp", "len", type="bayes", conf_level=0.9)
+    assert two.warnings == (
+        POSTERIOR_WARNING,
+        "conf_level=0.9 has no effect: type='bayes' shows no interval in this "
+        "version (the posterior credible interval arrives in inferplot 0.2).",
+    )
+    many = betweenstats(
+        plants,
+        "group",
+        "weight",
+        type="bayes",
+        results_subtitle=False,
+        p_adjust_method="BH",
+        pairwise_alpha=0.1,
+        pairwise_display="ns",
+        bf_prior=0.5,
+    )
+    assert many.warnings == (
+        "p_adjust_method='BH' has no effect: Bayes factors are not adjusted for "
+        "multiple comparisons (as in ggstatsplot).",
+        "pairwise_alpha=0.1 has no effect: Bayes factors are not compared with a "
+        "significance level, and every pair is drawn.",
+        "pairwise_display='ns' has no effect: Bayes factors have no significance, "
+        "so every pair is drawn (as in ggstatsplot); pass pairwise_display='none' "
+        "to draw none.",
+        "bf_prior=0.5 has no effect: no Bayes factor is computed (the pairwise "
+        "Bayes factors always use the prior scale 0.707, as in ggstatsplot, and "
+        "the Bayesian ANOVA arrives in inferplot 0.2).",
+    )
+    assert all(pair.displayed for pair in many.pairwise)
+    assert all(pair.bayes and pair.bayes.prior_scale == 0.707 for pair in many.pairwise)
+
+
+def test_bayes_plain_errors() -> None:
+    one = frame({"a": [1.0, 2.0, 4.0], "b": [3.0]})
+    with pytest.raises(ValueError, match=r"at least 2 observations.*'b' \(n = 1\)"):
+        betweenstats(one, "g", "y", type="bayes")
+    flat = frame({"a": [1.0, 2.0, 4.0, 7.0], "b": [3.0, 3.0, 3.0]})
+    with pytest.raises(ValueError, match=r"MAP estimate.*group 'b' of x='g'"):
+        betweenstats(flat, "g", "y", type="bayes")
+    with pytest.raises(ValueError, match="type='nonparametric'"):
+        betweenstats(flat, "g", "y", type="bayes")
+
+
+def test_bayes_row_order(plants: pd.DataFrame) -> None:
+    base = betweenstats(plants, "group", "weight", type="bayes", results_subtitle=False)
+    shuffled = plants.sample(frac=1.0, random_state=11).reset_index(drop=True)
+    again = betweenstats(
+        shuffled, "group", "weight", type="bayes", results_subtitle=False
+    )
+    assert again.pairwise == base.pairwise
+    assert again.text == base.text
+    for a, b in zip(again.descriptives, base.descriptives, strict=True):
+        assert a.value == pytest.approx(b.value, rel=1e-12)

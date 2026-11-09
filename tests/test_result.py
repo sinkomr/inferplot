@@ -34,7 +34,8 @@ def _case(name: str) -> OracleCase:
 def _no_nan(result: StatsResult) -> StatsResult:
     """The fixture's pairs lack a raw p; give them one so equality is meaningful."""
     pairs = tuple(
-        dataclasses.replace(p, p_value=p.p_adjusted / 3) for p in result.pairwise
+        dataclasses.replace(p, p_value=(p.p_adjusted or 0.0) / 3)
+        for p in result.pairwise
     )
     return dataclasses.replace(result, pairwise=pairs)
 
@@ -185,6 +186,7 @@ def test_to_dict_keeps_floats(one_sided: StatsResult) -> None:
     assert isinstance(d["descriptives"][0], dict)
     assert d["test"]["df"] is None
     assert type(d["settings"]["conf_level"]) is float
+    assert one_sided.test is not None
     with_int = dataclasses.replace(
         one_sided, test=dataclasses.replace(one_sided.test, df_error=55)
     )
@@ -215,8 +217,18 @@ def test_nan_becomes_null() -> None:
     data = _strict_loads(result.to_json())
     assert data["pairwise"][0]["p_value"] is None
     back = StatsResult.from_json(result.to_json())
-    assert math.isnan(back.pairwise[0].p_value)
+    # A pair's p-value can be None (Bayes factor pairs have none), so its JSON
+    # null reads back as None: NaN and None both mean "missing" there.
+    assert back.pairwise[0].p_value is None
     assert back.to_json() == result.to_json()
+    # In a field that is always a number, null reads back as NaN.
+    assert result.effect_size is not None
+    nan_es = dataclasses.replace(result.effect_size, estimate=math.nan)
+    with_nan = dataclasses.replace(result, effect_size=nan_es)
+    assert _strict_loads(with_nan.to_json())["effect_size"]["estimate"] is None
+    again = StatsResult.from_json(with_nan.to_json())
+    assert again.effect_size is not None
+    assert math.isnan(again.effect_size.estimate)
 
 
 def test_from_dict_rejects_bad_input(anova: StatsResult) -> None:
@@ -252,6 +264,7 @@ def test_to_frame_pandas(anova: StatsResult) -> None:
         "games_howell",
     ]
     main = frame.iloc[0]
+    assert anova.test is not None
     assert main["statistic"] == anova.test.statistic
     assert main["df"] == 2.0
     assert main["effect_size"] == "partial_omega_squared"

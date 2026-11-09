@@ -221,7 +221,9 @@ class PairwiseComparison(_Plain):
     ``estimate`` with ``conf_level``, ``conf_low`` and ``conf_high`` is the pair's
     own estimate and interval where the pairwise method reports one (lincon: the
     trimmed-mean difference group1 - group2), else None. ``bayes`` is the pair's
-    Bayes factor where the comparison is Bayesian, else None.
+    Bayes factor where the comparison is Bayesian (type "bayes"); such a pair has
+    no p-value, so ``p_value``, ``p_adjusted`` and ``significant`` are None and
+    ``adjust_method`` is "none" (Bayes factors are not adjusted).
     """
 
     group1: str
@@ -229,12 +231,12 @@ class PairwiseComparison(_Plain):
     statistic_name: str
     statistic: float
     df: float | None
-    p_value: float
-    p_adjusted: float
+    p_value: float | None
+    p_adjusted: float | None
     adjust_method: str
     test: str
     test_label: str
-    significant: bool
+    significant: bool | None
     displayed: bool
     estimate: float | None = None
     conf_level: float | None = None
@@ -451,6 +453,11 @@ class StatsResult(_Plain):
     ``y`` values of the complete rows in that level, in data order, as floats. The
     renderer draws the points, boxes and violins from them, so a result read back
     with :meth:`from_json` draws the same figure (DECISIONS.md D36).
+
+    ``test`` and ``effect_size`` are None for type "bayes", which has no
+    frequentist test: its two-group Bayes factor is in ``bayes`` and, with three or
+    more groups, each pair's in ``pairwise`` (the Bayesian ANOVA and posterior
+    estimates arrive in inferplot 0.2, DECISIONS.md D41).
     """
 
     analysis: str
@@ -462,8 +469,8 @@ class StatsResult(_Plain):
     levels: tuple[str, ...]
     values: tuple[tuple[float, ...], ...]
     descriptives: tuple[Descriptive, ...]
-    test: TestResult
-    effect_size: EffectSize
+    test: TestResult | None
+    effect_size: EffectSize | None
     bayes: BayesFactor | None
     pairwise: tuple[PairwiseComparison, ...]
     n_obs: int
@@ -504,33 +511,51 @@ class StatsResult(_Plain):
         return cls.from_dict(json.loads(text))
 
     def frame_rows(self) -> list[dict[str, Any]]:
-        """The rows of :meth:`to_frame`: the main test, then each pair."""
+        """The rows of :meth:`to_frame`: the main test, then each pair.
+
+        Type "bayes" has no frequentist test: its main row is the two-group Bayes
+        factor, and with three or more groups there is no main row (the Bayesian
+        ANOVA arrives in inferplot 0.2).
+        """
         test, es, bayes = self.test, self.effect_size, self.bayes
-        rows: list[dict[str, Any]] = [
-            {
-                "test": test.name,
-                "label": test.label,
-                "group1": None,
-                "group2": None,
-                "statistic_name": test.statistic_name,
-                "statistic": test.statistic,
-                "df": test.df,
-                "df_error": test.df_error,
-                "p_value": test.p_value,
-                "p_adjusted": None,
-                "adjust_method": None,
-                "alternative": test.alternative,
-                "effect_size": es.name,
-                "estimate": es.estimate,
-                "conf_level": es.conf_level,
-                "conf_low": es.conf_low,
-                "conf_high": es.conf_high,
-                "bf10": None if bayes is None else bayes.bf10,
-                "log_bf01": None if bayes is None else bayes.log_bf01,
-                "significant": None,
-                "displayed": None,
-            }
-        ]
+        rows: list[dict[str, Any]] = []
+        if test is not None:
+            rows.append(
+                {
+                    "test": test.name,
+                    "label": test.label,
+                    "group1": None,
+                    "group2": None,
+                    "statistic_name": test.statistic_name,
+                    "statistic": test.statistic,
+                    "df": test.df,
+                    "df_error": test.df_error,
+                    "p_value": test.p_value,
+                    "p_adjusted": None,
+                    "adjust_method": None,
+                    "alternative": test.alternative,
+                    "effect_size": None if es is None else es.name,
+                    "estimate": None if es is None else es.estimate,
+                    "conf_level": None if es is None else es.conf_level,
+                    "conf_low": None if es is None else es.conf_low,
+                    "conf_high": None if es is None else es.conf_high,
+                    "bf10": None if bayes is None else bayes.bf10,
+                    "log_bf01": None if bayes is None else bayes.log_bf01,
+                    "significant": None,
+                    "displayed": None,
+                }
+            )
+        elif bayes is not None:
+            rows.append(
+                {
+                    **dict.fromkeys(name for name, _ in _FRAME_COLUMNS),
+                    "test": bayes.test,
+                    "label": "Bayesian t-test",
+                    "alternative": "two-sided",
+                    "bf10": bayes.bf10,
+                    "log_bf01": bayes.log_bf01,
+                }
+            )
         for pair in self.pairwise:
             rows.append(
                 {
@@ -617,8 +642,8 @@ class StatsResult(_Plain):
         return self.text.apa + "\n\n" + _pairwise_table(self)
 
 
-def _p_cell(p: float) -> str:
-    if math.isnan(p):
+def _p_cell(p: float | None) -> str:
+    if p is None or math.isnan(p):
         return "NA"
     if p < 0.001:
         return "<.001"
@@ -647,8 +672,60 @@ _ADJUSTED_HEADINGS: Final = {
 }
 
 
+def _bf_cell(x: float) -> str:
+    if math.isnan(x):
+        return "NA"
+    if math.isinf(x):
+        return "Inf" if x > 0 else "-Inf"
+    if x != 0.0 and (abs(x) >= 1e5 or abs(x) < 0.01):
+        return f"{x:.2e}"
+    return f"{x:.2f}"
+
+
+def _table(title: str, rows: list[tuple[str, ...]]) -> str:
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    lines = [
+        "  ".join(
+            cell.ljust(width) for cell, width in zip(row, widths, strict=True)
+        ).rstrip()
+        for row in rows
+    ]
+    return "\n".join([title, *lines])
+
+
+def _bayes_pairwise_table(result: StatsResult) -> str:
+    first = result.pairwise[0]
+    rows: list[tuple[str, ...]] = [
+        ("group1", "group2", first.statistic_name, "df", "BF10", "log BF01", "shown")
+    ]
+    scale = ""
+    for pair in result.pairwise:
+        bayes = pair.bayes
+        assert bayes is not None
+        scale = f"{bayes.prior_scale:g}"
+        rows.append(
+            (
+                pair.group1,
+                pair.group2,
+                _num_cell(pair.statistic),
+                _num_cell(pair.df),
+                _bf_cell(bayes.bf10),
+                _num_cell(bayes.log_bf01),
+                "yes" if pair.displayed else "no",
+            )
+        )
+    title = f"Pairwise Bayes factors ({first.test_label}, JZS prior {scale}):"
+    return _table(title, rows)
+
+
+def _yes_no(flag: bool | None) -> str:
+    return "NA" if flag is None else ("yes" if flag else "no")
+
+
 def _pairwise_table(result: StatsResult) -> str:
     first = result.pairwise[0]
+    if first.bayes is not None:
+        return _bayes_pairwise_table(result)
     method = result.settings.p_adjust_method
     adjusted = _ADJUSTED_HEADINGS.get(method, f"p ({method})")
     header = (
@@ -669,8 +746,8 @@ def _pairwise_table(result: StatsResult) -> str:
             _num_cell(pair.df),
             _p_cell(pair.p_value),
             _p_cell(pair.p_adjusted),
-            "yes" if pair.significant else "no",
-            "yes" if pair.displayed else "no",
+            _yes_no(pair.significant),
+            _yes_no(pair.displayed),
         )
         for pair in result.pairwise
     ]

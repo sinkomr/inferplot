@@ -197,19 +197,19 @@ def test_type_aliases(plants: pd.DataFrame, anova: StatsResult) -> None:
 @pytest.mark.parametrize(
     ("value", "canonical"),
     [
+        ("nonparametric", "nonparametric"),
+        ("np", "nonparametric"),
+        ("robust", "robust"),
+        ("r", "robust"),
         ("bayes", "bayes"),
         ("bf", "bayes"),
     ],
 )
-def test_other_types_are_not_implemented(
-    plants: pd.DataFrame, value: str, canonical: str
+def test_every_type_and_alias_is_implemented(
+    teeth: pd.DataFrame, value: str, canonical: str
 ) -> None:
-    with pytest.raises(NotImplementedError) as info:
-        betweenstats(plants, "group", "weight", type=value)
-    message = str(info.value)
-    assert repr(value) in message
-    assert canonical in message
-    assert "'nonparametric' and 'robust' exist for now" in message
+    # tests/test_betweenstats_types_api.py checks each type in detail.
+    assert betweenstats(teeth, "supp", "len", type=value).type == canonical
 
 
 @pytest.mark.parametrize("tr", [0.0, 0.1, 0.25, 0.49])
@@ -224,8 +224,10 @@ def test_tr_other_than_the_default_raises_for_parametric(
 
 
 def test_type_checked_before_the_data() -> None:
-    with pytest.raises(NotImplementedError):
-        betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="bf")
+    with pytest.raises(ValueError, match="use one of"):
+        betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="bootstrap")
+    with pytest.raises(ValueError, match="trims nothing"):
+        betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="bf", tr=0.1)
 
 
 # --------------------------------------------------------------------------- #
@@ -306,6 +308,8 @@ def test_two_groups(two: StatsResult, teeth: pd.DataFrame) -> None:
     oj = teeth.loc[teeth["supp"] == "OJ", "len"].to_numpy(dtype=float)
     vc = teeth.loc[teeth["supp"] == "VC", "len"].to_numpy(dtype=float)
     assert two.levels == ("OJ", "VC")
+    assert two.test is not None
+    assert two.effect_size is not None
     assert two.values == (tuple(oj.tolist()), tuple(vc.tolist()))
     welch = stats.welch_t(oj, vc)
     assert (two.test.name, two.test.label) == ("welch_t", "Welch's t-test")
@@ -412,6 +416,8 @@ def test_three_groups(anova: StatsResult, plants: pd.DataFrame) -> None:
     ]
     welch = stats.welch_anova(groups)
     test = anova.test
+    assert test is not None
+    assert anova.effect_size is not None
     assert (test.name, test.label, test.statistic_name) == (
         "welch_anova",
         "Welch's ANOVA",
@@ -519,7 +525,8 @@ def test_pairwise_display(plants: pd.DataFrame, display: str, canonical: str) ->
 
 
 def test_pairwise_alpha_is_strict(plants: pd.DataFrame, anova: StatsResult) -> None:
-    holm = [pair.p_adjusted for pair in anova.pairwise]
+    holm = [pair.p_adjusted for pair in anova.pairwise if pair.p_adjusted]
+    assert len(holm) == len(anova.pairwise)
     assert [pair.significant for pair in anova.pairwise] == [False, False, False]
     # alpha equal to a pair's adjusted p: not significant (strictly below)
     at = betweenstats(plants, "group", "weight", pairwise_alpha=min(holm))
@@ -670,6 +677,7 @@ def test_to_frame(anova: StatsResult, two: StatsResult) -> None:
     assert isinstance(pandas_frame, pd.DataFrame)
     assert len(pandas_frame) == 4
     assert list(pandas_frame["test"]) == ["welch_anova"] + ["games_howell"] * 3
+    assert anova.test is not None
     assert pandas_frame.loc[0, "statistic"] == anova.test.statistic
     polars_frame = anova.to_frame("polars")
     assert isinstance(polars_frame, pl.DataFrame)

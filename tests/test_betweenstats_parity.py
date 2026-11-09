@@ -187,6 +187,8 @@ def test_means(name: str, backend: Backend) -> None:
 def test_main_test_and_effect_size(name: str, backend: Backend) -> None:
     case, result = _BY_NAME[name], analyze(name, backend)
     test, es = result.test, result.effect_size
+    assert test is not None
+    assert es is not None
     if not case.subtitle_rows:  # results.subtitle = FALSE: R reports nothing
         assert case.args.get("results.subtitle") is False
         return
@@ -274,6 +276,8 @@ def test_pairwise_rows(name: str, backend: Backend) -> None:
         assert order[pair.group1] < order[pair.group2]
         assert pair.adjust_method == method
         assert pair.test_label == "Games-Howell"
+        assert pair.p_value is not None
+        assert pair.p_adjusted is not None
         assert pair.significant == (pair.p_adjusted < 0.05)
         reference = probe_rows[frozenset((pair.group1, pair.group2))]
         sign = 1.0 if reference["group1"] == pair.group1 else -1.0
@@ -329,6 +333,7 @@ def _label_check(
     labels = result.text.pairwise_labels
     assert len(labels) == len(figure.pairwise_labels) == len(result.pairwise)
     for i, (pair, row) in enumerate(zip(result.pairwise, rows, strict=True)):
+        assert pair.p_adjusted is not None
         ours = tx.pairwise_p_expression(
             p_adjusted=pair.p_adjusted, adjust_method=pair.adjust_method, digits=digits
         )
@@ -439,6 +444,8 @@ def test_failed_case_computes(name: str, backend: Backend) -> None:
     node = parse(str(row["expression"]))
     assert result.text.subtitle == tx.to_plain(node)
     assert figure.subtitle == tx.to_mathtext(node)
+    assert result.test is not None
+    assert result.effect_size is not None
     assert_close(
         "closed_form", result.test.statistic, number(row["statistic"]), what="F"
     )
@@ -480,6 +487,8 @@ def test_failed_case_computes(name: str, backend: Backend) -> None:
     for pair in result.pairwise:
         assert pair.df is not None
         assert pair.df < 2.0
+        assert pair.p_value is not None
+        assert pair.p_adjusted is not None
         assert math.isfinite(pair.p_value)
         assert math.isfinite(pair.p_adjusted)
         assert pair.p_value == stats.srange_sf(abs(pair.statistic), k, pair.df)

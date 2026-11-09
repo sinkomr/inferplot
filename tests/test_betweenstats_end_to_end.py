@@ -159,6 +159,15 @@ TYPE_EXAMPLES = [
     ),
     pytest.param("robust", "ToothGrowth", "supp", "len", {}, id="robust-k2"),
     pytest.param("robust", "iris", "Species", "Sepal.Width", {}, id="robust-k3"),
+    pytest.param("bayes", "ToothGrowth", "supp", "len", {}, id="bayes-k2"),
+    pytest.param(
+        "bayes",
+        "PlantGrowth",
+        "group",
+        "weight",
+        {"results_subtitle": False},
+        id="bayes-k3",
+    ),
 ]
 
 

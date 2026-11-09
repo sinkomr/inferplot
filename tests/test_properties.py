@@ -57,6 +57,8 @@ def _close_numbers(actual: StatsResult, expected: StatsResult, what: str) -> Non
             assert a is None
         else:
             assert_close("closed_form", a, b, what=f"{what} {field}")
+    assert actual.effect_size is not None
+    assert expected.effect_size is not None
     assert_close(
         "closed_form",
         actual.effect_size.estimate,

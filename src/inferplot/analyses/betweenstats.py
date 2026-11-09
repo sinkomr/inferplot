@@ -298,6 +298,11 @@ def _no_effect_warnings(
     if not bayes_computed and canonical["bf_prior"] != _DEFAULT_BF_PRIOR:
         if type_name in ("nonparametric", "robust"):
             why = f"type={type_name!r} has no Bayes factor"
+        elif type_name == "bayes" and k >= 3:
+            why = (
+                "the pairwise Bayes factors always use the prior scale 0.707, as "
+                "in ggstatsplot, and the Bayesian ANOVA arrives in inferplot 0.2"
+            )
         elif k >= 3:
             why = (
                 f"x={x!r} has {k} groups, and the Bayes factor for three or more "
@@ -407,8 +412,8 @@ class _Args:
 class _Parts:
     """What one type's analysis computed."""
 
-    test: TestResult
-    effect_size: EffectSize
+    test: TestResult | None
+    effect_size: EffectSize | None
     bayes: BayesFactor | None
     pairwise: tuple[PairwiseComparison, ...]
     centrality: str
@@ -975,10 +980,195 @@ def _lincon_pairs(
 
 
 # --------------------------------------------------------------------------- #
-# the analysis
+# type bayes
 # --------------------------------------------------------------------------- #
 
-_IMPLEMENTED_TYPES: Final = ("parametric", "nonparametric", "robust")
+# Every pairwise Bayes factor uses this prior scale, whatever bf_prior says
+# (statsExpressions' pairwise_comparisons(); SPEC.md section 4).
+_PAIRWISE_BF_PRIOR: Final = 0.707
+_SHEATHER_JONES_1991: Final = (
+    "Sheather, S. J. & Jones, M. C. (1991). Journal of the Royal Statistical "
+    "Society B 53: 683-690 (kernel density bandwidth of the MAP estimate)."
+)
+_POSTERIOR_WARNING: Final = (
+    "The posterior difference and its credible interval, which ggstatsplot adds to "
+    "the Bayes factor subtitle, arrive in inferplot 0.2."
+)
+
+
+def _map_estimates(
+    x: str, levels: Sequence[str], values: Sequence[FloatArray]
+) -> tuple[float, ...]:
+    """Each group's MAP estimate (the centrality of type bayes), with a plain
+    error naming the group when it has no density to take the peak of."""
+    out: list[float] = []
+    for level, v in zip(levels, values, strict=True):
+        try:
+            out.append(stats.map_estimate(v).estimate)
+        except ValueError as error:
+            raise ValueError(
+                f"The MAP estimate that type='bayes' shows for each group needs a "
+                f"kernel density of the group's values, and the group {level!r} of "
+                f"x={x!r} (n = {v.size}) has none: {error}. Collect more varied "
+                "values, or use type='nonparametric' (medians) or "
+                "type='parametric' (means)."
+            ) from None
+    return tuple(out)
+
+
+def _check_bayes(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -> None:
+    small = [
+        f"{level!r} (n = {v.size})"
+        for level, v in zip(levels, values, strict=True)
+        if v.size < 2
+    ]
+    if small:
+        has = "this group has" if len(small) == 1 else "these groups have"
+        raise ValueError(
+            f"Every group of x={x!r} needs at least 2 observations for the Bayes "
+            f"factor (Student's t) and the MAP estimate; {has} fewer: "
+            f"{', '.join(small)}. Remove {'it' if len(small) == 1 else 'them'} from "
+            "the data or collect more observations."
+        )
+    constant = [
+        level
+        for level, v in zip(levels, values, strict=True)
+        if float(np.ptp(v)) == 0.0
+    ]
+    if len(constant) >= 2:
+        raise ValueError(
+            f"The groups {_names(constant)} of x={x!r} have no variability (every "
+            "value within each group is the same), so Student's t of a pair of "
+            "them, and its Bayes factor, has no standard error."
+        )
+
+
+def _bayes(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> _Parts:
+    """Two groups: the JZS Bayes factor subtitle (log_e BF01 and the prior scale);
+    three or more groups, only with results_subtitle=False: a JZS Bayes factor for
+    every pair, Student's t, prior 0.707, unadjusted (D41). MAP estimates as
+    centrality."""
+    x = args.x
+    _check_bayes(x, levels, values)
+    centers = _map_estimates(x, levels, values)
+    warnings: list[str] = []
+    citations = [_ROUDER_2009, _SHEATHER_JONES_1991]
+    bayes: BayesFactor | None = None
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    try:
+        if len(levels) == 2:
+            if args.results_subtitle:
+                a, b = values
+                bf10, log_bf01 = stats.jzs_bf10_two_sample(
+                    a, b, prior_scale=args.prior_scale
+                )
+                bayes = BayesFactor(
+                    bf10=bf10,
+                    log_bf01=log_bf01,
+                    prior="cauchy",
+                    prior_scale=args.prior_scale,
+                    test="jzs_two_sample",
+                )
+                warnings.append(_POSTERIOR_WARNING)
+        else:
+            pairwise = _bayes_pairs(levels, values, args)
+    except ValueError as error:
+        raise ValueError(
+            _named_groups(str(error), levels, x)
+            + ". Check the data for entry or unit errors."
+        ) from None
+    return _Parts(
+        test=None,
+        effect_size=None,
+        bayes=bayes,
+        pairwise=pairwise,
+        centrality="map",
+        centers=centers,
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
+
+
+def _bayes_pairs(
+    levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """A JZS Bayes factor for every pair i < j in level order on Student's t
+    (mean(group1) - mean(group2)), prior 0.707 whatever ``bf_prior`` is, not
+    adjusted; every pair drawn unless ``pairwise_display`` is "none"; rows in
+    ggstatsplot's order (``_sorted_pairs``)."""
+    rows: list[PairwiseComparison] = []
+    k = len(levels)
+    for i in range(k):
+        for j in range(i + 1, k):
+            a, b = values[i], values[j]
+            student = stats.student_t(a, b)
+            bf10, log_bf01 = stats.jzs_bf10_two_sample(
+                a, b, prior_scale=_PAIRWISE_BF_PRIOR
+            )
+            rows.append(
+                PairwiseComparison(
+                    group1=levels[i],
+                    group2=levels[j],
+                    statistic_name="t",
+                    statistic=student.t,
+                    df=student.df,
+                    p_value=None,
+                    p_adjusted=None,
+                    adjust_method="none",
+                    test="jzs_two_sample",
+                    test_label="Student's t",
+                    significant=None,
+                    displayed=args.pairwise_display != "none",
+                    bayes=BayesFactor(
+                        bf10=bf10,
+                        log_bf01=log_bf01,
+                        prior="cauchy",
+                        prior_scale=_PAIRWISE_BF_PRIOR,
+                        test="jzs_two_sample",
+                    ),
+                )
+            )
+    return _sorted_pairs(rows)
+
+
+def _bayes_no_effect_warnings(
+    *, k: int, passed: dict[str, object], canonical: dict[str, object]
+) -> list[str]:
+    """Arguments type bayes does not use (D39): conf_level (no interval in v0.1),
+    and with three or more groups the significance and adjustment arguments
+    (Bayes factors are neither tested nor adjusted; every pair is drawn)."""
+    out: list[str] = []
+    if canonical["conf_level"] != 0.95:
+        out.append(
+            f"conf_level={passed['conf_level']!r} has no effect: type='bayes' shows "
+            "no interval in this version (the posterior credible interval arrives "
+            "in inferplot 0.2)."
+        )
+    if k >= 3:
+        if canonical["p_adjust_method"] != _DEFAULT_P_ADJUST:
+            out.append(
+                f"p_adjust_method={passed['p_adjust_method']!r} has no effect: "
+                "Bayes factors are not adjusted for multiple comparisons (as in "
+                "ggstatsplot)."
+            )
+        if canonical["pairwise_alpha"] != _DEFAULT_ALPHA:
+            out.append(
+                f"pairwise_alpha={passed['pairwise_alpha']!r} has no effect: Bayes "
+                "factors are not compared with a significance level, and every pair "
+                "is drawn."
+            )
+        if canonical["pairwise_display"] == "non-significant":
+            out.append(
+                f"pairwise_display={passed['pairwise_display']!r} has no effect: "
+                "Bayes factors have no significance, so every pair is drawn (as in "
+                "ggstatsplot); pass pairwise_display='none' to draw none."
+            )
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# the analysis
+# --------------------------------------------------------------------------- #
 
 
 def _check_type_arguments(
@@ -1051,6 +1241,11 @@ def betweenstats(
     * "nonparametric" ("np"): the Mann-Whitney U test with the rank-biserial r (two
       groups); the Kruskal-Wallis test with rank epsilon squared (bootstrap CI) and
       Dunn's comparisons (three or more). Centrality: medians.
+    * "bayes" ("bf"): the JZS Bayes factor of Student's t, reported as log_e(BF01)
+      with the prior scale ``bf_prior`` (two groups); with three or more groups
+      only with ``results_subtitle=False`` (the Bayesian ANOVA arrives in 0.2): a
+      Bayes factor for every pair, prior 0.707, unadjusted. Centrality: MAP
+      estimates. Posterior estimates arrive in 0.2 (D41).
     * "robust" ("r"): Yuen's test on ``tr``-trimmed means with the AKP robust
       standardized difference (two groups); the heteroscedastic trimmed-means
       ANOVA with the explanatory effect size and lincon's comparisons (three or
@@ -1061,8 +1256,8 @@ def betweenstats(
         data: a pandas, polars or pyarrow data frame in long format.
         x: the grouping column.
         y: the numeric outcome column.
-        type: "parametric" ("p"), "nonparametric" ("np") or "robust" ("r");
-            "bayes" is not available yet in this development version.
+        type: "parametric" ("p"), "nonparametric" ("np"), "robust" ("r") or
+            "bayes" ("bf").
         pairwise_display: which pairs the figure draws: "significant" ("s"),
             "non-significant" ("ns"), "all" or "none". Every pair is computed.
         p_adjust_method: R's ``p.adjust`` method for the pairwise p-values.
@@ -1089,8 +1284,9 @@ def betweenstats(
         TypeError, ValueError: a bad argument or unusable data; the message says
             how to fix the call.
         KeyError: a column that the data frame does not have.
-        NotImplementedError: a type, or a Bayes factor caption, that this version
-            does not have.
+        NotImplementedError: a design this version does not have: the Bayes factor
+            caption or subtitle for three or more groups (a Bayesian ANOVA), and
+            the robust pairwise comparisons at a conf_level other than 0.95.
     """
     type_name = canonical_type(type)
     display = canonical_pairwise_display(pairwise_display)
@@ -1104,13 +1300,6 @@ def betweenstats(
     subtitle_on = check_bool(results_subtitle, "results_subtitle")
     side = _alternative(check_alternative(alternative))
     rng_seed = check_seed(seed)
-    if type_name not in _IMPLEMENTED_TYPES:
-        shown = repr(type) if type == type_name else f"{type!r} ({type_name})"
-        raise NotImplementedError(
-            f"type={shown} is not available yet in this development version of "
-            "inferplot; type='parametric', 'nonparametric' and 'robust' exist for "
-            "now."
-        )
     if show_bf is True and not subtitle_on:
         raise ValueError(
             "bf_message=True asks for the Bayes factor caption, which is drawn only "
@@ -1127,6 +1316,7 @@ def betweenstats(
             "parametric": "Welch's ANOVA",
             "nonparametric": "the Kruskal-Wallis test",
             "robust": "the trimmed-means ANOVA",
+            "bayes": "the pairwise Bayes factors",
         }[type_name]
         raise ValueError(
             f"alternative={side!r} applies only to two groups; x={x!r} has {k} "
@@ -1143,6 +1333,14 @@ def betweenstats(
             )
         _check_groups(
             x, levels, values, bayes=k == 2 and subtitle_on and show_bf is not False
+        )
+    if type_name == "bayes" and k >= 3 and subtitle_on:
+        raise NotImplementedError(
+            f"type='bayes' with {k} groups: the subtitle ggstatsplot draws here is a "
+            "Bayesian ANOVA, which arrives in inferplot 0.2. Pass "
+            "results_subtitle=False for the rest of ggstatsplot's output (MAP "
+            "estimates and a Bayes factor for every pair), or use "
+            "type='parametric'."
         )
 
     args = _Args(
@@ -1163,6 +1361,7 @@ def betweenstats(
         "parametric": _parametric,
         "nonparametric": _nonparametric,
         "robust": _robust,
+        "bayes": _bayes,
     }
     parts = analyses[type_name](levels, values, args)
 
@@ -1176,6 +1375,22 @@ def betweenstats(
             f"{'was' if len(empty) == 1 else 'were'} left out of the analysis."
         )
     warnings += parts.warnings
+    if type_name == "bayes":
+        warnings += _bayes_no_effect_warnings(
+            k=k,
+            passed={
+                "conf_level": level,
+                "p_adjust_method": p_adjust_method,
+                "pairwise_alpha": alpha,
+                "pairwise_display": pairwise_display,
+            },
+            canonical={
+                "conf_level": level,
+                "p_adjust_method": adjust,
+                "pairwise_alpha": alpha,
+                "pairwise_display": display,
+            },
+        )
     warnings += _no_effect_warnings(
         x=x,
         k=k,
