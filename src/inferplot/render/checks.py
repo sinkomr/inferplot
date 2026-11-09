@@ -3,7 +3,8 @@
 Measured on the drawn figure from the rendered bounding boxes of its texts:
 
 * ``label_overlap`` (warning): two texts' boxes intersect, or a bracket label's
-  box crosses the line (bar or leg) of another bracket;
+  box reaches into the line (bar or leg) of another bracket by more than
+  anti-aliasing slack;
 * ``text_clipped`` (warning): a text extends outside the figure, or a text drawn
   inside the Axes (labels, and the subtitle and caption when ``ax=`` was given)
   extends outside that Axes;
@@ -32,7 +33,8 @@ if TYPE_CHECKING:
 
 __all__ = ["figure_issues", "text_extents"]
 
-# Pixels a text may cross a border by before it counts (anti-aliasing slack).
+# Pixels a text may cross a border, or reach into a bracket's line, before it
+# counts (anti-aliasing slack).
 _CLIP_TOLERANCE: Final = 0.5
 _MAX_LISTED: Final = 5
 
@@ -123,14 +125,28 @@ def _overlaps(extents: list[tuple[Text, str, Bbox]]) -> list[str]:
     return found
 
 
-def _intersect(a: BboxBase, b: BboxBase) -> bool:
-    width = min(a.x1, b.x1) - max(a.x0, b.x0)
-    height = min(a.y1, b.y1) - max(a.y0, b.y0)
-    return width > 0 and height > 0
+def _reaches_into(box: BboxBase, stroke: BboxBase) -> bool:
+    """Whether a text box reaches into a stroke by more than anti-aliasing slack.
+
+    In each direction the overlap must exceed _CLIP_TOLERANCE, or half the
+    stroke's extent in that direction when the stroke is thinner than that (a
+    0.8-point line at low dpi), so that a box drawn across a line of any width
+    counts and a box touching its edge or the end of its cap by a fraction of a
+    pixel does not.
+    """
+    width = min(box.x1, stroke.x1) - max(box.x0, stroke.x0)
+    height = min(box.y1, stroke.y1) - max(box.y0, stroke.y0)
+    return width > min(_CLIP_TOLERANCE, stroke.width / 2) and height > min(
+        _CLIP_TOLERANCE, stroke.height / 2
+    )
 
 
 def _segments(line: Line2D, dpi: float) -> list[Bbox]:
-    """Each straight piece of a drawn line, as a box in pixels as thick as the line."""
+    """Each straight piece of a drawn line, as a box in pixels as thick as the line.
+
+    The box reaches half the line width past each end: bracket lines have
+    matplotlib's default projecting cap style.
+    """
     # matplotlib's stubs leave these partly Unknown; both are float arrays.
     data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
     pixels = np.asarray(cast("Any", line.get_transform()).transform(data))
@@ -155,7 +171,8 @@ def _crossings(
     One entry per label and bracket crossed: the label's position among the
     brackets and the crossing in words. A label may sit inside the area an
     enclosing bracket spans (between its legs, below its bar); only the drawn
-    lines count.
+    lines count, and only when the label's box reaches into one by more than
+    anti-aliasing slack (:func:`_reaches_into`).
     """
     boxes = {id(text): (described, box) for text, described, box in extents}
     dpi = float(root_figure(fig.figure).dpi)
@@ -170,7 +187,7 @@ def _crossings(
             continue
         described, box = drawn
         for m, (_, _, bracket) in enumerate(fig.brackets):
-            if m != n and any(_intersect(box, piece) for piece in lines[m]):
+            if m != n and any(_reaches_into(box, piece) for piece in lines[m]):
                 found.append((n, f"{described} crosses {bracket}"))
     return found
 

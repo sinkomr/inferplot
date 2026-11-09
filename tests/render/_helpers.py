@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import functools
+import itertools
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from matplotlib.artist import Artist
 from matplotlib.text import Text
@@ -77,6 +79,66 @@ def numbered_count(fig: StatsFigure, prefix: str) -> int:
 
 def figure_codes(fig: StatsFigure) -> list[str]:
     return [issue.code for issue in fig.check() if issue.code in FIGURE_CODES]
+
+
+def stroke_reach(fig: StatsFigure, *, near: float = 8.0) -> tuple[float, float]:
+    """How the drawn bracket lines meet the other brackets' labels, in pixels.
+
+    An independent measure for ``check()``: each bracket line is sampled as drawn,
+    every 0.05 px along its pieces and at 9 offsets across its width, with
+    projecting caps; a label's box is its rendered text extent. Returns the
+    deepest sample inside another bracket's label box (its distance to the box's
+    nearest edge; 0.0 when none is inside) and the smallest distance from a
+    sample outside to such a box (inf when no line comes within ``near``).
+    """
+    fig.draw()
+    renderer = fig.figure.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+    dpi = float(fig.figure.dpi)
+    deepest, clearance = 0.0, float("inf")
+    for n, (label, _, _) in enumerate(fig.brackets):
+        box = label.get_window_extent(renderer)
+        for m, (_, line, _) in enumerate(fig.brackets):
+            if m == n:
+                continue
+            data = np.asarray(line.get_xydata(), dtype=np.float64)  # pyright: ignore[reportUnknownArgumentType]
+            xy = np.asarray(line.get_transform().transform(data), dtype=np.float64)
+            half = float(line.get_linewidth()) * dpi / 72.0 / 2.0
+            for (x0, y0), (x1, y1) in itertools.pairwise(xy):
+                if (
+                    min(x0, x1) - half - near > box.x1
+                    or max(x0, x1) + half + near < box.x0
+                    or min(y0, y1) - half - near > box.y1
+                    or max(y0, y1) + half + near < box.y0
+                ):
+                    continue
+                length = float(np.hypot(x1 - x0, y1 - y0))
+                ux, uy = (x1 - x0) / length, (y1 - y0) / length
+                # Only the stretch of the line within ``near`` of the box.
+                along = [
+                    (cx - x0) * ux + (cy - y0) * uy
+                    for cx in (box.x0, box.x1)
+                    for cy in (box.y0, box.y1)
+                ]
+                start = max(-half, min(along) - near)
+                stop = min(length + half, max(along) + near)
+                t, s = np.meshgrid(
+                    np.append(np.arange(start, stop, 0.05), stop),
+                    np.linspace(-half, half, 9),
+                )
+                px = x0 + ux * t - uy * s
+                py = y0 + uy * t + ux * s
+                inside = (px > box.x0) & (px < box.x1) & (py > box.y0) & (py < box.y1)
+                if inside.any():
+                    depth = np.minimum.reduce(
+                        [px - box.x0, box.x1 - px, py - box.y0, box.y1 - py]
+                    )[inside]
+                    deepest = max(deepest, float(depth.max()))
+                dx = np.maximum(np.maximum(box.x0 - px, px - box.x1), 0.0)
+                dy = np.maximum(np.maximum(box.y0 - py, py - box.y1), 0.0)
+                gaps = np.hypot(dx, dy)[~inside]
+                if gaps.size:
+                    clearance = min(clearance, float(gaps.min()))
+    return deepest, clearance
 
 
 def svg_texts(path: Path) -> list[str]:

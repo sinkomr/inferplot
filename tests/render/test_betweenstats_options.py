@@ -17,6 +17,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.text import Text
+from matplotlib.transforms import Bbox
 
 from inferplot.render import StatsFigure, betweenstats
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
@@ -30,6 +31,7 @@ from tests.render._helpers import (
     figure_codes,
     gids,
     numbered_texts,
+    stroke_reach,
     text_of,
 )
 from tests.render._results import (
@@ -252,17 +254,21 @@ def _three_groups() -> StatsResult:
 
 
 def _given_axes(kind: str) -> Axes:
+    # 1.6 and 1.7 in high: too short for the three levels at full spacing, so the
+    # levels are pushed closer together. (The review's 10 x 4 and 9 x 3.5 in
+    # figures now fit them: the levels are spaced in pixels, not by 7% of the
+    # data range.)
     if kind == "add_axes":
-        figure = Figure(figsize=(10, 4))
-        return figure.add_axes((0.08, 0.2, 0.9, 0.75))
-    figure = Figure(figsize=(9, 3.5), layout="constrained")
+        figure = Figure(figsize=(10, 2.6))
+        return figure.add_axes((0.08, 0.3, 0.9, 0.62))
+    figure = Figure(figsize=(9, 2.4), layout="constrained")
     return figure.add_subplot()
 
 
 @pytest.mark.parametrize("kind", ["add_axes", "constrained"])
 def test_bracket_label_drawn_across_another_bracket_is_reported(kind: str) -> None:
-    # A short Axes: the label of b-c sits on the bar of a-c. (With matplotlib 3.8
-    # the label of a-b crosses that bar too; the layout differs by a pixel.)
+    # A short Axes: the label of b-c sits on the bar of a-c. (The label of a-b
+    # may cross that bar too; a pixel decides.)
     fig = betweenstats(_three_groups(), ax=_given_axes(kind))
     (issue,) = [i for i in fig.check() if i.code == "label_overlap"]
     assert issue.severity == "warning"
@@ -335,11 +341,105 @@ def test_bracket_crossing_needs_a_line_not_its_box(
         assert found == []
 
 
+def _move_box(fig: StatsFigure, label: Text, **edges: float) -> Bbox:
+    """Move ``label`` so its drawn box has the given edges (pixels): x0, x1, cx
+    for the horizontal and y0, y1 for the vertical; returns the drawn box."""
+    ax = fig.axes["main"]
+    renderer = fig.figure.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+    box = label.get_window_extent(renderer)
+    dx = dy = 0.0
+    if "x0" in edges:
+        dx = edges["x0"] - box.x0
+    if "x1" in edges:
+        dx = edges["x1"] - box.x1
+    if "cx" in edges:
+        dx = edges["cx"] - (box.x0 + box.x1) / 2
+    if "y0" in edges:
+        dy = edges["y0"] - box.y0
+    if "y1" in edges:
+        dy = edges["y1"] - box.y1
+    x, y = ax.transData.transform(label.get_position())
+    label.set_position(tuple(ax.transData.inverted().transform((x + dx, y + dy))))
+    fig.draw()
+    return label.get_window_extent(renderer)
+
+
+def _leg_stroke(fig: StatsFigure, line: Line2D, end: int) -> Bbox:
+    """The drawn stroke of a bracket's left (end 0) or right (end 1) leg, caps in."""
+    xy = line.get_transform().transform(np.asarray(line.get_xydata(), dtype=float))
+    half = float(line.get_linewidth()) * fig.figure.dpi / 72 / 2
+    (xa, ya), (xb, yb) = (xy[0], xy[1]) if end == 0 else (xy[3], xy[2])
+    return Bbox.from_extents(
+        min(xa, xb) - half, min(ya, yb) - half, max(xa, xb) + half, max(ya, yb) + half
+    )
+
+
+@pytest.mark.parametrize("x", [0.0, 2.0])  # a-c's left and right leg
+@pytest.mark.parametrize(("depth", "crosses"), [(0.3, False), (1.0, True)])
+def test_bracket_crossing_allows_subpixel_contact(
+    x: float, depth: float, crosses: bool
+) -> None:
+    # The box of label a-b, centered on a leg of a-c, reaches ``depth`` pixels
+    # into the leg's projecting cap from below.
+    fig = _two_brackets(x, 7.0)
+    (label, _, _), (_, outer, _) = fig.brackets
+    leg = _leg_stroke(fig, outer, 0 if x == 0.0 else 1)
+    box = _move_box(fig, label, cx=(leg.x0 + leg.x1) / 2, y1=leg.y0 + depth)
+    assert box.y1 - leg.y0 == pytest.approx(depth, abs=0.02)
+    found = [i.message for i in figure_issues(fig) if i.code == "label_overlap"]
+    reach, _ = stroke_reach(fig)
+    assert bool(found) is crosses is (reach > 0.5)
+
+
+@pytest.mark.parametrize("dpi", [72, 100, 200])
+@pytest.mark.parametrize(
+    ("where", "depth", "crosses"),
+    [
+        ("tip", 0.3, False),  # box top 0.3 px into the leg's cap: contact
+        ("tip", 1.0, True),  # one pixel into the leg: drawn across it
+        ("tip", 3.0, True),
+        ("side", 0.3, False),  # box edge 0.3 px into the leg's side
+        ("side", 1.0, True),  # one pixel into the leg's side
+    ],
+)
+def test_a_given_axes_reports_a_label_across_a_leg(
+    dpi: int, where: str, depth: float, crosses: bool
+) -> None:
+    # A tall Axes: nothing crosses. Then the label of b-c (lowest level) is moved
+    # onto the right leg of a-c (the level above), as deep as given, and check()
+    # must agree with the dense sampling of the drawn line.
+    figure = Figure(figsize=(10.0, 7.0), dpi=dpi)
+    FigureCanvasAgg(figure)
+    fig = betweenstats(_three_groups(), ax=figure.add_subplot())
+    assert figure_codes(fig) == []
+    assert len(fig.brackets) == 3
+    (label,) = [t for t, _, n in fig.brackets if n == "the bracket of 'b' and 'c'"]
+    (outer,) = [ln for _, ln, n in fig.brackets if n == "the bracket of 'a' and 'c'"]
+    leg = _leg_stroke(fig, outer, 1)
+    if where == "tip":
+        box = _move_box(fig, label, cx=(leg.x0 + leg.x1) / 2, y1=leg.y0 + depth)
+        assert box.y1 - leg.y0 == pytest.approx(depth, abs=0.02)
+    else:
+        # Just below the bar of a-c, the box's right edge in the leg's left side.
+        box = _move_box(fig, label, x1=leg.x0 + depth, y1=leg.y1 - leg.width - 1.0)
+        assert box.x1 - leg.x0 == pytest.approx(depth, abs=0.02)
+    reach, _ = stroke_reach(fig)
+    found = [i.message for i in fig.check() if i.code == "label_overlap"]
+    assert bool(found) is crosses is (reach > 0.5)
+    if crosses:
+        assert len(found) == 1
+        assert "label of 'b' and 'c'" in found[0]
+        assert "crosses the bracket of 'a' and 'c'" in found[0]
+
+
 def test_a_tall_given_axes_fits_the_brackets() -> None:
     _, (ax,) = _user_axes(10.0, 7.0)
     fig = betweenstats(_three_groups(), ax=ax)
     assert len(fig.brackets) == 3
     assert figure_codes(fig) == []
+    deepest, clearance = stroke_reach(fig)
+    assert deepest == 0.0
+    assert clearance >= 3.0  # a label pad and half a line width at 100 dpi
 
 
 # --------------------------------------------------------------------------- #

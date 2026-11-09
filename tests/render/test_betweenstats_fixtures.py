@@ -16,7 +16,12 @@ import pytest
 from matplotlib.lines import Line2D
 
 from inferplot.render import betweenstats
-from inferplot.render.brackets import LEVEL_STEP
+from inferplot.render.betweenstats import (
+    BRACKET_TIP_PT,
+    LABEL_PAD_PT,
+    MIN_AXES_HEIGHT_IN,
+    MIN_DATA_HEIGHT_IN,
+)
 from inferplot.text import figure_texts
 from tests.oracle_fixtures import OracleCase
 from tests.render._helpers import (
@@ -82,22 +87,41 @@ def test_fixture_figure_matches_figure_texts(case: OracleCase) -> None:
 def test_fixture_brackets_are_stacked_by_span(case: OracleCase) -> None:
     result = fixture_result(case)
     fig = default_figure(short(case))
+    ax = fig.axes["main"]
+    dpi = fig.figure.dpi
     lines = [fig.figure.findobj(lambda a, m=m: a.get_gid() == f"bracket-{m}")[0]
              for m in range(numbered_count(fig, "bracket"))]  # fmt: skip
     data = [v for group in result.values for v in group]
-    span = max(data) - min(data)
     spans: list[tuple[float, float, float]] = []
     for line in lines:
         assert isinstance(line, Line2D)
         xs = np.asarray(line.get_xdata(), dtype=float).tolist()
         ys = np.asarray(line.get_ydata(), dtype=float).tolist()
         assert ys[1] == ys[2] > max(data)
+        # Legs BRACKET_TIP_PT long at any data range.
+        legs = ax.transData.transform([(xs[0], ys[0]), (xs[1], ys[1])])
+        assert legs[1, 1] - legs[0, 1] == pytest.approx(BRACKET_TIP_PT * dpi / 72)
         spans.append((xs[0], xs[3], ys[1]))
+    # Levels are a fixed number of pixels apart, set by the label height.
     heights = sorted({y for _, _, y in spans})
-    for low, high in itertools.pairwise(heights):
-        steps = (high - low) / (LEVEL_STEP * span)
-        assert steps == pytest.approx(round(steps), abs=1e-9)
-        assert round(steps) >= 1
+    pixels = [float(ax.transData.transform((0.0, y))[1]) for y in heights]
+    if len(pixels) > 1:
+        step = pixels[1] - pixels[0]
+        label_h = max(t.get_window_extent().height for t, _, _ in fig.brackets)
+        pad = LABEL_PAD_PT * dpi / 72
+        assert step >= label_h + 2 * pad + BRACKET_TIP_PT * dpi / 72
+        for low, high in itertools.pairwise(pixels):
+            assert high - low == pytest.approx(step, abs=1e-6)
+    # The data region keeps MIN_DATA_HEIGHT_IN; the Axes grows only by the stack.
+    if heights:
+        lowest_legs = float(ax.transData.transform((0.0, heights[0]))[1]) - (
+            BRACKET_TIP_PT * dpi / 72
+        )
+        data_px = lowest_legs - ax.bbox.y0
+        assert data_px >= MIN_DATA_HEIGHT_IN * dpi
+        if ax.bbox.height > MIN_AXES_HEIGHT_IN * dpi + 1e-6:
+            line_px = fig.brackets[0][1].get_linewidth() * dpi / 72
+            assert data_px == pytest.approx(MIN_DATA_HEIGHT_IN * dpi + line_px / 2)
     for a_lo, a_hi, a_y in spans:
         for b_lo, b_hi, b_y in spans:
             if (a_lo, a_hi) != (b_lo, b_hi) and a_lo <= b_lo and b_hi <= a_hi:

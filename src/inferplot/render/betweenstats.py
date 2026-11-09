@@ -77,8 +77,11 @@ MARGIN_PT: Final = 10.0
 GAP_PT: Final = 5.0
 LABEL_PAD_PT: Final = 3.0  # between a bracket and its label, and around labels
 LABEL_BOX_PAD: Final = 0.3  # centrality label box padding, in font sizes
+BRACKET_TIP_PT: Final = 4.0  # length of a bracket's legs
+BRACKET_LINEWIDTH_PT: Final = 0.8
 MIN_LEVEL_SPACING_IN: Final = 1.1
 MIN_AXES_HEIGHT_IN: Final = 3.2
+MIN_DATA_HEIGHT_IN: Final = 2.5  # the data region; bracket levels go on top
 KDE_GRID: Final = 256
 KDE_BINS: Final = 2_048
 
@@ -890,6 +893,7 @@ class _Drawing:
             (self.extent(t).height / 2 for t in self.centrality_labels), default=0.0
         )
         label_h = max((self.extent(t).height for t in self.bracket_labels), default=0.0)
+        fixed = height_px is not None
         return vertical_layout(
             data_min=data_min,
             data_max=data_max,
@@ -898,11 +902,12 @@ class _Drawing:
             center_half_px=center_half,
             label_px=label_h,
             pad_px=_px(LABEL_PAD_PT, self.dpi),
+            tip_px=_px(BRACKET_TIP_PT, self.dpi),
+            line_px=_px(BRACKET_LINEWIDTH_PT, self.dpi),
             top_px=top_px,
             bottom_px=bottom_px,
-            min_height_px=None
-            if height_px is not None
-            else MIN_AXES_HEIGHT_IN * self.dpi,
+            min_height_px=None if fixed else MIN_AXES_HEIGHT_IN * self.dpi,
+            data_height_px=MIN_DATA_HEIGHT_IN * self.dpi,
             height_px=height_px,
         )
 
@@ -920,7 +925,7 @@ class _Drawing:
                 [i, i, j, j],
                 [y - layout.tip, y, y, y - layout.tip],
                 color=theme.INK,
-                linewidth=0.8,
+                linewidth=BRACKET_LINEWIDTH_PT,
                 zorder=4.0,
                 gid=f"bracket-{m}",
             )
