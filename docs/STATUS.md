@@ -105,7 +105,11 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   (`inferplot.stats.nonparametric`): every nonparametric fixture reproduced, closed-form
   values within 1.9e-14 relative, the rank epsilon squared lower bound within 1.21
   Monte Carlo SDs of the 20,000-resample reference; analysis, text and rendering next
-- [ ] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes with bootstrap CIs)
+- [ ] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes with bootstrap CIs). Statistics layer done
+  (`inferplot.stats.robust`): all 10 robust fixtures reproduced (statistics within
+  4.3e-15 relative, p within one rounding step of R's, bootstrap CIs within 2.72 Monte
+  Carlo SDs), every bootstrap method proved by exact replay of ggstatsplot's draws;
+  exact constants (D42) and accurate p-values (D43); analysis, text and rendering next
 - [ ] bayes (two-group JZS Bayes factor; MAP centrality). MAP centrality done
   (`inferplot.stats.map_estimate`): all 30 MAP labels of the 10 bayes fixtures on
   ggstatsplot's grid point; v0.1 behaviour decided (D41); analysis, text and rendering
@@ -168,19 +172,17 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   computes its pairwise tests through the same hidden helper, and `.chisq_test_safe`
   swallows errors into NA rows the recorders cannot see). Unused edge CSV:
   `edge_within_missing` (Phase 3).
-- Phase 2: compute WRS2's p-values as R does, 1 - cdf (`wrs2_p`; the statistics rule
-  has an exception for it). Every fixture's p is large enough that `sf` passes too, so
-  add a robust case whose p underflows (for example iris Petal.Length) to pin how
-  ggstatsplot prints a p of 0 or one rounded on the double grid; and a two-group robust
-  case with tiny p to confirm Yuen's 1 - pt. lincon's critical values need the
-  published Studentized maximum modulus table (C = 3 at df 5 is 3.39, not the rounded
-  3.40); no fixture has a Yuen df above 200 or alpha other than 0.05.
+- Robust: Yuen's p is 2 (1 - pt) in WRS2 (confirmed: every robust omnibus p lies on the
+  1 - cdf grid); inferplot reports the accurate tail (D43, awaiting the owner's
+  confirmation). Unconfirmed until probe-smm and the Phase 2 oracle cases land:
+  lincon's critical value at df >= 200 (the infinite-df row is used), below df 2 or at
+  `conf_level` other than 0.95 (both raise `NotImplementedError`), WRS2's constants at tr
+  other than 0.2, and 879 of 900 SMM table entries. A bootstrap resample whose effect
+  size is 0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at
+  10,000 values per group; a counting-based sort could make it about 5 times faster.
 - Phases 3 and 4: `ttest_bayes_factor` was measured on two-sample Bayes factors only;
   measure paired and one-sample ones against an exact integral when their fixtures
   arrive, and log any change.
-- AKP: WRS2's scaling constant differs from the exact winsorized-normal value by
-  1.2e-9 relative (review measurement), which is above the 1e-10 closed-form tolerance.
-  Phase 2 must match WRS2's constant or register a measured tolerance.
 - MAP centrality: reproduced at the same grid point on all 30 fixture labels
   (`MAP_CENTRALITY`, 0 steps), by matching the fixtures. Not yet pinned (every fixture
   value is positive, n <= 93): bins of negative values (truncation toward zero
