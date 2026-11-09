@@ -185,8 +185,7 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   swallows errors into NA rows the recorders cannot see). Unused edge CSV:
   `edge_within_missing` (Phase 3).
 - Robust: Yuen's p is 2 (1 - pt) in WRS2 (confirmed: every robust omnibus p lies on the
-  1 - cdf grid); inferplot reports the accurate tail (D43, awaiting the owner's
-  confirmation). Unconfirmed until probe-smm and the Phase 2 oracle cases land:
+  1 - cdf grid); inferplot reports the accurate tail (D43, confirmed by the owner). Unconfirmed until probe-smm and the Phase 2 oracle cases land:
   lincon's critical value at df >= 200 (the infinite-df row is used), below df 2 or at
   `conf_level` other than 0.95 (both raise `NotImplementedError`), WRS2's constants at tr
   other than 0.2, and 879 of 900 SMM table entries. A bootstrap resample whose effect
