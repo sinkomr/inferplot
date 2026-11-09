@@ -57,13 +57,14 @@ follow its convention: text between two `$` signs is mathtext (`r"Dose ($\mu$g)"
 and `\$` is a literal dollar sign. Each is laid out once before anything is drawn, so
 an expression matplotlib cannot read raises `ValueError` at the call, also with `ax=`,
 and leaves a given Axes unchanged (D40). Default labels from column names are never
-read as mathtext.
+read as mathtext. With `ax=`, inferplot's font applies only to the axis labels, tick
+labels and the texts it draws; texts already in that Axes keep their font.
 
 ### Function-specific arguments
 
 | Function | Positional | Specific keywords (defaults) |
 | --- | --- | --- |
-| `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. They are checked on throwaway artists of the receiving classes before anything is drawn, so an unknown property raises `TypeError` and a rejected value `ValueError`, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
+| `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. Before anything is drawn, each is applied to a scratch artist made as the drawing makes it, which is drawn and written as SVG and PDF (matplotlib checks some values only then); a property name the artist does not have raises `TypeError` with the closest property name, and any value matplotlib rejects, when setting it or only when drawing, raises `ValueError` naming the argument, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
 | `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=True`, `centrality_path=True` |
 | `histostats` | `data, x` | `test_value=0.0`, `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True` |
 | `scatterstats` | `data, x, y` | `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `label_var=None` |
@@ -111,12 +112,21 @@ lowercase underscores) is a valid argument raises `TypeError` naming that spelli
 `subject`, `id`, `subject.id` point to `subject_id` in functions that have it; in
 `betweenstats` they, and `subject_id`, say the groups are independent and point to
 `withinstats(..., subject_id=...)`. When several keywords are wrong, the first in call
-order is reported. More positional arguments than `data, x[, y]` raise `TypeError`
+order is reported. Did-you-mean never suggests an argument the call already gives; a
+snake_case spelling of one says it is already given. A drawing keyword given to
+`ip.analyze.<name>` (`ax`, `palette`, `layers`, `title`, `subtitle`, `caption`, `xlab`,
+`ylab`, `centrality_plotting`, `point_args`, `boxplot_args`, `violin_args`) says it is a
+drawing option of `ip.<name>` and `ip.render.<name>`; an analysis keyword given to
+`ip.render.<name>` (`data`, `x`, `y`, `type`, `pairwise_display`, `seed`, ...) says the
+result already holds it and points to `ip.analyze.<name>`. More positional arguments
+than `data, x[, y]` raise `TypeError`
 naming the extra values and saying everything after them is keyword-only. A drawing
-function (`ip.render.<name>`) given anything but a `StatsResult` raises `TypeError`
+function (`ip.render.<name>`) given anything but a `StatsResult`, positionally, as
+`result=`, or as data by keyword (`data=`, or `x=`/`y=` without a result), raises
+`TypeError`
 saying it draws the result of `ip.analyze.<name>(data, x, y)`, or to use
 `ip.<name>(data, x, y, ...)` to analyze and draw in one call; this comes before the
-positional count.
+keyword and positional checks.
 
 Passing a numpy array, list or dict as `data` → `TypeError` saying to build a pandas
 or polars DataFrame in long format. `withinstats` without `subject_id` → `TypeError`
@@ -198,14 +208,14 @@ a docstring):
 | parametric | Welch's t (`stats::t.test`, var.equal = FALSE); p follows `alternative` | Hedges' g (`effectsize::hedges_g(pooled_sd = FALSE)`): d = (mean1 - mean2) / sqrt((var1 + var2) / 2), the unpooled standardizer, not the pooled SD and not the average of the two SDs; g = d x J(df_W), with J Hedges' exact gamma-ratio correction at the Welch df df_W. CI: the noncentral-t interval for the noncentrality parameter at the Welch t and df_W, each bound times (Welch SE / sqrt((var1 + var2) / 2)) x J(df_W). The CI follows `alternative`: "greater" gives [lower bound, Inf] and "less" [-Inf, upper bound], one-sided at `conf_level`; the subtitle prints "Inf" and "-Inf". Reproduced in every two-group fixture, balanced and unbalanced (mtcars `am`, `edge_k2`), at 90% and 95% and one-sided: g to 1e-10, CI bounds to 1.9e-8 absolute (`noncentral_ci`). inferplot computes the noncentral t itself: SciPy's `nctdtr` is off by up to 1.5e-3 at the SciPy 1.11 floor and returns NaN far in the tails at 1.18 | mean |
 | nonparametric | Mann-Whitney U (`stats::wilcox.test(exact = FALSE)`): always the normal approximation with continuity correction, never exact, also without ties and with fewer than 50 values per group (`edge_k2`: ggstatsplot reports p = 0.0025; the exact p would be 0.0013); the fixture's method string omits "with continuity correction"; p follows `alternative` | rank-biserial r = 2U / (n1 n2) - 1 (`effectsize::rank_biserial`), U the Mann-Whitney U of group 1; CI tanh(atanh(r) -/+ z x sqrt((n1 + n2 + 1) / (3 n1 n2))), ties ignored; follows `alternative` ("greater" gives [lower bound, 1], "less" [-1, upper bound]); reproduced to 1e-10 | median |
 | robust | Yuen, 20% trim (`WRS2::yuen`): t is reported unsigned, \|t\|, even when group 1's trimmed mean is the smaller (mtcars `am`, `edge_k2`), while the AKP effect size keeps its sign; p presumably 1 - pt like lincon's *(verify: every two-group robust fixture has p of 0.0047 or more, where the two computations agree)* (§10, `wrs2_p`) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); bootstrap CI (ggstatsplot: 100 resamples) | trimmed mean |
-| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces all 36 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 1.5e-9; Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`: kernel density, Sheather-Jones bandwidth, 2^10 grid points) |
+| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces all 36 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 1.5e-9; Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`): Gaussian kernel density with `bw.SJ` (Sheather & Jones 1991, solve-the-equation; pair distances binned in 1,000 bins of 1.01 x range / 1000 anchored at zero, root by Brent's zero finder at tol 0.1 x lower) by `stats::density` (linear binning on 1,024 points from min - 4 bw to max + 4 bw, FFT, linear interpolation), read at 1,024 points from min(x) to max(x); the first point with the largest density. No density (fewer than 2 values, no spread, zero IQR) raises `ValueError` |
 
 ### betweenstats, three or more groups
 
 | type | Omnibus | Effect size + CI | Pairwise, then `p_adjust_method` | Centrality |
 | --- | --- | --- | --- | --- |
 | parametric | Welch ANOVA (`stats::oneway.test`) | partial omega squared = max(0, (F - 1) df1 / (F df1 + df2 + 1)) with Welch's F and df (`effectsize::omega_squared`), one-sided CI [lower, 1] at `conf_level`: the estimate read as a partial eta squared gives F_w = omega df2 / ((1 - omega) df1), lambda solves P(F'(df1, df2, lambda) <= F_w) = `conf_level`, the lower bound is lambda / (lambda + df2), and 0 when no lambda > 0 does (D33, probe-omega). inferplot computes the noncentral F itself (SciPy 1.11's `ncfdtr` is off by up to 1.2 relative near P = 1) | Games-Howell (`PMCMRplus::gamesHowellTest`) **then Holm on top**; q is signed, mean(group2) - mean(group1); group1 is the earlier level in the analysis order, and rows are sorted by group1 and then group2 as text in the C locale (statsExpressions 2.2.1 `pairwise_comparisons()`: `dplyr::arrange(group1, group2)`), the order the brackets keep. p is the accurate studentized range upper tail at the pair's Welch df and \|q\| (`inferplot.stats.srange_sf`, D31), then `p_adjust_method` over all k(k-1)/2 pairs (ggstatsplot's adjusted p is exactly `p.adjust` of gamesHowellTest's raw p). ggstatsplot's p is R's `ptukey` value, whose error grows as the df falls (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, 1.9e-8 at df 20 to 1000, a floor near 4.7e-10 in the far tail) and which is NaN below 2 df, where ggstatsplot stops with an error (fixture `edge_n2`, D37). SciPy's `studentized_range` is no ground truth in the far tail either (1.9e-14 for iris setosa-versicolor, 14% low) | mean |
-| nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), one-sided percentile bootstrap CI [lower, 1] (ggstatsplot: 100 iterations) | Dunn (`PMCMRplus::kwAllPairsDunnTest`): z = abs(mean-rank difference) / tie-corrected SE, reported unsigned; two-sided normal p (reproduced to 2.4e-15) | median |
+| nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared = H / (N - 1) (`effectsize::rank_epsilon_squared`; Tomczak & Tomczak 2014), one-sided percentile bootstrap CI [lower, 1]: each resample draws n_g values with replacement within every group (group sizes fixed; whole-row resampling misses the oracle's 20,000-resample references by up to about 220 replicate SDs); the lower bound is the bootstrap (1 - conf_level) quantile with `boot::boot.ci`'s percentile rule, order statistic (R + 1) alpha interpolated on the normal quantile scale (Davison & Hinkley 1997, ch. 5); ggstatsplot: 100 iterations, inferplot: 2,000 seeded, drawn from each group's sorted values with groups in content order, so row order and level order do not change it | Dunn (`PMCMRplus::kwAllPairsDunnTest`): z = abs(mean-rank difference) / tie-corrected SE, reported unsigned; two-sided normal p (reproduced to 2.4e-15); inferplot computes raw p for i < j in input order and adjusts with `p_adjust` | median |
 | robust | trimmed-means ANOVA (`WRS2::t1way`); p computed as 1 - pf (§10, `wrs2_p`) | explanatory effect size (`WRS2::t1way`), bootstrap CI (ggstatsplot: 100 resamples, `alpha = 1 - conf.level` computed in floating point, 0.050000000000000044: with 100 resamples only that value, not 0.05, reproduces ggstatsplot's bounds, so the CI's order statistics depend on alpha / 2 x resamples rounding past 2.5); with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon`: estimate = trimmed mean(group1) - trimmed mean(group2); p = per-pair Yuen p (1 - pt), then `p_adjust_method` (lincon's own Hochberg is not used); CI = estimate -/+ c x Yuen SE. c comes from a two-decimal table of the Studentized maximum modulus at (alpha, C = number of pairs, not groups: `edge_k5` has 10, `bugs_long` 6), whose rows are every df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40, 60 and a last row at df 200 holding the infinite-df (normal) values; c is interpolated linearly in 1/df between the rows on either side of the pair's Yuen df (fixtures: df 5.2 to 110, rows up to 60/200; reproduced to 1e-14). The entries are the published table's, not recomputed quantiles: for C = 3 at df 5 the table has 3.39 where the quantile, 3.3992, rounds to 3.40 *(verify: take the table from its published source; no fixture has df above 200 or alpha other than 0.05)* | trimmed mean |
 | bayes | v0.2: `BayesFactor::anovaBF` (method and precision to measure when implemented) | v0.2: Bayesian R squared, posterior median with 95% HDI (`conf.method` "HDI" in the fixtures) | v0.2: `ttestBF` per pair as for two groups, unadjusted, always with prior 0.707 and 95% intervals whatever `bf_prior` and `conf_level` say (every pair's Bayes factor is reproduced by `tools/reference`) | MAP |
 
@@ -325,7 +335,11 @@ Statistical and behavioral differences are exactly these:
    other than bayes), no Bayes
    caption is drawn by default and `warnings` says so; `bf_message=True` raises
    `NotImplementedError` for those designs (§2). Posterior estimates in Bayes captions
-   also arrive in v0.2 (§1).
+   also arrive in v0.2 (§1). With `type="bayes"` (D41), two groups get a subtitle of
+   log_e(BF01) and the prior scale with a `warnings` entry that the posterior estimate
+   arrives in v0.2; three or more groups raise `NotImplementedError` unless
+   `results_subtitle=False`, which draws ggstatsplot's own output without its
+   subtitle: MAP labels and a Bayes factor bracket for every pair.
 6. Games-Howell p-values are computed from an accurate upper tail of the studentized
    range, not from R's `ptukey`, whose error grows as the df falls (up to 1.35e-3
    absolute at df 2, 1.8e-7 at df 10, about 5e-10 in the far tail) and which is NaN
@@ -412,7 +426,10 @@ from it has `values == ()` and cannot be drawn again.
   oracle's `expression` output exactly (same rounding, same switch to scientific
   notation, same `digits`). Bootstrap-derived numbers are the exception described in
   §10. The v0.1 two-group Bayes caption is the first and last items of ggstatsplot's
-  (D32). Tick labels are plain `<level>\n(n = <n>)`.
+  (D32). For `type="bayes"` the two-group subtitle is the same two items (D41); with
+  three or more groups and `results_subtitle=False` each bracket reads
+  `log_e(BF_01) = <value>` and the caption's pairwise line reads "Pairwise: Bayes
+  factors (Student's t, JZS prior 0.707), unadjusted; showing all <m> pairs." Tick labels are plain `<level>\n(n = <n>)`.
 - **Numbers (probe-format):** `insight::format_value(x, digits)`: fixed notation with
   `digits` decimals, scientific (`digits` mantissa decimals, signed two-digit exponent)
   when x is not 0 and log10(|x|) < -digits or |x| >= 1e5, judged on the unrounded
@@ -619,7 +636,7 @@ again.
 | JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces all 36 distinct `ttestBF` values in the fixtures to at most 1.5e-9, which is BayesFactor's own integration error; a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive |
 | other Bayes factors (correlation; v0.2 ANOVA and contingency) | own entry, measured when first implemented | not yet measured |
 | bootstrap CIs and p-values | within 4 Monte Carlo SDs of the 20,000-resample R reference, never less than the closed-form tolerance | randomness; a quantity whose replicate SD is 0 does not depend on the resamples (AKP and rank epsilon squared estimates, an upper bound of 1) and is stored to 15 significant digits |
-| MAP centrality | one grid step of the density grid | kernel density grid |
+| MAP centrality (`MAP_CENTRALITY`) | the same grid point (0 steps; the oracle value must lie on the grid within 1e-6 steps) | all 30 fixture labels on ggstatsplot's grid point; each method variant tried moves 1 to 14 of them |
 | subtitle numbers | exact string match | formatting parity; see below for bootstrap-derived numbers |
 
 Never loosen an entry without a measured reason written in the registry.
