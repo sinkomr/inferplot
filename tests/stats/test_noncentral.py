@@ -10,11 +10,18 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
+import scipy
 from scipy import special, stats
 
 from inferplot.stats import f_ncp_bound, t_ncp_interval
-from inferplot.stats.noncentral import noncentral_f_logcdf, noncentral_t_logcdf
+from inferplot.stats.noncentral import (
+    _beta_large_a,  # pyright: ignore[reportPrivateUsage]
+    log_beta_factors,
+    noncentral_f_logcdf,
+    noncentral_t_logcdf,
+)
 from tests.tolerances import assert_close
 
 REFERENCE = Path(__file__).resolve().parents[1] / "data" / "noncentral_reference.json"
@@ -208,3 +215,155 @@ def test_f_bound_is_zero_when_lambda_zero_is_already_below() -> None:
         f_ncp_bound(2.0, 2.0, 10.0, prob=1.0)
     with pytest.raises(ValueError, match="finite"):
         f_ncp_bound(math.inf, 2.0, 10.0, prob=0.5)
+
+
+# SciPy before 1.12 computes betainc with older code whose error at these a
+# (1e4 to 1e7) is noise of up to about 1e-10 relative per value; it does not cancel
+# between the subsampled and the full sum (measured: 4.7e-10 on SciPy 1.11.1,
+# 2.4e-14 on 1.12.0 and 1.18.1). The subsampling itself is checked at 1e-12.
+OLD_BETAINC = tuple(int(p) for p in scipy.__version__.split(".")[:2]) < (1, 12)
+SUBSAMPLE_TOL = 1e-9 if OLD_BETAINC else 1e-12
+
+
+def _compensated_cumsum(terms: list[float]) -> list[float]:
+    """Running sums with Neumaier's compensation."""
+    out: list[float] = []
+    total, carry = 0.0, 0.0
+    for term in terms:
+        t = total + term
+        if abs(total) >= abs(term):
+            carry += (total - t) + term
+        else:
+            carry += (term - t) + total
+        total = t
+        out.append(total + carry)
+    return out
+
+
+def _log_poisson_ratios(mu: float, lo: int, hi: int) -> np.ndarray:
+    """log(w_j / w_m), m = floor(mu), j = lo..hi, summed outward from the mode:
+    log(w_j / w_m) = -sum_{i=m+1}^{j} log1p((i - mu) / mu) above the mode and
+    sum_{i=j+1}^{m} log1p((i - mu) / mu) below it. The terms are small near the
+    mode and each is accurate, so the sums keep about 1e-14 absolute accuracy,
+    where -mu + j log mu - log j! loses about 1e-10 at mu = 1e5."""
+    m = math.floor(mu)
+    up = _compensated_cumsum([-math.log1p((i - mu) / mu) for i in range(m + 1, hi + 1)])
+    down = _compensated_cumsum([math.log1p((i - mu) / mu) for i in range(m, lo, -1)])
+    return np.array([*reversed(down), 0.0, *up])
+
+
+def _full_poisson_sum(
+    f: float, df1: float, df2: float, ncp: float, upper: bool
+) -> float:
+    """log P(F' <= f) (or > f) summed over every integer j of the Poisson window,
+    with independently computed weights (``_log_poisson_ratios``)."""
+    mu = 0.5 * ncp
+    span = math.ceil(15.0 * math.sqrt(mu) + 30.0)
+    lo, hi = max(0, math.floor(mu) - span), math.floor(mu) + span
+    j = np.arange(lo, hi + 1)
+    rel = _log_poisson_ratios(mu, lo, hi)
+    log_w = rel - special.logsumexp(rel)
+    denom = df1 * f + df2
+    # The same beta factors as noncentral_f_logcdf, at every integer j: the test
+    # checks the subsampling and the weights, not SciPy's betainc (whose error,
+    # up to 1e-10 relative at these a in SciPy 1.11, would otherwise not cancel).
+    log_i = log_beta_factors(
+        0.5 * df1 + j.astype(np.float64),
+        0.5 * df2,
+        df1 * f / denom,
+        df2 / denom,
+        df2 / (df1 * f),
+        upper=upper,
+    )
+    return float(special.logsumexp(log_w + log_i))
+
+
+@pytest.mark.parametrize("mu", [1.2e4, 1e5, 2.5e6])
+@pytest.mark.parametrize(("df1", "df2"), [(2.0, 6.77), (5.0, 1.5), (3.0, 2300.0)])
+@pytest.mark.parametrize("spread", [-2.0, 0.0, 1.5])
+@pytest.mark.parametrize("upper", [False, True])
+def test_subsampled_poisson_sum_matches_the_full_sum(
+    mu: float, df1: float, df2: float, spread: float, upper: bool
+) -> None:
+    # From mu = 1e4 on every h-th term is summed (h = floor(sqrt(mu) / 8)): the
+    # trapezoidal rule on an analytic summand. f is placed `spread` (roughly in
+    # SDs of log F') from the median of F'.
+    ncp = 2.0 * mu
+    median = (df1 + ncp) / df1
+    f = median * math.exp(spread * math.sqrt(2.0 / df2 + 4.0 / ncp))
+    ours = noncentral_f_logcdf(f, df1, df2, ncp, upper=upper)
+    full = _full_poisson_sum(f, df1, df2, ncp, upper)
+    assert ours == pytest.approx(full, rel=SUBSAMPLE_TOL, abs=SUBSAMPLE_TOL)
+
+
+# I_y(b, a) at y = r / (1 + r), r = z / a, from mpmath 1.3 at 50 digits
+# (mpmath.betainc(b, a, 0, y, regularized=True), y the double given here):
+# (b, a, z, value). a is 1e5 and 1e7 times max(b, 1), z is b and b +/- 2 sqrt(b).
+LARGE_A_BETA = (
+    (0.5, 100000.0, 0.001, "0.035670547082068689644"),
+    (0.5, 100000.0, 0.5, "0.68268828228497562808"),
+    (0.5, 100000.0, 1.9142135623730951, "0.94960841208301662138"),
+    (0.5, 10000000.0, 0.001, "0.035670591283203496002"),
+    (0.5, 10000000.0, 0.5, "0.6826894800385498352"),
+    (0.5, 10000000.0, 1.9142135623730951, "0.94960978761147567718"),
+    (1.0, 100000.0, 0.001, "0.00099950016163000594915"),
+    (1.0, 100000.0, 1.0, "0.63211871943901596569"),
+    (1.0, 100000.0, 3.0, "0.95021069120845871446"),
+    (1.0, 10000000.0, 0.001, "0.00099950016657505828195"),
+    (1.0, 10000000.0, 1.0, "0.63212054043458635506"),
+    (1.0, 10000000.0, 3.0, "0.95021290922795471981"),
+    (3.0, 300000.0, 0.001, "1.6654338082480179404e-10"),
+    (3.0, 300000.0, 3.0, "0.57680879867003043088"),
+    (3.0, 300000.0, 6.464101615137754, "0.95580807500988530192"),
+    (3.0, 30000000.0, 0.001, "1.6654173329446447817e-10"),
+    (3.0, 30000000.0, 3.0, "0.57680990767106663614"),
+    (3.0, 30000000.0, 6.464101615137754, "0.95580962521702239868"),
+    (30.0, 3000000.0, 19.045548849896676, "0.01220444960653581212"),
+    (30.0, 3000000.0, 30.0, "0.52428265072314619014"),
+    (30.0, 3000000.0, 40.954451150103324, "0.96836683701600711194"),
+    (30.0, 300000000.0, 19.045548849896676, "0.012204203347717216484"),
+    (30.0, 300000000.0, 30.0, "0.52428301026195377054"),
+    (30.0, 300000000.0, 40.954451150103324, "0.96836769054221919059"),
+    (1150.0, 115000000.0, 1082.1767001687474, "0.021135611755136874544"),
+    (1150.0, 115000000.0, 1150.0, "0.50392134877192653638"),
+    (1150.0, 115000000.0, 1217.8232998312526, "0.97568112902253744888"),
+    (1150.0, 11500000000.0, 1082.1767001687474, "0.021135126758918721202"),
+    (1150.0, 11500000000.0, 1150.0, "0.50392140699998370382"),
+    (1150.0, 11500000000.0, 1217.8232998312526, "0.97568171380032822591"),
+)
+
+
+@pytest.mark.parametrize(("b", "a", "z", "expected"), LARGE_A_BETA)
+def test_large_a_beta_expansion(b: float, a: float, z: float, expected: str) -> None:
+    # For a >= 1e5 max(b, 1) the expansion through a^-2 replaces SciPy's betainc,
+    # which is off by up to 2.8e-10 here (b = 3 and 30; the expansion by 1.2e-15).
+    r = z / a
+    value = float(expected)
+    upper = _beta_large_a(np.array([a]), b, r, upper=True)[0]
+    assert upper == pytest.approx(value, rel=1e-13, abs=1e-16)
+    lower = _beta_large_a(np.array([a]), b, r, upper=False)[0]
+    assert lower == pytest.approx(1.0 - value, rel=1e-13, abs=1e-16)
+
+
+@pytest.mark.parametrize("f", [1e6, 1e12, 1e50, 1e200, 1e300])
+@pytest.mark.parametrize("prob", [0.05, 0.5, 0.95, 0.999])
+@pytest.mark.parametrize(("df1", "df2"), [(2.0, 60.0), (5.0, 1.5), (3.0, 2300.0)])
+def test_f_bound_at_huge_f(f: float, df1: float, df2: float, prob: float) -> None:
+    # The large-lambda bracket and both tails at any f; the root's probability is
+    # the requested one.
+    ncp = f_ncp_bound(f, df1, df2, prob=prob)
+    assert 0.0 < ncp < math.inf
+    if prob > 0.5:
+        reached = math.exp(noncentral_f_logcdf(f, df1, df2, ncp, upper=True))
+        assert reached == pytest.approx(1.0 - prob, rel=1e-9)
+    else:
+        reached = math.exp(noncentral_f_logcdf(f, df1, df2, ncp))
+        assert reached == pytest.approx(prob, rel=1e-9)
+    # The large-lambda start: lambda / (df1 f q / df2) tends to 1.
+    q = float(special.chdtri(df2, prob))
+    assert ncp / (df1 * f * q / df2) == pytest.approx(1.0, rel=0.05)
+
+
+def test_f_bound_beyond_the_largest_double_is_inf() -> None:
+    biggest = float(np.finfo(np.float64).max)
+    assert f_ncp_bound(biggest, 2.0, 60.0, prob=0.95) == math.inf

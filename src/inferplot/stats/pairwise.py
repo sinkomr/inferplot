@@ -6,8 +6,15 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from inferplot.stats.descriptive import SampleLike, as_sample, mean, variance
+from inferplot.stats.descriptive import (
+    SampleLike,
+    as_sample,
+    common_scale,
+    mean,
+    scaled_variance,
+)
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
+from inferplot.stats.parametric import constant_group_message, satterthwaite_df
 from inferplot.stats.srange import srange_sf
 
 __all__ = ["PairResult", "games_howell"]
@@ -36,7 +43,10 @@ def games_howell(
     the pair's Welch-Satterthwaite df; the raw p is the studentized range upper tail
     P(Q_{k,df} > |q|) with k the number of groups (``srange_sf``, accurate in the
     far tail, DECISIONS.md D31). The k(k-1)/2 raw p-values are then adjusted together
-    with ``p_adjust_method``. R reference: ``PMCMRplus::gamesHowellTest`` followed by
+    with ``p_adjust_method``. Computed on the groups times their ``common_scale``
+    (q and df do not depend on the scale of the data, bit for bit under powers of
+    two), with the df from the variance shares (``satterthwaite_df``). R reference:
+    ``PMCMRplus::gamesHowellTest`` followed by
     ``stats::p.adjust`` (Holm by default), as statsExpressions 2.2.1 calls them.
 
     Raises:
@@ -46,26 +56,26 @@ def games_howell(
     if len(groups) < 2:
         raise ValueError(f"Games-Howell needs at least two groups; got {len(groups)}")
     p_adjust([], p_adjust_method)  # an unknown method fails before any work
-    samples = [
+    raw = [
         as_sample(g, name=f"group {i + 1}", min_size=2) for i, g in enumerate(groups)
     ]
+    scale = common_scale(*raw)
+    samples = [s * scale for s in raw]
     k = len(samples)
     n = [s.size for s in samples]
     means = [mean(s) for s in samples]
     weights: list[float] = []
     for index, sample in enumerate(samples):
-        v = variance(sample)
+        v = scaled_variance(sample)
         if v == 0.0:
-            raise ValueError(
-                f"group {index + 1} is constant: Games-Howell needs a variance > 0"
-            )
+            raise ValueError(constant_group_message(index, raw[index], "Games-Howell"))
         weights.append(v / sample.size)
     rows: list[tuple[int, int, float, float, float]] = []
     for i in range(k):
         for j in range(i + 1, k):
             w = weights[i] + weights[j]
             q = (means[j] - means[i]) / math.sqrt(0.5 * w)
-            df = w * w / (weights[i] ** 2 / (n[i] - 1) + weights[j] ** 2 / (n[j] - 1))
+            df = satterthwaite_df(weights[i], n[i], weights[j], n[j])
             rows.append((i, j, q, df, srange_sf(abs(q), k, df)))
     adjusted = p_adjust([row[4] for row in rows], p_adjust_method)
     return tuple(

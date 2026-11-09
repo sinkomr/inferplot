@@ -13,13 +13,23 @@ import pytest
 
 from inferplot.stats import games_howell, srange_logsf, srange_sf
 from tests.oracle_fixtures import load_cases
-from tests.stats.fixture_data import groups
+from tests.stats.fixture_data import between_cases, groups
 from tests.tolerances import TOLERANCES, assert_close
 
 REFERENCE = (
     Path(__file__).resolve().parents[1] / "data" / "studentized_range_reference.json"
 )
-SETS = ("grid", "df_inf", "k2_identity", "fixture_pairs", "failed_fixture_pairs")
+SETS = (
+    "grid",
+    "df_inf",
+    "k2_identity",
+    "fixture_pairs",
+    "failed_fixture_pairs",
+    "added_fixture_pairs",
+)
+# fixture_pairs (the cases of the first oracle run) and added_fixture_pairs (the
+# cases added later) together hold every pair of every completed case.
+COMPLETED_SETS = ("fixture_pairs", "added_fixture_pairs")
 
 
 @cache
@@ -43,8 +53,12 @@ def test_reference_file_has_the_frozen_sets() -> None:
         "k2_identity": 224,
         "fixture_pairs": 31,
         "failed_fixture_pairs": 3,
+        "added_fixture_pairs": 78,
     }
     assert "studentized_range_mpmath.py" in _reference()["generator"]
+    # 78 pairs, 42 distinct (k, df, q) points: several cases share their data.
+    distinct = {(p["k"], p["df"], p["q"]) for p in _points("added_fixture_pairs")}
+    assert len(distinct) == 42
 
 
 @pytest.mark.parametrize("name", SETS)
@@ -62,16 +76,61 @@ def test_tail_matches_high_precision_reference(name: str) -> None:
         assert abs(log_p - float(expected.ln())) <= rtol, what
 
 
-def test_fixture_pairs_are_the_games_howell_pairs() -> None:
+def test_every_completed_fixture_pair_has_a_reference() -> None:
+    # SPEC section 10: every Games-Howell p is checked against a high-precision
+    # reference, so the frozen sets must cover every pair of every completed
+    # parametric case with three or more groups (and nothing else).
+    expected = {
+        (case.name, case.analysis_levels[i], case.analysis_levels[j])
+        for case in between_cases("parametric", two_groups=False)
+        for i in range(len(case.analysis_levels))
+        for j in range(i + 1, len(case.analysis_levels))
+    }
+    frozen = [
+        (p["case"], p["pair"][0], p["pair"][1])
+        for name in COMPLETED_SETS
+        for p in _points(name)
+    ]
+    assert len(frozen) == len(set(frozen))
+    assert set(frozen) == expected
+    assert len(expected) == 109
+
+
+def test_edge_negative_b_c_reference() -> None:
+    # SPEC section 5 item 6 and DECISIONS.md D31: the b-c label differs from
+    # ggstatsplot's because R's ptukey is off in the far tail; the reference holds
+    # the accurate raw p that the differing label rests on.
+    point = next(
+        p
+        for p in _points("added_fixture_pairs")
+        if p["case"] == "ggbetweenstats-edge_negative-parametric"
+        and p["pair"] == ["b", "c"]
+    )
+    assert point["p"].startswith("4.28309162932008")
+    value = srange_sf(point["q"], point["k"], point["df"])
+    assert_close(
+        "studentized_range_tail", value, float(Decimal(point["p"])), what="b-c"
+    )
+
+
+@pytest.mark.parametrize("name", [*COMPLETED_SETS, "failed_fixture_pairs"])
+def test_fixture_pairs_are_the_games_howell_pairs(name: str) -> None:
     # The frozen pairs are the q and df that games_howell computes on the fixture
     # data, so its raw p is checked against the reference at the very same point.
     cases = {case.name: case for case in load_cases()}
     by_case: dict[str, list[dict[str, Any]]] = {}
-    for point in _points("fixture_pairs"):
+    for point in _points(name):
         by_case.setdefault(point["case"], []).append(point)
-    assert len(by_case) == 7
-    for name, points in by_case.items():
-        case = cases[name]
+    assert (
+        len(by_case)
+        == {
+            "fixture_pairs": 7,
+            "added_fixture_pairs": 22,
+            "failed_fixture_pairs": 1,
+        }[name]
+    )
+    for case_name, points in by_case.items():
+        case = cases[case_name]
         levels = case.analysis_levels
         pairs = {(levels[p.i], levels[p.j]): p for p in games_howell(groups(case))}
         for point in points:

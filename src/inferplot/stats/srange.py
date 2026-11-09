@@ -103,7 +103,13 @@ from scipy import special
 
 FloatArray = NDArray[np.float64]
 
-__all__ = ["log_scaled_chi_density", "srange_logsf", "srange_sf", "stirlerr"]
+__all__ = [
+    "log_scaled_chi_density",
+    "srange_logsf",
+    "srange_sf",
+    "stirlerr",
+    "stirlerr_large",
+]
 
 _LN2: Final = math.log(2.0)
 _LOG_SQRT_2PI: Final = 0.5 * math.log(2.0 * math.pi)
@@ -209,6 +215,18 @@ def stirlerr(x: float) -> float:
         return acc / x
     # Below 15 the terms are at most |log Gamma(15)| = 25.2: absolute error ~6e-15.
     return math.lgamma(x) - (x - 0.5) * math.log(x) + x - _LOG_SQRT_2PI
+
+
+def stirlerr_large(x: FloatArray) -> FloatArray:
+    """``stirlerr`` element-wise for x >= 15 (the series branch, vectorized)."""
+    if bool((x < 15.0).any()):
+        raise ValueError("stirlerr_large needs x >= 15")
+    inv = 1.0 / x
+    x2 = inv * inv  # not 1 / (x * x), which overflows for x above 1.3e154
+    acc = np.zeros_like(x)
+    for c in reversed(_STIRLING):
+        acc = acc * x2 + c
+    return acc * inv
 
 
 def _expm1_minus_x(y: FloatArray) -> FloatArray:

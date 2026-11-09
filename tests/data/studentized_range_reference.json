@@ -5160,6 +5160,869 @@
      "p": "0.2254686260585423775463"
     }
    ]
+  },
+  "added_fixture_pairs": {
+   "method": "ref_srange as for grid, at the Games-Howell pairs (|q|, Welch df) of the completed parametric ggbetweenstats fixtures with three or more groups that fixture_pairs does not cover",
+   "points": [
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "A",
+      "B"
+     ],
+     "k": 6,
+     "df": 21.784430812659465,
+     "q": 0.6413803364432576,
+     "p": "0.9972482341459898209429"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "A",
+      "C"
+     ],
+     "k": 6,
+     "df": 14.73901159805025,
+     "q": 11.889773543088758,
+     "p": "0.000006592187640147028861867"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "A",
+      "D"
+     ],
+     "k": 6,
+     "df": 16.734676354262742,
+     "q": 8.788431472163158,
+     "p": "0.0001255900940175162716279"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "A",
+      "E"
+     ],
+     "k": 6,
+     "df": 13.910462414504046,
+     "q": 10.71944377382259,
+     "p": "0.00003208731108864359722347"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "A",
+      "F"
+     ],
+     "k": 6,
+     "df": 20.522752497225305,
+     "q": 1.3603940517759987,
+     "p": "0.9247475958129736116199"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "B",
+      "C"
+     ],
+     "k": 6,
+     "df": 15.499346849747734,
+     "q": 13.794121819968312,
+     "p": "6.654440771778679655864e-7"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "B",
+      "D"
+     ],
+     "k": 6,
+     "df": 17.75848440537314,
+     "q": 10.308232630722305,
+     "p": "0.00001263006682487539701239"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "B",
+      "E"
+     ],
+     "k": 6,
+     "df": 14.522671646001532,
+     "q": 12.577973637569347,
+     "p": "0.000003675628641390419035935"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "B",
+      "F"
+     ],
+     "k": 6,
+     "df": 19.49812438302073,
+     "q": 0.8663331051278789,
+     "p": "0.9887868132570241501868"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "C",
+      "D"
+     ],
+     "k": 6,
+     "df": 20.87185430393803,
+     "q": 4.353253917718463,
+     "p": "0.05566776950136395026738"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "C",
+      "E"
+     ],
+     "k": 6,
+     "df": 21.630910267011966,
+     "q": 2.6418069191415463,
+     "p": "0.4466120877942761612586"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "C",
+      "F"
+     ],
+     "k": 6,
+     "df": 13.200835154063316,
+     "q": 10.957948493257973,
+     "p": "0.00003420955061463927762801"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "D",
+      "E"
+     ],
+     "k": 6,
+     "df": 19.569571035212817,
+     "q": 2.280063977527598,
+     "p": "0.6005952534836068979621"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "D",
+      "F"
+     ],
+     "k": 6,
+     "df": 14.478637286519099,
+     "q": 8.593292343883428,
+     "p": "0.0002914146019946553945652"
+    },
+    {
+     "case": "ggbetweenstats-InsectSprays-parametric",
+     "pair": [
+      "E",
+      "F"
+     ],
+     "k": 6,
+     "df": 12.69931476773817,
+     "q": 10.000072832946714,
+     "p": "0.0001104327895557240734078"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-cl90-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-cl90-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-cl90-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-declared-parametric",
+     "pair": [
+      "trt2",
+      "ctrl"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-declared-parametric",
+     "pair": [
+      "trt2",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-declared-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-all-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-all-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-all-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-none-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-none-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-none-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-ns-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-ns-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-display-ns-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-nosubtitle-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-nosubtitle-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-nosubtitle-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BH-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BH-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BH-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BY-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BY-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-BY-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-bonferroni-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-bonferroni-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-bonferroni-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-fdr-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-fdr-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-fdr-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hochberg-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hochberg-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hochberg-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hommel-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hommel-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-hommel-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-none-parametric",
+     "pair": [
+      "ctrl",
+      "trt1"
+     ],
+     "k": 3,
+     "df": 16.5235850568593,
+     "q": 1.684696588328189,
+     "p": "0.4745549221939477976764"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-none-parametric",
+     "pair": [
+      "ctrl",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 16.785764482605725,
+     "q": 3.0179606671896253,
+     "p": "0.1128891768538276001458"
+    },
+    {
+     "case": "ggbetweenstats-PlantGrowth-padj-none-parametric",
+     "pair": [
+      "trt1",
+      "trt2"
+     ],
+     "k": 3,
+     "df": 14.103569122760339,
+     "q": 4.256922182351754,
+     "p": "0.02370345473894139377496"
+    },
+    {
+     "case": "ggbetweenstats-edge_empty_level-parametric",
+     "pair": [
+      "c",
+      "a"
+     ],
+     "k": 3,
+     "df": 13.687942142803195,
+     "q": 5.469161239140811,
+     "p": "0.004720881239150379391538"
+    },
+    {
+     "case": "ggbetweenstats-edge_empty_level-parametric",
+     "pair": [
+      "c",
+      "b"
+     ],
+     "k": 3,
+     "df": 11.150974454892498,
+     "q": 2.489162910420221,
+     "p": "0.2270683035216654529329"
+    },
+    {
+     "case": "ggbetweenstats-edge_empty_level-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 10.204176776973567,
+     "q": 4.257482791429654,
+     "p": "0.03154160211319727351497"
+    },
+    {
+     "case": "ggbetweenstats-edge_large_n-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 2481.9838168781466,
+     "q": 4.570942620368039,
+     "p": "0.003563097280542926053506"
+    },
+    {
+     "case": "ggbetweenstats-edge_large_n-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 2280.5592022156184,
+     "q": 8.105530312616995,
+     "p": "3.379323776170910010919e-8"
+    },
+    {
+     "case": "ggbetweenstats-edge_large_n-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 2332.233479649362,
+     "q": 3.7940382915191866,
+     "p": "0.02010219795919721379113"
+    },
+    {
+     "case": "ggbetweenstats-edge_missing-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 12.221508312256367,
+     "q": 1.9934416199274148,
+     "p": "0.3664620924497817905985"
+    },
+    {
+     "case": "ggbetweenstats-edge_missing-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 11.397431282646448,
+     "q": 6.14555057941537,
+     "p": "0.002831078934831974845965"
+    },
+    {
+     "case": "ggbetweenstats-edge_missing-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 14.99486720175242,
+     "q": 3.143947513963887,
+     "p": "0.09947803595740137192956"
+    },
+    {
+     "case": "ggbetweenstats-edge_negative-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 12.301457976425615,
+     "q": 6.064572847097459,
+     "p": "0.002653501871095215878108"
+    },
+    {
+     "case": "ggbetweenstats-edge_negative-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 11.586212724510682,
+     "q": 9.111562340525206,
+     "p": "0.0001029030873853216251318"
+    },
+    {
+     "case": "ggbetweenstats-edge_negative-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 13.855344558082809,
+     "q": 19.741763722659957,
+     "p": "4.283091629320080120623e-9"
+    },
+    {
+     "case": "ggbetweenstats-edge_null-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 13.935272900740893,
+     "q": 0.2853864865084396,
+     "p": "0.9778359873759923559711"
+    },
+    {
+     "case": "ggbetweenstats-edge_null-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 13.508834825806202,
+     "q": 1.5746601149100734,
+     "p": "0.5223361982305393993657"
+    },
+    {
+     "case": "ggbetweenstats-edge_null-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 13.14200325741723,
+     "q": 1.361874176473872,
+     "p": "0.6117818611995205881795"
+    },
+    {
+     "case": "ggbetweenstats-edge_outliers-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 17.850559453304342,
+     "q": 2.8066713560422736,
+     "p": "0.1449661202858825685275"
+    },
+    {
+     "case": "ggbetweenstats-edge_outliers-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 9.084688114073545,
+     "q": 2.744457983946221,
+     "p": "0.1825224351124689810864"
+    },
+    {
+     "case": "ggbetweenstats-edge_outliers-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 9.101745368143648,
+     "q": 2.4583256753247085,
+     "p": "0.2434363544660599325396"
+    },
+    {
+     "case": "ggbetweenstats-edge_ties-parametric",
+     "pair": [
+      "a",
+      "b"
+     ],
+     "k": 3,
+     "df": 17.346930012881064,
+     "q": 2.0947696058260297,
+     "p": "0.3237746218497137400566"
+    },
+    {
+     "case": "ggbetweenstats-edge_ties-parametric",
+     "pair": [
+      "a",
+      "c"
+     ],
+     "k": 3,
+     "df": 17.920353982300885,
+     "q": 1.414213562373095,
+     "p": "0.5863144415432724361902"
+    },
+    {
+     "case": "ggbetweenstats-edge_ties-parametric",
+     "pair": [
+      "b",
+      "c"
+     ],
+     "k": 3,
+     "df": 17.705220061412486,
+     "q": 3.7330261010295316,
+     "p": "0.04232953150635735550525"
+    },
+    {
+     "case": "ggbetweenstats-mtcars-digits3-parametric",
+     "pair": [
+      "4",
+      "6"
+     ],
+     "k": 3,
+     "df": 12.955981376359244,
+     "q": 6.673757811046921,
+     "p": "0.001096025417056622235795"
+    },
+    {
+     "case": "ggbetweenstats-mtcars-digits3-parametric",
+     "pair": [
+      "4",
+      "8"
+     ],
+     "k": 3,
+     "df": 14.966753872523658,
+     "q": 10.743305394618414,
+     "p": "0.000004661093332946449913291"
+    },
+    {
+     "case": "ggbetweenstats-mtcars-digits3-parametric",
+     "pair": [
+      "6",
+      "8"
+     ],
+     "k": 3,
+     "df": 18.502484732757694,
+     "q": 7.482794367893902,
+     "p": "0.0001286500494883908309631"
+    }
+   ]
   }
  }
 }
