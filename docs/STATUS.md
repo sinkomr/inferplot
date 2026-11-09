@@ -93,11 +93,20 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   a label as a crossing on large figures. Fixed with the bracket layout (D38): levels are
   spaced in points, so three levels take 4.8 in instead of 7.3 in and InsectSprays with
   every pair 7.15 in instead of 9.8 in
-- [ ] the statistics part did not finish. Its unjudged leads: `variance()` on subnormal
-  data; the noncentral F lower tail near 1e-300 (log P off by about 3); the noncentral
-  F next to the Poisson-mean switch with df2 = 0.5 (1.6e-10 relative in log P) and at
-  df2 = 1e8 (4.6e-11); the refusal of a group whose values span more than the largest
-  double. Re-run from a fresh context.
+- [x] the statistics part did not finish; re-run from a fresh context. All 13 earlier
+  statistics findings and the wide-range follow-up are confirmed closed; of the five
+  unjudged leads, three were false alarms (subnormal variance, df2 = 0.5, the one-sided
+  bound at 50%) and two are real but minor (below)
+- [ ] new, major: t, F, Games-Howell q and Hedges' g subtract means that were each
+  rounded first, so groups that differ only in the last digits get silently wrong
+  results (0.3 against 0.1 + 0.2 data: p = 0.04 where the exact p on the same doubles
+  is 0.54; 1.7e9 timestamps lose six digits). R has the same flaw, so the oracle cannot
+  catch it. Being fixed (exact differences, rounded once), also checked in the robust
+  layer
+- [ ] minor, being fixed: the noncentral F distribution function is inaccurate or turns
+  a NaN into P = 1 in deep tails and at extreme df2 that no shipped number reaches;
+  three analysis messages state wrong reasons (the span error, an overflow message in
+  stats words, the Hedges' g J = 0 warning)
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 
