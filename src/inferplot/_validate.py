@@ -31,6 +31,8 @@ import numpy as np
 
 __all__ = [
     "ALTERNATIVES",
+    "ANALYSIS_KEYWORDS",
+    "DRAWING_KEYWORDS",
     "LAYERS",
     "PAIRWISE_DISPLAYS",
     "P_ADJUST_METHODS",
@@ -51,6 +53,8 @@ __all__ = [
     "check_seed",
     "check_tr",
     "checked",
+    "closest_name",
+    "describe_value",
 ]
 
 P = ParamSpec("P")
@@ -123,6 +127,16 @@ def _closest(word: str, candidates: Iterable[str]) -> str | None:
     return folded[match[0]] if match else None
 
 
+def describe_value(value: object) -> str:
+    """A value as an error message quotes it: its repr when short, else its type."""
+    return _show(value)
+
+
+def closest_name(word: str, candidates: Iterable[str]) -> str | None:
+    """The name a did-you-mean suggests for ``word``, or None (cutoff 0.6)."""
+    return _closest(word, candidates)
+
+
 def _snake(name: str) -> str:
     """``name`` in snake_case: R's dots, hyphens and camelCase become underscores."""
     name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name)
@@ -186,6 +200,76 @@ def _removed(arg: str, version: str, rest: str) -> str:
 # The functions whose drawing takes layers= (SPEC.md section 2), so their analysis
 # function can name it for plot.type= without importing the renderers.
 _LAYERED_DRAWINGS: Final = frozenset({"betweenstats", "withinstats"})
+
+# Keywords only the drawing functions (ip.<name>, ip.render.<name>) take, by
+# function, so ip.analyze.<name> can point to them without importing the renderers.
+# Functions not listed get the common ones. tests/test_validate.py checks these
+# against the real signatures.
+_COMMON_DRAWING: Final = frozenset(
+    {"ax", "palette", "title", "subtitle", "caption", "xlab", "ylab"}
+)
+_LAYERED_DRAWING: Final = _COMMON_DRAWING | {
+    "layers",
+    "point_args",
+    "boxplot_args",
+    "violin_args",
+    "centrality_plotting",
+}
+DRAWING_KEYWORDS: Final[Mapping[str, frozenset[str]]] = {
+    "betweenstats": _LAYERED_DRAWING,
+    "withinstats": _LAYERED_DRAWING | {"point_path", "centrality_path"},
+}
+# Keywords only the analysis functions (ip.analyze.<name>, ip.<name>) take, so a
+# drawing function ip.render.<name> can point to them.
+ANALYSIS_KEYWORDS: Final = frozenset(
+    {
+        "data",
+        "x",
+        "y",
+        "type",
+        "pairwise_display",
+        "p_adjust_method",
+        "pairwise_alpha",
+        "conf_level",
+        "digits",
+        "tr",
+        "bf_prior",
+        "bf_message",
+        "results_subtitle",
+        "alternative",
+        "seed",
+        "order",
+        "subject_id",
+        "test_value",
+        "counts",
+        "paired",
+        "ratio",
+        "proportion_test",
+    }
+)
+# What a drawing function given data by keyword was given instead of a result.
+_DATA_KEYWORDS: Final = ("data", "x", "y")
+
+
+def _wrong_kind_of_function(
+    arg: str, key: str, fn: str, valid: frozenset[str]
+) -> TypeError | None:
+    """An analysis keyword given to a drawing function, or a drawing keyword given
+    to an analysis function: point to the function that takes it."""
+    if "result" in valid and key in ANALYSIS_KEYWORDS:
+        return TypeError(
+            f"{arg}= is an argument of the analysis, ip.analyze.{fn}(data, x, y, "
+            f"...); render.{fn}() draws a result that already holds it. Pass {key}= "
+            f"to ip.analyze.{fn}() or ip.{fn}() and draw that result. Remove {arg}=."
+        )
+    drawing = DRAWING_KEYWORDS.get(fn, _COMMON_DRAWING)
+    if "ax" not in valid and "result" not in valid and key in drawing:
+        return TypeError(
+            f"{arg}= is a drawing option of ip.{fn}(...) and "
+            f"ip.render.{fn}(result, ...); ip.analyze.{fn}() only computes the "
+            f"statistics. Pass {key}= when drawing, or remove it."
+        )
+    return None
 
 
 def _targeted(
@@ -363,9 +447,21 @@ _NO_EQUIVALENT: Mapping[str, str] = {
 
 
 def _keyword_problem(
-    arg: str, value: object, fn: str, valid: frozenset[str], order: Sequence[str]
+    arg: str,
+    value: object,
+    fn: str,
+    valid: frozenset[str],
+    order: Sequence[str],
+    filled: frozenset[str],
 ) -> TypeError | NotImplementedError:
+    """The error for keyword ``arg``, which ``fn`` does not take. ``filled`` names
+    the arguments the call already gives; they are never suggested."""
     key = _snake(arg)
+    if key in filled:
+        return TypeError(
+            f"{fn}() got an unexpected keyword argument {arg!r}, and {key} is already "
+            f"given. Remove {arg}=."
+        )
     if key in valid:
         return TypeError(
             f"{fn}() has no argument {arg!r}: inferplot spells every argument in "
@@ -374,7 +470,10 @@ def _keyword_problem(
     targeted = _targeted(arg, key, value, fn, valid)
     if targeted is not None:
         return targeted
-    close = _closest(key, order)
+    elsewhere = _wrong_kind_of_function(arg, key, fn, valid)
+    if elsewhere is not None:
+        return elsewhere
+    close = _closest(key, [name for name in order if name not in filled])
     if close is not None:
         return TypeError(
             f"{fn}() got an unexpected keyword argument {arg!r}. Did you mean "
@@ -415,10 +514,10 @@ def _type_name(value: object) -> str:
     return f"a {cls.__module__.split('.')[0]}.{cls.__name__}"
 
 
-def _not_a_result(fn: str, value: object) -> TypeError:
+def _not_a_result(fn: str, got: str) -> TypeError:
     return TypeError(
         f"render.{fn}() draws the result of ip.analyze.{fn}(data, x, y); got "
-        f"{_type_name(value)}. Compute it first with "
+        f"{got}. Compute it first with "
         f"result = ip.analyze.{fn}(data, x, y, ...) and pass result, or use "
         f"ip.{fn}(data, x, y, ...) to analyze and draw in one call."
     )
@@ -459,16 +558,26 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
 
     @functools.wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        for arg, value in kwargs.items():
-            if arg not in valid:
-                raise _keyword_problem(arg, value, name, valid, order)
+        # A drawing function given data, positionally or as data=, x= or y=, says
+        # it draws a result before anything else (x= is not a typo of ax=).
         if draws_result:
             from inferplot.result import StatsResult
 
             if args or "result" in kwargs:
                 given = args[0] if args else kwargs["result"]
                 if not isinstance(given, StatsResult):
-                    raise _not_a_result(name, given)
+                    raise _not_a_result(name, _type_name(given))
+            elif "data" in kwargs:
+                raise _not_a_result(name, _type_name(kwargs["data"]))
+            else:
+                data_like = [k for k in _DATA_KEYWORDS if k in kwargs]
+                if data_like:
+                    shown = ", ".join(f"{k}={_show(kwargs[k])}" for k in data_like)
+                    raise _not_a_result(name, f"{shown} and no result")
+        filled = frozenset(positional[: len(args)]) | (valid & kwargs.keys())
+        for arg, value in kwargs.items():
+            if arg not in valid:
+                raise _keyword_problem(arg, value, name, valid, order, filled)
         if len(args) > len(positional):
             raise _positional_problem(name, positional, args[len(positional) :], valid)
         return fn(*args, **kwargs)
