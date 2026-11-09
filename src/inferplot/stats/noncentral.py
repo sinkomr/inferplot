@@ -462,7 +462,7 @@ def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
     is at least 1e4, the bracket is lambda_0 +/- 4 sqrt(lambda_0), widened four-fold
     until it holds the root; otherwise it runs from 0 to 2 f df1, doubled until it
     holds the root. With the subsampled Poisson sum (module docstring) the search
-    takes a few milliseconds at any f. Returns ``math.inf`` when the root lies
+    takes 1 to 40 ms at any f. Returns ``math.inf`` when the root lies
     beyond the largest double.
 
     Raises:

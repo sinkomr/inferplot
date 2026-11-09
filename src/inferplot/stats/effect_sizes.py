@@ -135,12 +135,13 @@ def partial_omega_squared(
     (F near 1e17); the two agree within 3e-15 relative where both are defined. A
     bound beyond the largest double gives a lower bound of 1.
 
-    Run time: a few milliseconds per call at any F up to the largest double (the
+    Run time: at most 0.04 s per call at any F up to the largest double (the
     subsampled Poisson sum and the large-lambda bracket of ``f_ncp_bound``; before
     them the cost grew like sqrt(F), 125 s at F = 1e12). Against the full Poisson
-    sum inverted from 0 (the method before), for F = 10 to 1e10 at six (df1, df2,
-    level) settings the lower bounds agree within 1e-12 absolute (measured:
-    see tests/stats/test_effect_sizes.py).
+    sum inverted from 0 (the method before), for 114 values of F from 10 to 1e10 at
+    six (df1, df2, level) settings, the lower bounds agree within 1.1e-15 absolute
+    and lambda within 3.4e-12 relative (SciPy 1.18; tests/stats/test_effect_sizes.py
+    keeps 30 of them); on probe-omega 85 of 577 bounds moved, by at most 4.4e-16.
 
     The bound is the accurate root, not effectsize's: on the oracle probe
     probe-omega (577 rows with alternative "greater") effectsize agrees with an
