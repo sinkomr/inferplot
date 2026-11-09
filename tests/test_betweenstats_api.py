@@ -197,8 +197,6 @@ def test_type_aliases(plants: pd.DataFrame, anova: StatsResult) -> None:
 @pytest.mark.parametrize(
     ("value", "canonical"),
     [
-        ("nonparametric", "nonparametric"),
-        ("np", "nonparametric"),
         ("robust", "robust"),
         ("r", "robust"),
         ("bayes", "bayes"),
@@ -213,7 +211,7 @@ def test_other_types_are_not_implemented(
     message = str(info.value)
     assert repr(value) in message
     assert canonical in message
-    assert "only type='parametric'" in message
+    assert "type='nonparametric' exist for now" in message
 
 
 @pytest.mark.parametrize("tr", [0.0, 0.1, 0.25, 0.49])
@@ -229,7 +227,7 @@ def test_tr_other_than_the_default_raises_for_parametric(
 
 def test_type_checked_before_the_data() -> None:
     with pytest.raises(NotImplementedError):
-        betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="np")
+        betweenstats(pd.DataFrame({"a": [1]}), "nope", "nope", type="bf")
 
 
 # --------------------------------------------------------------------------- #

@@ -10,16 +10,21 @@ What it reproduces is ggstatsplot 1.1.4's ``ggbetweenstats()`` (SPEC.md section 
 
 * two groups, type parametric: Welch's t-test, Hedges' g with a noncentral-t CI that
   follows ``alternative``, and the two-sided JZS Bayes factor caption (D28, D32);
-* three or more groups: Welch's ANOVA, partial omega squared with a one-sided
-  noncentral-F CI, and Games-Howell pairwise comparisons adjusted with
+* three or more groups, type parametric: Welch's ANOVA, partial omega squared with
+  a one-sided noncentral-F CI, and Games-Howell pairwise comparisons adjusted with
   ``p_adjust_method`` over all k(k - 1)/2 pairs. The raw Games-Howell p-values come
-  from an accurate studentized range tail, not from R's ``ptukey`` (D31).
+  from an accurate studentized range tail, not from R's ``ptukey`` (D31);
+* type nonparametric: the Mann-Whitney U test (normal approximation with
+  continuity correction) with the rank-biserial r, or the Kruskal-Wallis test
+  with rank epsilon squared (seeded percentile bootstrap CI) and Dunn's pairwise
+  z; medians as centrality.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
@@ -259,6 +264,7 @@ def _no_effect_warnings(
     *,
     x: str,
     k: int,
+    type_name: str,
     bayes_computed: bool,
     subtitle_on: bool,
     show_bf: bool | None,
@@ -284,7 +290,9 @@ def _no_effect_warnings(
                     + reason.format(what=what)
                 )
     if not bayes_computed and canonical["bf_prior"] != _DEFAULT_BF_PRIOR:
-        if k >= 3:
+        if type_name in ("nonparametric", "robust"):
+            why = f"type={type_name!r} has no Bayes factor"
+        elif k >= 3:
             why = (
                 f"x={x!r} has {k} groups, and the Bayes factor for three or more "
                 "groups arrives in inferplot 0.2"
@@ -324,7 +332,7 @@ def _displayed(display: str, significant: bool) -> bool:
     return False  # "none": computed and returned, never drawn
 
 
-def _pairwise(
+def _games_howell_pairs(
     levels: Sequence[str],
     values: Sequence[FloatArray],
     *,
@@ -371,134 +379,65 @@ def _pairwise(
     return tuple(rows)
 
 
-@checked
-def betweenstats(
-    data: object,
-    x: str,
-    y: str,
-    *,
-    type: str = "parametric",
-    pairwise_display: str = "significant",
-    p_adjust_method: str = "holm",
-    pairwise_alpha: float = 0.05,
-    conf_level: float = 0.95,
-    digits: int = 2,
-    tr: float = 0.2,
-    bf_prior: float = 0.707,
-    bf_message: bool | None = None,
-    results_subtitle: bool = True,
-    alternative: str = "two-sided",
-    seed: int = 0,
-    order: Iterable[str | int | float] | None = None,
-) -> StatsResult:
-    """Compare ``y`` across the independent groups of ``x``; no plotting.
+@dataclass(frozen=True, slots=True)
+class _Args:
+    """The validated arguments every type's analysis reads."""
 
-    Two groups: Welch's t-test, Hedges' g (unpooled standardizer, exact small-sample
-    correction at the Welch df) with a noncentral-t CI, and the JZS Bayes factor.
-    Three or more groups: Welch's ANOVA, partial omega squared with a one-sided
-    noncentral-F CI, and Games-Howell comparisons of every pair adjusted with
-    ``p_adjust_method``. Defaults are ggstatsplot 1.1.4's ``ggbetweenstats()``.
+    x: str
+    type: str
+    conf_level: float
+    alternative: stats.Alternative
+    p_adjust_method: stats.PAdjustMethod
+    pairwise_alpha: float
+    pairwise_display: str
+    prior_scale: float
+    bf_message: bool | None
+    results_subtitle: bool
+    tr: float
+    seed: int
 
-    Args:
-        data: a pandas, polars or pyarrow data frame in long format.
-        x: the grouping column.
-        y: the numeric outcome column.
-        type: "parametric" (alias "p"); "nonparametric", "robust" and "bayes" are
-            not available yet in this development version.
-        pairwise_display: which pairs the figure draws: "significant" ("s"),
-            "non-significant" ("ns"), "all" or "none". Every pair is computed.
-        p_adjust_method: R's ``p.adjust`` method for the pairwise p-values.
-        pairwise_alpha: a pair is significant when its adjusted p is below this.
-        conf_level: confidence level of the effect-size interval.
-        digits: decimals in the subtitle, caption and labels.
-        tr: trimming proportion of the robust methods; another value than 0.2
-            with type="parametric" raises, since nothing would be trimmed.
-        bf_prior: scale of the Cauchy prior of the Bayes factor (0.707).
-        bf_message: None draws the Bayes factor caption where it is available;
-            True requires it; False never draws it.
-        results_subtitle: whether the statistical results are reported as a
-            subtitle (False also drops the Bayes factor caption).
-        alternative: "two-sided", "less" or "greater"; one-sided only with two
-            groups.
-        seed: random seed, recorded in the result (no random step here).
-        order: the level order, a permutation of the levels present.
 
-    Returns:
-        A :class:`~inferplot.result.StatsResult` holding every number and text.
+@dataclass(frozen=True, slots=True)
+class _Parts:
+    """What one type's analysis computed."""
 
-    Raises:
-        TypeError, ValueError: a bad argument or unusable data; the message says
-            how to fix the call.
-        KeyError: a column that the data frame does not have.
-        NotImplementedError: a type, or a Bayes factor caption, that this version
-            does not have.
-    """
-    type_name = canonical_type(type)
-    display = canonical_pairwise_display(pairwise_display)
-    adjust = _adjust_method(check_p_adjust_method(p_adjust_method))
-    alpha = check_probability(pairwise_alpha, "pairwise_alpha")
-    level = check_conf_level(conf_level)
-    n_digits = check_digits(digits)
-    trim = check_tr(tr)
-    prior_scale = check_positive(bf_prior, "bf_prior")
-    show_bf = check_optional_bool(bf_message, "bf_message")
-    subtitle_on = check_bool(results_subtitle, "results_subtitle")
-    side = _alternative(check_alternative(alternative))
-    rng_seed = check_seed(seed)
-    if type_name != "parametric":
-        shown = repr(type) if type == type_name else f"{type!r} ({type_name})"
-        raise NotImplementedError(
-            f"type={shown} is not available yet in this development version of "
-            "inferplot; only type='parametric' exists for now."
-        )
-    if trim != _DEFAULT_TR:
-        # ggstatsplot silently ignores tr outside the robust type; inferplot never
-        # drops an argument (CLAUDE.md rule 3), as for alternative (SPEC section 2).
-        raise ValueError(
-            f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
-            f"type={type_name!r} trims nothing, so it would have no effect. Remove "
-            "tr=; the robust methods arrive later in this development version."
-        )
-    if show_bf is True and not subtitle_on:
-        raise ValueError(
-            "bf_message=True asks for the Bayes factor caption, which is drawn only "
-            "together with the results subtitle; results_subtitle=False turns both "
-            "off. Pass results_subtitle=True, or drop bf_message=True."
-        )
+    test: TestResult
+    effect_size: EffectSize
+    bayes: BayesFactor | None
+    pairwise: tuple[PairwiseComparison, ...]
+    centrality: str
+    centers: tuple[float, ...]
+    warnings: tuple[str, ...]
+    citations: tuple[str, ...]
 
-    between = read_between(data, x, y, order=order)
-    levels, values = between.levels, between.values
-    k = len(levels)
-    if k >= 3 and side != "two-sided":
-        raise ValueError(
-            f"alternative={side!r} applies only to two groups; x={x!r} has {k} "
-            "groups, where Welch's ANOVA and the pairwise comparisons are always "
-            "two-sided. Remove alternative= or compare two groups."
-        )
-    if k >= 3 and show_bf is True:
-        raise NotImplementedError(
-            "bf_message=True: the Bayes factor caption for three or more groups (a "
-            "Bayesian ANOVA) arrives in inferplot 0.2. Remove bf_message=True; the "
-            "default (None) leaves the caption out and says so in result.warnings."
-        )
-    _check_groups(
-        x, levels, values, bayes=k == 2 and subtitle_on and show_bf is not False
-    )
 
+def _sorted_pairs(rows: list[PairwiseComparison]) -> tuple[PairwiseComparison, ...]:
+    """Rows sorted by group1 and then group2 as text in the C locale (code-point
+    order, Python's ``sorted()``), as statsExpressions 2.2.1's
+    ``pairwise_comparisons()`` arranges them (see ``_games_howell_pairs``)."""
+    return tuple(sorted(rows, key=lambda row: (row.group1, row.group2)))
+
+
+def _adjustment_citation(method: str) -> list[str]:
+    return [_ADJUSTMENT_CITATIONS[method]] if method in _ADJUSTMENT_CITATIONS else []
+
+
+# --------------------------------------------------------------------------- #
+# type parametric
+# --------------------------------------------------------------------------- #
+
+
+def _parametric(
+    levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> _Parts:
+    """Welch's t or ANOVA, Hedges' g or partial omega squared, Games-Howell, and
+    the two-group JZS Bayes factor caption (D28, D32)."""
+    side, level = args.alternative, args.conf_level
     warnings: list[str] = []
-    if between.empty_levels:
-        empty = between.empty_levels
-        warnings.append(
-            f"The declared {'level' if len(empty) == 1 else 'levels'} "
-            f"{_names(empty)} of {x!r} {'has' if len(empty) == 1 else 'have'} no "
-            "observations with both x and y present and "
-            f"{'was' if len(empty) == 1 else 'were'} left out of the analysis."
-        )
-
     citations: list[str] = []
     bayes: BayesFactor | None = None
     pairwise: tuple[PairwiseComparison, ...] = ()
-    if k == 2:
+    if len(levels) == 2:
         a, b = values
         welch = stats.welch_t(a, b, alternative=side)
         g = stats.hedges_g(a, b, conf_level=level, alternative=side)
@@ -526,13 +465,15 @@ def betweenstats(
         citations += [_WELCH_1947, _HEDGES_1981, _DELACRE_2021, _STEIGER_2004]
         if stats.hedges_j(welch.df) == 0.0:
             warnings.append(_HEDGES_J_ZERO_WARNING)
-        if subtitle_on and show_bf is not False:
-            bf10, log_bf01 = stats.jzs_bf10_two_sample(a, b, prior_scale=prior_scale)
+        if args.results_subtitle and args.bf_message is not False:
+            bf10, log_bf01 = stats.jzs_bf10_two_sample(
+                a, b, prior_scale=args.prior_scale
+            )
             bayes = BayesFactor(
                 bf10=bf10,
                 log_bf01=log_bf01,
                 prior="cauchy",
-                prior_scale=prior_scale,
+                prior_scale=args.prior_scale,
                 test="jzs_two_sample",
             )
             citations.append(_ROUDER_2009)
@@ -569,24 +510,373 @@ def betweenstats(
             ci_method="noncentral F",
             sidedness=omega.sidedness,
         )
-        pairwise = _pairwise(
+        pairwise = _games_howell_pairs(
             levels,
             values,
-            p_adjust_method=adjust,
-            pairwise_alpha=alpha,
-            pairwise_display=display,
+            p_adjust_method=args.p_adjust_method,
+            pairwise_alpha=args.pairwise_alpha,
+            pairwise_display=args.pairwise_display,
         )
         citations += [_WELCH_1951, _OLEJNIK_ALGINA_2003, _STEIGER_2004]
         citations.append(_GAMES_HOWELL_1976)
-        if adjust in _ADJUSTMENT_CITATIONS:
-            citations.append(_ADJUSTMENT_CITATIONS[adjust])
-        if subtitle_on and show_bf is None:
+        citations += _adjustment_citation(args.p_adjust_method)
+        if args.results_subtitle and args.bf_message is None:
             warnings.append(_BAYES_K3_WARNING)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=bayes,
+        pairwise=pairwise,
+        centrality="mean",
+        centers=tuple(stats.mean(v) for v in values),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
 
+
+# --------------------------------------------------------------------------- #
+# type nonparametric
+# --------------------------------------------------------------------------- #
+
+_MANN_WHITNEY_1947: Final = (
+    "Mann, H. B. & Whitney, D. R. (1947). Annals of Mathematical Statistics 18: "
+    "50-60 (Mann-Whitney U test)."
+)
+_KERBY_2014: Final = (
+    "Kerby, D. S. (2014). Comprehensive Psychology 3: 11.IT.3.1 (rank-biserial "
+    "correlation)."
+)
+_KRUSKAL_WALLIS_1952: Final = (
+    "Kruskal, W. H. & Wallis, W. A. (1952). Journal of the American Statistical "
+    "Association 47: 583-621 (Kruskal-Wallis test)."
+)
+_TOMCZAK_2014: Final = (
+    "Tomczak, M. & Tomczak, E. (2014). Trends in Sport Sciences 21: 19-25 (rank "
+    "epsilon squared)."
+)
+_DUNN_1964: Final = (
+    "Dunn, O. J. (1964). Technometrics 6: 241-252 (Dunn's pairwise comparisons)."
+)
+_EFRON_TIBSHIRANI_1993: Final = (
+    "Efron, B. & Tibshirani, R. J. (1993). An Introduction to the Bootstrap. "
+    "Chapman & Hall (percentile bootstrap intervals)."
+)
+
+
+def _check_ranks(x: str, values: Sequence[FloatArray]) -> None:
+    """The rank tests need at least two distinct values in all the data."""
+    lows = [float(np.min(v)) for v in values]
+    if min(lows) == max(float(np.max(v)) for v in values):
+        raise ValueError(
+            f"Every value of y is the same ({lows[0]!r}) in all groups of "
+            f"x={x!r}, so the rank tests have nothing to rank: every observation "
+            "ties with every other. There is no difference to test."
+        )
+
+
+def _nonparametric(
+    levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> _Parts:
+    """Mann-Whitney U with the rank-biserial r, or Kruskal-Wallis with rank
+    epsilon squared (bootstrap CI) and Dunn's pairwise z (SPEC.md section 4)."""
+    _check_ranks(args.x, values)
+    side, level = args.alternative, args.conf_level
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    if len(levels) == 2:
+        a, b = values
+        test_result = stats.mann_whitney(a, b, alternative=side)
+        r = stats.rank_biserial(a, b, conf_level=level, alternative=side)
+        test = TestResult(
+            name="mann_whitney",
+            label="Mann-Whitney U test",
+            method="Wilcoxon rank sum test",
+            statistic_name="W",
+            statistic=test_result.statistic,
+            df=None,
+            df_error=None,
+            p_value=test_result.p_value,
+            alternative=side,
+        )
+        effect_size = EffectSize(
+            name="rank_biserial",
+            label="rank-biserial r",
+            estimate=r.estimate,
+            conf_level=r.conf_level,
+            conf_low=r.conf_low,
+            conf_high=r.conf_high,
+            ci_method="normal approximation (Fisher z)",
+            sidedness=r.sidedness,
+        )
+        citations = [_MANN_WHITNEY_1947, _KERBY_2014]
+    else:
+        kw = stats.kruskal_wallis(values)
+        try:
+            epsilon = stats.rank_epsilon_squared(
+                values, conf_level=level, seed=args.seed
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"The bootstrap interval of rank epsilon squared cannot be computed "
+                f"for these groups of x={args.x!r}: {error}. Use type='parametric' "
+                "or type='robust', or collect more varied data."
+            ) from None
+        test = TestResult(
+            name="kruskal_wallis",
+            label="Kruskal-Wallis test",
+            method="Kruskal-Wallis rank sum test",
+            statistic_name="chi2",
+            statistic=kw.statistic,
+            df=None,
+            df_error=kw.df,
+            p_value=kw.p_value,
+            alternative="two-sided",
+        )
+        effect_size = EffectSize(
+            name="rank_epsilon_squared",
+            label="rank epsilon squared",
+            estimate=epsilon.estimate,
+            conf_level=epsilon.conf_level,
+            conf_low=epsilon.conf_low,
+            conf_high=epsilon.conf_high,
+            ci_method="percentile bootstrap",
+            sidedness=epsilon.sidedness,
+            bootstrap_resamples=epsilon.resamples,
+            bootstrap_seed=epsilon.seed,
+        )
+        pairwise = _dunn_pairs(levels, values, args)
+        citations = [
+            _KRUSKAL_WALLIS_1952,
+            _TOMCZAK_2014,
+            _EFRON_TIBSHIRANI_1993,
+            _DUNN_1964,
+            *_adjustment_citation(args.p_adjust_method),
+        ]
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        pairwise=pairwise,
+        centrality="median",
+        centers=tuple(stats.median(v) for v in values),
+        warnings=(),
+        citations=tuple(citations),
+    )
+
+
+def _dunn_pairs(
+    levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """Dunn's z for every pair i < j in level order (unsigned, as ggstatsplot
+    reports it), raw p adjusted with ``p_adjust_method`` over all pairs, rows in
+    ggstatsplot's order (``_sorted_pairs``)."""
+    pairs = stats.dunn(values)
+    adjusted = stats.p_adjust([pair.p_value for pair in pairs], args.p_adjust_method)
+    rows: list[PairwiseComparison] = []
+    for pair, p_adjusted in zip(pairs, adjusted, strict=True):
+        significant = p_adjusted < args.pairwise_alpha
+        rows.append(
+            PairwiseComparison(
+                group1=levels[pair.i],
+                group2=levels[pair.j],
+                statistic_name="z",
+                statistic=pair.statistic,
+                df=None,
+                p_value=pair.p_value,
+                p_adjusted=p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test="dunn",
+                test_label="Dunn",
+                significant=significant,
+                displayed=_displayed(args.pairwise_display, significant),
+            )
+        )
+    return _sorted_pairs(rows)
+
+
+# --------------------------------------------------------------------------- #
+# the analysis
+# --------------------------------------------------------------------------- #
+
+_IMPLEMENTED_TYPES: Final = ("parametric", "nonparametric")
+
+
+def _check_type_arguments(
+    type_name: str, *, tr: object, trim: float, side: str, show_bf: bool | None
+) -> None:
+    """Arguments that cannot apply to ``type_name`` whatever the data (SPEC.md
+    section 2): they would change what the reported numbers mean, so they raise
+    instead of being ignored as ggstatsplot ignores them."""
+    if trim != _DEFAULT_TR and type_name != "robust":
+        # ggstatsplot silently ignores tr outside the robust type; inferplot never
+        # drops an argument (CLAUDE.md rule 3), as for alternative (SPEC section 2).
+        raise ValueError(
+            f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
+            f"type={type_name!r} trims nothing, so it would have no effect. Remove "
+            "tr=, or pass type='robust' to compare trimmed means."
+        )
+    if show_bf is True and type_name != "parametric":
+        raise ValueError(
+            f"bf_message=True asks for a Bayes factor caption, which ggstatsplot "
+            f"draws only for type='parametric'; type={type_name!r} has none. Remove "
+            "bf_message=True"
+            + (
+                "; type='bayes' reports the Bayes factor in the subtitle."
+                if type_name == "bayes"
+                else "."
+            )
+        )
+
+
+@checked
+def betweenstats(
+    data: object,
+    x: str,
+    y: str,
+    *,
+    type: str = "parametric",
+    pairwise_display: str = "significant",
+    p_adjust_method: str = "holm",
+    pairwise_alpha: float = 0.05,
+    conf_level: float = 0.95,
+    digits: int = 2,
+    tr: float = 0.2,
+    bf_prior: float = 0.707,
+    bf_message: bool | None = None,
+    results_subtitle: bool = True,
+    alternative: str = "two-sided",
+    seed: int = 0,
+    order: Iterable[str | int | float] | None = None,
+) -> StatsResult:
+    """Compare ``y`` across the independent groups of ``x``; no plotting.
+
+    The methods follow ggstatsplot 1.1.4's ``ggbetweenstats()`` for each ``type``
+    (SPEC.md section 4):
+
+    * "parametric" ("p"): Welch's t-test with Hedges' g and the JZS Bayes factor
+      caption (two groups); Welch's ANOVA with partial omega squared and
+      Games-Howell comparisons (three or more). Centrality: means.
+    * "nonparametric" ("np"): the Mann-Whitney U test with the rank-biserial r (two
+      groups); the Kruskal-Wallis test with rank epsilon squared (bootstrap CI) and
+      Dunn's comparisons (three or more). Centrality: medians.
+
+    Args:
+        data: a pandas, polars or pyarrow data frame in long format.
+        x: the grouping column.
+        y: the numeric outcome column.
+        type: "parametric" ("p") or "nonparametric" ("np"); "robust" and "bayes"
+            are not available yet in this development version.
+        pairwise_display: which pairs the figure draws: "significant" ("s"),
+            "non-significant" ("ns"), "all" or "none". Every pair is computed.
+        p_adjust_method: R's ``p.adjust`` method for the pairwise p-values.
+        pairwise_alpha: a pair is significant when its adjusted p is below this.
+        conf_level: confidence level of the effect-size interval.
+        digits: decimals in the subtitle, caption and labels.
+        tr: trimming proportion of the robust methods; another value than 0.2
+            with a type that trims nothing raises.
+        bf_prior: scale of the Cauchy prior of the Bayes factor (0.707).
+        bf_message: None draws the Bayes factor caption where it is available
+            (type "parametric"); True requires it; False never draws it.
+        results_subtitle: whether the statistical results are reported as a
+            subtitle (False also drops the Bayes factor caption).
+        alternative: "two-sided", "less" or "greater"; one-sided only with two
+            groups.
+        seed: random seed of the bootstrap intervals (three or more groups with
+            type "nonparametric"), recorded in the result.
+        order: the level order, a permutation of the levels present.
+
+    Returns:
+        A :class:`~inferplot.result.StatsResult` holding every number and text.
+
+    Raises:
+        TypeError, ValueError: a bad argument or unusable data; the message says
+            how to fix the call.
+        KeyError: a column that the data frame does not have.
+        NotImplementedError: a type, or a Bayes factor caption, that this version
+            does not have.
+    """
+    type_name = canonical_type(type)
+    display = canonical_pairwise_display(pairwise_display)
+    adjust = _adjust_method(check_p_adjust_method(p_adjust_method))
+    alpha = check_probability(pairwise_alpha, "pairwise_alpha")
+    level = check_conf_level(conf_level)
+    n_digits = check_digits(digits)
+    trim = check_tr(tr)
+    prior_scale = check_positive(bf_prior, "bf_prior")
+    show_bf = check_optional_bool(bf_message, "bf_message")
+    subtitle_on = check_bool(results_subtitle, "results_subtitle")
+    side = _alternative(check_alternative(alternative))
+    rng_seed = check_seed(seed)
+    if type_name not in _IMPLEMENTED_TYPES:
+        shown = repr(type) if type == type_name else f"{type!r} ({type_name})"
+        raise NotImplementedError(
+            f"type={shown} is not available yet in this development version of "
+            "inferplot; type='parametric' and type='nonparametric' exist for now."
+        )
+    if show_bf is True and not subtitle_on:
+        raise ValueError(
+            "bf_message=True asks for the Bayes factor caption, which is drawn only "
+            "together with the results subtitle; results_subtitle=False turns both "
+            "off. Pass results_subtitle=True, or drop bf_message=True."
+        )
+    _check_type_arguments(type_name, tr=tr, trim=trim, side=side, show_bf=show_bf)
+
+    between = read_between(data, x, y, order=order)
+    levels, values = between.levels, between.values
+    k = len(levels)
+    if k >= 3 and side != "two-sided":
+        omnibus = {
+            "parametric": "Welch's ANOVA",
+            "nonparametric": "the Kruskal-Wallis test",
+        }[type_name]
+        raise ValueError(
+            f"alternative={side!r} applies only to two groups; x={x!r} has {k} "
+            f"groups, where {omnibus} and the pairwise comparisons are always "
+            "two-sided. Remove alternative= or compare two groups."
+        )
+    if type_name == "parametric":
+        if k >= 3 and show_bf is True:
+            raise NotImplementedError(
+                "bf_message=True: the Bayes factor caption for three or more groups "
+                "(a Bayesian ANOVA) arrives in inferplot 0.2. Remove "
+                "bf_message=True; the default (None) leaves the caption out and "
+                "says so in result.warnings."
+            )
+        _check_groups(
+            x, levels, values, bayes=k == 2 and subtitle_on and show_bf is not False
+        )
+
+    args = _Args(
+        x=x,
+        type=type_name,
+        conf_level=level,
+        alternative=side,
+        p_adjust_method=adjust,
+        pairwise_alpha=alpha,
+        pairwise_display=display,
+        prior_scale=prior_scale,
+        bf_message=show_bf,
+        results_subtitle=subtitle_on,
+        tr=trim,
+        seed=rng_seed,
+    )
+    analyses = {"parametric": _parametric, "nonparametric": _nonparametric}
+    parts = analyses[type_name](levels, values, args)
+
+    warnings: list[str] = []
+    if between.empty_levels:
+        empty = between.empty_levels
+        warnings.append(
+            f"The declared {'level' if len(empty) == 1 else 'levels'} "
+            f"{_names(empty)} of {x!r} {'has' if len(empty) == 1 else 'have'} no "
+            "observations with both x and y present and "
+            f"{'was' if len(empty) == 1 else 'were'} left out of the analysis."
+        )
+    warnings += parts.warnings
     warnings += _no_effect_warnings(
         x=x,
         k=k,
-        bayes_computed=bayes is not None,
+        type_name=type_name,
+        bayes_computed=parts.bayes is not None,
         subtitle_on=subtitle_on,
         show_bf=show_bf,
         passed={
@@ -604,8 +894,8 @@ def betweenstats(
     )
 
     descriptives = tuple(
-        Descriptive(level=name, n=int(v.size), centrality="mean", value=stats.mean(v))
-        for name, v in zip(levels, values, strict=True)
+        Descriptive(level=name, n=int(v.size), centrality=parts.centrality, value=c)
+        for name, v, c in zip(levels, values, parts.centers, strict=True)
     )
     settings = Settings(
         conf_level=level,
@@ -624,10 +914,10 @@ def betweenstats(
         x=x,
         y=y,
         descriptives=descriptives,
-        test=test,
-        effect_size=effect_size,
-        bayes=bayes,
-        pairwise=pairwise,
+        test=parts.test,
+        effect_size=parts.effect_size,
+        bayes=parts.bayes,
+        pairwise=parts.pairwise,
         n_obs=between.n_obs,
         settings=settings,
     )
@@ -641,15 +931,15 @@ def betweenstats(
         levels=levels,
         values=tuple(tuple(float(v) for v in arr.tolist()) for arr in values),
         descriptives=descriptives,
-        test=test,
-        effect_size=effect_size,
-        bayes=bayes,
-        pairwise=pairwise,
+        test=parts.test,
+        effect_size=parts.effect_size,
+        bayes=parts.bayes,
+        pairwise=parts.pairwise,
         n_obs=between.n_obs,
         n_dropped=between.n_dropped,
         dropped_subjects=0,
         warnings=tuple(warnings),
-        provenance=current_provenance(seed=rng_seed, citations=tuple(citations)),
+        provenance=current_provenance(seed=rng_seed, citations=parts.citations),
         settings=settings,
         text=texts,
     )

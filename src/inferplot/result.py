@@ -182,7 +182,14 @@ class TestResult(_Plain):
 
 @dataclass(frozen=True, slots=True)
 class EffectSize(_Plain):
-    """The effect size and its CI; ``sidedness`` "greater" means [low, max]."""
+    """The effect size and its CI; ``sidedness`` "greater" means [low, max].
+
+    A bootstrap CI (``ci_method`` "percentile bootstrap") records its number of
+    resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``; both
+    are None for a CI without resampling. With unequal group sizes the explanatory
+    effect size's estimate is itself the median of the bootstrap values, so it
+    depends on the seed too.
+    """
 
     name: str
     label: str
@@ -192,6 +199,8 @@ class EffectSize(_Plain):
     conf_high: float
     ci_method: str
     sidedness: str
+    bootstrap_resamples: int | None = None
+    bootstrap_seed: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,7 +216,13 @@ class BayesFactor(_Plain):
 
 @dataclass(frozen=True, slots=True)
 class PairwiseComparison(_Plain):
-    """One pair: ``significant`` is ``p_adjusted < pairwise_alpha``."""
+    """One pair: ``significant`` is ``p_adjusted < pairwise_alpha``.
+
+    ``estimate`` with ``conf_level``, ``conf_low`` and ``conf_high`` is the pair's
+    own estimate and interval where the pairwise method reports one (lincon: the
+    trimmed-mean difference group1 - group2), else None. ``bayes`` is the pair's
+    Bayes factor where the comparison is Bayesian, else None.
+    """
 
     group1: str
     group2: str
@@ -221,6 +236,11 @@ class PairwiseComparison(_Plain):
     test_label: str
     significant: bool
     displayed: bool
+    estimate: float | None = None
+    conf_level: float | None = None
+    conf_low: float | None = None
+    conf_high: float | None = None
+    bayes: BayesFactor | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,12 +547,12 @@ class StatsResult(_Plain):
                     "adjust_method": pair.adjust_method,
                     "alternative": "two-sided",
                     "effect_size": None,
-                    "estimate": None,
-                    "conf_level": None,
-                    "conf_low": None,
-                    "conf_high": None,
-                    "bf10": None,
-                    "log_bf01": None,
+                    "estimate": pair.estimate,
+                    "conf_level": pair.conf_level,
+                    "conf_low": pair.conf_low,
+                    "conf_high": pair.conf_high,
+                    "bf10": None if pair.bayes is None else pair.bayes.bf10,
+                    "log_bf01": None if pair.bayes is None else pair.bayes.log_bf01,
                     "significant": pair.significant,
                     "displayed": pair.displayed,
                 }

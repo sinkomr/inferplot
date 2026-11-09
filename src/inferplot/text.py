@@ -431,6 +431,8 @@ _CENTRALITY_SUBSCRIPTS: Final[dict[str, str]] = {
 _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "welch_t": ("welch_t", False, True),
     "welch_anova": ("welch_f", False, True),
+    "mann_whitney": ("mann_whitney_w", False, False),
+    "kruskal_wallis": ("kruskal_wallis_chi2", False, False),
 }
 
 
