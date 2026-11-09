@@ -6,15 +6,9 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from inferplot.stats.descriptive import (
-    SampleLike,
-    as_sample,
-    common_scale,
-    mean,
-    scaled_variance,
-)
+from inferplot.stats.descriptive import SampleLike, as_sample, common_scale, mean
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
-from inferplot.stats.parametric import constant_group_message, satterthwaite_df
+from inferplot.stats.parametric import checked_scaled_variances, satterthwaite_df
 from inferplot.stats.srange import srange_sf
 
 __all__ = ["PairResult", "games_howell"]
@@ -49,9 +43,16 @@ def games_howell(
     ``PMCMRplus::gamesHowellTest`` followed by
     ``stats::p.adjust`` (Holm by default), as statsExpressions 2.2.1 calls them.
 
+    Limits: every group's scaled variance term v_i / n_i must be at least
+    ``TINY`` = 2^-1022 (``welch_anova``'s condition; a standard deviation above
+    roughly 1e-154 times the largest |value| of all groups), so each term is
+    accurate to about 2^-53 relative and |q| < 2^512.5 (about 1.9e154).
+
     Raises:
         ValueError: fewer than two groups, a group with fewer than two values or a
-            non-finite value, a group with variance 0, or an unknown method.
+            non-finite value, a constant group or one whose variance term is below
+            TINY (it varies by less than double precision can represent next to
+            the largest value of all groups), or an unknown method.
     """
     if len(groups) < 2:
         raise ValueError(f"Games-Howell needs at least two groups; got {len(groups)}")
@@ -64,12 +65,8 @@ def games_howell(
     k = len(samples)
     n = [s.size for s in samples]
     means = [mean(s) for s in samples]
-    weights: list[float] = []
-    for index, sample in enumerate(samples):
-        v = scaled_variance(sample)
-        if v == 0.0:
-            raise ValueError(constant_group_message(index, raw[index], "Games-Howell"))
-        weights.append(v / sample.size)
+    variances = checked_scaled_variances(raw, samples, "Games-Howell")
+    weights = [v / size for v, size in zip(variances, n, strict=True)]
     rows: list[tuple[int, int, float, float, float]] = []
     for i in range(k):
         for j in range(i + 1, k):

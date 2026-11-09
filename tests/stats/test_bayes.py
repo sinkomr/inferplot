@@ -61,6 +61,22 @@ def test_huge_t_stays_finite_in_log_space() -> None:
     assert log_bf01 < -709.0
 
 
+@pytest.mark.parametrize("t", [1e100, 1e150, 2.0**512, 1e200, 1e300, -1.7e308])
+@pytest.mark.parametrize(("df", "n_eff"), [(2.0, 1.0), (4.0, 1.5), (1e5, 2e4)])
+def test_huge_t_follows_the_large_t_limit(t: float, df: float, n_eff: float) -> None:
+    # Beyond |t| = 2^512 t^2 / df overflowed (RuntimeWarning, then a wrong or
+    # infinite log). For large |t| the integral over g is dominated by
+    # g ~ t^2, where it has the closed form
+    # BF10 = (n_eff r^2 / (2 pi))^(1/2) 2 / (df - 1) (t^2 / df)^((df - 1) / 2).
+    r = 0.707
+    limit = (
+        0.5 * (df - 1.0) * (2.0 * math.log(abs(t)) - math.log(df))
+        + math.log(2.0 / (df - 1.0))
+        + 0.5 * math.log(n_eff * r * r / (2.0 * math.pi))
+    )
+    assert jzs_log_bf10(t, n_eff, df, prior_scale=r) == pytest.approx(limit, rel=1e-13)
+
+
 def test_evidence_for_the_null_grows_with_n() -> None:
     values = [jzs_log_bf10(0.0, n, 2 * n - 2, prior_scale=0.707) for n in (5, 50, 500)]
     assert values == sorted(values, reverse=True)

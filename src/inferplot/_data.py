@@ -30,7 +30,7 @@ from __future__ import annotations
 import difflib
 import math
 import numbers
-from collections.abc import Hashable, Iterable, Sequence
+from collections.abc import Hashable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -344,14 +344,29 @@ def _check_order(
 ) -> list[str]:
     """``order`` as labels, if it is a permutation of ``present``.
 
-    ``order`` may be any iterable other than a string: a list, a tuple, a NumPy
-    array, a pandas Index or Series, a polars Series or a pyarrow array. Typed
-    ``object``: callers that skip type checking can pass anything.
+    ``order`` may be any iterable other than a string, a set or a mapping: a list,
+    a tuple, a generator, a NumPy array, a pandas Index or Series, a polars Series
+    or a pyarrow array. A set (also a frozenset or a dict's keys view) is refused
+    because its iteration order is not one the caller chose, and a mapping because
+    it is ambiguous (keys or values). Typed ``object``: callers that skip type
+    checking can pass anything.
     """
+    kind = type(order).__name__
     if isinstance(order, str | bytes) or not isinstance(order, Iterable):
         raise TypeError(
             "order must be a list of level names, for example "
             f"order={list(present)!r}; got {order!r}."
+        )
+    if isinstance(order, Set | Mapping):
+        why = (
+            "a set has no order, so the levels would come out in an arbitrary one"
+            if isinstance(order, Set)
+            else "a mapping is ambiguous: its keys or its values could be meant"
+        )
+        raise TypeError(
+            f"order must list the levels in the order to use, but got a "
+            f"{kind}: {why}. Pass a list, for example "
+            f"order={list(present)!r}."
         )
     labels = [_order_label(item) for item in cast("Iterable[object]", order)]
     duplicates = sorted({label for label in labels if labels.count(label) > 1})

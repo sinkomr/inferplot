@@ -531,6 +531,35 @@ def test_order(backend: str) -> None:
         read_between(frame, "g", "y", order=[8.5, 4, 6])
 
 
+@pytest.mark.parametrize(
+    ("order", "why"),
+    [
+        ({"8", "4", "6"}, "a set has no order"),
+        (frozenset({"8", "4", "6"}), "a set has no order"),
+        ({"8": 1, "4": 2, "6": 3}.keys(), "a set has no order"),
+        ({"8": 1, "4": 2, "6": 3}, "a mapping is ambiguous"),
+        (pd.Series(["8", "4", "6"]).to_dict(), "a mapping is ambiguous"),
+    ],
+)
+def test_order_refuses_sets_and_mappings(order: Any, why: str) -> None:
+    # A set was accepted and its arbitrary iteration order used without a word.
+    frame = make("pandas", {"g": [4, 6, 8, 4], "y": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(TypeError) as error:
+        read_between(frame, "g", "y", order=order)
+    text = str(error.value)
+    assert why in text
+    assert text.startswith("order must list the levels in the order to use, but got a")
+    assert text.endswith("Pass a list, for example order=['4', '6', '8'].")
+
+
+def test_order_through_the_analysis_refuses_a_set() -> None:
+    from inferplot import analyze
+
+    frame = pd.DataFrame({"g": list("abc") * 2, "y": [1.0, 2.0, 4.0, 3.0, 5.0, 9.0]})
+    with pytest.raises(TypeError, match=r"got a set: a set has no order"):
+        analyze.betweenstats(frame, "g", "y", order={"c", "a", "b"})
+
+
 def _unique_descending(frame: Any, backend: str) -> Any:
     """The distinct values of column g, largest first, as the backend returns them."""
     if backend == "pandas":
@@ -589,7 +618,7 @@ def test_order_from_the_column_through_the_analysis() -> None:
         num.astype({"g": float}),
         "g",
         "y",
-        order=[8.0, 6.0, 4.0],  # type: ignore[list-item]
+        order=[8.0, 6.0, 4.0],
     )
     assert result.levels == ("8", "6", "4")
 
