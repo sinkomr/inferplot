@@ -127,9 +127,11 @@ Review any fixture diff before committing it.
 - ggstatsplot applies Holm on top of Games-Howell p-values, which are already
   family-wise. Replicate it; do not fix it.
 - R's `ptukey` is off by up to about 5e-10 absolute in the far upper tail, and
-  ggstatsplot prints it (1.41e-9 where the true p is about 2.2e-14). inferplot computes
-  the accurate tail (DECISIONS.md D31); SciPy's `studentized_range` is not accurate
-  there either. The `games_howell_p` tolerance is for Games-Howell only.
+  ggstatsplot prints it (1.41e-9 where the true p is about 2.2e-14); at small df the
+  error is far larger (1.35e-3 at df 2), and below 2 df it returns NaN, where
+  ggstatsplot fails. inferplot computes the accurate tail (DECISIONS.md D31, D37);
+  SciPy's `studentized_range` is not accurate there either. The `games_howell_p`
+  tolerance is for Games-Howell only.
 - Exact versus normal-approximation p-values in rank tests, and continuity corrections
   in chi-square and McNemar tests, follow R's rules for the given input. Read the
   variant from the oracle; it is part of the method, not a choice.

@@ -34,12 +34,41 @@ are logged in DECISIONS.md.
 
 ## Phase 1 — betweenstats, parametric, end to end
 
-- [ ] `_data.py` boundary (pandas, polars, pyarrow) and `_validate.py` (aliases, did-you-mean, removed-argument messages)
-- [ ] Welch t and ANOVA, Hedges' g and partial omega squared with CIs, Games-Howell then Holm (accurate studentized range tail, D31)
-- [ ] Two-group JZS Bayes factor caption (D32)
-- [ ] `StatsResult`, `text.py` (subtitle parity, APA, caption, alt text), `check()`
-- [ ] Renderer (violin, box, points, centrality label, brackets, subtitle, caption) and `save()`
-- [ ] Oracle parity tests pass for every betweenstats parametric fixture
+- [x] `_data.py` boundary (pandas, polars, pyarrow) and `_validate.py` (aliases, did-you-mean, removed-argument messages)
+- [x] Welch t and ANOVA, Hedges' g and partial omega squared with CIs, Games-Howell then Holm (accurate studentized range tail, D31): `inferplot.stats` reproduces every completed parametric fixture's statistics (`tests/stats/test_parity.py`); end-to-end parity is the last item
+- [x] Two-group JZS Bayes factor caption (D32): every two-sample ttestBF value within 1.5e-9; the caption is ggstatsplot's first and last items, AST-equal on every two-group parametric fixture
+- [x] `StatsResult`, `text.py` (subtitle parity, APA, caption, alt text), `check()`: every fixture expression AST-equal when rebuilt from its numbers; number formatting reproduces all 5,010 probe-format rows
+- [x] Renderer (violin, box, points, centrality label, brackets, subtitle, caption) and `save()`: all 40 completed parametric fixtures render with no clipped or overlapping text; SVG, PDF and PNG round trips; identical bytes on re-save
+- [x] Oracle parity tests pass for every betweenstats parametric fixture: `ip.analyze.betweenstats` matches all 40 completed parametric fixtures on pandas, polars and pyarrow (`tests/test_betweenstats_parity.py`); three bracket labels differ by design (D31, SPEC §5 item 6); `edge_n2`, where ggstatsplot fails, matches its partial outputs (D37)
+
+Slices: two groups (ToothGrowth) and three or more groups (iris) render to SVG with
+`fig.check()` empty (`tests/test_betweenstats_end_to_end.py`).
+
+End-of-phase review: done. A fresh-context review of the Phase 1 diff against SPEC.md
+confirmed 21 findings, all fixed. The four major ones: the omega squared interval took
+minutes, and crashed near F = 1e17, for very well separated groups (now at most 0.04 s
+at any F); a bracket label drawn across another bracket's line went unreported with
+`ax=`; artist dicts for layers that are not drawn were ignored, and a bad one left a
+half-drawn Axes; statsExpressions' templates were adapted without its notice (NOTICE
+added; the D5 question is below). The others: statistics that depended on the units
+of y (now bit-identical under any power of two), -0.00 for Hedges' g at df 1,
+arguments with no effect accepted silently (now a warning each, D39), Games-Howell
+references for every fixture pair (109), coverage simulated at nonzero effects,
+`order=` with NumPy values, user text as mathtext (D40), clearer messages, and stale
+counts. The lead's review of the fixes found that very wide ranges between groups gave
+silent errors or NaN; such data now compute exactly or raise a plain error (SPEC §4,
+"Scale and range").
+
+Phase 1 notes: fixtures come from oracle run 42522555302: the 45 Phase 0 cases,
+unchanged, plus 28 parametric ggbetweenstats cases (edge data and every argument the
+parametric slice exposes) and four probe files (number formatting, `p.adjust`,
+`ptukey`, the omega squared CI). In `edge_n2` (two values per group) ggstatsplot 1.1.4
+itself fails, because R's ptukey returns NaN below 2 df; the fixture keeps the
+subtitle, caption and labels computed before the failure, and inferplot computes the
+accurate p-values there (D37, flagged for the owner). The probes pinned every number
+formatting rule except negative zero, showed that ggstatsplot's adjusted Games-Howell p
+is exactly `p.adjust` of gamesHowellTest's raw p, measured ptukey's error by df, and
+confirmed the omega squared CI construction (D33, flagged for the owner).
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 
@@ -60,7 +89,7 @@ are logged in DECISIONS.md.
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
 - [ ] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples
-- [ ] simulation tests (`slow` marker)
+- [ ] simulation tests (`slow` marker); started in Phase 1: Welch t and ANOVA Type I error under the null (0.0475, 0.0515) and Hedges' g CI coverage at nonzero standardized differences (0.9445, 0.9480, 0.9515), with unequal variances and n (`tests/test_simulation.py`)
 - [ ] agent evaluation harness (ask the human before running it)
 - [ ] release workflow; human publishes to TestPyPI, then PyPI
 
@@ -71,11 +100,39 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 
 ## Known gaps and open oracle discrepancies
 
-- Decided (D31): Games-Howell p is computed from an accurate studentized range tail,
-  not R's ptukey, which is off by up to about 5e-10 in the far tail (iris
-  setosa-versicolor: ggstatsplot 1.41e-09, true about 2.2e-14). SciPy's
-  `studentized_range.sf` is no ground truth there either (1.9e-14, 14% low; it can
-  return 0), so Phase 1 needs its own stable tail computation.
+- Decided (D31, D37): Games-Howell p is computed from an accurate studentized range
+  tail (`inferplot.stats.srange_sf`), not R's ptukey, whose error grows as the df falls
+  (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, about 4.7e-10 in the
+  far tail; NaN below 2 df). `games_howell_p` (atol 3e-9) holds on every fixture, but
+  InsectSprays B-E already uses 2.8e-9 of it (ptukey's error times the Holm multiplier).
+  A fixture with more groups or smaller df will exceed it; its entry must then be
+  rebuilt from measurement with the reason it has (R's raw error, which the raw-p
+  check against probe-ptukey bounds, times the adjustment's multiplier, as `wrs2_p`
+  scales), never widened to fit.
+- D33 and D37 follow the owner's D31 precedent (accurate value over R's numerical
+  accident) and await the owner's confirmation.
+- Owner decision needed (fixed D5, CLAUDE.md rule 4): the text layer
+  (`src/inferplot/text.py`) adapts statsExpressions 2.2.1's expression templates, symbol
+  tables and number-formatting routes, read from its MIT source, while rule 4 allows
+  adapting source only from ggstatsplot. statsExpressions is ggstatsplot's own text
+  engine, by the same authors, and MIT-licensed; `NOTICE` now carries its notice. Either
+  extend the D5 exception to statsExpressions or rebuild those tables from the fixtures
+  and documentation (every template in use is pinned by AST equality with the fixtures;
+  the symbol entries no v0.1 fixture exercises would go).
+- Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
+  ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
+  figure). Figures with several bracket levels are tall (three levels 7.3 in,
+  InsectSprays 8.6 in), because a 9 pt label must fit in the 7% level step. With `ax=`
+  the renderer sets DejaVu Sans on every text of that Axes, including the user's.
+- Negative zero in number formatting is not pinned (R received the probe's -0 as +0);
+  inferplot prints "-0.00" as C `sprintf` does.
+- Wide dynamic range: one constant group with a value of at least about 1e154 times the
+  other group's standard deviation raises (SPEC §5 item 8), although its t fits in a
+  double; a second scale per group could compute it. Not worth it for such data unless
+  a user needs it.
+- R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
+  (`?TDist`); no fixture has a two-group \|t\| above 3.7, so Hedges' g CI parity at
+  large \|t\| is untested.
 - The generator handles ggbetweenstats only: `between_analysis`,
   `statsexpressions_rows` (`paired = FALSE`) and `bootstrap_candidates` stop on any
   other function. Each one needs its own bookkeeping (complete subjects for
@@ -84,14 +141,8 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   robust: `trimcibt`) before its cases are added, and so do `name_hidden`, the caption
   rule in `outcome_problems` and `label_counts`, which assume ggbetweenstats (barstats
   computes its pairwise tests through the same hidden helper, and `.chisq_test_safe`
-  swallows errors into NA rows the recorders cannot see). A case that declares a
-  swallowed subtitle (`expect_hidden_errors`) would still get a bootstrap reference;
-  skip it in `run_case` with the first such case. Unused edge CSVs: `edge_n2`,
-  `edge_ties`, `edge_negative`, `edge_empty_level`, `edge_missing`, `edge_outliers`,
-  `edge_within_missing`.
-- Phase 1: Hedges' g CI bounds agree with a tight SciPy inversion to 7.5e-7 relative
-  and up to 1.9e-8 absolute; set `noncentral_ci` from the implementation's own
-  measurement and add an absolute part before a fixture has a bound near 0.
+  swallows errors into NA rows the recorders cannot see). Unused edge CSV:
+  `edge_within_missing` (Phase 3).
 - Phase 2: compute WRS2's p-values as R does, 1 - cdf (`wrs2_p`; the statistics rule
   has an exception for it). Every fixture's p is large enough that `sf` passes too, so
   add a robust case whose p underflows (for example iris Petal.Length) to pin how

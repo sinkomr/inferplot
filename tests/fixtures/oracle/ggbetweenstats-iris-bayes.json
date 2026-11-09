@@ -26,6 +26,8 @@
     "virginica": 50
   },
   "error": null,
+  "expected_error": null,
+  "partial": null,
   "r_warnings": [],
   "r_messages": [],
   "suppressed": [

@@ -1,0 +1,300 @@
+{
+  "schema_version": 2,
+  "name": "ggbetweenstats-edge_n2-parametric",
+  "function": "ggbetweenstats",
+  "call": "ggstatsplot::ggbetweenstats(data = data, x = group, y = value, type = \"parametric\")",
+  "dataset": {
+    "file": "edge_n2.csv",
+    "sha256": "d9df276bdce62fc7d74e436821f974c99a1df69e1b20041cb07765ee6324a84c",
+    "rows": 6,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "group",
+    "y": "value",
+    "type": "parametric"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a",
+    "b",
+    "c"
+  ],
+  "n_per_level": {
+    "a": 2,
+    "b": 2,
+    "c": 2
+  },
+  "error": "arguments imply differing number of rows: 0, 1",
+  "expected_error": {
+    "component": "pairwise_comparisons",
+    "message": "arguments imply differing number of rows",
+    "reason": "Welch df below 2 in every pair: ptukey returns NaN for df < 2 and pairwise_comparisons() fails on the NaN p-values"
+  },
+  "partial": [
+    {
+      "component": "subtitle",
+      "value": [
+        {
+          "statistic": 21.445798168393,
+          "df": 2,
+          "df.error": 1.59476719259425,
+          "p.value": 0.0703652764287568,
+          "method": "One-way analysis of means (not assuming equal variances)",
+          "effectsize": "Omega2",
+          "estimate": 0.898985831443166,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 1,
+          "conf.method": "ncp",
+          "conf.distribution": "F",
+          "n.obs": 6,
+          "expression": "list(italic(\"F\")[\"Welch\"](2, 1.59) == \"21.45\", italic(p) == \"0.07\", widehat(omega[\"p\"]^2) == \"0.90\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"6\")"
+        }
+      ]
+    },
+    {
+      "component": "caption",
+      "value": [
+        {
+          "term": "mu",
+          "pd": 1,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        },
+        {
+          "term": "group-a",
+          "pd": 0.86675,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        },
+        {
+          "term": "group-b",
+          "pd": 0.898,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        },
+        {
+          "term": "group-c",
+          "pd": 0.96725,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        },
+        {
+          "term": "sig2",
+          "pd": 1,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        },
+        {
+          "term": "g_group",
+          "pd": 1,
+          "prior.distribution": "cauchy",
+          "prior.location": 0,
+          "prior.scale": 0.707,
+          "bf10": 2.51295767683412,
+          "method": "Bayes factors for linear models",
+          "log_e_bf10": 0.921460416730068,
+          "effectsize": "Bayesian R-squared",
+          "estimate": 0.494923393334642,
+          "std.dev": 0.51011087883514,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.869981822933187,
+          "conf.method": "HDI",
+          "n.obs": 6,
+          "expression": "list(log[e] * (BF[\"01\"]) == \"-0.92\", widehat(italic(R^\"2\"))[\"Bayesian\"]^\"posterior\" == \"0.49\", CI[\"95%\"]^HDI ~ \"[\" * \"0.00\", \"0.87\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+        }
+      ]
+    },
+    {
+      "component": "centrality_description",
+      "value": [
+        {
+          "group": "a",
+          "value": 11.59,
+          "std.dev": 0.29698484809835,
+          "iqr": 0.42,
+          "conf.low": 11.38,
+          "conf.high": 11.8,
+          "min": 11.38,
+          "max": 11.8,
+          "skewness": 1.27374145736338e-14,
+          "kurtosis": -2,
+          "n.obs": 2,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[mean] == \"11.59\")",
+          "n.expression": "a\n(n = 2)"
+        },
+        {
+          "group": "b",
+          "value": 11.26,
+          "std.dev": 1.68291413922398,
+          "iqr": 2.38,
+          "conf.low": 10.07,
+          "conf.high": 12.45,
+          "min": 10.07,
+          "max": 12.45,
+          "skewness": 0,
+          "kurtosis": -2,
+          "n.obs": 2,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[mean] == \"11.26\")",
+          "n.expression": "b\n(n = 2)"
+        },
+        {
+          "group": "c",
+          "value": 15.44,
+          "std.dev": 0.636396103067893,
+          "iqr": 0.9,
+          "conf.low": 14.99,
+          "conf.high": 15.89,
+          "min": 14.99,
+          "max": 15.89,
+          "skewness": -5.93946474079301e-15,
+          "kurtosis": -2,
+          "n.obs": 2,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[mean] == \"15.44\")",
+          "n.expression": "c\n(n = 2)"
+        }
+      ]
+    },
+    {
+      "component": "pairwise_comparisons",
+      "value": null
+    }
+  ],
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": "arguments imply differing number of rows: 0, 1",
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": null,
+  "caption": null,
+  "stats": null,
+  "plot_layers": null,
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

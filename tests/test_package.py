@@ -43,3 +43,70 @@ def test_import_works_without_optional_backends() -> None:
     block = "import sys\nfor name in ('pandas', 'polars', 'pyarrow'):\n"
     block += "    sys.modules[name] = None\n"
     _run(block + IMPORT_ALL)
+
+
+def test_public_api() -> None:
+    assert sorted(inferplot.__all__) == [
+        "Issue",
+        "StatsFigure",
+        "StatsResult",
+        "__version__",
+        "analyze",
+        "betweenstats",
+        "render",
+    ]
+    for name in inferplot.__all__:
+        assert hasattr(inferplot, name)
+    assert callable(inferplot.analyze.betweenstats)
+    assert inferplot.analyze.__all__ == ["betweenstats"]
+    assert callable(inferplot.render.betweenstats)
+    assert set(inferplot.__all__) <= set(dir(inferplot))
+
+
+def test_render_and_statsfigure_load_matplotlib_lazily() -> None:
+    # `import inferplot` stays free of matplotlib; the names that need it load it
+    # on first access, and an unknown name still raises AttributeError.
+    _run(
+        """
+        import sys
+        import inferplot
+        assert "matplotlib" not in sys.modules
+        assert callable(inferplot.betweenstats)
+        assert "matplotlib" not in sys.modules, "ip.betweenstats is not lazy"
+        from inferplot.render.figure import StatsFigure
+        assert inferplot.StatsFigure is StatsFigure
+        assert inferplot.render.betweenstats.__name__ == "betweenstats"
+        assert "matplotlib.pyplot" not in sys.modules
+        try:
+            inferplot.not_a_name
+        except AttributeError as error:
+            assert "not_a_name" in str(error)
+        else:
+            raise AssertionError("no AttributeError")
+        """
+    )
+
+
+def test_analysis_does_not_load_matplotlib() -> None:
+    # SPEC.md section 2: inferplot.analyze must not import matplotlib, and neither
+    # must `import inferplot` nor running an analysis.
+    _run(
+        """
+        import sys
+        import inferplot
+        assert "matplotlib" not in sys.modules, "import inferplot"
+        import inferplot.analyze
+        assert "matplotlib" not in sys.modules, "import inferplot.analyze"
+        import pandas as pd
+        two = pd.DataFrame({"g": list("aaabbb"), "y": [1.0, 2.0, 4.0, 3.0, 5.0, 8.0]})
+        three = pd.DataFrame(
+            {"g": list("aaabbbccc"), "y": [1.0, 2, 4, 3, 5, 8, 6, 9, 13]}
+        )
+        for data in (two, three):
+            result = inferplot.analyze.betweenstats(data, "g", "y")
+            result.to_json()
+            result.check()
+            str(result)
+        assert "matplotlib" not in sys.modules, "running an analysis"
+        """
+    )
