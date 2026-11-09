@@ -163,9 +163,10 @@ def smm_quantile(n_comparisons: int, df: float, *, conf_level: float = 0.95) -> 
     via its ``smmvalv2``) estimates them by a simulation seeded by itself. That
     simulation does not reproduce this quantile: on probe-smm's lincon runs with 36
     and 45 comparisons at alpha 0.05 its values are 3.4% to 6.6% below it (and with
-    one comparison it comes within 1% of the one-sided t quantile), so inferplot's
-    intervals there are wider than ggstatsplot's (DECISIONS.md D52; needs the
-    owner's confirmation).
+    one comparison it comes within 1% of the one-sided t quantile), while on the
+    edge_k9 fixture (36 comparisons) they are above it for 28 of the 36 pairs
+    (-0.35% to +4.7%). So inferplot's intervals there differ from ggstatsplot's,
+    wider or narrower by pair (DECISIONS.md D52).
 
     Raises:
         ValueError: ``n_comparisons`` below 1, ``df`` below 1 or NaN, or

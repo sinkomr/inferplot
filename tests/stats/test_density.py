@@ -16,6 +16,7 @@ import pytest
 
 from inferplot.stats import MapEstimate, bw_sj, map_estimate
 from inferplot.stats import density as density_module
+from inferplot.stats.descriptive import FloatArray
 from inferplot.text import format_value
 from tests.oracle_fixtures import (
     OracleCase,
@@ -113,7 +114,8 @@ def test_bandwidth_is_positive_and_scale_equivariant() -> None:
     x = rng.normal(size=200)
     h = bw_sj(x)
     assert h > 0
-    # Bins are anchored at zero, so scaling by a power of two is exact.
+    # The bin anchor (zero, or min(x) by max|x| / width, which a power of two
+    # leaves unchanged) makes scaling by a power of two exact.
     assert bw_sj(x * 8.0) == h * 8.0
     assert map_estimate(x * 8.0).estimate == map_estimate(x).estimate * 8.0
 
@@ -145,11 +147,11 @@ def test_constant_data_give_the_value() -> None:
 # 6.2e-15 relative, below the FFT's rounding, and R's which.max takes the later;
 # inferplot's tie rule (map_estimate, 1e-12) takes the first: one grid step.
 MAP_DIFFERS = {"normal_n1e5": 1}
-# shifted_large and timestamps (values near 1e8 and 1.7e9): R's bw.SJ equals the
-# Sheather-Jones bandwidth with the pair-distance bins anchored at min(x) (to
-# 1e-15), where everywhere else its bins are anchored at zero, as inferplot's
-# always are; the bandwidths differ by 9.6e-4 and 4.9e-4 relative, the MAP not.
-BANDWIDTH_DIFFERS = {"shifted_large": 9.6e-4, "timestamps": 4.9e-4}
+# shifted_large and timestamps (values near 1e8 and 1.7e9, 2.4e10 and 7.5e11 bin
+# widths from zero): R's bw.SJ anchors the pair-distance bins at min(x) there and
+# at zero everywhere else, as inferplot does (density._pair_counts); with the zero
+# anchor their bandwidths would differ by 9.6e-4 and 4.9e-4 relative.
+MIN_ANCHORED = {"shifted_large": 9.6e-4, "timestamps": 4.9e-4}
 
 
 def _probe_map_rows() -> list[Any]:
@@ -178,13 +180,9 @@ def test_map_and_bandwidth_against_probe_map(row: Any) -> None:
     got = map_estimate(x)
     r_bw = r_double(str(row["bw_sj"]["hex"]))
     assert r_bw is not None
-    if name in BANDWIDTH_DIFFERS:
-        assert abs(got.bandwidth / r_bw - 1) == pytest.approx(
-            BANDWIDTH_DIFFERS[name], rel=0.01
-        )
-        assert bw_sj(x - float(x.min())) == pytest.approx(r_bw, rel=1e-14)
-    else:
-        assert_close("closed_form", got.bandwidth, r_bw, what=f"{name} bw")
+    assert_close("closed_form", got.bandwidth, r_bw, what=f"{name} bw")
+    if name in MIN_ANCHORED:
+        assert got.bandwidth == pytest.approx(r_bw, rel=1e-14)
     lo, step = float(x.min()), got.grid_step
     if name in MAP_DIFFERS:
         r_index = (r_map - lo) / step
@@ -199,8 +197,77 @@ def test_map_and_bandwidth_against_probe_map(row: Any) -> None:
 
 def test_probe_map_differences_are_all_listed() -> None:
     names = {str(row["name"]) for row in probe("probe-map").rows("rows")}
-    assert set(MAP_DIFFERS) | set(BANDWIDTH_DIFFERS) <= names
+    assert set(MAP_DIFFERS) | set(MIN_ANCHORED) <= names
     assert len(names) == 52
+
+
+def _zero_anchored_bandwidth(x: FloatArray) -> float:
+    """bw_sj with the bins anchored at zero whatever max|x| / width is."""
+    original = density_module._ANCHOR_AT_MIN  # pyright: ignore[reportPrivateUsage]
+    try:
+        density_module._ANCHOR_AT_MIN = math.inf  # pyright: ignore[reportPrivateUsage]
+        return bw_sj(x)
+    finally:
+        density_module._ANCHOR_AT_MIN = original  # pyright: ignore[reportPrivateUsage]
+
+
+def _binned_pairs(bins: FloatArray, size: int) -> list[float]:
+    """Pair counts by bin distance, by brute force."""
+    index = bins.astype(np.int64)
+    diffs = np.abs(index[:, None] - index[None, :])[np.triu_indices(index.size, 1)]
+    return np.bincount(diffs, minlength=size).astype(np.float64).tolist()
+
+
+def test_bins_anchor_at_min_exactly_where_r_does() -> None:
+    # probe-map: R anchors its bins at min(x) on the two vectors far from zero
+    # (max|x| / width 2.4e10 and 7.5e11) and at zero on the 49 others with spread
+    # (at most 2.8e4). The zero anchor misses R's bandwidth on the first two by the
+    # amounts in MIN_ANCHORED; the threshold 2^31 lies between, not pinned.
+    ratios: dict[str, float] = {}
+    for row in probe("probe-map").rows("rows"):
+        x = np.array([r_double(str(h)) for h in row["x_hex"]], dtype=np.float64)
+        lo, hi = float(x.min()), float(x.max())
+        if hi == lo:
+            continue
+        name = str(row["name"])
+        ratios[name] = max(abs(lo), abs(hi)) / (1.01 * (hi - lo) / 1000)
+        if name in MIN_ANCHORED:
+            r_bw = r_double(str(row["bw_sj"]["hex"]))
+            assert r_bw is not None
+            assert abs(_zero_anchored_bandwidth(x) / r_bw - 1) == pytest.approx(
+                MIN_ANCHORED[name], rel=0.01
+            )
+    far = {name for name, ratio in ratios.items() if ratio >= 2.0**31}
+    assert far == set(MIN_ANCHORED)
+    assert max(r for name, r in ratios.items() if name not in far) < 2.8e4
+
+
+def test_values_far_from_zero_have_a_map() -> None:
+    # 1.7e9 plus small dyadic offsets: 1.4e15 bin widths from zero, beyond 2^53
+    # with the zero anchor (which raised); the min anchor bins them exactly.
+    offsets = np.array([0, 1, 2, 2, 3, 3, 3, 4, 5, 7, 9, 12], dtype=np.float64)
+    x = 1.7e9 + offsets * 20 * 2.0**-22
+    got = map_estimate(x)
+    assert got.index == 224
+    assert got.estimate == 1700000000.0000126
+    counts, width = density_module._pair_counts(x)  # pyright: ignore[reportPrivateUsage]
+    assert counts.tolist() == _binned_pairs(
+        np.floor((x - x.min()) / width), counts.size
+    )
+
+
+@pytest.mark.parametrize(
+    ("ratio", "at_min"), [(2.0**31 * 0.999, False), (2.0**31 * 1.001, True)]
+)
+def test_anchor_threshold(ratio: float, at_min: bool) -> None:
+    # A spread of 1 placed so that max|x| / width is just below or just above 2^31.
+    spread = np.array([0.0, 0.1, 0.25, 0.3, 0.55, 0.6, 0.62, 0.9, 1.0])
+    x = ratio * (1.01 / 1000) - 1.0 + spread
+    lo, hi = float(x.min()), float(x.max())
+    assert (max(abs(lo), abs(hi)) / (1.01 * (hi - lo) / 1000) >= 2.0**31) is at_min
+    counts, width = density_module._pair_counts(x)  # pyright: ignore[reportPrivateUsage]
+    bins = np.floor((x - lo) / width) if at_min else np.trunc(x / width)
+    assert counts.tolist() == _binned_pairs(bins, counts.size)
 
 
 def test_rejects_non_finite_and_two_dimensional() -> None:

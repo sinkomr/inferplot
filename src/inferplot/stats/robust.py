@@ -51,7 +51,12 @@ from inferplot.stats.descriptive import (
     variance,
 )
 from inferplot.stats.noncentral import check_conf_level
-from inferplot.stats.nonparametric import BOOTSTRAP_RESAMPLES, BootstrapEffectSizeCI
+from inferplot.stats.nonparametric import (
+    BOOTSTRAP_RESAMPLES,
+    BootstrapEffectSizeCI,
+    SeedLike,
+    check_bootstrap_seed,
+)
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import TINY, satterthwaite_df
 from inferplot.stats.smm import smm_quantile
@@ -135,12 +140,6 @@ def _check_trim(tr: float) -> float:
     if not 0.0 <= value < 0.5:
         raise ValueError(f"tr must lie in [0, 0.5); got {tr!r}")
     return value
-
-
-def _check_seed(seed: int) -> int:
-    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:  # pyright: ignore[reportUnnecessaryIsInstance]
-        raise ValueError(f"seed must be a non-negative integer; got {seed!r}")
-    return seed
 
 
 def _sorted(x: FloatArray) -> FloatArray:
@@ -655,7 +654,11 @@ def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:
     return [o - middle for o in ordered]
 
 
-def _check_replicates(values: NDArray[np.float64], what: str) -> None:
+def _check_replicates(values: NDArray[np.float64], what: str) -> int:
+    """Raise when a resample is 0 / 0; return how many are +/-inf (a winsorized
+    variance of 0 under a numerator that is not). The infinite values are kept, as
+    WRS2 keeps them: its arithmetic gives the same infinities, so a percentile
+    bound can be infinite."""
     undefined = int(np.isnan(values).sum())
     if undefined:
         raise ValueError(
@@ -664,6 +667,7 @@ def _check_replicates(values: NDArray[np.float64], what: str) -> None:
             "with its numerator; the data have too few distinct values for this "
             "bootstrap CI"
         )
+    return int(np.isinf(values).sum())
 
 
 def _floor_percentile_bounds(
@@ -700,7 +704,7 @@ def akp_effect(
     *,
     tr: float = 0.2,
     conf_level: float = 0.95,
-    seed: int = 0,
+    seed: SeedLike = 0,
 ) -> BootstrapEffectSizeCI:
     """AKP robust standardized difference with a percentile bootstrap CI.
 
@@ -714,7 +718,10 @@ def akp_effect(
     CI: BOOTSTRAP_RESAMPLES resamples, each drawing n_a values of a and then n_b of
     b with replacement; the bounds are the (floor(alpha / 2 B) + 1)-th and
     floor((1 - alpha / 2) B)-th smallest of the resampled deltas, alpha =
-    1 - conf_level (WRS2's order statistics, read off the oracle's replay).
+    1 - conf_level (WRS2's order statistics, read off the oracle's replay). A
+    resample whose first sample has a winsorized variance of 0 while the trimmed
+    means differ gives delta = +/-inf; it is kept, as WRS2's arithmetic keeps it,
+    so a bound can be infinite, and counted in ``infinite_resamples``.
 
     WRS2 evaluates s_N numerically, off the exact value used here by an amount
     that varies with tr: 1.2e-9 relative above it at tr = 0.2, 4.6e-9 at 0.1, up
@@ -729,7 +736,7 @@ def akp_effect(
     """
     t_trim = _check_trim(tr)
     level = check_conf_level(conf_level)
-    rng_seed = _check_seed(seed)
+    rng_seed = check_bootstrap_seed(seed)
     raw_a = as_sample(a, name="a", min_size=2)
     raw_b = as_sample(b, name="b", min_size=2)
     scale = common_scale(raw_a, raw_b)
@@ -750,7 +757,7 @@ def akp_effect(
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
     values = _replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
-    _check_replicates(values, method)
+    infinite = _check_replicates(values, method)
     low, high = _floor_percentile_bounds(_sorted(values), level)
     return BootstrapEffectSizeCI(
         estimate=estimate,
@@ -760,6 +767,7 @@ def akp_effect(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
+        infinite_resamples=infinite,
     )
 
 
@@ -768,7 +776,7 @@ def explanatory_effect(
     *,
     tr: float = 0.2,
     conf_level: float = 0.95,
-    seed: int = 0,
+    seed: SeedLike = 0,
 ) -> BootstrapEffectSizeCI:
     """Wilcox & Tian's (2011, Journal of Applied Statistics 38: 1359-1368)
     explanatory measure of effect size xi with a percentile bootstrap CI, as
@@ -785,9 +793,12 @@ def explanatory_effect(
     size, as the pooled variance needs) and compute xi; the CI bounds are the
     (l + 1)-th and (B - l)-th smallest, l = round(alpha / 2 B) with alpha =
     1 - conf_level in floating point (WRS2's rule; at B = 100 alpha / 2 B is
-    2.5000000000000022, so l = 3, which ggstatsplot's own values need).
+    2.5000000000000022, so l = 3, which ggstatsplot's own values need). A resample
+    whose pooled winsorized variance is 0 while its trimmed means differ gives
+    xi = inf; it is kept, as in WRS2, and counted in ``infinite_resamples``.
 
-    Estimate: with equal group sizes, xi of the data. With unequal sizes the
+    Estimate: with equal group sizes, xi of the data (inf when the pooled
+    winsorized variance is 0 and the trimmed means differ). With unequal sizes the
     median of the bootstrap values, as WRS2 reports it (oracle replay; the
     100-resample values reproduce exactly), so it depends on ``seed``.
 
@@ -803,7 +814,7 @@ def explanatory_effect(
     """
     t_trim = _check_trim(tr)
     level = check_conf_level(conf_level)
-    rng_seed = _check_seed(seed)
+    rng_seed = check_bootstrap_seed(seed)
     method = "the explanatory effect size"
     if len(groups) < 2:
         raise ValueError(f"{method} needs at least two groups; got {len(groups)}")
@@ -825,7 +836,7 @@ def explanatory_effect(
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
     values = _replicates(rng, _centred(ordered), [size] * k, xis)
-    _check_replicates(values, method)
+    infinite = _check_replicates(values, method)
     values = _sorted(values)
     if all(o.size == size for o in ordered):
         # The variance of the exact trimmed means, rounded once.
@@ -854,4 +865,5 @@ def explanatory_effect(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
+        infinite_resamples=infinite,
     )

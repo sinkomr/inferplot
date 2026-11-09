@@ -575,6 +575,30 @@ def test_df_conf_level_p_and_bf() -> None:
         tx.format_n(-1)
 
 
+def test_format_bf10_beyond_a_double() -> None:
+    # Within doubles: format_value's text of the stored BF10.
+    assert tx.format_bf10(1.2, -math.log(1.2)) == "1.20"
+    assert tx.format_bf10(7038810280.06, -22.6747) == "7.04e+09"
+    assert tx.format_bf10(0.0049, 5.318) == "4.90e-03"
+    assert tx.format_bf10(math.nan, math.nan) == "NA"
+    # Beyond them: from log(BF01) = -log(BF10), mantissa and exponent base 10.
+    # log10(BF10) = 761.2852281001012 / ln 10 = 330.62245...: 10^0.62245 = 4.19.
+    assert tx.format_bf10(math.inf, -761.2852281001012) == "4.19e+330"
+    assert tx.format_bf10(math.inf, -990.814829440547) == "2.02e+430"
+    # Underflow to 0 or to a subnormal, and a mantissa that rounds up to 10.
+    assert tx.format_bf10(0.0, 800.0) == "3.67e-348"
+    assert tx.format_bf10(5e-320, math.log(10) * 320 - math.log(5.0)) == "5.00e-320"
+    assert tx.format_bf10(math.inf, -math.log(10) * 400 - math.log(9.9999)) == (
+        "1.00e+401"
+    )
+    assert tx.format_bf10(math.inf, -math.log(10) * 400 - math.log(9.9999), 4) == (
+        "9.9999e+400"
+    )
+    # A truly infinite or zero Bayes factor (log(BF01) infinite) prints as stored.
+    assert tx.format_bf10(math.inf, -math.inf) == "Inf"
+    assert tx.format_bf10(0.0, math.inf) == "0.00"
+
+
 # --------------------------------------------------------------------------- #
 # probe-format: R's own output on a grid (tests/fixtures/oracle/probe-format.json)
 # --------------------------------------------------------------------------- #

@@ -86,6 +86,7 @@ __all__ = [
     "centrality_expression",
     "figure_texts",
     "format_bf01_log",
+    "format_bf10",
     "format_conf_level",
     "format_df",
     "format_n",
@@ -193,6 +194,31 @@ def format_bf01_log(bf10: float, digits: int = 2) -> str:
         raise ValueError(f"a Bayes factor cannot be negative, got {bf10}")
     log_bf01 = math.inf if bf10 == 0.0 else -math.log(bf10)
     return format_value(log_bf01, digits, missing="")
+
+
+def format_bf10(bf10: float, log_bf01: float, digits: int = 2) -> str:
+    """Format a Bayes factor BF10 as :func:`format_value` does, also beyond doubles.
+
+    A BF10 that overflows a double (stored as inf) or underflows it (0 or
+    subnormal) while ``log_bf01`` is finite is printed from ``log_bf01``: its
+    mantissa and exponent come from -log_bf01 / ln(10), as "4.17e+330". Elsewhere
+    the result is ``format_value(bf10, digits)`` ("NA" when missing). The stored
+    ``bf10`` keeps the double (inf or 0); ``log_bf01`` carries the value.
+    """
+    if math.isnan(bf10):
+        return "NA"
+    beyond = math.isinf(bf10) or bf10 < DOUBLE_XMIN
+    if not beyond or not math.isfinite(log_bf01):
+        return format_value(bf10, digits, missing="NA")
+    log10 = -log_bf01 / math.log(10.0)
+    exponent = math.floor(log10)
+    mantissa = 10.0 ** (log10 - exponent)
+    text = f"{mantissa:.{digits}f}"
+    if float(text) >= 10.0:  # 9.996 rounds up to 10.00: carry into the exponent
+        exponent += 1
+        text = f"{mantissa / 10.0:.{digits}f}"
+    sign = "-" if exponent < 0 else "+"
+    return f"{text}e{sign}{abs(exponent):02d}"
 
 
 def r_number_text(x: float) -> str:
@@ -1077,9 +1103,10 @@ def apa_sentence(test: TestResult, effect_size: EffectSize, *, n_obs: int) -> st
     )
 
 
-def _apa_bf(bf10: float) -> str:
-    """A Bayes factor: two decimals, scientific from 1e5 and below 0.01."""
-    return format_value(bf10, 2, missing="NA")
+def _apa_bf(bayes: BayesFactor) -> str:
+    """A Bayes factor: two decimals, scientific from 1e5 and below 0.01, and from
+    log(BF01) where BF10 is beyond a double (:func:`format_bf10`)."""
+    return format_bf10(bayes.bf10, bayes.log_bf01, 2)
 
 
 def _prior_text(bayes: BayesFactor) -> str:
@@ -1094,7 +1121,7 @@ def bayes_sentence(bayes: BayesFactor, *, n_obs: int) -> str:
     ``format_value``), log(BF01) to two decimals.
     """
     return (
-        f"Bayesian t-test ({_prior_text(bayes)}): BF10 = {_apa_bf(bayes.bf10)}, "
+        f"Bayesian t-test ({_prior_text(bayes)}): BF10 = {_apa_bf(bayes)}, "
         f"log(BF01) = {_apa_number(bayes.log_bf01)}, n = {format_n(n_obs)}."
     )
 
@@ -1113,9 +1140,7 @@ def pairwise_bayes_sentence(
     parts: list[str] = []
     for pair in pairwise:
         assert pair.bayes is not None
-        parts.append(
-            f"{pair.group1} vs {pair.group2}, BF10 = {_apa_bf(pair.bayes.bf10)}"
-        )
+        parts.append(f"{pair.group1} vs {pair.group2}, BF10 = {_apa_bf(pair.bayes)}")
     return (
         f"Bayesian t-tests of each pair ({_prior_text(first)}): "
         + "; ".join(parts)
@@ -1163,8 +1188,13 @@ def _alt_groups_detailed(
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
-        value = format_value(d.value, digits, missing="NA")
-        parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {word} {value})")
+        # A missing centrality (a MAP without a density, D55): "no MAP estimate".
+        center = (
+            f"no {word}"
+            if d.value is None or math.isnan(d.value)
+            else f"{word} {format_value(d.value, digits)}"
+        )
+        parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {center})")
     return ", ".join(parts)
 
 
@@ -1194,21 +1224,37 @@ def _alt_groups_summary(
     )
 
 
-def _alt_bayes_pairs(pairwise: Sequence[PairwiseComparison]) -> str:
-    """Type "bayes" with three or more groups: the range of the pairs' BF10."""
+def _alt_bayes_pairs(
+    pairwise: Sequence[PairwiseComparison], *, limit: int, display: str
+) -> str:
+    """Type "bayes" with three or more groups: the range of the pairs' BF10, the
+    level names shortened to ``limit`` characters, and what the brackets show.
+
+    Pairs are ranked by -log(BF01), which stays finite where BF10 overflows a
+    double, so the strongest pair is found even when several BF10 are inf."""
     first = pairwise[0].bayes
     assert first is not None
 
-    def bf10(pair: PairwiseComparison) -> float:
+    def strength(pair: PairwiseComparison) -> float:
         assert pair.bayes is not None
-        return pair.bayes.bf10
+        return -pair.bayes.log_bf01
 
-    low, high = min(pairwise, key=bf10), max(pairwise, key=bf10)
+    def described(pair: PairwiseComparison) -> str:
+        assert pair.bayes is not None
+        return (
+            f"{_apa_bf(pair.bayes)} ({_short(pair.group1, limit)} vs "
+            f"{_short(pair.group2, limit)})"
+        )
+
+    low, high = min(pairwise, key=strength), max(pairwise, key=strength)
+    brackets = (
+        "no brackets are drawn (pairwise_display='none')."
+        if display == "none"
+        else "brackets show log(BF01) for every pair."
+    )
     return (
         f"Bayesian t-tests of each of the {len(pairwise)} pairs ({_prior_text(first)}, "
-        f"Student's t): BF10 from {_apa_bf(bf10(low))} ({low.group1} vs {low.group2}) "
-        f"to {_apa_bf(bf10(high))} ({high.group1} vs {high.group2}); brackets show "
-        "log(BF01) for every pair."
+        f"Student's t): BF10 from {described(low)} to {described(high)}; {brackets}"
     )
 
 
@@ -1230,14 +1276,24 @@ def alt_text(
     ranges when listing every group would not fit), the omnibus result, and the
     count of significant pairs. Type "bayes" with three or more groups gives the
     range of the pairs' Bayes factors instead.
+
+    Level names, x and y are shortened (40, 20, then 12 characters) until the text
+    fits. If it still does not, the group description is left out; the result
+    sentence is never cut, so a result sentence too long by itself (a statistic
+    printed with hundreds of digits) gives a text above the limit.
     """
     k = len(descriptives)
     pairs = ""
-    if pairwise and pairwise[0].bayes is not None:
-        result = _alt_bayes_pairs(pairwise)
-    else:
-        result = results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs)
-    if pairwise and pairwise[0].bayes is None:
+    bayes_pairs = bool(pairwise) and pairwise[0].bayes is not None
+
+    def result_at(limit: int) -> str:
+        if bayes_pairs:
+            return _alt_bayes_pairs(
+                pairwise, limit=limit, display=settings.pairwise_display
+            )
+        return results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs)
+
+    if pairwise and not bayes_pairs:
         significant = sum(1 for pair in pairwise if pair.significant)
         verb = "is" if significant == 1 else "are"
         method = settings.p_adjust_method
@@ -1251,25 +1307,26 @@ def alt_text(
             f"significant ({pairwise[0].test_label}, {adjust}, alpha = "
             f"{r_number_text(settings.pairwise_alpha)})."
         )
-    candidates: list[str] = []
+    head = ""
+    result = ""
     for limit in (40, 20, 12):
         head = (
             f"Plot comparing {_short(y, limit)} across the {k} groups of "
             f"{_short(x, limit)}"
         )
+        result = result_at(limit)
         detailed = _alt_groups_detailed(
             descriptives, settings.digits, limit, settings.tr
         )
         summary = _alt_groups_summary(descriptives, settings.digits, limit, settings.tr)
-        candidates.append(f"{head}: {detailed}. {result}{pairs}")
-        candidates.append(f"{head} ({summary}). {result}{pairs}")
-    for text in candidates:
-        if len(text) <= ALT_TEXT_MAX_CHARS:
-            return text
-    # Extremely long labels: keep the result, cut the description.
-    tail = f" {result}{pairs}"
-    head = candidates[-1][: max(0, ALT_TEXT_MAX_CHARS - len(tail) - 2)].rstrip()
-    return f"{head}\u2026.{tail}"[:ALT_TEXT_MAX_CHARS]
+        for text in (
+            f"{head}: {detailed}. {result}{pairs}",
+            f"{head} ({summary}). {result}{pairs}",
+        ):
+            if len(text) <= ALT_TEXT_MAX_CHARS:
+                return text
+    # Extremely long labels: keep the start and the whole result, drop the groups.
+    return f"{head}. {result}{pairs}"
 
 
 # =========================================================================== #

@@ -24,11 +24,15 @@ returns the grid point where the density is largest. Three published pieces:
 The bandwidth's binning and constants are not all on R's help pages; the choices
 below were settled against ggstatsplot's 30 MAP labels in the bayes fixtures, which
 are all reproduced at the same grid point. Each alternative tried moves 1 to 14 of
-them (tests/tolerances.py ``MAP_CENTRALITY`` lists them): bins anchored at min(x),
-a bin width of range / 1000, pilot constants 1.241 and 1.230, netlib's Fortran
-zeroin, another hmax constant, another FFT grid spacing. Every fixture value is
-positive, so whether bins of negative values truncate toward zero (as here) or round
-down is not yet pinned.
+them (tests/tolerances.py ``MAP_CENTRALITY`` lists them): bins anchored at min(x)
+everywhere, a bin width of range / 1000, pilot constants 1.241 and 1.230, netlib's
+Fortran zeroin, another hmax constant, another FFT grid spacing. The oracle probe
+``probe-map`` (``tests/fixtures/oracle/probe-map.json``: R's ``bw.SJ`` and
+``map_estimate`` on 52 vectors, as exact doubles) pins the rest: bins of negative
+values truncate toward zero, and values very far from zero next to their spread
+are binned from min(x) instead (``_pair_counts``). Its 50 bandwidths are reproduced
+within 1e-10 relative and its MAPs on the same grid point, except normal_n1e5, one
+step off at a tie below the FFT's rounding (``map_estimate``).
 """
 
 from __future__ import annotations
@@ -60,8 +64,11 @@ _MAX_TRIES: Final = 99  # bracket enlargements before giving up
 _MAX_ITER: Final = 1000  # uniroot's maxiter
 _EPS: Final = float(np.finfo(np.float64).eps)
 _SQRT_2PI: Final = math.sqrt(2.0 * math.pi)
-# Bin indices are computed as doubles; beyond 2^53 they are no longer integers.
-_MAX_BIN: Final = 2.0**53
+# Bins are anchored at zero unless max|x| / width reaches this; then at min(x)
+# (``_pair_counts``). Inferred from probe-map, not pinned: any threshold between
+# 2.8e4 and 2.4e10 bin widths fits it; 2^31 is where a 32-bit integer bin index
+# would overflow.
+_ANCHOR_AT_MIN: Final = 2.0**31
 
 
 @dataclass(frozen=True)
@@ -99,15 +106,34 @@ def _quantile7(sorted_x: FloatArray, p: float) -> float:
 def _pair_counts(x: FloatArray) -> tuple[FloatArray, float]:
     """Binned pairwise distances: ``(counts, width)``.
 
-    The values fall into bins of width ``width`` = 1.01 (max - min) / 1000 anchored
-    at zero (bin trunc(x / width)); ``counts[k]`` is the number of pairs i < j whose
-    bins are k apart, so a pair's distance is taken as k x width. Bins anchored at
-    zero make the bandwidth change slightly when the data are shifted or reflected,
-    as ``?bw.SJ`` warns. O(n) for any n: the pairs are counted from the bin counts.
+    The values fall into bins of width ``width`` = 1.01 (max - min) / 1000;
+    ``counts[k]`` is the number of pairs i < j whose bins are k apart, so a pair's
+    distance is taken as k x width. O(n) for any n: the pairs are counted from the
+    bin counts.
+
+    Where the bins start (probe-map, DECISIONS.md log):
+
+    * anchored at zero, bin trunc(x / width), truncated toward zero for negative
+      values, when max|x| / width is below 2^31. Pinned by probe-map's 17 vectors
+      that span zero (spanning_zero, t2_60, normal_n*, outlier_tail, ...): R's
+      bandwidth matches trunc on every one to 1.3e-14, while rounding down (floor)
+      misses on all 17, by 1e-5 to 0.527 relative (outlier_tail). Bins anchored at
+      zero make the bandwidth change slightly when the data are shifted or
+      reflected, as ``?bw.SJ`` warns.
+    * anchored at min(x), bin floor((x - min) / width), when max|x| / width is 2^31
+      or more. R does this on exactly probe-map's two vectors far from zero
+      (shifted_large, 2.4e10 bin widths, and timestamps, 7.5e11), whose bandwidth
+      it reproduces to 1e-14; every other probe-map vector is within 2.8e4 bin
+      widths of zero and matches the zero anchor. The threshold is inferred, not
+      pinned: any value between 2.8e4 and 2.4e10 fits the probe, and 2^31 is where
+      a 32-bit integer bin index would overflow, the likely reason.
+
+    With the min anchor every index is at most about 990, so the bins are always
+    resolved.
 
     Raises:
-        ValueError: the values have no spread, or lie so far from zero relative to
-            it (beyond 2^53 bin widths) that their bins are not resolved.
+        ValueError: the values have no spread, or their range exceeds the largest
+            double.
     """
     lo, hi = float(x.min()), float(x.max())
     width = _BIN_WIDEN * (hi - lo) / _N_BINS
@@ -116,13 +142,10 @@ def _pair_counts(x: FloatArray) -> tuple[FloatArray, float]:
             "no Sheather-Jones bandwidth: the values have no spread or their range "
             "exceeds the largest double"
         )
-    scaled = x / width
-    if float(np.max(np.abs(scaled))) >= _MAX_BIN:
-        raise ValueError(
-            "no Sheather-Jones bandwidth: the values lie more than 2^53 bin widths "
-            "(1.01 x range / 1000) from zero; subtract a constant near their center"
-        )
-    bins = np.trunc(scaled)
+    if max(abs(lo), abs(hi)) / width >= _ANCHOR_AT_MIN:
+        bins = np.floor((x - lo) / width)
+    else:
+        bins = np.trunc(x / width)
     index = (bins - bins.min()).astype(np.int64)
     per_bin = np.bincount(index)
     counts = np.correlate(per_bin, per_bin, mode="full")[per_bin.size - 1 :]

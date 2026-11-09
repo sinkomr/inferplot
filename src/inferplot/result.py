@@ -187,10 +187,13 @@ class EffectSize(_Plain):
     """The effect size and its CI; ``sidedness`` "greater" means [low, max].
 
     A bootstrap CI (``ci_method`` "percentile bootstrap") records its number of
-    resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``; both
-    are None for a CI without resampling. With unequal group sizes the explanatory
-    effect size's estimate is itself the median of the bootstrap values, so it
-    depends on the seed too.
+    resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``, and
+    in ``infinite_resamples`` how many resamples gave an infinite effect size (the
+    AKP and explanatory effect sizes when a resample's winsorized variance is 0;
+    kept, as in WRS2, so a bound can be infinite); all three are None for a CI
+    without resampling. With unequal group sizes the explanatory effect size's
+    estimate is itself the median of the bootstrap values, so it depends on the
+    seed too.
     """
 
     name: str
@@ -203,6 +206,7 @@ class EffectSize(_Plain):
     sidedness: str
     bootstrap_resamples: int | None = None
     bootstrap_seed: int | None = None
+    infinite_resamples: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -674,14 +678,12 @@ _ADJUSTED_HEADINGS: Final = {
 }
 
 
-def _bf_cell(x: float) -> str:
-    if math.isnan(x):
-        return "NA"
-    if math.isinf(x):
-        return "Inf" if x > 0 else "-Inf"
-    if x != 0.0 and (abs(x) >= 1e5 or abs(x) < 0.01):
-        return f"{x:.2e}"
-    return f"{x:.2f}"
+def _bf_cell(bayes: BayesFactor) -> str:
+    """BF10 to two decimals, scientific from 1e5 and below 0.01, and printed from
+    log(BF01) where it is beyond a double (``text.format_bf10``)."""
+    from inferplot.text import format_bf10
+
+    return format_bf10(bayes.bf10, bayes.log_bf01, 2)
 
 
 def _table(title: str, rows: list[tuple[str, ...]]) -> str:
@@ -711,7 +713,7 @@ def _bayes_pairwise_table(result: StatsResult) -> str:
                 pair.group2,
                 _num_cell(pair.statistic),
                 _num_cell(pair.df),
-                _bf_cell(bayes.bf10),
+                _bf_cell(bayes),
                 _num_cell(bayes.log_bf01),
                 "yes" if pair.displayed else "no",
             )
