@@ -16,8 +16,17 @@ import pytest
 
 import inferplot as ip
 from inferplot.render import StatsFigure
+from inferplot.text import figure_texts
+from tests import betweenstats_cases
 from tests.oracle_args import translate
-from tests.oracle_fixtures import OracleCase, cases_for, read_dataset, require_cases
+from tests.oracle_fixtures import (
+    DATASET_DIR,
+    OracleCase,
+    cases_for,
+    read_dataset,
+    require_cases,
+)
+from tests.render._helpers import numbered_texts, text_of
 
 FIGURE_CODES = frozenset({"label_overlap", "text_clipped", "points_subsampled"})
 CASES = require_cases(
@@ -113,3 +122,87 @@ def test_unknown_keyword_names_the_top_level_function() -> None:
         ip.betweenstats(frame, "g", "y", pointargs={})  # pyright: ignore[reportCallIssue]
     with pytest.raises(TypeError, match=r"var\.equal"):
         ip.betweenstats(frame, "g", "y", **{"var.equal": True})  # pyright: ignore[reportArgumentType]
+
+
+# --------------------------------------------------------------------------- #
+# types nonparametric, robust and bayes
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "name", [pytest.param(c.name, id=c.name) for c in betweenstats_cases.CASES]
+)
+def test_every_fixture_of_the_other_types(name: str, tmp_path: Path) -> None:
+    # Each fixture's call, or the replay SPEC.md prescribes where inferplot refuses
+    # it (tests/betweenstats_cases.py).
+    case = betweenstats_cases.BY_NAME[name]
+    args, kwargs = betweenstats_cases.replay_arguments(case)
+    data = read_dataset(case)
+    fig = ip.betweenstats(data, *args, **kwargs)
+    result = fig.result
+    assert result == ip.analyze.betweenstats(data, *args, **kwargs)
+    issues = fig.check()
+    assert not [i for i in issues if i.code in FIGURE_CODES], issues
+    assert issues == result.check()
+    # Every drawn text is the result's: the centrality label of the type, the
+    # subtitle, bracket labels of the displayed pairs (log Bayes factors for type
+    # bayes) and the caption lines.
+    texts = figure_texts(result)
+    assert text_of(fig, "subtitle") == texts.subtitle
+    assert numbered_texts(fig, "centrality-label") == list(texts.centrality_labels)
+    displayed = [n for n, pair in enumerate(result.pairwise) if pair.displayed]
+    assert numbered_texts(fig, "bracket-label") == [
+        texts.pairwise_labels[n] for n in displayed
+    ]
+    assert numbered_texts(fig, "caption") == list(texts.caption_lines)
+    symbol = {
+        "median": "median",
+        "trimmed_mean": "trimmed",
+        "map": "MAP",
+    }[result.descriptives[0].centrality]
+    assert all(symbol in label for label in texts.centrality_labels)
+    if result.type == "bayes":
+        assert all("BF" in label for label in texts.pairwise_labels)
+    fig.save(tmp_path / "figure.svg")
+    assert (tmp_path / "figure.svg").stat().st_size > 0
+
+
+# One two-group and one many-group example per type whose fig.check() is empty
+# (CLAUDE.md's definition of done): data without heavy ties, every pair drawn.
+TYPE_EXAMPLES = [
+    pytest.param("nonparametric", "edge_k2", "group", "value", {}, id="np-k2"),
+    pytest.param(
+        "nonparametric",
+        "PlantGrowth",
+        "group",
+        "weight",
+        {"pairwise_display": "all"},
+        id="np-k3",
+    ),
+    pytest.param("robust", "ToothGrowth", "supp", "len", {}, id="robust-k2"),
+    pytest.param("robust", "iris", "Species", "Sepal.Width", {}, id="robust-k3"),
+    pytest.param("bayes", "ToothGrowth", "supp", "len", {}, id="bayes-k2"),
+    pytest.param(
+        "bayes",
+        "PlantGrowth",
+        "group",
+        "weight",
+        {"results_subtitle": False},
+        id="bayes-k3",
+    ),
+]
+
+
+@pytest.mark.parametrize(("type_", "dataset", "x", "y", "extra"), TYPE_EXAMPLES)
+def test_type_examples_check_clean(
+    type_: str, dataset: str, x: str, y: str, extra: dict[str, Any], tmp_path: Path
+) -> None:
+    data = pd.read_csv(DATASET_DIR / f"{dataset}.csv")
+    fig = ip.betweenstats(data, x, y, type=type_, **extra)
+    assert fig.result.type == type_
+    assert fig.check() == ()
+    path = tmp_path / f"{dataset}-{type_}.svg"
+    fig.save(path)
+    text = path.read_text(encoding="utf-8")
+    assert "<text" in text
+    assert all(level in text for level in fig.result.levels)

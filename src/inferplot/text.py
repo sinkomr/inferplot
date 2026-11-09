@@ -80,6 +80,7 @@ __all__ = [
     "apa_sentence",
     "bayes_expression",
     "bayes_factor_expression",
+    "bayes_sentence",
     "build_texts",
     "caption_lines",
     "centrality_expression",
@@ -92,10 +93,12 @@ __all__ = [
     "format_value",
     "frequentist_expression",
     "p_adjust_label",
+    "pairwise_bayes_sentence",
     "pairwise_bf_expression",
     "pairwise_caption_line",
     "pairwise_p_expression",
     "r_number_text",
+    "results_sentence",
     "subtitle_expression",
     "tick_label",
     "to_mathtext",
@@ -431,6 +434,10 @@ _CENTRALITY_SUBSCRIPTS: Final[dict[str, str]] = {
 _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "welch_t": ("welch_t", False, True),
     "welch_anova": ("welch_f", False, True),
+    "mann_whitney": ("mann_whitney_w", False, False),
+    "kruskal_wallis": ("kruskal_wallis_chi2", False, False),
+    "yuen_t": ("yuen_t", False, True),
+    "trimmed_means_anova": ("trimmed_means_f", False, True),
 }
 
 
@@ -958,11 +965,20 @@ def pairwise_caption_line(
 
     "Pairwise: Games-Howell, Holm adjusted; showing 1 of 3 pairs (significant
     only)." None when there are no pairs or ``display`` is "none". It also states how
-    many pairs were tested when only some are drawn (SPEC section 5 item 3).
+    many pairs were tested when only some are drawn (SPEC section 5 item 3). Bayes
+    factor pairs (type "bayes", every pair drawn): "Pairwise: Bayes factors
+    (Student's t, JZS prior 0.707), unadjusted; showing all 3 pairs." (D41).
     """
     if not pairwise or display == "none":
         return None
     test_label = pairwise[0].test_label
+    bayes = pairwise[0].bayes
+    if bayes is not None:
+        return (
+            f"Pairwise: Bayes factors ({test_label}, JZS prior "
+            f"{r_number_text(bayes.prior_scale)}), unadjusted; showing all "
+            f"{_plural(len(pairwise), 'pair')}."
+        )
     if adjust_method == "none":
         method = f"{test_label}, unadjusted"
     else:
@@ -1058,24 +1074,99 @@ def apa_sentence(test: TestResult, effect_size: EffectSize, *, n_obs: int) -> st
     )
 
 
+def _apa_bf(bf10: float) -> str:
+    """A Bayes factor: two decimals, scientific from 1e5 and below 0.01."""
+    return format_value(bf10, 2, missing="NA")
+
+
+def _prior_text(bayes: BayesFactor) -> str:
+    return f"JZS prior, r = {r_number_text(bayes.prior_scale)}"
+
+
+def bayes_sentence(bayes: BayesFactor, *, n_obs: int) -> str:
+    """The results sentence of a two-group Bayes factor (type "bayes"), ASCII.
+
+    "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18,
+    n = 60." BF10 to two decimals (scientific from 1e5 and below 0.01, as
+    ``format_value``), log(BF01) to two decimals.
+    """
+    return (
+        f"Bayesian t-test ({_prior_text(bayes)}): BF10 = {_apa_bf(bayes.bf10)}, "
+        f"log(BF01) = {_apa_number(bayes.log_bf01)}, n = {format_n(n_obs)}."
+    )
+
+
+def pairwise_bayes_sentence(
+    pairwise: Sequence[PairwiseComparison], *, n_obs: int
+) -> str:
+    """The results sentence of type "bayes" with three or more groups, which has no
+    omnibus test in v0.1 (D41): each pair's Bayes factor, ASCII.
+
+    "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 =
+    0.65; ctrl vs trt2, BF10 = 1.77; trt1 vs trt2, BF10 = 6.36; n = 30."
+    """
+    first = pairwise[0].bayes
+    assert first is not None
+    parts: list[str] = []
+    for pair in pairwise:
+        assert pair.bayes is not None
+        parts.append(
+            f"{pair.group1} vs {pair.group2}, BF10 = {_apa_bf(pair.bayes.bf10)}"
+        )
+    return (
+        f"Bayesian t-tests of each pair ({_prior_text(first)}): "
+        + "; ".join(parts)
+        + f"; n = {format_n(n_obs)}."
+    )
+
+
+def results_sentence(
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    n_obs: int,
+) -> str:
+    """The result's APA-style sentence: :func:`apa_sentence` for a frequentist
+    test, :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type
+    "bayes", or a note that nothing was tested."""
+    if test is not None and effect_size is not None:
+        return apa_sentence(test, effect_size, n_obs=n_obs)
+    if bayes is not None:
+        return bayes_sentence(bayes, n_obs=n_obs)
+    if pairwise and pairwise[0].bayes is not None:
+        return pairwise_bayes_sentence(pairwise, n_obs=n_obs)
+    return f"No test was computed (results_subtitle=False), n = {format_n(n_obs)}."
+
+
 def _short(name: str, limit: int) -> str:
     # U+2026 HORIZONTAL ELLIPSIS: three periods would read as a sentence end.
     return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
 
+def _centrality_word(centrality: str, tr: float) -> str:
+    """The centrality in words: "mean", "median", "20% trimmed mean", "MAP
+    estimate"."""
+    word = _CENTRALITY_WORDS.get(centrality, centrality)
+    if centrality == "trimmed_mean":
+        return f"{r_number_text(tr * 100)}% {word}"
+    return word
+
+
 def _alt_groups_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
 ) -> str:
     parts: list[str] = []
     for d in descriptives:
-        word = _CENTRALITY_WORDS.get(d.centrality, d.centrality)
+        word = _centrality_word(d.centrality, tr)
         value = format_value(d.value, digits, missing="NA")
         parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {word} {value})")
     return ", ".join(parts)
 
 
 def _alt_groups_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
 ) -> str:
     ns = [d.n for d in descriptives]
     n_text = (
@@ -1088,11 +1179,29 @@ def _alt_groups_summary(
         return n_text
     low = min(finite, key=lambda d: d.value)
     high = max(finite, key=lambda d: d.value)
-    word = _CENTRALITY_WORDS.get(low.centrality, low.centrality)
+    word = _centrality_word(low.centrality, tr)
     return (
         f"{n_text}; {word}s from {format_value(low.value, digits)} "
         f"({_short(low.level, limit)}) to {format_value(high.value, digits)} "
         f"({_short(high.level, limit)})"
+    )
+
+
+def _alt_bayes_pairs(pairwise: Sequence[PairwiseComparison]) -> str:
+    """Type "bayes" with three or more groups: the range of the pairs' BF10."""
+    first = pairwise[0].bayes
+    assert first is not None
+
+    def bf10(pair: PairwiseComparison) -> float:
+        assert pair.bayes is not None
+        return pair.bayes.bf10
+
+    low, high = min(pairwise, key=bf10), max(pairwise, key=bf10)
+    return (
+        f"Bayesian t-tests of each of the {len(pairwise)} pairs ({_prior_text(first)}, "
+        f"Student's t): BF10 from {_apa_bf(bf10(low))} ({low.group1} vs {low.group2}) "
+        f"to {_apa_bf(bf10(high))} ({high.group1} vs {high.group2}); brackets show "
+        "log(BF01) for every pair."
     )
 
 
@@ -1101,22 +1210,27 @@ def alt_text(
     x: str,
     y: str,
     descriptives: Sequence[Descriptive],
-    test: TestResult,
-    effect_size: EffectSize,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
+    bayes: BayesFactor | None = None,
 ) -> str:
     """Alt text for the figure: 2 to 4 sentences, at most 400 characters.
 
     Chart type and variables, groups with n and centrality values (summarized as
     ranges when listing every group would not fit), the omnibus result, and the
-    count of significant pairs.
+    count of significant pairs. Type "bayes" with three or more groups gives the
+    range of the pairs' Bayes factors instead.
     """
     k = len(descriptives)
-    result = apa_sentence(test, effect_size, n_obs=n_obs)
     pairs = ""
-    if pairwise:
+    if pairwise and pairwise[0].bayes is not None:
+        result = _alt_bayes_pairs(pairwise)
+    else:
+        result = results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs)
+    if pairwise and pairwise[0].bayes is None:
         significant = sum(1 for pair in pairwise if pair.significant)
         verb = "is" if significant == 1 else "are"
         method = settings.p_adjust_method
@@ -1136,8 +1250,10 @@ def alt_text(
             f"Plot comparing {_short(y, limit)} across the {k} groups of "
             f"{_short(x, limit)}"
         )
-        detailed = _alt_groups_detailed(descriptives, settings.digits, limit)
-        summary = _alt_groups_summary(descriptives, settings.digits, limit)
+        detailed = _alt_groups_detailed(
+            descriptives, settings.digits, limit, settings.tr
+        )
+        summary = _alt_groups_summary(descriptives, settings.digits, limit, settings.tr)
         candidates.append(f"{head}: {detailed}. {result}{pairs}")
         candidates.append(f"{head} ({summary}). {result}{pairs}")
     for text in candidates:
@@ -1166,8 +1282,8 @@ class _Expressions:
 def _expressions(
     *,
     descriptives: Sequence[Descriptive],
-    test: TestResult,
-    effect_size: EffectSize,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
     bayes: BayesFactor | None,
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
@@ -1176,7 +1292,19 @@ def _expressions(
     digits = settings.digits
     subtitle = None
     bayes_caption = None
-    if settings.results_subtitle:
+    if settings.results_subtitle and (test is None or effect_size is None):
+        # Type bayes (D41): the two-group subtitle is the first and last items of
+        # ggstatsplot's; there is no caption.
+        if bayes is not None:
+            subtitle = bayes_factor_expression(
+                log_bf01=bayes.log_bf01,
+                prior=bayes.prior,
+                prior_scale=bayes.prior_scale,
+                digits=digits,
+            )
+    elif settings.results_subtitle:
+        assert test is not None
+        assert effect_size is not None
         subtitle = subtitle_expression(test, effect_size, n_obs=n_obs, digits=digits)
         # bf_message=False never draws the caption, even when a Bayes factor exists.
         if bayes is not None and settings.bf_message is not False:
@@ -1190,18 +1318,28 @@ def _expressions(
         centrality_expression(centrality=d.centrality, value=d.value, digits=digits)
         for d in descriptives
     )
-    labels = tuple(
-        pairwise_p_expression(
-            p_adjusted=pair.p_adjusted, adjust_method=pair.adjust_method, digits=digits
-        )
-        for pair in pairwise
-    )
+    labels = tuple(_pair_label(pair, digits) for pair in pairwise)
     line = pairwise_caption_line(
         pairwise,
         display=settings.pairwise_display,
         adjust_method=settings.p_adjust_method,
     )
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
+
+
+def _pair_label(pair: PairwiseComparison, digits: int) -> Call:
+    """A bracket label: the log Bayes factor of a Bayesian pair, else its
+    adjusted p."""
+    if pair.bayes is not None:
+        return pairwise_bf_expression(log_bf01=pair.bayes.log_bf01, digits=digits)
+    if pair.p_adjusted is None:
+        raise ValueError(
+            f"the pair {pair.group1!r}-{pair.group2!r} has neither an adjusted p nor "
+            "a Bayes factor"
+        )
+    return pairwise_p_expression(
+        p_adjusted=pair.p_adjusted, adjust_method=pair.adjust_method, digits=digits
+    )
 
 
 def caption_lines(
@@ -1223,8 +1361,8 @@ def build_texts(
     x: str,
     y: str,
     descriptives: Sequence[Descriptive],
-    test: TestResult,
-    effect_size: EffectSize,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
     bayes: BayesFactor | None,
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
@@ -1252,7 +1390,7 @@ def build_texts(
     return Texts(
         subtitle=None if ex.subtitle is None else to_plain(ex.subtitle),
         caption="\n".join(lines) if lines else None,
-        apa=apa_sentence(test, effect_size, n_obs=n_obs),
+        apa=results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs),
         alt_text=alt_text(
             x=x,
             y=y,
@@ -1262,6 +1400,7 @@ def build_texts(
             pairwise=pairwise,
             n_obs=n_obs,
             settings=settings,
+            bayes=bayes,
         ),
         centrality_labels=tuple(to_plain(node) for node in ex.centrality),
         tick_labels=tuple(tick_label(d.level, d.n) for d in descriptives),

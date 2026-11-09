@@ -86,11 +86,13 @@ def test_pdf_round_trip_and_truetype_text(name: str, tmp_path: Path) -> None:
 
 def test_one_sided_inf_survives_the_round_trip(tmp_path: Path) -> None:
     fig = default_figure("ToothGrowth-greater")
+    assert fig.result.effect_size is not None
     assert fig.result.effect_size.conf_high == float("inf")
     path = tmp_path / "f.svg"
     fig.save(path)
     assert '"conf_high": "Inf"' in svg_description(path)
     back = StatsResult.from_json(svg_description(path))
+    assert back.effect_size is not None
     assert back.effect_size.conf_high == float("inf")
 
 

@@ -620,7 +620,7 @@ def test_alt_text_on_every_parametric_fixture() -> None:
         for d in result.descriptives:
             assert f"{d.level} (n = {tx.format_n(d.n)}, mean " in alt
         if result.pairwise:
-            significant = sum(p.significant for p in result.pairwise)
+            significant = sum(1 for p in result.pairwise if p.significant)
             assert f"{significant} of {len(result.pairwise)} pairwise" in alt
 
 

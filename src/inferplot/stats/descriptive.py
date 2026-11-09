@@ -27,6 +27,7 @@ __all__ = [
     "as_sample",
     "common_scale",
     "mean",
+    "median",
     "scaled_variance",
     "variance",
 ]
@@ -87,6 +88,23 @@ def mean(x: SampleLike) -> float:
     if scale >= 0:
         return float((numerator << scale) / n)
     return float(numerator / (n << -scale))
+
+
+def median(x: SampleLike) -> float:
+    """Sample median, R's ``stats::median``: the middle value of the sorted sample,
+    or for even n the mean of the two middle values, correctly rounded (``mean``),
+    which R's ``mean`` of those two values gives. It is the centrality label of
+    ggstatsplot's nonparametric type.
+
+    Raises:
+        ValueError: ``x`` is empty, not one-dimensional or not finite.
+    """
+    arr = as_sample(x).copy()
+    arr.sort()
+    half, odd = divmod(arr.size, 2)
+    if odd:
+        return float(arr[half])
+    return mean(arr[half - 1 : half + 1])
 
 
 def common_scale(*samples: FloatArray) -> float:
