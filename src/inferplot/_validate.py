@@ -25,7 +25,7 @@ import math
 import numbers
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import ParamSpec, TypeVar, cast
+from typing import Final, ParamSpec, TypeVar, cast
 
 import numpy as np
 
@@ -183,6 +183,11 @@ def _removed(arg: str, version: str, rest: str) -> str:
     return f"{arg}= was removed in ggstatsplot {version}; {rest} Remove {arg}=."
 
 
+# The functions whose drawing takes layers= (SPEC.md section 2), so their analysis
+# function can name it for plot.type= without importing the renderers.
+_LAYERED_DRAWINGS: Final = frozenset({"betweenstats", "withinstats"})
+
+
 def _targeted(
     arg: str, key: str, value: object, fn: str, valid: frozenset[str]
 ) -> TypeError | NotImplementedError | None:
@@ -242,6 +247,13 @@ def _targeted(
             )
         elif draws:
             rest = f"{fn}() draws a fixed set of layers and has no plot type option."
+        elif fn in _LAYERED_DRAWINGS:
+            rest = (
+                f"ip.analyze.{fn}() only computes the statistics; choose the layers "
+                "when drawing with layers=, a tuple of 'violin', 'box' and 'points': "
+                f"ip.{fn}(..., layers=('box', 'points')) or "
+                f"ip.render.{fn}(result, layers=('box', 'points'))."
+            )
         else:
             rest = (
                 f"ip.analyze.{fn}() only computes the statistics. What is drawn is "

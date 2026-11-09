@@ -360,9 +360,17 @@ def test_real_analysis_function_points_to_the_drawing_functions() -> None:
 
     frame = pd.DataFrame({"g": list("aabbcc") * 2, "y": range(12)})
     analysis = cast("Callable[..., object]", analyze.betweenstats)
-    text = message(TypeError, lambda: analysis(frame, "g", "y", **{"plot.type": "box"}))
-    assert "ip.betweenstats(...) or ip.render.betweenstats(result, ...)" in text
-    assert "no plot type option" not in text
+    for name in ("plot.type", "plot_type"):
+        bad = {name: "box"}
+        text = message(TypeError, lambda bad=bad: analysis(frame, "g", "y", **bad))
+        assert text == (
+            f"{name}= was removed in ggstatsplot 0.12.0; ip.analyze.betweenstats() "
+            "only computes the statistics; choose the layers when drawing with "
+            "layers=, a tuple of 'violin', 'box' and 'points': "
+            "ip.betweenstats(..., layers=('box', 'points')) or "
+            "ip.render.betweenstats(result, layers=('box', 'points')). "
+            f"Remove {name}=."
+        )
     text = message(TypeError, lambda: analysis(frame, "g", "y", package="x"))
     assert "palette= (a list of colors" in text
     assert "ip.betweenstats(...) or ip.render.betweenstats(result, ...)" in text
