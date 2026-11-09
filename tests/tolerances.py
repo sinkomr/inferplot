@@ -101,6 +101,36 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "the number of pairs for a Holm-adjusted p)."
             ),
         ),
+        "wrs2_akp_constant": Tolerance(
+            rtol=1.3e-9,
+            atol=0.0,
+            reason=(
+                "AKP effect size against WRS2::akp.effect. WRS2 scales by a constant "
+                "1.2026e-9 relative above the exact square root of the winsorized "
+                "standard normal variance (0.64193981625799 against "
+                "0.64193981548600 at tr = 0.2), which inferplot uses (DECISIONS.md "
+                "log). Measured: every AKP estimate in the 3 two-group robust "
+                "fixtures (subtitle and 20,000-resample reference) is 1.20259e-9 "
+                "relative above inferplot's, the same ratio to 2e-15; the rest of "
+                "the computation agrees to rounding. 1.3e-9 leaves 8% headroom."
+            ),
+        ),
+        "wrs2_xi_constant": Tolerance(
+            rtol=3.3e-8,
+            atol=0.0,
+            reason=(
+                "Explanatory effect size xi against WRS2::t1way with equal group "
+                "sizes, where it does not depend on the resamples. WRS2 divides the "
+                "pooled winsorized variance by 0.4120867, inferplot by the exact "
+                "winsorized standard normal variance 0.41208672670619 (DECISIONS.md "
+                "log), so WRS2's xi is sqrt(0.4120867 / 0.41208672670619) = 1 - "
+                "3.2404e-8 times inferplot's. Measured on the 3 equal-size robust "
+                "fixtures with three or more groups: 3.2404e-8 relative in each, "
+                "the same ratio to 1e-15; with 0.4120867 the 20,000-resample "
+                "references replay exactly. 3.3e-8 leaves 2% headroom. With "
+                "unequal sizes the estimate is random and compared under BOOTSTRAP."
+            ),
+        ),
         "noncentral_ci": Tolerance(
             rtol=1e-6,
             atol=4e-8,
