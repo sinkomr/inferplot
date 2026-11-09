@@ -3,15 +3,17 @@ invariances and edge inputs (oracle parity is in test_robust_parity.py)."""
 
 from __future__ import annotations
 
+import csv
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from numpy.typing import NDArray
-from scipy import integrate, stats
+from scipy import integrate, special, stats
 from tools.reference import smm_table
 from tools.reference import stats_reference as ref
 
@@ -252,22 +254,21 @@ def _reference_sets() -> list[object]:
 
 @pytest.mark.parametrize("data", _reference_sets())
 def test_against_reference(data: list[FloatArray]) -> None:
-    # tools/reference computes the tails directly (sf); inferplot as WRS2 does
-    # (1 - cdf), so p-values agree within wrs2_p.
+    # Both compute the upper tails directly (DECISIONS.md D43).
     for i in range(len(data)):
         for j in range(i + 1, len(data)):
             result = yuen_t(data[i], data[j])
             t, df, p = ref.yuen(data[i], data[j])
             assert_close("closed_form", result.t, abs(t), what="Yuen t")
             assert_close("closed_form", result.df, df, what="Yuen df")
-            assert_close("wrs2_p", result.p_value, p, what="Yuen p", atol_scale=2)
+            assert_close("closed_form", result.p_value, p, what="Yuen p")
     if len(data) > 2:
         anova = trimmed_means_anova(data)
         f, df1, df2, p = ref.t1way(data)
         assert_close("closed_form", anova.f, f, what="t1way F")
         assert anova.df1 == df1
         assert_close("closed_form", anova.df2, df2, what="t1way df2")
-        assert_close("wrs2_p", anova.p_value, p, what="t1way p")
+        assert_close("closed_form", anova.p_value, p, what="t1way p")
 
 
 def test_yuen_reduces_to_welch_without_trimming() -> None:
@@ -468,3 +469,41 @@ def test_large_n_timing() -> None:
     lincon(big)
     seconds = time.perf_counter() - start
     assert seconds <= 3.0, f"t1way and lincon at n = 1e6 took {seconds:.2f} s"
+
+
+# ------------------------------------------------------------------ tiny p-values
+
+
+def _iris_petal_length() -> list[FloatArray]:
+    path = Path(__file__).resolve().parents[2] / "oracle" / "datasets" / "iris.csv"
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    species = sorted({row["Species"] for row in rows})
+    return [
+        np.array([float(r["Petal.Length"]) for r in rows if r["Species"] == s])
+        for s in species
+    ]
+
+
+def test_p_values_are_accurate_where_one_minus_cdf_is_zero() -> None:
+    # R's 1 - pf and 2 (1 - pt) give exactly 0 here (ggstatsplot would print
+    # 2.23e-308); inferplot reports the upper tail (DECISIONS.md D43). References:
+    # mpmath at 50 digits, the regularized incomplete beta at these F, t and df:
+    # I_{df2/(df2 + df1 F)}(df2/2, df1/2) and I_{df/(df + t^2)}(df/2, 1/2)
+    # (uv run --with mpmath).
+    setosa, versicolor, virginica = _iris_petal_length()
+    anova = trimmed_means_anova([setosa, versicolor, virginica])
+    assert_close("closed_form", anova.f, 1510.6836909956144, what="t1way F")
+    assert_close("closed_form", anova.df2, 45.87618043707867, what="t1way df2")
+    assert 1.0 - float(special.fdtr(anova.df1, anova.df2, anova.f)) == 0.0
+    assert anova.p_value > 0.0
+    assert_close("closed_form", anova.p_value, 1.3623605417577488e-42, what="p")
+    yuen = yuen_t(setosa, virginica)
+    assert_close("closed_form", yuen.t, 45.12516909123536, what="Yuen t")
+    assert_close("closed_form", yuen.df, 34.46263814754606, what="Yuen df")
+    assert 2.0 * (1.0 - float(special.stdtr(yuen.df, yuen.t))) == 0.0
+    assert yuen.p_value > 0.0
+    assert_close("closed_form", yuen.p_value, 3.0399821392506091e-32, what="p")
+    pairs = lincon([setosa, versicolor, virginica])
+    assert pairs[1].p_value == yuen.p_value  # setosa-virginica: the same test
+    assert all(pair.p_value > 0.0 for pair in pairs)

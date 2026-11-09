@@ -175,9 +175,9 @@ def winsorized_normal_variance(tr: float = 0.2) -> float:
     z^2 phi(z) over [-c, c] plus the two tails' mass tr at +/-c (Wilcox 2017,
     section 2.3; Algina, Keselman & Penfield 2005). 0.41208672670619 at tr = 0.2,
     whose square root, 0.64193981548600, is Algina et al.'s constant 0.642. WRS2
-    uses approximations of it (DECISIONS.md log): 0.4120867 in t1way's
+    uses approximations of it (DECISIONS.md D42): 0.4120867 in t1way's
     explanatory effect size and, in akp.effect, a square root 1.2e-9 relative
-    above this one. inferplot uses the exact value.
+    above this one. inferplot uses the exact value (DECISIONS.md D42).
     """
     t = _check_trim(tr)
     if t == 0.0:
@@ -277,19 +277,21 @@ def _zero_spread_message(name: str, raw: FloatArray, tr: float, method: str) -> 
     )
 
 
-def _wrs2_two_sided_t_p(t_abs: float, df: float) -> float:
-    """2 (1 - pt(|t|, df)), the two-sided p-value as WRS2's yuen and lincon compute
-    it: 1 - cdf, so the one-sided tail is rounded to the spacing of doubles just
-    below 1 (2^-53) and is 0 when the tail is below about 1.1e-16. Reproduced for
-    parity (SPEC.md section 4, ``wrs2_p``); elsewhere inferplot computes tails
-    directly."""
-    return 2.0 * (1.0 - float(special.stdtr(df, t_abs)))
+def _two_sided_t_p(t_abs: float, df: float) -> float:
+    """2 P(T_df > |t|), the upper tail computed directly (SciPy's ``stdtr`` at
+    -|t|). WRS2's yuen and lincon compute 2 (1 - pt(|t|, df)) instead, which
+    rounds the one-sided tail to the spacing of doubles just below 1 (2^-53) and
+    gives 0 below about 1.1e-16, where ggstatsplot would print 2.23e-308.
+    inferplot reports the accurate tail (DECISIONS.md D43); against the oracle the
+    two agree within that rounding (tolerance ``wrs2_p``)."""
+    return min(1.0, 2.0 * float(special.stdtr(df, -t_abs)))
 
 
-def _wrs2_f_p(f: float, df1: float, df2: float) -> float:
-    """1 - pf(F, df1, df2), the p-value as WRS2's t1way computes it (see
-    ``_wrs2_two_sided_t_p``)."""
-    return 1.0 - float(special.fdtr(df1, df2, f))
+def _f_upper_p(f: float, df1: float, df2: float) -> float:
+    """P(F_{df1, df2} > F), the upper tail computed directly (SciPy's ``fdtrc``).
+    WRS2's t1way computes 1 - pf(F, df1, df2) instead; inferplot reports the
+    accurate tail (DECISIONS.md D43; see ``_two_sided_t_p``)."""
+    return float(special.fdtrc(df1, df2, f))
 
 
 # ------------------------------------------------------------------ Yuen
@@ -306,10 +308,11 @@ def yuen_t(a: SampleLike, b: SampleLike, *, tr: float = 0.2) -> YuenT:
     ``WRS2::yuen``, as statsExpressions 2.2.1 calls it: ggstatsplot reports |t|,
     so ``t`` here is unsigned and ``difference`` carries the sign.
 
-    The p-value is 2 (1 - pt(|t|, df)) as WRS2 computes it, not the directly
-    computed tail: the oracle's p-values all lie on that rounding grid (multiples
-    of 2^-52; DECISIONS.md log), and parity is checked under ``wrs2_p``. It is 0
-    when the true p is below about 2.2e-16.
+    The p-value is the two-sided upper tail 2 P(T_df > |t|), computed directly.
+    R's value is 2 (1 - pt(|t|, df)), rounded to multiples of 2^-52 (the oracle's
+    p-values all lie on that grid) and 0 below about 2.2e-16; inferplot reports
+    the accurate tail (DECISIONS.md D43), within that rounding of R's
+    (``wrs2_p``).
 
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value,
@@ -339,7 +342,7 @@ def yuen_t(a: SampleLike, b: SampleLike, *, tr: float = 0.2) -> YuenT:
     return YuenT(
         t=abs(t),
         df=df,
-        p_value=_wrs2_two_sided_t_p(abs(t), df),
+        p_value=_two_sided_t_p(abs(t), df),
         difference=difference / scale,
         se=se / scale,
     )
@@ -375,8 +378,9 @@ def trimmed_means_anova(
     the weighted grand trimmed mean X = sum w_j Xt_j / U, A = sum w_j (Xt_j - X)^2
     / (J - 1) and lambda = sum (1 - w_j / U)^2 / (h_j - 1):
     F = A / (1 + 2 (J - 2) lambda / (J^2 - 1)), df1 = J - 1,
-    df2 = (J^2 - 1) / (3 lambda). The p-value is 1 - pf(F, df1, df2) as WRS2
-    computes it (``wrs2_p``; see ``yuen_t``).
+    df2 = (J^2 - 1) / (3 lambda). The p-value is the upper tail P(F > F_obs),
+    computed directly; R's 1 - pf(F, df1, df2) is rounded to 2^-53 and 0 below
+    about 1.1e-16 (DECISIONS.md D43; ``wrs2_p``, see ``yuen_t``).
 
     Limits as ``welch_anova``: every scaled d_j must be at least ``TINY``; the
     weights are then brought below 2^(1015 - bit_length(J)) by one power of two so
@@ -423,7 +427,7 @@ def trimmed_means_anova(
         )
     df1 = float(k - 1)
     df2 = (k * k - 1) / (3.0 * lam)
-    return TrimmedMeansAnova(f=f, df1=df1, df2=df2, p_value=_wrs2_f_p(f, df1, df2))
+    return TrimmedMeansAnova(f=f, df1=df1, df2=df2, p_value=_f_upper_p(f, df1, df2))
 
 
 # ------------------------------------------------------------------ lincon
@@ -504,12 +508,12 @@ def lincon(
 
     For every pair i < j in input order: estimate = trimmed mean(i) - trimmed
     mean(j), Yuen's standard error sqrt(d_i + d_j) and df (``yuen_t``),
-    t = estimate / se, the raw p = 2 (1 - pt(|t|, df)) as WRS2 computes it
-    (``wrs2_p``), and the CI estimate -/+ c x se with c the Studentized maximum
-    modulus critical value for C = k (k - 1) / 2 comparisons at the pair's df
-    (``smm_critical_value``). The raw p-values are then adjusted together with
-    ``p_adjust_method`` (ggstatsplot does not use lincon's own Hochberg
-    adjustment; SPEC.md section 4).
+    t = estimate / se, the raw p = 2 P(T_df > |t|) computed directly (R's
+    2 (1 - pt) is rounded to 2^-52; DECISIONS.md D43, ``wrs2_p``), and the CI
+    estimate -/+ c x se with c the Studentized maximum modulus critical value for
+    C = k (k - 1) / 2 comparisons at the pair's df (``smm_critical_value``). The
+    raw p-values are then adjusted together with ``p_adjust_method`` (ggstatsplot
+    does not use lincon's own Hochberg adjustment; SPEC.md section 4).
 
     Raises:
         ValueError: fewer than two groups, a group with fewer than two values or a
@@ -548,7 +552,7 @@ def lincon(
             t = estimate / se
             df = satterthwaite_df(ki.d, ki.h, kj.d, kj.h)
             critical = smm_critical_value(n_comparisons, df, conf_level=conf_level)
-            p = _wrs2_two_sided_t_p(abs(t), df)
+            p = _two_sided_t_p(abs(t), df)
             rows.append((i, j, estimate, se, df, t, critical, p))
     adjusted = p_adjust([row[7] for row in rows], p_adjust_method)
     out: list[LinconPair] = []
@@ -681,7 +685,7 @@ def akp_effect(
     1 - conf_level (WRS2's order statistics, read off the oracle's replay).
 
     WRS2's s_N is 1.2e-9 relative above the exact value used here (tolerance
-    ``wrs2_akp_constant``; DECISIONS.md log).
+    ``wrs2_akp_constant``; DECISIONS.md D42).
 
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value,
@@ -755,7 +759,7 @@ def explanatory_effect(
 
     WRS2 divides by 0.4120867 instead of the exact winsorized normal variance
     0.41208672670619, so its xi is 3.2e-8 relative below the value here (tolerance
-    ``wrs2_xi_constant``; DECISIONS.md log).
+    ``wrs2_xi_constant``; DECISIONS.md D42).
 
     Raises:
         ValueError: fewer than two groups, a group with fewer than two values or a

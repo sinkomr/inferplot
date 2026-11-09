@@ -68,7 +68,8 @@ def test_yuen(case: OracleCase) -> None:
     assert_close("closed_form", result.t, value(row, "statistic"), what="Yuen t")
     assert result.t >= 0.0
     assert_close("closed_form", result.df, value(row, "df.error"), what="Yuen df")
-    # 2 (1 - pt(|t|, df)): one grid step 2^-53 of the one-sided tail, doubled.
+    # R rounds 2 (1 - pt(|t|, df)) to 2^-52; inferplot reports the accurate tail
+    # (D43), within one such step of it.
     assert_close(
         "wrs2_p", result.p_value, value(row, "p.value"), what="Yuen p", atol_scale=2.0
     )
@@ -134,7 +135,8 @@ def test_trimmed_means_anova(case: OracleCase) -> None:
     assert_close("closed_form", result.f, value(row, "statistic"), what="F")
     assert result.df1 == value(row, "df")
     assert_close("closed_form", result.df2, value(row, "df.error"), what="df2")
-    # 1 - pf(F, df1, df2): one grid step 2^-53.
+    # R rounds 1 - pf(F, df1, df2) to 2^-53; inferplot reports the accurate tail
+    # (D43), within one such step of it.
     assert_close("wrs2_p", result.p_value, value(row, "p.value"), what="t1way p")
 
 
@@ -201,8 +203,8 @@ def test_lincon(case: OracleCase) -> None:
         assert_close(
             "closed_form", pair.conf_high, number(row["conf.high"]), what=f"{what} hi"
         )
-        # The raw p is 2 (1 - pt): one step 2^-53 of the one-sided tail, doubled,
-        # and multiplied by at most m by the adjustment.
+        # R's raw p is 2 (1 - pt), rounded to 2^-52 (inferplot: the accurate tail,
+        # D43); the adjustment multiplies that step by at most m.
         assert_close(
             "wrs2_p",
             pair.p_adjusted,
