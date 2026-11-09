@@ -12,10 +12,10 @@ changed call reproduces ggstatsplot's output:
   output;
 * type bayes with three or more groups raises ``NotImplementedError`` unless
   ``results_subtitle=False`` (D41); the replay passes it and must give ggstatsplot's
-  output without its subtitle (MAP labels and a Bayes factor bracket per pair);
-* type robust with three or more groups at a ``conf_level`` other than 0.95 raises
-  ``NotImplementedError``: lincon's critical values are known here only at 95%.
-  There is no replay.
+  output without its subtitle (MAP labels and a Bayes factor bracket per pair).
+
+Type robust with three or more groups at a ``conf_level`` other than 0.95 is not
+refused: as in ggstatsplot, the pairwise intervals stay at 95% (D53).
 """
 
 from __future__ import annotations
@@ -66,8 +66,6 @@ def refusal(case: OracleCase) -> Refusal | None:
         return Refusal(
             NotImplementedError, "results_subtitle=False", {"results_subtitle": False}
         )
-    if case.type == "robust" and k >= 3 and kwargs.get("conf_level", 0.95) != 0.95:
-        return Refusal(NotImplementedError, "conf_level", None)
     return None
 
 

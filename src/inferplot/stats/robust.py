@@ -54,8 +54,10 @@ from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.nonparametric import BOOTSTRAP_RESAMPLES, BootstrapEffectSizeCI
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import TINY, satterthwaite_df
+from inferplot.stats.smm import smm_quantile
 
 __all__ = [
+    "SMM_MAX_TABLED",
     "SMM_ROWS",
     "LinconPair",
     "TrimmedMeansAnova",
@@ -75,6 +77,8 @@ __all__ = [
 _CHUNK_VALUES: Final = 1 << 22
 
 _SMM_CONF_LEVEL: Final = 0.95
+# WRS2's table stops at 28 comparisons (8 groups); above, lincon simulates.
+SMM_MAX_TABLED: Final = 28
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,31 +442,39 @@ def trimmed_means_anova(
 def smm_critical_value(
     n_comparisons: int, df: float, *, conf_level: float = 0.95
 ) -> float:
-    """lincon's critical value: the Studentized maximum modulus table, interpolated.
+    """lincon's critical value for ``n_comparisons`` pairs at a pair's Yuen ``df``.
 
-    WRS2's ``lincon`` reads the upper 5% point of the Studentized maximum modulus
-    distribution (max of C independent |Z| over a common sqrt(chi2_df / df);
-    Stoline & Ury 1979, Technometrics 21: 87-93) from a two-decimal table with rows
-    at df 2..12, 14, 16, 18, 20, 24, 30, 40, 60 and a last row, labelled 200, that
-    holds the infinite-df values, and interpolates linearly in 1/df between the
-    rows on either side of ``df`` (SPEC.md section 4). The table is rebuilt from
-    the distribution (tools/reference/smm_table.py) and rounded to two decimals,
-    except where WRS2's published entries are known to differ (C = 3 at df 5 is
-    3.39, the quantile 3.3992). The oracle fixtures pin 21 entries (C = 3, 6 and
-    10); the others are the rounded quantiles until probe-smm confirms them.
+    WRS2's ``lincon`` (alpha = 0.05) takes it from three sources (probe-smm):
 
-    From df 200 on the last row is used (not confirmed by the oracle).
+    * C = 1: Student's t quantile, t_{0.975, df}.
+    * C = 2..28: a two-decimal table of the upper 5% point of the Studentized
+      maximum modulus distribution (max of C independent |Z| over a common
+      sqrt(chi2_df / df); Stoline & Ury 1979, Technometrics 21: 87-93), with rows
+      at df 2..12, 14, 16, 18, 20, 24, 30, 40, 60 and a last row, labelled 200, that
+      holds the infinite-df values, interpolated linearly in 1/df between the rows
+      on either side of ``df`` and read off the last row from df 200 on (SPEC.md
+      section 4). The entries are WRS2's published ones (DECISIONS.md D51), 24 of
+      which are not the rounded quantile (C = 3 at df 5 is 3.39 where the quantile
+      is 3.3992), except C = 9 at df 2, a transcription error in WRS2 (8.83 for the
+      quantile 8.38), kept at 8.38 (``inferplot.stats._smm_table``).
+    * C above 28: WRS2 estimates the value by a simulation seeded by itself; here
+      the exact Studentized maximum modulus quantile at the pair's df
+      (``inferplot.stats.smm.smm_quantile``; DECISIONS.md D52). WRS2's simulated
+      values are not that quantile: 3.4% to 6.6% below it at 36 and 45
+      comparisons (probe-smm) and -0.35% to +4.7% off it on edge_k9, so these
+      intervals differ from ggstatsplot's.
 
     Args:
         n_comparisons: C, the number of pairwise comparisons (k (k - 1) / 2 for k
-            groups), 1 to 45.
-        df: the pair's Yuen df, at least 2.
+            groups), at least 1.
+        df: the pair's Yuen df: at least 2 for C up to 28 (WRS2's table and its
+            t quantile stop there), at least 1 above.
         conf_level: only 0.95 (alpha = 0.05) is supported.
 
     Raises:
-        NotImplementedError: ``conf_level`` other than 0.95, C above 45, or df
-            below 2, where WRS2's critical value is not known here.
-        ValueError: C below 1, or df not a positive number.
+        NotImplementedError: ``conf_level`` other than 0.95, or df below 2 with C
+            up to 28, where WRS2 stops with an error.
+        ValueError: C below 1, or df not a number of at least 1.
     """
     level = check_conf_level(conf_level)
     if level != _SMM_CONF_LEVEL:
@@ -472,19 +484,20 @@ def smm_critical_value(
         )
     if isinstance(n_comparisons, bool) or n_comparisons < 1:
         raise ValueError(f"n_comparisons must be at least 1; got {n_comparisons!r}")
-    if n_comparisons not in SMM_TABLE_05:
-        raise NotImplementedError(
-            "lincon's critical values are tabulated here for up to 45 pairwise "
-            f"comparisons (10 groups); got {n_comparisons}"
-        )
     value = float(df)
-    if not value > 0.0 or math.isnan(value):
-        raise ValueError(f"df must be a positive number; got {df!r}")
+    if not value >= 1.0:
+        raise ValueError(f"df must be a number of at least 1; got {df!r}")
+    if n_comparisons > SMM_MAX_TABLED:
+        return smm_quantile(n_comparisons, value, conf_level=level)
     if value < SMM_ROWS[0]:
         raise NotImplementedError(
             "lincon's critical value below 2 degrees of freedom is not known "
-            f"(the table starts at df 2); got df {value!r}"
+            f"(WRS2's table starts at df 2); got df {value!r}"
         )
+    if n_comparisons == 1:
+        # |T_df| is the maximum modulus of one comparison; smm_quantile computes it
+        # to 1e-14 at any SciPy (SciPy 1.11's stdtrit is off by up to about 1e-9).
+        return smm_quantile(1, value, conf_level=level)
     entries = SMM_TABLE_05[n_comparisons]
     if value >= SMM_ROWS[-1]:
         return entries[-1]
@@ -522,8 +535,8 @@ def lincon(
             non-finite value, trimming leaving fewer than two values, a pair whose
             groups both have a winsorized variance of 0 (or too small to
             resolve), an unknown ``p_adjust_method``, or ``tr`` outside [0, 0.5).
-        NotImplementedError: ``conf_level`` other than 0.95, more than 10 groups,
-            or a pair with fewer than 2 df (``smm_critical_value``).
+        NotImplementedError: ``conf_level`` other than 0.95, or a pair with fewer
+            than 2 df with up to 8 groups (``smm_critical_value``).
     """
     t_trim = _check_trim(tr)
     check_conf_level(conf_level)
@@ -531,7 +544,7 @@ def lincon(
     raw, scale, kernels = _group_kernels(groups, t_trim, "lincon", min_groups=2)
     k = len(kernels)
     n_comparisons = k * (k - 1) // 2
-    smm_critical_value(n_comparisons, SMM_ROWS[-1], conf_level=conf_level)
+    smm_critical_value(n_comparisons, math.inf, conf_level=conf_level)
     rows: list[tuple[int, int, float, float, float, float, float, float]] = []
     for i in range(k):
         for j in range(i + 1, k):
@@ -703,8 +716,9 @@ def akp_effect(
     floor((1 - alpha / 2) B)-th smallest of the resampled deltas, alpha =
     1 - conf_level (WRS2's order statistics, read off the oracle's replay).
 
-    WRS2's s_N is 1.2e-9 relative above the exact value used here (tolerance
-    ``wrs2_akp_constant``; DECISIONS.md D42).
+    WRS2 evaluates s_N numerically, off the exact value used here by an amount
+    that varies with tr: 1.2e-9 relative above it at tr = 0.2, 4.6e-9 at 0.1, up
+    to 4.2e-7 at 0.49 (probe-akp; tolerance ``akp_constant``; DECISIONS.md D42).
 
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value,

@@ -117,13 +117,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 - [x] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes): all 10 robust
   fixtures on three backends (p within `wrs2_p`, D43; bootstrap bounds within 2.72 MC
   SDs); texts AST-equal; every bootstrap method proved by exact replay; three or more
-  groups at a `conf_level` other than 0.95 raise `NotImplementedError` (lincon's table
-  is at 95% only)
+  groups keep 95% pairwise intervals at any `conf_level`, as ggstatsplot does, with a
+  warning (D53)
 - [x] bayes (D41): the two-group subtitle (3 fixtures, BF within 3.5e-11); three or more
   groups with `results_subtitle=False` (7 fixtures; 31 pair BFs within 1.5e-9, 31
   bracket labels and all 30 MAP labels on ggstatsplot's grid point)
-- [ ] Phase 2 oracle cases and probes (oracle/phase2-cases: edge data, conf_level 0.90,
-  tr 0.1, every p_adjust method, probe-smm, probe-map, probe-wrs2p, probe-akp) pass
+- [x] Phase 2 oracle cases and probes pass: fixtures from oracle run 42579842568
+  (generator at 9c4994c), the 73 earlier cases plus 88 nonparametric, robust and bayes
+  ggbetweenstats cases (edge data, every argument these types take, iris Petal.Length,
+  iris_no_setosa, edge_ties_small, edge_k9) and five probes (smm, wrs2p, akp, map,
+  ranks); all 72 bootstrap references reproduce ggstatsplot's 100-resample values
+  exactly, also at conf.level 0.90 and tr 0.1. 64 of the 73 earlier fixtures are
+  byte-identical; in the other nine only BayesFactor's Bayes ANOVA values moved (v0.2
+  outputs; OpenBLAS kernels, now pinned). 11,192 tests pass. Deliberate differences
+  pinned: 3 subtitles and 3 bracket labels (D43), 1 label (D50), 36 edge_k9 critical
+  values (D52). New: WRS2's published lincon table (D51), the exact SMM quantile above
+  28 pairs (D52), tied resamples left out (D54), MAP without a density (D55)
 - [ ] end-of-phase fresh-context review of the Phase 2 diff against SPEC.md
 
 ## Phase 3 — withinstats, all types
@@ -183,29 +192,31 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   rule in `outcome_problems` and `label_counts`, which assume ggbetweenstats (barstats
   computes its pairwise tests through the same hidden helper, and `.chisq_test_safe`
   swallows errors into NA rows the recorders cannot see). Unused edge CSV:
-  `edge_within_missing` (Phase 3).
-- Robust: Yuen's p is 2 (1 - pt) in WRS2 (confirmed: every robust omnibus p lies on the
-  1 - cdf grid); inferplot reports the accurate tail (D43, awaiting the owner's
-  confirmation). Unconfirmed until probe-smm and the Phase 2 oracle cases land:
-  lincon's critical value at df >= 200 (the infinite-df row is used), below df 2 or at
-  `conf_level` other than 0.95 (both raise `NotImplementedError`), WRS2's constants at tr
-  other than 0.2, and 879 of 900 SMM table entries. A bootstrap resample whose effect
-  size is 0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at
-  10,000 values per group; a counting-based sort could make it about 5 times faster.
+  `edge_within_missing` (Phase 3). `ORACLE_SUBSET` limits a local debugging run (no
+  manifest).
+- Awaiting the owner's confirmation (accuracy over R's numbers, like D31): D50, two
+  pairwise Bayes factors BayesFactor misses (iris Petal.Length, +1.16e-3 and -6.1e-5;
+  one label -133.68 for ggstatsplot's -133.69); D52, the exact SMM quantile for nine or
+  more robust groups, where WRS2's seeded simulation is off by -6.6% to +4.7% (only the
+  pairwise intervals differ, not the figure).
+- Robust: WRS2's yuen, t1way and lincon p are 1 - cdf (probe-wrs2p, 420 of 420);
+  inferplot reports the accurate tail (D43, confirmed). lincon below df 2 raises
+  `NotImplementedError` (WRS2 stops too). An AKP or xi resample whose effect size is
+  0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at 10,000
+  values per group; a counting-based sort could make it about 5 times faster.
 - Phases 3 and 4: `ttest_bayes_factor` was measured on two-sample Bayes factors only;
   measure paired and one-sample ones against an exact integral when their fixtures
   arrive, and log any change.
-- MAP centrality: reproduced at the same grid point on all 30 fixture labels
-  (`MAP_CENTRALITY`, 0 steps), by matching the fixtures. Not yet pinned (every fixture
-  value is positive, n <= 93): bins of negative values (truncation toward zero
-  assumed), R's binning above n = 500, the tolerance after the lower search end is
-  enlarged, integer bins once |x| exceeds 2^31 bin widths, and what bayestestR does
-  when bw.SJ has no answer (n = 2, ties, zero IQR; inferplot raises `ValueError`).
-  probe-map settles these.
+- MAP centrality: every fixture label and 49 of probe-map's 52 vectors on R's grid
+  point (`MAP_CENTRALITY`, 0 steps); constant data and zero IQR behave as D55 says;
+  normal_n1e5 is pinned one step away (R's two densities differ by 6.2e-15). For values
+  near 1e8 and above R's bw.SJ anchors its bins at min(x), inferplot at zero: the
+  bandwidth differs by up to 9.6e-4 relative (shifted_large, timestamps), the MAP
+  does not. Copying R there would copy a numerical accident; not done.
 - Rank epsilon squared: the resampling scheme (within groups) and percentile rule are
-  settled by Monte Carlo agreement and the boot.ci help page, not by exact replay. A
-  resample with every value tied raises; R's handling of it is unverified until a
-  heavy-ties fixture arrives.
+  settled by Monte Carlo agreement and the boot.ci help page, not by exact replay.
+  Fully tied resamples are left out (D54); the data cannot tell that from sorting them
+  last (0.46 standard errors apart on edge_ties_small).
 - ggstatsplot's own bootstrap CIs use 100 resamples, so they differ from the 20,000-
   resample references by Monte Carlo noise; parity tests compare against the
   references (SPEC §10, D29), not against ggstatsplot's 100-resample values.

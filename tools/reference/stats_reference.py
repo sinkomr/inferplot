@@ -92,6 +92,25 @@ def games_howell(groups: Sequence[ArrayLike]) -> list[tuple[int, int, float, flo
     return out
 
 
+def t_isf(tail: float, df: float) -> float:
+    """x with P(T_df > x) = tail: Student's t upper quantile, accurate at any SciPy.
+
+    SciPy 1.11's ``stdtrit`` and ``stats.t.isf`` stop a search at about 1e-9
+    relative (7e-10 at df 60, 0.975). Their value is refined here by Newton steps on
+    the upper tail ``stdtr(df, -x)`` against the density (1 + x^2/df)^(-(df+1)/2) /
+    (sqrt(df) B(1/2, df/2)); both are accurate to rounding at every supported SciPy.
+    """
+    x = float(special.stdtrit(df, 1.0 - tail))
+    log_norm = -0.5 * math.log(df) - float(special.betaln(0.5, df / 2))
+    for _ in range(4):
+        density = math.exp(log_norm - (df + 1) / 2 * math.log1p(x * x / df))
+        step = (float(special.stdtr(df, -x)) - tail) / density
+        x += step
+        if abs(step) <= 4e-16 * abs(x):
+            break
+    return x
+
+
 def hedges_j(df: float) -> float:
     """Exact small-sample bias correction for Cohen's d (Hedges 1981)."""
     return math.exp(
@@ -221,6 +240,23 @@ def _known_answer_checks() -> None:
         print(f"{status}  {name:44s} got {got:.12g}  want {want:.12g}  ({source})")
         if not ok:
             raise SystemExit(1)
+
+    # Student's t quantile against closed forms: df 1 is the Cauchy, tan(pi (p - 1/2));
+    # df 2 solves p = 1/2 + t / (2 sqrt(2 + t^2)).
+    close(
+        "t quantile, df 1, 0.975",
+        t_isf(0.025, 1.0),
+        math.tan(0.475 * math.pi),
+        1e-14,
+        "closed form",
+    )
+    close(
+        "t quantile, df 2, 0.975",
+        t_isf(0.025, 2.0),
+        0.95 * math.sqrt(2 / (1 - 0.95**2)),
+        1e-14,
+        "closed form",
+    )
 
     gg = "ggstatsplot 1.1.1 via plotsalot oracle"
     m3 = [

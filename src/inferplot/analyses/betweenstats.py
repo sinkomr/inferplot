@@ -63,7 +63,7 @@ from inferplot.result import (
     current_provenance,
 )
 from inferplot.stats.parametric import TINY
-from inferplot.stats.robust import SMM_ROWS
+from inferplot.stats.robust import SMM_MAX_TABLED, SMM_ROWS
 from inferplot.text import build_texts, r_number_text
 
 __all__ = ["betweenstats"]
@@ -127,6 +127,21 @@ _HEDGES_J_ZERO_WARNING: Final = (
     "negligible next to it, so g and its confidence interval carry no information "
     "about the size of the difference."
 )
+
+# ggstatsplot 1.1.4 does not pass conf.level to WRS2's lincon, so the robust pairwise
+# intervals are always 95% while the omnibus effect size follows conf_level
+# (PlantGrowth-cl90-robust). Replicated, like Holm on Games-Howell (DECISIONS.md D53).
+_LINCON_CONF_LEVEL: Final = 0.95
+
+
+def _lincon_level_warning(conf_level: float) -> str:
+    return (
+        f"The pairwise confidence intervals are 95% intervals, not conf_level="
+        f"{conf_level!r}, which applies to the effect size: ggstatsplot does not "
+        "pass conf.level to the pairwise comparisons (WRS2's lincon), and inferplot "
+        "follows it. Each pair records its conf_level."
+    )
+
 
 _BAYES_K3_WARNING: Final = (
     "The Bayes factor caption for three or more groups arrives in inferplot 0.2."
@@ -418,7 +433,7 @@ class _Parts:
     bayes: BayesFactor | None
     pairwise: tuple[PairwiseComparison, ...]
     centrality: str
-    centers: tuple[float, ...]
+    centers: tuple[float | None, ...]
     warnings: tuple[str, ...]
     citations: tuple[str, ...]
 
@@ -596,6 +611,7 @@ def _nonparametric(
     _check_ranks(args.x, values)
     side, level = args.alternative, args.conf_level
     pairwise: tuple[PairwiseComparison, ...] = ()
+    warnings: list[str] = []
     if len(levels) == 2:
         a, b = values
         test_result = stats.mann_whitney(a, b, alternative=side)
@@ -658,6 +674,8 @@ def _nonparametric(
             bootstrap_seed=epsilon.seed,
         )
         pairwise = _dunn_pairs(levels, values, args)
+        if epsilon.undefined_resamples:
+            warnings.append(_tied_resamples_warning(epsilon))
         citations = [
             _KRUSKAL_WALLIS_1952,
             _TOMCZAK_2014,
@@ -672,8 +690,18 @@ def _nonparametric(
         pairwise=pairwise,
         centrality="median",
         centers=tuple(stats.median(v) for v in values),
-        warnings=(),
+        warnings=tuple(warnings),
         citations=tuple(citations),
+    )
+
+
+def _tied_resamples_warning(epsilon: stats.BootstrapEffectSizeCI) -> str:
+    """D54: the resamples left out of rank epsilon squared's interval."""
+    tied, total = epsilon.undefined_resamples, epsilon.resamples
+    return (
+        f"{tied:,} of {total:,} bootstrap resamples have every value tied, where "
+        "rank epsilon squared is undefined; its confidence interval comes from the "
+        f"other {total - tied:,}, as in ggstatsplot."
     )
 
 
@@ -821,23 +849,8 @@ def _check_robust(
             "the other group first with order=, pass a smaller tr, or use "
             "type='nonparametric'."
         )
-    if k >= 3:
-        if args.conf_level != 0.95:
-            raise NotImplementedError(
-                f"conf_level={args.conf_level!r} with type='robust' and {k} groups: "
-                "the pairwise comparisons (WRS2's lincon) take their critical values "
-                "from the Studentized maximum modulus table at 95%, the only level "
-                "inferplot has. Pass conf_level=0.95; two groups take any level."
-            )
-        pairs = k * (k - 1) // 2
-        try:
-            stats.smm_critical_value(pairs, SMM_ROWS[-1])
-        except NotImplementedError:
-            raise NotImplementedError(
-                f"x={x!r} has {k} groups ({pairs} pairs): the critical values of "
-                "the pairwise comparisons (WRS2's lincon) are tabulated here for up "
-                "to 45 pairs (10 groups). Compare fewer groups at a time."
-            ) from None
+    pairs = k * (k - 1) // 2
+    if k >= 3 and pairs <= SMM_MAX_TABLED:
         low_df = [
             f"{levels[i]!r} and {levels[j]!r}"
             for i in range(k)
@@ -940,7 +953,11 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
         pairwise=pairwise,
         centrality="trimmed_mean",
         centers=tuple(stats.trimmed_mean(v, tr=tr) for v in values),
-        warnings=(),
+        warnings=(
+            (_lincon_level_warning(level),)
+            if pairwise and level != _LINCON_CONF_LEVEL
+            else ()
+        ),
         citations=tuple(citations),
     )
 
@@ -955,7 +972,7 @@ def _lincon_pairs(
     pairs = stats.lincon(
         values,
         tr=args.tr,
-        conf_level=args.conf_level,
+        conf_level=_LINCON_CONF_LEVEL,
         p_adjust_method=args.p_adjust_method,
     )
     rows: list[PairwiseComparison] = []
@@ -976,7 +993,7 @@ def _lincon_pairs(
                 significant=significant,
                 displayed=_displayed(args.pairwise_display, significant),
                 estimate=pair.estimate,
-                conf_level=args.conf_level,
+                conf_level=_LINCON_CONF_LEVEL,
                 conf_low=pair.conf_low,
                 conf_high=pair.conf_high,
             )
@@ -1003,22 +1020,25 @@ _POSTERIOR_WARNING: Final = (
 
 def _map_estimates(
     x: str, levels: Sequence[str], values: Sequence[FloatArray]
-) -> tuple[float, ...]:
-    """Each group's MAP estimate (the centrality of type bayes), with a plain
-    error naming the group when it has no density to take the peak of."""
-    out: list[float] = []
+) -> tuple[tuple[float | None, ...], tuple[str, ...]]:
+    """Each group's MAP estimate (the centrality of type bayes). A group without a
+    kernel density (the Sheather-Jones bandwidth fails, as on a zero interquartile
+    range) has None, no label is drawn for it, and a warning says why; ggstatsplot
+    prints an empty label there (probe-map, DECISIONS.md D55)."""
+    out: list[float | None] = []
+    warnings: list[str] = []
     for level, v in zip(levels, values, strict=True):
         try:
             out.append(stats.map_estimate(v).estimate)
         except ValueError as error:
-            raise ValueError(
-                f"The MAP estimate that type='bayes' shows for each group needs a "
-                f"kernel density of the group's values, and the group {level!r} of "
-                f"x={x!r} (n = {v.size}) has none: {error}. Collect more varied "
-                "values, or use type='nonparametric' (medians) or "
-                "type='parametric' (means)."
-            ) from None
-    return tuple(out)
+            out.append(None)
+            warnings.append(
+                f"The group {level!r} of x={x!r} (n = {v.size}) has no MAP estimate, "
+                f"so no centrality label is drawn for it: {error}. ggstatsplot "
+                "prints an empty label there. Use type='nonparametric' to show "
+                "medians."
+            )
+    return tuple(out), tuple(warnings)
 
 
 def _check_bayes(x: str, levels: Sequence[str], values: Sequence[FloatArray]) -> None:
@@ -1055,8 +1075,8 @@ def _bayes(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> 
     centrality."""
     x = args.x
     _check_bayes(x, levels, values)
-    centers = _map_estimates(x, levels, values)
-    warnings: list[str] = []
+    centers, map_warnings = _map_estimates(x, levels, values)
+    warnings: list[str] = list(map_warnings)
     citations = [_ROUDER_2009, _SHEATHER_JONES_1991]
     bayes: BayesFactor | None = None
     pairwise: tuple[PairwiseComparison, ...] = ()
@@ -1291,7 +1311,8 @@ def betweenstats(
         KeyError: a column that the data frame does not have.
         NotImplementedError: a design this version does not have: the Bayes factor
             caption or subtitle for three or more groups (a Bayesian ANOVA), and
-            the robust pairwise comparisons at a conf_level other than 0.95.
+            the robust pairwise comparisons when a pair has fewer than 2 degrees of
+            freedom (where WRS2's lincon stops).
     """
     type_name = canonical_type(type)
     display = canonical_pairwise_display(pairwise_display)

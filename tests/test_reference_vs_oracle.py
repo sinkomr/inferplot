@@ -34,6 +34,7 @@ Three or more groups:
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -48,6 +49,7 @@ from tests.oracle_fixtures import (
     OracleCase,
     Row,
     cases_for,
+    expected_bf10,
     number,
     oracle_params,
     probe,
@@ -146,6 +148,15 @@ def _r_upper_tail(p: float) -> float:
 
 def _alternative(case: OracleCase) -> str:
     return str(case.args.get("alternative", "two.sided"))
+
+
+def _tr(case: OracleCase) -> float:
+    """The trimming of the robust tests and labels (ggstatsplot's default 0.2)."""
+    return float(case.args.get("tr", 0.2))
+
+
+def _adjust_method(case: OracleCase) -> str:
+    return str(case.args.get("p.adjust.method", "holm"))
 
 
 def _one_sided_quantile(case: OracleCase, row: Row) -> float:
@@ -394,11 +405,27 @@ def _welch_anova_checks(groups: list[FloatArray], row: Row) -> None:
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats", failed=True))
 def test_failed_case_partial_subtitle(case: OracleCase) -> None:
-    # ggstatsplot failed after computing the subtitle (edge_n2: Welch df below 2 in
-    # every pair stops the pairwise table); what it computed is still right.
+    # ggstatsplot failed after computing the subtitle (edge_n2: the pairwise table
+    # stops below df 2 for parametric and robust, and on the pairwise Bayes factors);
+    # what it computed is still right.
     rows = case.partial("subtitle")
-    assert len(rows) == 1
-    _welch_anova_checks(_groups(case), rows[0])
+    groups = _groups(case)
+    if case.type == "parametric":
+        assert len(rows) == 1
+        _welch_anova_checks(groups, rows[0])
+    elif case.type == "robust":
+        assert len(rows) == 1
+        f_stat, df1, df2, _ = ref.t1way(groups, tr=_tr(case))
+        assert_close("closed_form", f_stat, _value(rows[0], "statistic"), what="F")
+        assert_close("closed_form", df1, _value(rows[0], "df"), what="df1")
+        assert_close("closed_form", df2, _value(rows[0], "df.error"), what="df2")
+        p = _r_upper_tail(float(stats.f.sf(f_stat, df1, df2)))
+        assert_close("wrs2_p", p, _value(rows[0], "p.value"), what="t1way p")
+    else:
+        # The Bayes ANOVA (v0.2): one row per posterior parameter, one Bayes factor.
+        assert case.type == "bayes"
+        assert rows
+        assert len({number(r["bf10"]) for r in rows}) == 1
 
 
 @pytest.mark.parametrize(
@@ -503,7 +530,7 @@ def test_yuen(case: OracleCase) -> None:
     # WRS2::yuen reports |t|: mtcars am and edge_k2 have the smaller trimmed mean in
     # group 1, yet a positive t, while the AKP effect size beside it is negative.
     a, b = _groups(case)
-    t, df, _ = ref.yuen(a, b, tr=0.2)
+    t, df, _ = ref.yuen(a, b, tr=_tr(case))
     row = case.subtitle_data
     assert_close("closed_form", abs(t), _value(row, "statistic"), what="Yuen |t|")
     if t < 0:
@@ -515,7 +542,7 @@ def test_yuen(case: OracleCase) -> None:
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=False))
 def test_t1way(case: OracleCase) -> None:
-    f_stat, df1, df2, _ = ref.t1way(_groups(case), tr=0.2)
+    f_stat, df1, df2, _ = ref.t1way(_groups(case), tr=_tr(case))
     row = case.subtitle_data
     assert_close("closed_form", f_stat, _value(row, "statistic"), what="t1way F")
     assert_close("closed_form", df1, _value(row, "df"), what="t1way df1")
@@ -525,11 +552,23 @@ def test_t1way(case: OracleCase) -> None:
 
 
 def _check_jzs(
-    row: Row, a: FloatArray, b: FloatArray, *, prior: float, what: str
+    row: Row,
+    a: FloatArray,
+    b: FloatArray,
+    *,
+    prior: float,
+    what: str,
+    pair: tuple[str, str, str] | None = None,
 ) -> None:
-    """BayesFactor::ttestBF on two groups: Student's t, Cauchy scale ``prior``."""
+    """BayesFactor::ttestBF on two groups: Student's t, Cauchy scale ``prior``.
+
+    ``pair`` (case, group1, group2) names a pairwise row, compared with the accurate
+    value where BayesFactor misses it (`ACCURATE_BAYES_FACTORS`).
+    """
     assert number(row["prior.scale"]) == prior, f"{what}: {row['prior.scale']}"
     bf10 = _value(row, "bf10")
+    if pair is not None:
+        bf10 = expected_bf10(*pair, bf10)
     n_eff = a.size * b.size / (a.size + b.size)
     df = float(a.size + b.size - 2)
     student = float(stats.ttest_ind(a, b, equal_var=True).statistic)
@@ -588,7 +627,7 @@ def test_absent_outputs(case: OracleCase) -> None:
         assert case.pairwise == []
 
 
-@pytest.mark.parametrize("case", _params("bayes", two_groups=False))
+@pytest.mark.parametrize("case", _params("bayes", two_groups=False, needs="pairwise"))
 def test_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
     # Every pair gets its own ttestBF, always with prior 0.707 (SPEC.md section 4).
     groups = dict(zip(case.analysis_levels, _groups(case), strict=True))
@@ -596,18 +635,22 @@ def test_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
     for row in case.pairwise:
         g1, g2 = str(row["group1"]), str(row["group2"])
         _check_jzs(
-            row, groups[g1], groups[g2], prior=JZS_PRIOR, what=f"{case.name} {g1}-{g2}"
+            row,
+            groups[g1],
+            groups[g2],
+            prior=JZS_PRIOR,
+            what=f"{case.name} {g1}-{g2}",
+            pair=(case.name, g1, g2),
         )
 
 
-@pytest.mark.parametrize("case", _params("nonparametric", two_groups=False))
-def test_dunn_holm(case: OracleCase) -> None:
-    # Dunn (1964): rank all N values together (mid-ranks for ties); for groups i < j,
-    # z = (Rbar_i - Rbar_j) / sqrt(S2 * (1/n_i + 1/n_j)), with the tie correction
-    # S2 = N(N + 1)/12 - sum(t^3 - t) / (12(N - 1)) over sets of t tied values.
-    # ggstatsplot 1.1.4 (PMCMRplus::kwAllPairsDunnTest) reports |z|, not a signed z,
-    # and Holm-adjusts two-sided normal p-values across all k(k - 1)/2 pairs.
-    groups = _groups(case)
+def _dunn(groups: Sequence[FloatArray]) -> tuple[list[tuple[int, int]], list[float]]:
+    """Pairs (i < j) and Dunn's (1964) |z| for each.
+
+    Rank all N values together (mid-ranks for ties); for groups i < j,
+    z = (Rbar_i - Rbar_j) / sqrt(S2 * (1/n_i + 1/n_j)), with the tie correction
+    S2 = N(N + 1)/12 - sum(t^3 - t) / (12(N - 1)) over sets of t tied values.
+    """
     pooled = np.concatenate(groups)
     n = pooled.size
     sizes = [g.size for g in groups]
@@ -621,7 +664,19 @@ def test_dunn_holm(case: OracleCase) -> None:
         / math.sqrt(s2 * (1 / sizes[i] + 1 / sizes[j]))
         for i, j in pairs
     ]
-    adjusted = ref.holm([float(2 * stats.norm.sf(z)) for z in z_values])
+    return pairs, z_values
+
+
+@pytest.mark.parametrize(
+    "case", _params("nonparametric", two_groups=False, needs="pairwise")
+)
+def test_dunn_holm(case: OracleCase) -> None:
+    # Dunn (1964), `_dunn`. ggstatsplot 1.1.4 (PMCMRplus::kwAllPairsDunnTest) reports
+    # |z|, not a signed z, and adjusts two-sided normal p-values across all
+    # k(k - 1)/2 pairs with the case's p.adjust method (Holm by default).
+    pairs, z_values = _dunn(_groups(case))
+    method = _adjust_method(case)
+    adjusted = _p_adjust([float(2 * stats.norm.sf(z)) for z in z_values], method)
     levels = case.analysis_levels
     expected = {
         (levels[i], levels[j]): (z, p_adj)
@@ -633,10 +688,10 @@ def test_dunn_holm(case: OracleCase) -> None:
         what = f"Dunn {pair['group1']}-{pair['group2']}"
         assert pair["test"] == "Dunn"
         assert pair["distribution"] == "z"
-        assert pair["p.adjust.method"] == "Holm"
+        assert pair["p.adjust.method"] == P_ADJUST_LABELS[method]
         assert_close("closed_form", z, number(pair["statistic"]), what=f"{what} z")
         assert_close(
-            "closed_form", p_adj, number(pair["p.value"]), what=f"{what} Holm p"
+            "closed_form", p_adj, number(pair["p.value"]), what=f"{what} {method} p"
         )
 
 
@@ -661,113 +716,147 @@ def _smm_cdf(c: float, n_comparisons: int, df: float) -> float:
     return value
 
 
-# The df rows of the two-decimal Studentized maximum modulus table lincon reads: every
-# df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40 and 60, and a last row placed at
-# df 200 that holds the infinite-df (normal) values. lincon interpolates linearly in
-# 1/df between the rows on either side of a pair's Yuen df. The fixtures confirm
-# rows 12/14, 18/20 and 40/60, and the 60/200 step (bugs_long, df 99 to 110: the
-# critical values lie on the line through the df-60 entry and the infinite-df entry
-# at 200 to 1.6e-14).
+# lincon's critical values (probe-smm). WRS2::lincon reads a two-decimal table of the
+# Studentized maximum modulus, one for alpha 0.05 (WRS2's internal smmcrit) and one
+# for alpha 0.01 (smmcrit01), with rows at every df from 2 to 12, then 14, 16, 18, 20,
+# 24, 30, 40 and 60, and a last row at df 200 that holds the infinite-df values, for
+# C = 2 to 28 comparisons. C = 1 is Student's t quantile at the pair's df. Between rows
+# the value is linear in 1/df; from df 200 on it is the last row; below df 2 and above
+# C = 28 the table stops with an error. For any other alpha, including 1 - 0.95
+# computed in floating point, and for C above 28, lincon calls a simulation instead
+# (WRS2's smmvalv2). The table's entries are the published ones, not recomputed
+# quantiles: `test_smm_table_against_quantiles` lists where they differ.
 SMM_TABLE_DF = (*range(2, 13), 14, 16, 18, 20, 24, 30, 40, 60, 200)
-SMM_INFINITE_DF_ROW = 200
-# Entries of the published table that differ from the rounded quantile, as the
-# fixtures show them: (alpha, C, df) -> entry. The quantile for C = 3 at df 5 is
-# 3.3992, which rounds to 3.40; edge_unbalanced a-b reproduces R only with 3.39.
-SMM_TABLE_EXCEPTIONS = {(0.05, 3, 5): 3.39}
+SMM_LAST_ROW = 200
+SMM_MAX_COMPARISONS = 28
+SMM_TABLES = {0.05: "smmcrit", 0.01: "smmcrit01"}
 
 
-def _smm_table_entry(alpha: float, n_comparisons: int, df: int) -> float:
-    """Upper ``alpha`` point of the Studentized maximum modulus, to two decimals."""
-    known = SMM_TABLE_EXCEPTIONS.get((round(alpha, 10), n_comparisons, df))
-    if known is not None:
-        return known
-    if df == SMM_INFINITE_DF_ROW:
-        # max |Z_i| over C independent standard normals: (2 Phi(c) - 1)^C = 1 - alpha
-        exact = float(stats.norm.isf((1 - (1 - alpha) ** (1 / n_comparisons)) / 2))
-    else:
-        exact = float(
-            optimize.brentq(
-                lambda c: _smm_cdf(c, n_comparisons, df) - (1 - alpha),
-                1.0,
-                50.0,
-                xtol=1e-13,
-            )
-        )
-    assert abs(exact * 100 % 1 - 0.5) > 1e-6, f"{exact} is at a rounding boundary"
-    return round(exact, 2)
+def _smm_grid(name: str) -> Row:
+    grids = {str(g["name"]): g for g in probe("probe-smm").rows("grids")}
+    return grids[name]
+
+
+@functools.cache
+def _smm_table(alpha: float) -> dict[tuple[int, int], float]:
+    """The table lincon reads at ``alpha``, {(df row, C): entry}, from probe-smm."""
+    grid = _smm_grid(SMM_TABLES[alpha])
+    table: dict[tuple[int, int], float] = {}
+    for row in grid["rows"]:
+        df = _hex(row["df_hex"])
+        if df not in SMM_TABLE_DF:
+            continue
+        for c, text in zip(grid["c_grid"], row["values_hex"], strict=True):
+            if 2 <= c <= SMM_MAX_COMPARISONS:
+                table[(int(df), int(c))] = _hex(text)
+    assert len(table) == len(SMM_TABLE_DF) * (SMM_MAX_COMPARISONS - 1)
+    return table
 
 
 def _lincon_critical_value(alpha: float, n_comparisons: int, df: float) -> float:
-    """Critical value of WRS2::lincon's pairwise CIs, as the fixtures show it."""
+    """Critical value of WRS2::lincon's pairwise CIs at a pair's Yuen ``df``."""
+    if alpha not in SMM_TABLES or n_comparisons > SMM_MAX_COMPARISONS:
+        raise NotImplementedError(
+            f"lincon simulates its critical value at alpha {alpha!r}, C {n_comparisons}"
+        )
+    if df < SMM_TABLE_DF[0]:
+        raise ValueError(f"lincon's table starts at df 2, not {df}")
+    if n_comparisons == 1:
+        return ref.t_isf(alpha / 2, df)
+    table = _smm_table(alpha)
+    if df >= SMM_LAST_ROW:
+        return table[(SMM_LAST_ROW, n_comparisons)]
     if df in SMM_TABLE_DF:
-        return _smm_table_entry(alpha, n_comparisons, int(df))
-    if not SMM_TABLE_DF[0] < df < SMM_TABLE_DF[-1]:
-        raise NotImplementedError(f"no fixture shows lincon at Yuen df {df}")
+        return table[(int(df), n_comparisons)]
     hi = next(row for row in SMM_TABLE_DF if row > df)
     lo = max(row for row in SMM_TABLE_DF if row < df)
-    at_lo = _smm_table_entry(alpha, n_comparisons, lo)
-    at_hi = _smm_table_entry(alpha, n_comparisons, hi)
+    at_lo = table[(lo, n_comparisons)]
+    at_hi = table[(hi, n_comparisons)]
     return at_lo + (1 / lo - 1 / df) / (1 / lo - 1 / hi) * (at_hi - at_lo)
 
 
-@pytest.mark.parametrize("case", _params("robust", two_groups=False))
-def test_lincon_holm(case: OracleCase) -> None:
-    # ggstatsplot 1.1.4's robust pairwise rows (WRS2::lincon, 20% trimming):
+def _adjustment_scale(method: str, m: int) -> float:
+    """The largest factor ``p.adjust`` multiplies a p-value by over ``m`` tests."""
+    if method == "none":
+        return 1.0
+    if method == "BY":
+        return m * math.fsum(1 / k for k in range(1, m + 1))
+    return float(m)
+
+
+def _lincon_alpha(case: OracleCase, row: Row) -> float:
+    """The alpha lincon ran at: always its default 0.05.
+
+    ggstatsplot 1.1.4 does not pass `conf.level` to lincon: with 0.90
+    (PlantGrowth-cl90-robust) the subtitle's CI is 90% but every pairwise row says
+    0.95 and has the 95% interval. Had it passed alpha = 1 - conf.level, lincon would
+    have simulated its critical value (probe-smm), since 1 - 0.95 is not 0.05.
+    """
+    assert _value(row, "conf.level") == 0.95, case.name
+    return 0.05
+
+
+@pytest.mark.parametrize("case", _params("robust", two_groups=False, needs="pairwise"))
+def test_lincon(case: OracleCase) -> None:
+    # ggstatsplot 1.1.4's robust pairwise rows (WRS2::lincon, the case's trimming):
     #   estimate  trimmed mean of group1 minus trimmed mean of group2
-    #   p.value   Holm over the per-pair Yuen p-values; Hochberg (lincon's own
-    #             default) does not match the PlantGrowth fixture
+    #   p.value   the case's p.adjust method over the per-pair Yuen p-values, which
+    #             WRS2 computes as 1 - pt; Hochberg (lincon's own default) does not
+    #             match the PlantGrowth fixture
     #   conf.*    estimate -/+ critical value x Yuen standard error, with the
     #             critical value at the pair's Yuen df and C = number of pairs
     #             (edge_k5: 10 pairs of 5 groups; bugs_long: 6 pairs of 4)
     levels = case.analysis_levels
+    tr = _tr(case)
+    method = _adjust_method(case)
     groups = dict(zip(levels, _groups(case), strict=True))
     pairs = [
         (levels[i], levels[j])
         for i in range(len(levels))
         for j in range(i + 1, len(levels))
     ]
-    yuen = {(g1, g2): ref.yuen(groups[g1], groups[g2], tr=0.2) for g1, g2 in pairs}
+    yuen = {(g1, g2): ref.yuen(groups[g1], groups[g2], tr=tr) for g1, g2 in pairs}
     raw = [
         2 * _r_upper_tail(float(stats.t.sf(abs(yuen[pair][0]), yuen[pair][1])))
         for pair in pairs
     ]
-    adjusted = dict(zip(pairs, ref.holm(raw), strict=True))
+    adjusted = dict(zip(pairs, _p_adjust(raw, method), strict=True))
     assert len(case.pairwise) == len(pairs)
     for row in case.pairwise:
         g1, g2 = str(row["group1"]), str(row["group2"])
         assert (g1, g2) in yuen, f"unexpected pair {g1}-{g2}"
         what = f"lincon {g1}-{g2}"
         assert row["test"] == "Yuen's trimmed means"
-        assert row["p.adjust.method"] == "Holm"
-        mean1, d1, _ = ref._trimmed_kernel(groups[g1], 0.2)
-        mean2, d2, _ = ref._trimmed_kernel(groups[g2], 0.2)
+        assert row["p.adjust.method"] == P_ADJUST_LABELS[method]
+        mean1, d1, _ = ref._trimmed_kernel(groups[g1], tr)
+        mean2, d2, _ = ref._trimmed_kernel(groups[g2], tr)
         estimate = mean1 - mean2
         _, df, _ = yuen[(g1, g2)]
-        alpha = 1 - _value(row, "conf.level")
-        half_width = _lincon_critical_value(alpha, len(pairs), df) * math.sqrt(d1 + d2)
+        alpha = _lincon_alpha(case, row)
         assert_close(
             "closed_form", estimate, _value(row, "estimate"), what=f"{what} estimate"
         )
-        # Two-sided, then Holm over the pairs: one grid step of a one-sided tail
-        # can become 2 x pairs steps here (wrs2_p).
+        # Two-sided, then the adjustment: one grid step of a one-sided tail can
+        # become 2 x the adjustment's largest factor here (wrs2_p).
         assert_close(
             "wrs2_p",
             adjusted[(g1, g2)],
             _value(row, "p.value"),
-            what=f"{what} Holm p",
-            atol_scale=2 * len(pairs),
+            what=f"{what} {method} p",
+            atol_scale=2 * _adjustment_scale(method, len(pairs)),
         )
+        low, high = _value(row, "conf.low"), _value(row, "conf.high")
+        if len(pairs) > SMM_MAX_COMPARISONS:
+            # Past the table (edge_k9, 36 pairs) lincon simulates its critical
+            # value with a seed of its own (probe-smm): the interval is still
+            # estimate -/+ c x Yuen SE, but c has no closed form to compare with.
+            assert_close("closed_form", estimate - low, high - estimate, what=what)
+            continue
+        critical = _lincon_critical_value(alpha, len(pairs), df)
+        half_width = critical * math.sqrt(d1 + d2)
+        assert_close("closed_form", estimate - half_width, low, what=f"{what} conf.low")
         assert_close(
-            "closed_form",
-            estimate - half_width,
-            _value(row, "conf.low"),
-            what=f"{what} conf.low",
-        )
-        assert_close(
-            "closed_form",
-            estimate + half_width,
-            _value(row, "conf.high"),
-            what=f"{what} conf.high",
+            "closed_form", estimate + half_width, high, what=f"{what} conf.high"
         )
 
 
@@ -896,3 +985,286 @@ def test_omega_probe() -> None:
             _hex(accurate["bound"]["hex"]),
             what=f"{what} accurate low",
         )
+
+
+# probe-wrs2p: WRS2's p-values are 1 - cdf --------------------------------------------
+
+
+def _wrs2p_rows(section: str) -> list[Row]:
+    return probe("probe-wrs2p").rows(section)
+
+
+def test_wrs2_p_is_one_minus_cdf() -> None:
+    # yuen and t1way on constructed data over |t| from 0 to about 40 at small,
+    # moderate and large df, and lincon's unadjusted pairs: every p is exactly R's
+    # 1 - pt (doubled) or 1 - pf, and the exact upper tail differs on some rows, so
+    # the probe tells the two apart. inferplot's rule, `_r_upper_tail` of the exact
+    # tail, matches each within `wrs2_p`.
+    differ = 0
+    for row in _wrs2p_rows("yuen"):
+        p = _hex(row["p_value_hex"])
+        assert p == 2 * _hex(row["one_minus_cdf_hex"]), row
+        differ += p != 2 * _hex(row["upper_tail_hex"])
+        t, df = abs(_hex(row["test_hex"])), _hex(row["df_hex"])
+        expected = 2 * _r_upper_tail(float(stats.t.sf(t, df)))
+        assert_close(
+            "wrs2_p", expected, p, what=f"yuen {row['n']} {row['shift']}", atol_scale=2
+        )
+    assert differ > 0
+    differ = 0
+    for row in _wrs2p_rows("t1way"):
+        p = _hex(row["p_value_hex"])
+        assert p == _hex(row["one_minus_cdf_hex"]), row
+        differ += p != _hex(row["upper_tail_hex"])
+        f_stat, df1, df2 = (_hex(row[k]) for k in ("test_hex", "df1_hex", "df2_hex"))
+        expected = _r_upper_tail(float(stats.f.sf(f_stat, df1, df2)))
+        assert_close("wrs2_p", expected, p, what=f"t1way {row['n']} {row['shift']}")
+    assert differ > 0
+    for row in _wrs2p_rows("lincon"):
+        for pair in row["pairs"]:
+            # lincon's unadjusted p is the pair's Yuen p; its default (Hochberg) is
+            # not what ggstatsplot reports.
+            p = _hex(pair["p_value_hex"])
+            assert p == _hex(pair["yuen_p_value_hex"]), pair
+            assert p == 2 * _hex(pair["one_minus_cdf_hex"]), pair
+
+
+# probe-akp: the AKP scaling constant ------------------------------------------------
+
+
+def _winsorized_normal_sd(tr: float) -> float:
+    """SD of a standard normal winsorized at its tr and 1 - tr quantiles.
+
+    With z the upper tr quantile: sigma^2 = 1 - 2 tr - 2 z phi(z) + 2 tr z^2.
+    """
+    if tr == 0:
+        return 1.0
+    z = float(stats.norm.isf(tr))
+    return math.sqrt(1 - 2 * tr - 2 * z * float(stats.norm.pdf(z)) + 2 * tr * z * z)
+
+
+def test_akp_constant() -> None:
+    # akp.effect(EQVAR = FALSE) = c(tr) x (trimmed mean 1 - trimmed mean 2) /
+    # winsorized SD of group 1, with c(tr) the same on every dataset (to a few ulps)
+    # and within akp_constant of the winsorized-normal SD, but not equal
+    # to it: at tr 0.2 the offset is 1.2e-9, above closed_form.
+    akp = probe("probe-akp")
+    by_tr: dict[float, list[float]] = {}
+    for row in akp.rows("rows"):
+        effect = row["akp"][0]
+        assert effect["EQVAR"] is False
+        ratio = effect["ratio_to_group1_hex"]
+        if ratio is None or not math.isfinite(_hex(ratio)):
+            continue  # a winsorized SD of 0 (ties at tr 0.4)
+        by_tr.setdefault(float(row["tr"]), []).append(_hex(ratio))
+    for tr, ratios in by_tr.items():
+        assert max(ratios) - min(ratios) <= 4 * math.ulp(max(ratios)), (tr, ratios)
+    constants = [
+        (_hex(r["tr_hex"]), _hex(r["ratio_to_group1_hex"]))
+        for r in akp.rows("constants")
+    ]
+    assert len(constants) == 49
+    for tr, constant in [*constants, *((t, v[0]) for t, v in by_tr.items())]:
+        exact = _winsorized_normal_sd(tr)
+        assert_close("akp_constant", exact, constant, what=f"AKP constant at tr {tr}")
+    at_02 = by_tr[0.2][0]
+    assert not is_close("closed_form", at_02, _winsorized_normal_sd(0.2))
+
+
+# probe-smm: the table behind lincon's CIs -------------------------------------------
+
+
+@pytest.mark.parametrize("alpha", sorted(SMM_TABLES))
+def test_smm_table_rule(alpha: float) -> None:
+    # WRS2's table function on its whole df x C grid follows `_lincon_critical_value`:
+    # C = 1 is Student's t quantile, rows in between are linear in 1/df, df 200 and
+    # above give the last row, and df below 2 or C above 28 is an error.
+    grid = _smm_grid(SMM_TABLES[alpha])
+    assert not grid["random"]
+    assert not grid["small_grid"]
+    c_grid = [int(c) for c in grid["c_grid"]]
+    assert c_grid == list(range(1, 51))
+    for row in grid["rows"]:
+        df = _hex(row["df_hex"])
+        errors = {int(e["C"]): str(e["error"]) for e in row["errors"]}
+        for c, text in zip(c_grid, row["values_hex"], strict=True):
+            what = f"alpha {alpha} C {c} df {df}"
+            # C is checked first: above 28 that error wins at any df.
+            if c > SMM_MAX_COMPARISONS:
+                assert text == "NA", what
+                assert "C must be" in errors[c], what
+                continue
+            if df < 2:
+                assert text == "NA", what
+                assert "degrees of freedom" in errors[c], what
+                continue
+            assert c not in errors, what
+            expected = _lincon_critical_value(alpha, c, df)
+            assert_close("closed_form", expected, _hex(text), what=what)
+            if c >= 2 and df in SMM_TABLE_DF:
+                assert abs(_hex(text) * 100 - round(_hex(text) * 100)) < 1e-9, what
+
+
+def test_smm_lincon_backout() -> None:
+    # lincon on 2 to 10 groups: its half-width over the pair's Yuen SE is the table's
+    # value at alpha 0.05 and 0.01 with C <= 28. Any other alpha (1 - 0.95 included)
+    # and C = 45 give something else: lincon's simulation.
+    entries = probe("probe-smm").rows("lincon")
+    assert len(entries) == 9 * 6
+    tabled = 0
+    for entry in entries:
+        result = entry["result"]
+        assert result["error"] is None, entry
+        assert len(result["pairs"]) == entry["comparisons"]
+        alpha = _hex(entry["alpha_hex"])
+        in_table = alpha in SMM_TABLES and entry["comparisons"] <= SMM_MAX_COMPARISONS
+        for pair in result["pairs"]:
+            got = _hex(pair["critical_value_hex"])
+            what = f"{entry['groups']} groups alpha {entry['alpha']} {pair['group1']}"
+            if in_table:
+                tabled += 1
+                want = _lincon_critical_value(
+                    alpha, int(entry["comparisons"]), _hex(pair["yuen_df_hex"])
+                )
+                assert_close("closed_form", want, got, what=what)
+            elif alpha in SMM_TABLES:
+                with pytest.raises(NotImplementedError):
+                    _lincon_critical_value(
+                        alpha, int(entry["comparisons"]), _hex(pair["yuen_df_hex"])
+                    )
+    assert tabled == 2 * sum(k * (k - 1) // 2 for k in range(2, 9))
+    # The simulation does not depend on R's seed: lincon seeds it itself.
+    runs: dict[tuple[int, str], set[tuple[str, ...]]] = {}
+    for run in probe("probe-smm").rows("seed_dependence"):
+        assert run["error"] is None, run
+        key = (int(run["groups"]), str(run["alpha"]))
+        runs.setdefault(key, set()).add(tuple(run["ci_upper_hex"]))
+    assert len(runs) == 3
+    assert all(len(bounds) == 1 for bounds in runs.values()), runs
+
+
+# The table entries that differ from round(quantile, 2) by more than one unit in the
+# last place, where they look like transcription errors: (alpha, C, df) -> entry
+# (df 200 is the infinite-df row). Measured with `_smm_cdf` against probe-smm.
+SMM_TABLE_OUTLIERS = {
+    (0.01, 6, 12): 0.99,
+    (0.01, 9, 14): 0.05,
+    (0.01, 15, 2): 20.99,
+    (0.01, 16, 2): 20.99,
+    (0.01, 16, 200): 0.42,
+    (0.01, 17, 2): 20.99,
+    (0.01, 17, 200): 0.44,
+    (0.01, 18, 2): 20.99,
+    (0.01, 19, 2): 20.99,
+    (0.01, 26, 3): 12.07,
+    (0.05, 9, 2): 8.83,
+}
+
+
+def _smm_quantile(alpha: float, n_comparisons: int, df: int) -> float:
+    if df == SMM_LAST_ROW:
+        # max |Z_i| over C independent standard normals: (2 Phi(c) - 1)^C = 1 - alpha
+        return float(stats.norm.isf((1 - (1 - alpha) ** (1 / n_comparisons)) / 2))
+    return float(
+        optimize.brentq(
+            lambda c: _smm_cdf(c, n_comparisons, df) - (1 - alpha),
+            0.5,
+            80.0,
+            xtol=1e-12,
+        )
+    )
+
+
+@pytest.mark.parametrize("alpha", sorted(SMM_TABLES))
+def test_smm_table_against_quantiles(alpha: float) -> None:
+    # Every entry of the published table is the Studentized maximum modulus quantile
+    # to within 0.01 (one unit in the last place, from rounding), except the
+    # outliers above. With all pairs compared ggstatsplot uses alpha 0.05 and
+    # C = 3, 6, 10, 15, 21 or 28, where no outlier lies.
+    table = _smm_table(alpha)
+    outliers = {}
+    for (df, c), entry in table.items():
+        quantile = _smm_quantile(alpha, c, df)
+        if abs(entry - quantile) > 0.01 + 1e-9:
+            outliers[(alpha, c, df)] = entry
+    assert outliers == {k: v for k, v in SMM_TABLE_OUTLIERS.items() if k[0] == alpha}
+
+
+# probe-ranks: Mann-Whitney, rank-biserial, Kruskal-Wallis and Dunn on ties ----------
+
+
+def test_ranks_probe_two_samples() -> None:
+    # wilcox.test(exact = FALSE) with and without the continuity correction, every
+    # alternative, against SciPy's normal approximation with the tie-corrected
+    # variance; effectsize::rank_biserial against 2U/(n1 n2) - 1 with the Fisher-z CI
+    # that ignores ties.
+    for entry in probe("probe-ranks").rows("two_sample"):
+        a = np.array([_hex(h) for h in entry["a_hex"]])
+        b = np.array([_hex(h) for h in entry["b_hex"]])
+        for test in entry["wilcox"]:
+            what = f"{entry['name']} {test['alternative']} correct={test['correct']}"
+            assert test["error"] is None, what
+            got = stats.mannwhitneyu(
+                a,
+                b,
+                alternative=SCIPY_ALTERNATIVE[str(test["alternative"])],
+                method="asymptotic",
+                use_continuity=bool(test["correct"]),
+            )
+            assert_close(
+                "closed_form",
+                float(got.statistic),
+                _hex(test["statistic_hex"]),
+                what=what,
+            )
+            assert_close(
+                "closed_form", float(got.pvalue), _hex(test["p_value_hex"]), what=what
+            )
+        n1, n2 = a.size, b.size
+        u = float(stats.mannwhitneyu(a, b, method="asymptotic").statistic)
+        r = 2 * u / (n1 * n2) - 1
+        se = math.sqrt((n1 + n2 + 1) / (3 * n1 * n2))
+        for out in entry["rank_biserial"]:
+            what = f"{entry['name']} rank-biserial {out['alternative']}"
+            assert out["error"] is None, what
+            assert_close("closed_form", r, _hex(out["estimate_hex"]), what=what)
+            side = str(out["alternative"])
+            q = float(stats.norm.isf(0.025 if side == "two.sided" else 0.05))
+            z = math.atanh(r)
+            low = -1.0 if side == "less" else math.tanh(z - q * se)
+            high = 1.0 if side == "greater" else math.tanh(z + q * se)
+            assert_close("closed_form", low, _hex(out["conf_low_hex"]), what=what)
+            assert_close("closed_form", high, _hex(out["conf_high_hex"]), what=what)
+
+
+def test_ranks_probe_k_samples() -> None:
+    entries = probe("probe-ranks").rows("k_sample")
+    for entry in entries:
+        levels = [str(v) for v in entry["levels"]]
+        groups = [np.array([_hex(h) for h in g]) for g in entry["groups_hex"]]
+        assert len(groups) == len(levels)
+        h = stats.kruskal(*groups)
+        assert_close(
+            "closed_form",
+            float(h.statistic),
+            _hex(entry["kruskal_statistic_hex"]),
+            what=f"{entry['name']} H",
+        )
+        assert_close(
+            "closed_form",
+            float(h.pvalue),
+            _hex(entry["kruskal_p_value_hex"]),
+            what=f"{entry['name']} p",
+        )
+        pairs, z_values = _dunn(groups)
+        assert len(entry["dunn_pairs"]) == len(pairs)
+        for (i, j), z, pair in zip(pairs, z_values, entry["dunn_pairs"], strict=True):
+            what = f"{entry['name']} Dunn {pair['group1']}-{pair['group2']}"
+            assert (pair["group1"], pair["group2"]) == (levels[i], levels[j])
+            assert_close("closed_form", z, abs(_hex(pair["statistic_hex"])), what=what)
+            assert_close(
+                "closed_form",
+                float(2 * stats.norm.sf(z)),
+                _hex(pair["p_value_hex"]),
+                what=what,
+            )

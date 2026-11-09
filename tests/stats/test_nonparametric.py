@@ -262,7 +262,8 @@ def test_invariances(groups: list[FloatArray]) -> None:
 def test_bootstrap_invariances(groups: list[FloatArray]) -> None:
     if _all_tied(groups) or _tied_resample_possible(groups):
         # Undefined (every value tied) or possibly undefined (a resample with every
-        # value tied): checked in test_all_values_tied and test_tied_resample_raises.
+        # value tied): checked in test_all_values_tied and
+        # test_tied_resamples_are_left_out.
         return
     base = rank_epsilon_squared(groups, seed=1)
     assert 0.0 <= base.conf_low <= 1.0
@@ -333,11 +334,26 @@ def test_constant_group() -> None:
     assert 0.0 < rank_epsilon_squared(groups).conf_low < 1.0
 
 
-def test_tied_resample_raises() -> None:
-    # The value 1 is in every group and the groups are tiny: about 9% of the
-    # stratified resamples have every value tied, where epsilon is undefined.
-    with pytest.raises(ValueError, match="bootstrap resamples have every value tied"):
-        rank_epsilon_squared([np.array([1.0, 1.0, 2.0]), np.array([1.0, 1.0, 3.0])])
+def test_tied_resamples_are_left_out() -> None:
+    # The value 1 is in every group and the groups are tiny: (2/3)^6 = 8.8% of the
+    # stratified resamples have every value tied, where epsilon is undefined. They
+    # are left out of the percentile and counted (D54, R's rule per the oracle).
+    groups = [np.array([1.0, 1.0, 2.0]), np.array([1.0, 1.0, 3.0])]
+    result = rank_epsilon_squared(groups, seed=4)
+    assert result.resamples == 2000
+    assert 120 < result.undefined_resamples < 230
+    again = rank_epsilon_squared(groups[::-1], seed=4)
+    assert again == result
+    assert 0.0 <= result.conf_low <= result.estimate
+    # Too few resamples left for the order statistic the level needs: 1,821 or
+    # fewer defined values cannot give the 0.05% quantile.
+    with pytest.raises(ValueError, match=r"every value tied, which leaves \d+"):
+        rank_epsilon_squared(groups, conf_level=0.9995, seed=4)
+
+
+def test_no_tied_resample_is_counted_as_zero() -> None:
+    clean = rank_epsilon_squared([np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0])])
+    assert clean.undefined_resamples == 0
 
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])

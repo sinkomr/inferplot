@@ -1,0 +1,284 @@
+{
+  "schema_version": 2,
+  "name": "ggbetweenstats-mtcars-am-digits3-robust",
+  "function": "ggbetweenstats",
+  "call": "ggstatsplot::ggbetweenstats(data = data, x = am, y = mpg, type = \"robust\", digits = 3L)",
+  "dataset": {
+    "file": "mtcars.csv",
+    "sha256": "f188c5614db7341420cc36d42a8ab4b6ba50e4749757a3396fa93df199b853ce",
+    "rows": 32,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "am",
+    "y": "mpg",
+    "type": "robust",
+    "digits": 3
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "0",
+    "1"
+  ],
+  "n_per_level": {
+    "0": 19,
+    "1": 13
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(italic(\"t\")[\"Yuen\"] * \"(\" * 11.849 * \")\" == \"3.477\", italic(p) == \"0.005\", widehat(delta)[\"R\"]^\"AKP\" == \"-1.723\", CI[\"95%\"] ~ \"[\" * \"-3.626\", \"-0.692\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 3.4770999428939,
+        "df.error": 11.8492269607814,
+        "p.value": 0.00465297049830982,
+        "method": "Yuen's test on trimmed means for independent samples",
+        "effectsize": "Algina-Keselman-Penfield robust standardized difference",
+        "estimate": -1.72279841775037,
+        "conf.level": 0.95,
+        "conf.low": -3.62634814875215,
+        "conf.high": -0.692165780143989,
+        "n.obs": 32,
+        "expression": "list(italic(\"t\")[\"Yuen\"] * \"(\" * 11.849 * \")\" == \"3.477\", italic(p) == \"0.005\", widehat(delta)[\"R\"]^\"AKP\" == \"-1.723\", CI[\"95%\"] ~ \"[\" * \"-3.626\", \"-0.692\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...4",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "am": "0",
+          "mpg": 17.1538461538462,
+          "std.dev": 3.83396638556131,
+          "iqr": 4.5,
+          "conf.low": 15.6122058823529,
+          "conf.high": 18.9569117647059,
+          "min": 10.4,
+          "max": 24.4,
+          "skewness": 0.0164577959472374,
+          "kurtosis": -0.333935256758398,
+          "n.obs": 19,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"17.154\")",
+          "n.expression": "0\n(n = 19)"
+        },
+        {
+          "am": "1",
+          "mpg": 24.4444444444444,
+          "std.dev": 6.16650380935334,
+          "iqr": 10.05,
+          "conf.low": 20.5052272727273,
+          "conf.high": 27.8818181818182,
+          "min": 15,
+          "max": 33.9,
+          "skewness": 0.0672942351398124,
+          "kurtosis": -1.15860821432552,
+          "n.obs": 13,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"24.444\")",
+          "n.expression": "1\n(n = 13)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "am": "0",
+          "mpg": 17.1538461538462,
+          "std.dev": 3.83396638556131,
+          "iqr": 4.5,
+          "conf.low": 15.6122058823529,
+          "conf.high": 18.9569117647059,
+          "min": 10.4,
+          "max": 24.4,
+          "skewness": 0.0164577959472374,
+          "kurtosis": -0.333935256758398,
+          "n.obs": 19,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"17.154\")",
+          "n.expression": "0\n(n = 19)"
+        },
+        {
+          "am": "1",
+          "mpg": 24.4444444444444,
+          "std.dev": 6.16650380935334,
+          "iqr": 10.05,
+          "conf.low": 20.5052272727273,
+          "conf.high": 27.8818181818182,
+          "min": 15,
+          "max": 33.9,
+          "skewness": 0.0672942351398124,
+          "kurtosis": -1.15860821432552,
+          "n.obs": 13,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"24.444\")",
+          "n.expression": "1\n(n = 13)"
+        }
+      ],
+      "params": null,
+      "built": null
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "effect size confidence interval",
+    "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+    "data_order": "rows ordered by the levels of x, as statsExpressions passes them",
+    "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": -1.72279841775037,
+      "conf_low": -3.62634814875215,
+      "conf_high": -0.692165780143989,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+          "values": [
+            -1.72279841775037,
+            -3.62634814875215,
+            -0.692165780143989
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = R, alpha = 0.05)",
+          "values": [
+            -1.72279841775037,
+            -3.62634814875215,
+            -0.692165780143989
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 1 - 0.95)",
+          "values": [
+            -1.30126615244554,
+            -2.03673912965198,
+            -0.621512920863741
+          ],
+          "matches": false
+        },
+        {
+          "call": "WRS2::akp.effect(y ~ x, data, EQVAR = TRUE, tr = 0.2, nboot = R, alpha = 0.05)",
+          "values": [
+            -1.30126615244554,
+            -2.03673912965198,
+            -0.621512920863741
+          ],
+          "matches": false
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": -1.72279841775037,
+    "conf_low": -3.76225908298608,
+    "conf_high": -0.634026162024562,
+    "raw": {
+      "AKPeffect": -1.72279841775037,
+      "AKPci": [-3.76225908298608, -0.634026162024562],
+      "AKPci_dim": null
+    },
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": -1.72279841775037,
+      "estimate_sd": 0,
+      "conf_low_mean": -3.77062324144997,
+      "conf_low_sd": 0.0832653548803596,
+      "conf_high_mean": -0.635854505511448,
+      "conf_high_sd": 0.02734310618191
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

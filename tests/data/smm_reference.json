@@ -1,0 +1,893 @@
+{
+ "description": "Studentized maximum modulus quantiles, 40-digit mpmath (tools/reference/smm_mpmath.py)",
+ "rows": [
+  {
+   "comparisons": 1,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "12.7062047361747046460216799789"
+  },
+  {
+   "comparisons": 1,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "6.01666310442793192185887513384"
+  },
+  {
+   "comparisons": 1,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "4.30265272974946385232094389262"
+  },
+  {
+   "comparisons": 1,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "2.86752070719118946371551927973"
+  },
+  {
+   "comparisons": 1,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "2.54679149891847017707055611135"
+  },
+  {
+   "comparisons": 1,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "2.2281388519862747483954906632"
+  },
+  {
+   "comparisons": 1,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "2.10218824292819330141809802464"
+  },
+  {
+   "comparisons": 1,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "2.01385744217347474235172644775"
+  },
+  {
+   "comparisons": 1,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "1.97993040508244084673127707078"
+  },
+  {
+   "comparisons": 1,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "1.96155738499400322398660644207"
+  },
+  {
+   "comparisons": 1,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "1.95998770753460963859188298634"
+  },
+  {
+   "comparisons": 2,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "17.9831728496092328009056752948"
+  },
+  {
+   "comparisons": 2,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "8.06632432697656164661780430061"
+  },
+  {
+   "comparisons": 2,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "5.57139490960036757978676287827"
+  },
+  {
+   "comparisons": 2,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "3.51133686374804249284179543408"
+  },
+  {
+   "comparisons": 2,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "3.05692770467717213739411685138"
+  },
+  {
+   "comparisons": 2,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "2.60910423358063750824312588413"
+  },
+  {
+   "comparisons": 2,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "2.43347867417193468583034054701"
+  },
+  {
+   "comparisons": 2,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "2.31093630387520543478092230376"
+  },
+  {
+   "comparisons": 2,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "2.26403243785407370009502409904"
+  },
+  {
+   "comparisons": 2,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "2.23867434996651430555124036768"
+  },
+  {
+   "comparisons": 2,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "2.23650936285598037151955663012"
+  },
+  {
+   "comparisons": 3,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "21.1433550400121683570586768689"
+  },
+  {
+   "comparisons": 3,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "9.3052926104563266939450387728"
+  },
+  {
+   "comparisons": 3,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "6.34047670671873209942434118246"
+  },
+  {
+   "comparisons": 3,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "3.89782732346414181525905239397"
+  },
+  {
+   "comparisons": 3,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "3.35943583248583465971016604728"
+  },
+  {
+   "comparisons": 3,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "2.82885523022483475470991485586"
+  },
+  {
+   "comparisons": 3,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "2.62083228072719534679529629011"
+  },
+  {
+   "comparisons": 3,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "2.47578337895902760012103892737"
+  },
+  {
+   "comparisons": 3,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "2.42031019163190844085051158468"
+  },
+  {
+   "comparisons": 3,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "2.39033511057046645510831686851"
+  },
+  {
+   "comparisons": 3,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "2.38777655241226162588426932287"
+  },
+  {
+   "comparisons": 6,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "26.3707029654364360638597323545"
+  },
+  {
+   "comparisons": 6,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "11.3868070265150356907158260855"
+  },
+  {
+   "comparisons": 6,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "7.64539426851530175440648475598"
+  },
+  {
+   "comparisons": 6,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "4.56035292482778978148914361204"
+  },
+  {
+   "comparisons": 6,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "3.87690124144617094752817529412"
+  },
+  {
+   "comparisons": 6,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "3.19928060066033110716794811094"
+  },
+  {
+   "comparisons": 6,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "2.93185159335424341063960491324"
+  },
+  {
+   "comparisons": 6,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "2.74474293441897696278500873962"
+  },
+  {
+   "comparisons": 6,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "2.67310182365713473785650949914"
+  },
+  {
+   "comparisons": 6,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "2.63439187769201241772506423883"
+  },
+  {
+   "comparisons": 6,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "2.63108820932061128613822784709"
+  },
+  {
+   "comparisons": 10,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "29.9876192081875938290179904753"
+  },
+  {
+   "comparisons": 10,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "12.8493318220961253957163403033"
+  },
+  {
+   "comparisons": 10,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "8.57273127145388652950441770614"
+  },
+  {
+   "comparisons": 10,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "5.04011786377574049154222999338"
+  },
+  {
+   "comparisons": 10,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "4.25319241123277818320549359785"
+  },
+  {
+   "comparisons": 10,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "3.46741135341718771206606704497"
+  },
+  {
+   "comparisons": 10,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.15441034479872345405413024514"
+  },
+  {
+   "comparisons": 10,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "2.93402631100674045769400675695"
+  },
+  {
+   "comparisons": 10,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "2.84936999924717834482677388147"
+  },
+  {
+   "comparisons": 10,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "2.80359167660725344493863984936"
+  },
+  {
+   "comparisons": 10,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "2.79968426798297304586986894975"
+  },
+  {
+   "comparisons": 28,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "36.6249221525449812097273942675"
+  },
+  {
+   "comparisons": 28,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "15.5689276176747393817092357279"
+  },
+  {
+   "comparisons": 28,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "10.3160093401219565749864223338"
+  },
+  {
+   "comparisons": 28,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "5.96309315541957680200309498187"
+  },
+  {
+   "comparisons": 28,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "4.98398441680024475530747849556"
+  },
+  {
+   "comparisons": 28,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "3.99184359566339855555494727982"
+  },
+  {
+   "comparisons": 28,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.58733400597998697253436676571"
+  },
+  {
+   "comparisons": 28,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.29652825857233443423557741578"
+  },
+  {
+   "comparisons": 28,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.18330006395389555984196614677"
+  },
+  {
+   "comparisons": 28,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.12181471892885377997276382334"
+  },
+  {
+   "comparisons": 28,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.1165617211762820593710096387"
+  },
+  {
+   "comparisons": 29,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "36.8368281044472133193292485858"
+  },
+  {
+   "comparisons": 29,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "15.6563430909148185626968928047"
+  },
+  {
+   "comparisons": 29,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "10.372368896732946581224294723"
+  },
+  {
+   "comparisons": 29,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "5.99334012717749261308787836826"
+  },
+  {
+   "comparisons": 29,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "5.00809302026725667267095671198"
+  },
+  {
+   "comparisons": 29,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "4.00928415237992118855208247639"
+  },
+  {
+   "comparisons": 29,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.60172937935152997358633133127"
+  },
+  {
+   "comparisons": 29,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.30848746096420883794873014264"
+  },
+  {
+   "comparisons": 29,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.19423926828131638524394604626"
+  },
+  {
+   "comparisons": 29,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.1321868291011377318572796798"
+  },
+  {
+   "comparisons": 29,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.12688511761866639827417819893"
+  },
+  {
+   "comparisons": 36,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "38.1235525500402045210772837291"
+  },
+  {
+   "comparisons": 36,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "16.1877678967041891491159133591"
+  },
+  {
+   "comparisons": 36,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "10.7153514927194322392837608333"
+  },
+  {
+   "comparisons": 36,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "6.17788798829628755622971601554"
+  },
+  {
+   "comparisons": 36,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "5.15539486877422947092082734979"
+  },
+  {
+   "comparisons": 36,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "4.11606672233024267823674058361"
+  },
+  {
+   "comparisons": 36,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.68991002274817780211406330044"
+  },
+  {
+   "comparisons": 36,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.38165239011566846142507799621"
+  },
+  {
+   "comparisons": 36,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.26106300242593526133601593283"
+  },
+  {
+   "comparisons": 36,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.19547303377459910543662007703"
+  },
+  {
+   "comparisons": 36,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.18986719860378666707107459931"
+  },
+  {
+   "comparisons": 45,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "39.418487691732844939587207543"
+  },
+  {
+   "comparisons": 45,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "16.7235880872623783944571448927"
+  },
+  {
+   "comparisons": 45,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "11.0617470341668209949704694222"
+  },
+  {
+   "comparisons": 45,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "6.36505664539887161220615724507"
+  },
+  {
+   "comparisons": 45,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "5.30513748399508496490748847945"
+  },
+  {
+   "comparisons": 45,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "4.22501414995968836309998782505"
+  },
+  {
+   "comparisons": 45,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.77997533793740982872409799472"
+  },
+  {
+   "comparisons": 45,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.45624154473904334320919938918"
+  },
+  {
+   "comparisons": 45,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.32901406523821586533233265023"
+  },
+  {
+   "comparisons": 45,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.25969721798342114547415393184"
+  },
+  {
+   "comparisons": 45,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.25377048812889380233660420242"
+  },
+  {
+   "comparisons": 66,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "41.5680857031814985022233076987"
+  },
+  {
+   "comparisons": 66,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "17.6150053071048215277763543583"
+  },
+  {
+   "comparisons": 66,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "11.6391605691391287553958377507"
+  },
+  {
+   "comparisons": 66,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "6.67863379755213620178444155844"
+  },
+  {
+   "comparisons": 66,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "5.55674365505912279202788628409"
+  },
+  {
+   "comparisons": 66,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "4.40896932210705218817015104342"
+  },
+  {
+   "comparisons": 66,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "3.93233858179653040761127116946"
+  },
+  {
+   "comparisons": 66,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.58219708261032204139717137379"
+  },
+  {
+   "comparisons": 66,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.44338510006744873252270859042"
+  },
+  {
+   "comparisons": 66,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.36749907454864429279993669655"
+  },
+  {
+   "comparisons": 66,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.3610053524535269202129545039"
+  },
+  {
+   "comparisons": 120,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "44.756866702597879365406537325"
+  },
+  {
+   "comparisons": 120,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "18.9411054625750681678177966512"
+  },
+  {
+   "comparisons": 120,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "12.500335894532393356902042113"
+  },
+  {
+   "comparisons": 120,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "7.14947326993775134096251903305"
+  },
+  {
+   "comparisons": 120,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "5.9360593746184044987423006163"
+  },
+  {
+   "comparisons": 120,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "4.68833292418682000268868499732"
+  },
+  {
+   "comparisons": 120,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "4.16457572900520711279931797996"
+  },
+  {
+   "comparisons": 120,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "3.77393046617742526718217618502"
+  },
+  {
+   "comparisons": 120,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.61666811723975689130771564009"
+  },
+  {
+   "comparisons": 120,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.53011987709592177249226517248"
+  },
+  {
+   "comparisons": 120,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.52270159346632102270598403994"
+  },
+  {
+   "comparisons": 300,
+   "df": "1",
+   "conf_level": "0.95",
+   "quantile": "49.3070436620588842391546169407"
+  },
+  {
+   "comparisons": 300,
+   "df": "1.5",
+   "conf_level": "0.95",
+   "quantile": "20.8392763199434961371155271367"
+  },
+  {
+   "comparisons": 300,
+   "df": "2",
+   "conf_level": "0.95",
+   "quantile": "13.7365323606133852204003132665"
+  },
+  {
+   "comparisons": 300,
+   "df": "3.7",
+   "conf_level": "0.95",
+   "quantile": "7.83057589016053096370898265709"
+  },
+  {
+   "comparisons": 300,
+   "df": "5.16",
+   "conf_level": "0.95",
+   "quantile": "6.48741608298202699818931930676"
+  },
+  {
+   "comparisons": 300,
+   "df": "10",
+   "conf_level": "0.95",
+   "quantile": "5.0983003242970324130475786525"
+  },
+  {
+   "comparisons": 300,
+   "df": "17.85",
+   "conf_level": "0.95",
+   "quantile": "4.50745734417238634794258771082"
+  },
+  {
+   "comparisons": 300,
+   "df": "45.2",
+   "conf_level": "0.95",
+   "quantile": "4.05726381572184229451437782318"
+  },
+  {
+   "comparisons": 300,
+   "df": "120",
+   "conf_level": "0.95",
+   "quantile": "3.8712711456394766314852222701"
+  },
+  {
+   "comparisons": 300,
+   "df": "1490",
+   "conf_level": "0.95",
+   "quantile": "3.76751792620403449077345997296"
+  },
+  {
+   "comparisons": 300,
+   "df": "1e5",
+   "conf_level": "0.95",
+   "quantile": "3.75859393231855633586973190667"
+  },
+  {
+   "comparisons": 36,
+   "df": "12.3",
+   "conf_level": "0.9",
+   "quantile": "3.51599856620110326686635122643"
+  },
+  {
+   "comparisons": 36,
+   "df": "12.3",
+   "conf_level": "0.99",
+   "quantile": "4.89153774447215877158477163825"
+  },
+  {
+   "comparisons": 45,
+   "df": "2",
+   "conf_level": "0.99",
+   "quantile": "25.0234890116581631415144949255"
+  },
+  {
+   "comparisons": 3,
+   "df": "5",
+   "conf_level": "0.5",
+   "quantile": "1.35973559215293624012974668803"
+  },
+  {
+   "comparisons": 1,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "1.95996398454005423552459443052"
+  },
+  {
+   "comparisons": 2,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "2.23647664455779231903707422558"
+  },
+  {
+   "comparisons": 3,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "2.38773788707081551220111246463"
+  },
+  {
+   "comparisons": 6,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "2.63103828453677825161143847687"
+  },
+  {
+   "comparisons": 10,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "2.79962521930109644664650208736"
+  },
+  {
+   "comparisons": 28,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.11648233412568331158172617283"
+  },
+  {
+   "comparisons": 29,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.12680499415801506897729491141"
+  },
+  {
+   "comparisons": 36,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.18978247747663332115634034314"
+  },
+  {
+   "comparisons": 45,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.25368091540251723002220498848"
+  },
+  {
+   "comparisons": 66,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.36090720631517381657527404339"
+  },
+  {
+   "comparisons": 120,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.52258946389665939311543227866"
+  },
+  {
+   "comparisons": 300,
+   "df": "inf",
+   "conf_level": "0.95",
+   "quantile": "3.75845901976110266528220344462"
+  }
+ ]
+}

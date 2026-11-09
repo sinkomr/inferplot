@@ -1,0 +1,1406 @@
+{
+  "schema_version": 2,
+  "name": "probe-ranks",
+  "kind": "probe",
+  "description": "wilcox.test (exact = FALSE), effectsize::rank_biserial, kruskal.test and kwAllPairsDunnTest on tied data",
+  "datasets": [
+    {
+      "file": "edge_ties.csv",
+      "sha256": "e62dd82fa5c89f867fa550061f1ffb1421caea5635eca240457c1ae2b8298d8e"
+    },
+    {
+      "file": "InsectSprays.csv",
+      "sha256": "81eefb0494d23ea6e376a17cc8a0a3a4aba50486bf0ffc8f2d8492c7169b8929"
+    },
+    {
+      "file": "mtcars.csv",
+      "sha256": "f188c5614db7341420cc36d42a8ab4b6ba50e4749757a3396fa93df199b853ce"
+    },
+    {
+      "file": "edge_k2.csv",
+      "sha256": "0e1e0599e5699efd3d3a44b661b200e7e4c9be75a40749950e2c703ab9016528"
+    }
+  ],
+  "two_sample": [
+    {
+      "name": "edge_ties_a_b",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2"
+      ],
+      "b_hex": [
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.5a5ad5c89a2f6p-3",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.421468c2a07a6p-3",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.5a5ad5c89a2f6p-4",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.421468c2a07a6p-4",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.da9c45975b8c8p-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1p+5",
+          "p_value_hex": "0x1.d7bd72e7abf0bp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.70a3d70a3d70bp-2",
+          "conf_low_hex": "-0x1.6d9ad9e1f80b1p-1",
+          "conf_high_hex": "0x1.2037dc9ba7592p-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.70a3d70a3d70bp-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.dd10afb945ebdp-5",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.70a3d70a3d70bp-2",
+          "conf_low_hex": "-0x1.576a3c43eaf6ap-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "edge_ties_a_c",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2"
+      ],
+      "b_hex": [
+        "0x1p+0",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.78c8c6f1d38f1p-2",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.63d5f2b214504p-2",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.ac16d18565af2p-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.a70a83537aebfp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.78c8c6f1d38f1p-3",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.63d5f2b214504p-3",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.eb851eb851eb8p-3",
+          "conf_low_hex": "-0x1.118daa4647244p-2",
+          "conf_high_hex": "0x1.493bec032b031p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "0x1.eb851eb851eb8p-3",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.2ed858f7a64b5p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "0x1.eb851eb851eb8p-3",
+          "conf_low_hex": "-0x1.8152179af305dp-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "edge_ties_b_c",
+      "a_hex": [
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2"
+      ],
+      "b_hex": [
+        "0x1p+0",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.ac5cae0cc5946p-6",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.832dd2d8aa7a7p-6",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.fa8a18721947bp-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.f9f348b49d561p-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.ac5cae0cc5946p-7",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.3cp+6",
+          "p_value_hex": "0x1.832dd2d8aa7a7p-7",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.28f5c28f5c29p-1",
+          "conf_low_hex": "0x1.24b32032ab952p-3",
+          "conf_high_hex": "0x1.a7d1e06eddac9p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "0x1.28f5c28f5c29p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.996c297428b0ap-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "0x1.28f5c28f5c29p-1",
+          "conf_low_hex": "0x1.c99b98bddb5a8p-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "InsectSprays_C_D",
+      "a_hex": [
+        "0x0p+0",
+        "0x1p+0",
+        "0x1.cp+2",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x0p+0",
+        "0x1p+0",
+        "0x1p+2"
+      ],
+      "b_hex": [
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+3",
+        "0x1.8p+2",
+        "0x1p+2",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1p+1",
+        "0x1p+2"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.5b7b8932c64eap-9",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.3b90dbe18a611p-9",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.5b7b8932c64eap-10",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.3b90dbe18a611p-10",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.ff70d2b7d0575p-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.4p+4",
+          "p_value_hex": "0x1.ff6237920f3adp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.71c71c71c71c8p-1",
+          "conf_low_hex": "-0x1.c37a4a5f51185p-1",
+          "conf_high_hex": "-0x1.a83bf8072a27cp-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.71c71c71c71c8p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.e676005b56abdp-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.71c71c71c71c8p-1",
+          "conf_low_hex": "-0x1.ba3eb1fc5f181p-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "InsectSprays_A_B",
+      "a_hex": [
+        "0x1.4p+3",
+        "0x1.cp+2",
+        "0x1.4p+4",
+        "0x1.cp+3",
+        "0x1.cp+3",
+        "0x1.8p+3",
+        "0x1.4p+3",
+        "0x1.7p+4",
+        "0x1.1p+4",
+        "0x1.4p+4",
+        "0x1.cp+3",
+        "0x1.ap+3"
+      ],
+      "b_hex": [
+        "0x1.6p+3",
+        "0x1.1p+4",
+        "0x1.5p+4",
+        "0x1.6p+3",
+        "0x1p+4",
+        "0x1.cp+3",
+        "0x1.1p+4",
+        "0x1.1p+4",
+        "0x1.3p+4",
+        "0x1.5p+4",
+        "0x1.cp+2",
+        "0x1.ap+3"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.2995245bf572ap-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.1f7a953244f42p-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.2995245bf572ap-2",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.1f7a953244f42p-2",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.753a5f100f112p-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.fp+5",
+          "p_value_hex": "0x1.7042b566dd85fp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.1c71c71c71c7p-3",
+          "conf_low_hex": "-0x1.170e711097ca8p-1",
+          "conf_high_hex": "0x1.47bae84d2d654p-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.1c71c71c71c7p-3",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.007730828b005p-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.1c71c71c71c7p-3",
+          "conf_low_hex": "-0x1.f54f76ae1edb6p-2",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "mtcars_am",
+      "a_hex": [
+        "0x1.5666666666666p+4",
+        "0x1.2b33333333333p+4",
+        "0x1.219999999999ap+4",
+        "0x1.c99999999999ap+3",
+        "0x1.8666666666666p+4",
+        "0x1.6cccccccccccdp+4",
+        "0x1.3333333333333p+4",
+        "0x1.1cccccccccccdp+4",
+        "0x1.0666666666666p+4",
+        "0x1.14ccccccccccdp+4",
+        "0x1.e666666666666p+3",
+        "0x1.4cccccccccccdp+3",
+        "0x1.4cccccccccccdp+3",
+        "0x1.d666666666666p+3",
+        "0x1.58p+4",
+        "0x1.fp+3",
+        "0x1.e666666666666p+3",
+        "0x1.a99999999999ap+3",
+        "0x1.3333333333333p+4"
+      ],
+      "b_hex": [
+        "0x1.5p+4",
+        "0x1.5p+4",
+        "0x1.6cccccccccccdp+4",
+        "0x1.0333333333333p+5",
+        "0x1.e666666666666p+4",
+        "0x1.0f33333333333p+5",
+        "0x1.b4ccccccccccdp+4",
+        "0x1.ap+4",
+        "0x1.e666666666666p+4",
+        "0x1.f99999999999ap+3",
+        "0x1.3b33333333333p+4",
+        "0x1.ep+3",
+        "0x1.5666666666666p+4"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.ea92f24bcbd4cp-10",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.cba053d63229ep-10",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.ea92f24bcbd4cp-11",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.cba053d63229ep-11",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.ff94611a18aeep-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.5p+5",
+          "p_value_hex": "0x1.ff8d17eb0a737p-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.51e0e829751ep-1",
+          "conf_low_hex": "-0x1.abcebaf603e3fp-1",
+          "conf_high_hex": "-0x1.72927ce63ace5p-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.51e0e829751ep-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.ac466abf87c8ep-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.51e0e829751ep-1",
+          "conf_low_hex": "-0x1.a0f1767017126p-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "edge_k2",
+      "a_hex": [
+        "0x1.8d1eb851eb852p+3",
+        "0x1.c23d70a3d70a4p+3",
+        "0x1.5b851eb851eb8p+3",
+        "0x1.b0a3d70a3d70ap+3",
+        "0x1.ea8f5c28f5c29p+3",
+        "0x1.78f5c28f5c28fp+3",
+        "0x1.9e66666666666p+3",
+        "0x1.035c28f5c28f6p+4",
+        "0x1.a147ae147ae14p+3"
+      ],
+      "b_hex": [
+        "0x1.f3d70a3d70a3dp+3",
+        "0x1.17ae147ae147bp+4",
+        "0x1.c947ae147ae14p+3",
+        "0x1.2ee147ae147aep+4",
+        "0x1.011eb851eb852p+4",
+        "0x1.bb33333333333p+3",
+        "0x1.3b5c28f5c28f6p+4",
+        "0x1.e51eb851eb852p+3",
+        "0x1.1051eb851eb85p+4",
+        "0x1.48a3d70a3d70ap+4",
+        "0x1.0d47ae147ae14p+4",
+        "0x1.d5c28f5c28f5cp+3"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.4af0f89fab904p-9",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.2621443d7c8fcp-9",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.4af0f89fab904p-10",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.2621443d7c8fcp-10",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.ff7d726d2fccp-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.6p+3",
+          "p_value_hex": "0x1.ff6cef5de141cp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.97b425ed097b4p-1",
+          "conf_low_hex": "-0x1.d7d3d05e1d1fap-1",
+          "conf_high_hex": "-0x1.0abdcff500c5cp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.97b425ed097b4p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.280d49abbbb44p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.97b425ed097b4p-1",
+          "conf_low_hex": "-0x1.d0fc9a68c510bp-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "small_ties",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1"
+      ],
+      "b_hex": [
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.96e7e59a44a5bp-4",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.36ff30ee50a43p-4",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.96e7e59a44a5bp-5",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.36ff30ee50a43p-5",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.f159c717eddfap-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.8p+1",
+          "p_value_hex": "0x1.ec900cf11af5cp-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.6666666666666p-1",
+          "conf_low_hex": "-0x1.dcc8174170384p-1",
+          "conf_high_hex": "-0x1.12a0c1a562f48p-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.6666666666666p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.8bef6d7ca8929p-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.6666666666666p-1",
+          "conf_low_hex": "-0x1.d2e72f7d7dd0ep-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "mostly_tied",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+0",
+        "0x1p+0",
+        "0x1p+1"
+      ],
+      "b_hex": [
+        "0x1p+0",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1p+1"
+      ],
+      "wilcox": [
+        {
+          "alternative": "two.sided",
+          "correct": true,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.95a6bfb945611p-2",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "two.sided",
+          "correct": false,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.49ee7bdd1d374p-2",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": true,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.95a6bfb945611p-3",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "correct": false,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.49ee7bdd1d374p-3",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": true,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.bdfa542dbfdc2p-1",
+          "method": "Wilcoxon rank sum test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "correct": false,
+          "statistic_hex": "0x1.ap+2",
+          "p_value_hex": "0x1.ad846108b8b23p-1",
+          "method": "Wilcoxon rank sum test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.6666666666667p-2",
+          "conf_low_hex": "-0x1.a54d4456ff99p-1",
+          "conf_high_hex": "0x1.a3120943aff2ap-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "less",
+          "estimate_hex": "-0x1.6666666666667p-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.2ffa3b3fb7edap-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "alternative": "greater",
+          "estimate_hex": "-0x1.6666666666667p-2",
+          "conf_low_hex": "-0x1.8da93b3674b16p-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    }
+  ],
+  "k_sample": [
+    {
+      "name": "edge_ties",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "n_per_level": {
+        "a": 10,
+        "b": 10,
+        "c": 10
+      },
+      "groups_hex": [
+        [
+          "0x1p+0",
+          "0x1p+1",
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1p+2",
+          "0x1p+2",
+          "0x1.4p+2"
+        ],
+        [
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1p+2",
+          "0x1p+2",
+          "0x1p+2",
+          "0x1p+2",
+          "0x1.4p+2",
+          "0x1.4p+2"
+        ],
+        [
+          "0x1p+0",
+          "0x1p+0",
+          "0x1p+1",
+          "0x1p+1",
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1.8p+1",
+          "0x1p+2",
+          "0x1p+2"
+        ]
+      ],
+      "kruskal_statistic_hex": "0x1.5abc6740b28a2p+2",
+      "kruskal_parameter": 2,
+      "kruskal_p_value_hex": "0x1.10d775b6d7597p-4",
+      "kruskal_warnings": [],
+      "dunn_method": "Dunn's all-pairs test",
+      "dunn_warnings": [
+        "Ties are present. z-quantiles were corrected for ties."
+      ],
+      "dunn_pairs": [
+        {
+          "group1": "a",
+          "group2": "b",
+          "statistic_hex": "0x1.6465dce85721fp+0",
+          "p_value_hex": "0x1.4f9a1526049f8p-3"
+        },
+        {
+          "group1": "a",
+          "group2": "c",
+          "statistic_hex": "0x1.d6b6d67b51452p-1",
+          "p_value_hex": "0x1.6e7ebf0d5f00ep-2"
+        },
+        {
+          "group1": "b",
+          "group2": "c",
+          "statistic_hex": "0x1.27e0a412ffe24p+1",
+          "p_value_hex": "0x1.54d59b7b71c1p-6"
+        }
+      ]
+    },
+    {
+      "name": "InsectSprays",
+      "levels": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "n_per_level": {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12,
+        "E": 12,
+        "F": 12
+      },
+      "groups_hex": [
+        [
+          "0x1.4p+3",
+          "0x1.cp+2",
+          "0x1.4p+4",
+          "0x1.cp+3",
+          "0x1.cp+3",
+          "0x1.8p+3",
+          "0x1.4p+3",
+          "0x1.7p+4",
+          "0x1.1p+4",
+          "0x1.4p+4",
+          "0x1.cp+3",
+          "0x1.ap+3"
+        ],
+        [
+          "0x1.6p+3",
+          "0x1.1p+4",
+          "0x1.5p+4",
+          "0x1.6p+3",
+          "0x1p+4",
+          "0x1.cp+3",
+          "0x1.1p+4",
+          "0x1.1p+4",
+          "0x1.3p+4",
+          "0x1.5p+4",
+          "0x1.cp+2",
+          "0x1.ap+3"
+        ],
+        [
+          "0x0p+0",
+          "0x1p+0",
+          "0x1.cp+2",
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1p+0",
+          "0x1p+1",
+          "0x1p+0",
+          "0x1.8p+1",
+          "0x0p+0",
+          "0x1p+0",
+          "0x1p+2"
+        ],
+        [
+          "0x1.8p+1",
+          "0x1.4p+2",
+          "0x1.8p+3",
+          "0x1.8p+2",
+          "0x1p+2",
+          "0x1.8p+1",
+          "0x1.4p+2",
+          "0x1.4p+2",
+          "0x1.4p+2",
+          "0x1.4p+2",
+          "0x1p+1",
+          "0x1p+2"
+        ],
+        [
+          "0x1.8p+1",
+          "0x1.4p+2",
+          "0x1.8p+1",
+          "0x1.4p+2",
+          "0x1.8p+1",
+          "0x1.8p+2",
+          "0x1p+0",
+          "0x1p+0",
+          "0x1.8p+1",
+          "0x1p+1",
+          "0x1.8p+2",
+          "0x1p+2"
+        ],
+        [
+          "0x1.6p+3",
+          "0x1.2p+3",
+          "0x1.ep+3",
+          "0x1.6p+4",
+          "0x1.ep+3",
+          "0x1p+4",
+          "0x1.ap+3",
+          "0x1.4p+3",
+          "0x1.ap+4",
+          "0x1.ap+4",
+          "0x1.8p+4",
+          "0x1.ap+3"
+        ]
+      ],
+      "kruskal_statistic_hex": "0x1.b587dfb07ace8p+5",
+      "kruskal_parameter": 5,
+      "kruskal_p_value_hex": "0x1.4c3cfb0dd3fd8p-33",
+      "kruskal_warnings": [],
+      "dunn_method": "Dunn's all-pairs test",
+      "dunn_warnings": [
+        "Ties are present. z-quantiles were corrected for ties."
+      ],
+      "dunn_pairs": [
+        {
+          "group1": "A",
+          "group2": "B",
+          "statistic_hex": "0x1.403d4d1718d3fp-2",
+          "p_value_hex": "0x1.824b947a985eap-1"
+        },
+        {
+          "group1": "A",
+          "group2": "C",
+          "statistic_hex": "0x1.318a7ccd496f9p+2",
+          "p_value_hex": "0x1.e49d2b051f664p-20"
+        },
+        {
+          "group1": "A",
+          "group2": "D",
+          "statistic_hex": "0x1.8f0c630fc7ef4p+1",
+          "p_value_hex": "0x1.de05f58cfbacdp-10"
+        },
+        {
+          "group1": "A",
+          "group2": "E",
+          "statistic_hex": "0x1.ecde58a58c352p+1",
+          "p_value_hex": "0x1.ee570f4e1dc09p-14"
+        },
+        {
+          "group1": "A",
+          "group2": "F",
+          "statistic_hex": "0x1.9f4f7ff9f4325p-2",
+          "p_value_hex": "0x1.5ebf5a089697cp-1"
+        },
+        {
+          "group1": "B",
+          "group2": "C",
+          "statistic_hex": "0x1.458e519ebafcdp+2",
+          "p_value_hex": "0x1.86fc424bf638dp-22"
+        },
+        {
+          "group1": "B",
+          "group2": "D",
+          "statistic_hex": "0x1.b7140cb2ab09cp+1",
+          "p_value_hex": "0x1.3c19f882cec28p-11"
+        },
+        {
+          "group1": "B",
+          "group2": "E",
+          "statistic_hex": "0x1.0a73012437a7dp+2",
+          "p_value_hex": "0x1.072b7e7d37c61p-15"
+        },
+        {
+          "group1": "B",
+          "group2": "F",
+          "statistic_hex": "0x1.7c48cb8b6d79bp-4",
+          "p_value_hex": "0x1.da2064fe0d281p-1"
+        },
+        {
+          "group1": "C",
+          "group2": "D",
+          "statistic_hex": "0x1.a8112d1595dfcp+0",
+          "p_value_hex": "0x1.8fd80f23b98ep-4"
+        },
+        {
+          "group1": "C",
+          "group2": "E",
+          "statistic_hex": "0x1.d8da83d41aa7ep-1",
+          "p_value_hex": "0x1.6c431c0436ffcp-2"
+        },
+        {
+          "group1": "C",
+          "group2": "F",
+          "statistic_hex": "0x1.4b7f74cce8b2bp+2",
+          "p_value_hex": "0x1.dd6151facb94bp-23"
+        },
+        {
+          "group1": "D",
+          "group2": "E",
+          "statistic_hex": "0x1.7747d6571117ap-1",
+          "p_value_hex": "0x1.dab3dd94e4dc5p-2"
+        },
+        {
+          "group1": "D",
+          "group2": "F",
+          "statistic_hex": "0x1.c2f6530f06759p+1",
+          "p_value_hex": "0x1.bf2da3e4b4f48p-12"
+        },
+        {
+          "group1": "E",
+          "group2": "F",
+          "statistic_hex": "0x1.10642452655dcp+2",
+          "p_value_hex": "0x1.5cfca20932a76p-16"
+        }
+      ]
+    },
+    {
+      "name": "mtcars_cyl",
+      "levels": [
+        "4",
+        "6",
+        "8"
+      ],
+      "n_per_level": {
+        "4": 11,
+        "6": 7,
+        "8": 14
+      },
+      "groups_hex": [
+        [
+          "0x1.6cccccccccccdp+4",
+          "0x1.8666666666666p+4",
+          "0x1.6cccccccccccdp+4",
+          "0x1.0333333333333p+5",
+          "0x1.e666666666666p+4",
+          "0x1.0f33333333333p+5",
+          "0x1.58p+4",
+          "0x1.b4ccccccccccdp+4",
+          "0x1.ap+4",
+          "0x1.e666666666666p+4",
+          "0x1.5666666666666p+4"
+        ],
+        [
+          "0x1.5p+4",
+          "0x1.5p+4",
+          "0x1.5666666666666p+4",
+          "0x1.219999999999ap+4",
+          "0x1.3333333333333p+4",
+          "0x1.1cccccccccccdp+4",
+          "0x1.3b33333333333p+4"
+        ],
+        [
+          "0x1.2b33333333333p+4",
+          "0x1.c99999999999ap+3",
+          "0x1.0666666666666p+4",
+          "0x1.14ccccccccccdp+4",
+          "0x1.e666666666666p+3",
+          "0x1.4cccccccccccdp+3",
+          "0x1.4cccccccccccdp+3",
+          "0x1.d666666666666p+3",
+          "0x1.fp+3",
+          "0x1.e666666666666p+3",
+          "0x1.a99999999999ap+3",
+          "0x1.3333333333333p+4",
+          "0x1.f99999999999ap+3",
+          "0x1.ep+3"
+        ]
+      ],
+      "kruskal_statistic_hex": "0x1.9bf040deda9a9p+4",
+      "kruskal_parameter": 2,
+      "kruskal_p_value_hex": "0x1.586e89a5a2748p-19",
+      "kruskal_warnings": [],
+      "dunn_method": "Dunn's all-pairs test",
+      "dunn_warnings": [
+        "Ties are present. z-quantiles were corrected for ties."
+      ],
+      "dunn_pairs": [
+        {
+          "group1": "4",
+          "group2": "6",
+          "statistic_hex": "0x1.0d02296db612ep+1",
+          "p_value_hex": "0x1.2384e6ee9cca4p-5"
+        },
+        {
+          "group1": "4",
+          "group2": "8",
+          "statistic_hex": "0x1.442f787f08134p+2",
+          "p_value_hex": "0x1.b59a4aff72648p-22"
+        },
+        {
+          "group1": "6",
+          "group2": "8",
+          "statistic_hex": "0x1.1b5d3f252b812p+1",
+          "p_value_hex": "0x1.b7cea2371aeb5p-6"
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

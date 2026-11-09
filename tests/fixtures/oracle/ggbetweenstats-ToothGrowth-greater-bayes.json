@@ -1,0 +1,210 @@
+{
+  "schema_version": 2,
+  "name": "ggbetweenstats-ToothGrowth-greater-bayes",
+  "function": "ggbetweenstats",
+  "call": "ggstatsplot::ggbetweenstats(data = data, x = supp, y = len, type = \"bayes\", alternative = \"greater\")",
+  "dataset": {
+    "file": "ToothGrowth.csv",
+    "sha256": "35d9d3e5931ec8679135d84ebe2fadc6a5b3582bb66792e289dd00c45a65ccb7",
+    "rows": 60,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "supp",
+    "y": "len",
+    "type": "bayes",
+    "alternative": "greater"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "OJ",
+    "VC"
+  ],
+  "n_per_level": {
+    "OJ": 30,
+    "VC": 30
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(log[e] * (BF[\"01\"]) == \"-0.18\", widehat(delta)[\"difference\"]^\"posterior\" == \"3.15\", CI[\"95%\"]^ETI ~ \"[\" * \"-0.25\", \"6.90\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "term": "Difference",
+        "effectsize": "Bayesian t-test",
+        "estimate": 3.14672372888428,
+        "conf.level": 0.95,
+        "conf.low": -0.251086355467677,
+        "conf.high": 6.89605271479187,
+        "pd": 0.965,
+        "prior.distribution": "cauchy",
+        "prior.location": 0,
+        "prior.scale": 0.707,
+        "bf10": 1.19883932110025,
+        "method": "Bayesian t-test",
+        "conf.method": "ETI",
+        "log_e_bf10": 0.181353856306375,
+        "n.obs": 60,
+        "expression": "list(log[e] * (BF[\"01\"]) == \"-0.18\", widehat(delta)[\"difference\"]^\"posterior\" == \"3.15\", CI[\"95%\"]^ETI ~ \"[\" * \"-0.25\", \"6.90\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...4",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "supp": "OJ",
+          "len": 24.9087976539589,
+          "iqr": 10.925,
+          "conf.low": 15.3425,
+          "conf.high": 26.5260826001955,
+          "min": 8.2,
+          "max": 30.9,
+          "skewness": -0.579907561825505,
+          "kurtosis": -0.831040440443577,
+          "n.obs": 30,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[MAP] == \"24.91\")",
+          "n.expression": "OJ\n(n = 30)"
+        },
+        {
+          "supp": "VC",
+          "len": 15.4354838709677,
+          "iqr": 12.475,
+          "conf.low": 6.5583284457478,
+          "conf.high": 24.806014173998,
+          "min": 4.2,
+          "max": 33.9,
+          "skewness": 0.305530163285045,
+          "kurtosis": -0.699780964471612,
+          "n.obs": 30,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[MAP] == \"15.44\")",
+          "n.expression": "VC\n(n = 30)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "supp": "OJ",
+          "len": 24.9087976539589,
+          "iqr": 10.925,
+          "conf.low": 15.3425,
+          "conf.high": 26.5260826001955,
+          "min": 8.2,
+          "max": 30.9,
+          "skewness": -0.579907561825505,
+          "kurtosis": -0.831040440443577,
+          "n.obs": 30,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[MAP] == \"24.91\")",
+          "n.expression": "OJ\n(n = 30)"
+        },
+        {
+          "supp": "VC",
+          "len": 15.4354838709677,
+          "iqr": 12.475,
+          "conf.low": 6.5583284457478,
+          "conf.high": 24.806014173998,
+          "min": 4.2,
+          "max": 33.9,
+          "skewness": 0.305530163285045,
+          "kurtosis": -0.699780964471612,
+          "n.obs": 30,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[MAP] == \"15.44\")",
+          "n.expression": "VC\n(n = 30)"
+        }
+      ],
+      "params": null,
+      "built": null
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

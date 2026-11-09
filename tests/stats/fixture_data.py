@@ -31,6 +31,7 @@ FloatArray = NDArray[np.float64]
 DEFAULT_CONF_LEVEL = 0.95
 DEFAULT_BF_PRIOR = 0.707
 DEFAULT_P_ADJUST = "holm"
+DEFAULT_TR = 0.2
 # Every pairwise Bayes factor uses this prior, whatever bf.prior says (SPEC.md §4).
 PAIRWISE_BF_PRIOR = 0.707
 
@@ -72,6 +73,10 @@ def alternative(case: OracleCase) -> Alternative:
 
 def conf_level(case: OracleCase) -> float:
     return float(case.args.get("conf.level", DEFAULT_CONF_LEVEL))
+
+
+def tr(case: OracleCase) -> float:
+    return float(case.args.get("tr", DEFAULT_TR))
 
 
 def bf_prior(case: OracleCase) -> float:

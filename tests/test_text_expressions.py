@@ -346,7 +346,8 @@ def test_failed_case_is_checked_on_partial_outputs(case: OracleCase) -> None:
     assert case.expected_error is not None
     where = [w for w, _, _ in checked_expressions(case)]
     for component in ("subtitle", "caption"):
-        rows = case.partial(component) or []
+        computed = component in case.partial_components
+        rows = (case.partial(component) if computed else None) or []
         found = sum(w.startswith(f"{component}_data[") for w in where)
         assert found == len(rows)
     labels = case.partial("centrality_description")

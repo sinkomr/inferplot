@@ -65,6 +65,7 @@ from inferplot.stats.robust import (
     winsorized_variance,
     yuen_t,
 )
+from inferplot.stats.smm import smm_cdf, smm_quantile
 from inferplot.stats.srange import srange_logsf, srange_sf
 
 __all__ = [
@@ -110,7 +111,9 @@ __all__ = [
     "rank_biserial",
     "rank_epsilon_squared",
     "scaled_variance",
+    "smm_cdf",
     "smm_critical_value",
+    "smm_quantile",
     "srange_logsf",
     "srange_sf",
     "student_t",

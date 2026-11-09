@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -43,17 +44,22 @@ from tests.betweenstats_cases import (
     replay_arguments,
 )
 from tests.oracle_fixtures import (
+    SIMULATED_LINCON_CRITICAL_VALUES,
     Backend,
     OracleCase,
+    check_simulated_lincon_pair,
+    expected_bf10,
     number,
     r_level_label,
     read_dataset,
+    wrs2_akp_constant,
 )
 from tests.plotmath import parse
 from tests.tolerances import (
     assert_close,
     assert_within_grid,
     assert_within_monte_carlo,
+    is_close,
 )
 
 BACKENDS: tuple[Backend, ...] = ("pandas", "polars", "pyarrow")
@@ -75,6 +81,41 @@ _CENTRALITY = {
     "bayes": "map",
 }
 _PAIR_TESTS = {"nonparametric": "Dunn", "robust": "Yuen's trimmed means"}
+# WRS2's xi constant is measured at these trimming levels (tolerance
+# wrs2_xi_constant); an equal-size fixture at another tr needs a new measurement.
+_XI_MEASURED_TR = (0.1, 0.2)
+
+# Subtitles whose p differs from ggstatsplot's because WRS2 computes it as 1 - cdf
+# and inferplot reports the accurate tail (DECISIONS.md D43): (case, ggstatsplot's
+# p, inferplot's p) as printed. iris Petal.Length robust: t1way's 1 - pf is exactly
+# 0, which statsExpressions prints as the smallest double; the accurate tail is
+# 1.36e-42. iris without setosa, Yuen: R's 2 (1 - pt) is 5.77e-15 and 4.44e-16
+# (multiples of 2^-53), the accurate tails 5.93e-15 and 5.43e-16.
+DIFFERING_SUBTITLES: tuple[tuple[str, str, str], ...] = (
+    ("ggbetweenstats-iris-petal-robust", "2.23e-308", "1.36e-42"),
+    ("ggbetweenstats-iris_no_setosa-petal-robust", "5.77e-15", "5.93e-15"),
+    ("ggbetweenstats-iris_no_setosa-petalwidth-robust", "4.44e-16", "5.43e-16"),
+)
+
+# Bracket labels that differ from ggstatsplot's: (case, group1, group2,
+# ggstatsplot's number, inferplot's number). iris Petal.Length robust: lincon's
+# Holm-adjusted p after WRS2's 1 - pt, exactly 0 for the two setosa pairs and
+# 5.77e-15 for the third (D43). iris Petal.Length bayes: BayesFactor misses the
+# accurate BF10 by 1.16e-3 relative for setosa-versicolor (D50,
+# oracle_fixtures.ACCURATE_BAYES_FACTORS), which moves log BF01 across a rounding
+# boundary (ggstatsplot -133.6872, accurate -133.6862).
+DIFFERING_LABELS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("ggbetweenstats-iris-petal-bayes", "setosa", "versicolor", "-133.69", "-133.68"),
+    ("ggbetweenstats-iris-petal-robust", "setosa", "versicolor", "0.00", "7.28e-30"),
+    ("ggbetweenstats-iris-petal-robust", "setosa", "virginica", "0.00", "9.12e-32"),
+    (
+        "ggbetweenstats-iris-petal-robust",
+        "versicolor",
+        "virginica",
+        "5.77e-15",
+        "5.93e-15",
+    ),
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -242,6 +283,7 @@ def test_centrality(name: str, backend: Backend) -> None:
             assert d.centrality == _CENTRALITY[case.type]
             assert int(row["n.obs"]) == d.n
             expected = number(row[y])
+            assert d.value is not None
             if d.centrality == "map":
                 values = groups[d.level]
                 low, high = float(values.min()), float(values.max())
@@ -322,11 +364,21 @@ def test_effect_size(name: str, backend: Backend) -> None:
             number(replicates["estimate_sd"]),
             what=f"{name} estimate",
         )
+    elif es.name == "akp_delta":
+        # WRS2's AKP constant at this tr, measured by probe-akp, in place of the
+        # exact one inferplot uses (D42); the rest agrees to rounding.
+        trim = result.settings.tr
+        as_wrs2 = (
+            es.estimate
+            * wrs2_akp_constant(trim)
+            / math.sqrt(stats.winsorized_normal_variance(trim))
+        )
+        assert_close("closed_form", as_wrs2, number(row["estimate"]), what="AKP")
     else:
-        kind = {
-            "akp_delta": "wrs2_akp_constant",
-            "explanatory_xi": "wrs2_xi_constant",
-        }.get(es.name, "closed_form")
+        kind = "closed_form"
+        if es.name == "explanatory_xi":
+            assert result.settings.tr in _XI_MEASURED_TR, name
+            kind = "wrs2_xi_constant"
         assert_close(kind, es.estimate, number(row["estimate"]), what="estimate")
     for bound in ("conf_low", "conf_high"):
         assert_within_monte_carlo(
@@ -385,9 +437,10 @@ def test_pairwise_rows(name: str, backend: Backend) -> None:
             assert pair.p_adjusted is None
             assert pair.significant is None
             assert pair.bayes.prior_scale == number(row["prior.scale"]) == 0.707
-            assert_close(
-                "ttest_bayes_factor", pair.bayes.bf10, number(row["bf10"]), what=what
+            expected = expected_bf10(
+                name, pair.group1, pair.group2, number(row["bf10"])
             )
+            assert_close("ttest_bayes_factor", pair.bayes.bf10, expected, what=what)
             continue
         method = str(case.args.get("p.adjust.method", "holm"))
         assert pair.adjust_method == method
@@ -404,16 +457,27 @@ def test_pairwise_rows(name: str, backend: Backend) -> None:
                 "closed_form", pair.p_adjusted, number(row["p.value"]), what=what
             )
         else:
+            # lincon's intervals are 95% whatever conf_level says (D53).
             assert number(row["conf.level"]) == pair.conf_level == 0.95
-            for field, column in (
-                ("estimate", "estimate"),
-                ("conf_low", "conf.low"),
-                ("conf_high", "conf.high"),
-            ):
-                value = getattr(pair, field)
-                assert value is not None
-                expected = number(row[column])
-                assert_close("closed_form", value, expected, what=f"{what} {column}")
+            assert pair.estimate is not None
+            assert_close(
+                "closed_form", pair.estimate, number(row["estimate"]), what=what
+            )
+            if (name, pair.group1, pair.group2) in SIMULATED_LINCON_CRITICAL_VALUES:
+                # Past lincon's table WRS2 simulates the critical value; inferplot
+                # computes the exact quantile (D52). Both are pinned.
+                _check_simulated_interval(name, pair, row)
+            else:
+                for field, column in (
+                    ("conf_low", "conf.low"),
+                    ("conf_high", "conf.high"),
+                ):
+                    value = getattr(pair, field)
+                    assert value is not None
+                    expected = number(row[column])
+                    assert_close(
+                        "closed_form", value, expected, what=f"{what} {column}"
+                    )
             # R's raw p is 2 (1 - pt), rounded to 2^-52 (D43); the adjustment
             # multiplies that step by at most m.
             assert_close(
@@ -423,6 +487,58 @@ def test_pairwise_rows(name: str, backend: Backend) -> None:
                 what=what,
                 atol_scale=2.0 * m,
             )
+
+
+def _check_simulated_interval(name: str, pair: Any, row: Mapping[str, Any]) -> None:
+    """A pinned pair: R's and inferplot's critical values as pinned, each recovered
+    from its own interval with the pair's Yuen SE (|estimate| / |t|)."""
+    assert pair.statistic != 0.0
+    se = abs(pair.estimate / pair.statistic)
+    check_simulated_lincon_pair(
+        name,
+        pair.group1,
+        pair.group2,
+        r_critical=(number(row["conf.high"]) - number(row["conf.low"])) / (2 * se),
+        critical=(pair.conf_high - pair.conf_low) / (2 * se),
+    )
+    assert_close(
+        "closed_form",
+        pair.conf_low + pair.conf_high,
+        2 * pair.estimate,
+        what=f"{name} {pair.group1}-{pair.group2} centre",
+    )
+
+
+# The warnings these fixtures add beyond the general ones (empty levels, arguments
+# without effect, the v0.2 posterior): D53's 95% pairwise intervals and D54's tied
+# resamples, each in exactly the case that needs it.
+EXPECTED_METHOD_WARNINGS: Mapping[str, str] = {
+    "ggbetweenstats-PlantGrowth-cl90-robust": (
+        "The pairwise confidence intervals are 95% intervals, not conf_level=0.9, "
+        "which applies to the effect size: ggstatsplot does not pass conf.level to "
+        "the pairwise comparisons (WRS2's lincon), and inferplot follows it. Each "
+        "pair records its conf_level."
+    ),
+    "ggbetweenstats-edge_ties_small-nonparametric": (
+        "8 of 2,000 bootstrap resamples have every value tied, where rank epsilon "
+        "squared is undefined; its confidence interval comes from the other 1,992, "
+        "as in ggstatsplot."
+    ),
+}
+
+
+def test_method_warnings() -> None:
+    markers = ("The pairwise confidence intervals are", "bootstrap resamples have")
+    found = {
+        case.name: warning
+        for case in CASES
+        for warning in analyze(case.name, "pandas").warnings
+        if any(marker in warning for marker in markers)
+    }
+    assert found == EXPECTED_METHOD_WARNINGS
+    tied = analyze("ggbetweenstats-edge_ties_small-nonparametric", "pandas")
+    assert tied.effect_size is not None
+    assert tied.effect_size.bootstrap_resamples == stats.BOOTSTRAP_RESAMPLES
 
 
 @pytest.mark.parametrize(("name", "backend"), _params(CASES))
@@ -441,6 +557,8 @@ def _expected_subtitle(case: OracleCase, result: StatsResult) -> tx.Node | None:
     """inferplot's subtitle AST, which must equal ggstatsplot's once ggstatsplot's
     own bootstrap values are put in (checked separately in ``test_subtitle``)."""
     digits = _digits(case)
+    if not result.settings.results_subtitle:
+        return None
     if result.type == "bayes":
         if result.bayes is None:
             return None
@@ -484,8 +602,47 @@ def test_subtitle(name: str, backend: Backend) -> None:
         assert ours == _v01(theirs)
         return
     # Every string from inferplot's own numbers, except the bootstrap-derived ones,
-    # which are inferplot's formatter applied to ggstatsplot's values.
-    assert _mixed_subtitle(case, result, case.subtitle_data) == theirs
+    # which are inferplot's formatter applied to ggstatsplot's values; a pinned p
+    # (DIFFERING_SUBTITLES) is checked by _subtitle_difference.
+    if _subtitle_difference(case, result) is None:
+        assert _mixed_subtitle(case, result, case.subtitle_data) == theirs
+
+
+def _subtitle_difference(
+    case: OracleCase, result: StatsResult
+) -> tuple[str, str, str] | None:
+    """(case, ggstatsplot's p, inferplot's p) where the subtitle differs only in p,
+    inferplot's p being within ``wrs2_p`` of ggstatsplot's; None where the
+    subtitle is ggstatsplot's."""
+    if result.test is None or not case.subtitle_rows or case.type == "bayes":
+        return None
+    row = case.subtitle_data
+    theirs = parse(str(case.subtitle))
+    if _mixed_subtitle(case, result, row) == theirs:
+        return None
+    r_p = number(row["p.value"])
+    with_r_p = dataclasses.replace(
+        result, test=dataclasses.replace(result.test, p_value=r_p)
+    )
+    assert _mixed_subtitle(case, with_r_p, row) == theirs, case.name
+    scale = 2.0 if result.test.name == "yuen_t" else 1.0
+    assert is_close("wrs2_p", result.test.p_value, r_p, atol_scale=scale), case.name
+    digits = _digits(case)
+    return (
+        case.name,
+        tx.format_value(r_p, digits),
+        tx.format_value(result.test.p_value, digits),
+    )
+
+
+def test_differing_subtitles_are_pinned() -> None:
+    differing = [
+        found
+        for case in CASES
+        if (found := _subtitle_difference(case, analyze(case.name, "pandas")))
+        is not None
+    ]
+    assert tuple(differing) == DIFFERING_SUBTITLES
 
 
 def _mixed_subtitle(
@@ -543,17 +700,66 @@ def test_bracket_labels(name: str, backend: Backend) -> None:
     case, result = BY_NAME[name], analyze(name, backend)
     if not case.pairwise:
         return
+    _label_check(case, result)
+
+
+def _label_check(
+    case: OracleCase, result: StatsResult
+) -> list[tuple[str, str, str, str, str]]:
+    """Compare every bracket label with ggstatsplot's; return the differing ones as
+    (case, group1, group2, ggstatsplot's number, inferplot's number), each checked
+    to be inferplot's formatter on a value within tolerance of ggstatsplot's."""
     figure = tx.figure_texts(result)
     rows = _pair_rows(case, result)
-    for i, row in enumerate(rows):
+    digits = _digits(case)
+    differing: list[tuple[str, str, str, str, str]] = []
+    for i, (pair, row) in enumerate(zip(result.pairwise, rows, strict=True)):
         theirs = parse(str(row["expression"]))
-        assert result.text.pairwise_labels[i] == tx.to_plain(theirs)
-        assert figure.pairwise_labels[i] == tx.to_mathtext(theirs)
+        ours = tx.to_plain(theirs)
+        if result.text.pairwise_labels[i] == ours:
+            assert figure.pairwise_labels[i] == tx.to_mathtext(theirs)
+            continue
+        if pair.bayes is not None:
+            # inferplot's formatter on ggstatsplot's BF reproduces its label; the
+            # value inferplot prints is the accurate one (D50).
+            r_bf10 = number(row["bf10"])
+            assert theirs == tx.pairwise_bf_expression(
+                log_bf01=-math.log(r_bf10), digits=digits
+            )
+            accurate = expected_bf10(case.name, pair.group1, pair.group2, r_bf10)
+            assert accurate != r_bf10
+            assert_close("ttest_bayes_factor", pair.bayes.bf10, accurate, what="bf10")
+            r_text = tx.format_value(-math.log(r_bf10), digits)
+            our_text = tx.format_value(pair.bayes.log_bf01, digits)
+        else:
+            assert pair.p_adjusted is not None
+            r_p = number(row["p.value"])
+            assert theirs == tx.pairwise_p_expression(
+                p_adjusted=r_p, adjust_method=pair.adjust_method, digits=digits
+            )
+            # Within wrs2_p of R's 1 - pt route (D43), as test_pairwise_rows checks.
+            assert case.type == "robust"
+            assert is_close("wrs2_p", pair.p_adjusted, r_p, atol_scale=2.0 * len(rows))
+            r_text = tx.format_value(r_p, digits)
+            our_text = tx.format_value(pair.p_adjusted, digits)
+        assert r_text != our_text
+        differing.append((case.name, pair.group1, pair.group2, r_text, our_text))
     drawn = [i for i, pair in enumerate(result.pairwise) if pair.displayed]
     annotations = _drawn_annotations(case)
     assert len(annotations) == len(drawn)
     for i, source in zip(drawn, annotations, strict=True):
         assert parse(source) == parse(str(rows[i]["expression"]))
+    return differing
+
+
+def test_differing_labels_are_pinned() -> None:
+    differing = [
+        item
+        for case in CASES
+        if case.pairwise
+        for item in _label_check(case, analyze(case.name, "pandas"))
+    ]
+    assert tuple(differing) == DIFFERING_LABELS
 
 
 @pytest.mark.parametrize(("name", "backend"), _params(CASES))

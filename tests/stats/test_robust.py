@@ -23,6 +23,7 @@ from inferplot.stats import (
     explanatory_effect,
     lincon,
     smm_critical_value,
+    smm_quantile,
     trimmed_mean,
     trimmed_means_anova,
     winsorized_normal_variance,
@@ -31,9 +32,11 @@ from inferplot.stats import (
 )
 from inferplot.stats._smm_table import SMM_ROWS, SMM_TABLE_05
 from inferplot.stats.robust import (
+    SMM_MAX_TABLED,
     _floor_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.oracle_fixtures import probe, r_double
 from tests.stats.fixture_data import between_cases, groups
 from tests.tolerances import assert_close
 
@@ -159,40 +162,116 @@ def test_bad_seeds(seed: object) -> None:
 def test_table_shape() -> None:
     assert SMM_ROWS == (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 30, 40,
                         60, 200)  # fmt: skip
-    assert sorted(SMM_TABLE_05) == list(range(1, 46))
+    assert sorted(SMM_TABLE_05) == list(range(2, SMM_MAX_TABLED + 1))
     for row in SMM_TABLE_05.values():
         assert len(row) == len(SMM_ROWS)
         assert all(round(v, 2) == v for v in row)
         assert list(row) == sorted(row, reverse=True)  # falls as df grows
     for df_index in range(len(SMM_ROWS)):
-        column = [SMM_TABLE_05[c][df_index] for c in range(1, 46)]
+        column = [SMM_TABLE_05[c][df_index] for c in SMM_TABLE_05]
         assert column == sorted(column)  # grows with C
 
 
 def test_one_comparison_is_student_t_and_infinite_df_is_normal() -> None:
-    # Closed forms, independent of the quadrature: C = 1 is |T_df|, and at
-    # infinite df P(max |Z| <= c) = (2 Phi(c) - 1)^C.
-    for index, df in enumerate(SMM_ROWS[:-1]):
-        assert SMM_TABLE_05[1][index] == round(float(stats.t.isf(0.025, df)), 2)
-    for c in range(1, 46):
-        exact = float(stats.norm.ppf((1 + 0.95 ** (1 / c)) / 2))
-        assert SMM_TABLE_05[c][-1] == round(exact, 2), c
+    # Closed forms, independent of the quadrature: C = 1 is |T_df| at the pair's
+    # own df (no table), and at infinite df P(max |Z| <= c) = (2 Phi(c) - 1)^C,
+    # which WRS2's last row rounds, one unit off at NOT_ROUNDED.
+    for df in (2.0, 2.5, 5.16, 13.7, 199.0, 1490.0):
+        assert_close(
+            "closed_form",
+            smm_critical_value(1, df),
+            ref.t_isf(0.025, df),
+            what=f"C = 1 at df {df}",
+        )
+    for c in SMM_TABLE_05:
+        exact = round(float(stats.norm.ppf((1 + 0.95 ** (1 / c)) / 2)), 2)
+        entry = SMM_TABLE_05[c][-1]
+        if (c, 200) in NOT_ROUNDED:
+            assert abs(entry - exact) == pytest.approx(0.01), c
+        else:
+            assert entry == exact, c
+
+
+# The entries of WRS2's table that are not the quantile rounded to two decimals
+# (C, df row): measured with tools/reference/smm_table.py's own quadrature. Each
+# is one unit in the last place from it: 20 below, 4 above.
+NOT_ROUNDED = {
+    (3, 5), (4, 4), (5, 12), (6, 10), (6, 20), (7, 18), (8, 16), (10, 16), (10, 30),
+    (10, 200), (11, 4), (11, 24), (15, 40), (19, 9), (19, 10), (19, 200), (20, 20),
+    (21, 14), (23, 9), (25, 16), (26, 8), (27, 7), (27, 30), (28, 9),
+}  # fmt: skip
 
 
 @pytest.mark.parametrize(
     ("comparisons", "df"),
-    [(2, 4), (3, 5), (3, 9), (6, 60), (10, 5), (10, 7), (15, 12), (28, 3), (45, 40)],
+    [
+        (2, 4),
+        (3, 5),
+        (3, 9),
+        (6, 10),
+        (6, 60),
+        (9, 2),
+        (10, 5),
+        (10, 7),
+        (15, 12),
+        (28, 3),
+        (28, 9),
+    ],
 )
-def test_entries_are_the_rounded_quantiles(comparisons: int, df: int) -> None:
-    exact = smm_table.smm_quantile(comparisons, df)
+def test_entries_against_the_quantiles(comparisons: int, df: int) -> None:
+    exact = round(smm_table.smm_quantile(comparisons, df), 2)
     entry = SMM_TABLE_05[comparisons][SMM_ROWS.index(df)]
-    published = smm_table.PUBLISHED_DIFFERS.get((comparisons, df))
-    assert entry == (published if published is not None else round(exact, 2))
+    if (comparisons, df) in NOT_ROUNDED:
+        assert abs(entry - exact) == pytest.approx(0.01)
+    else:
+        assert entry == exact
 
 
-@pytest.mark.slow
+def test_the_not_rounded_entries_are_listed() -> None:
+    differ = smm_table.not_rounded_quantiles(SMM_TABLE_05)
+    assert {(c, df) for c, df, _, _ in differ} == NOT_ROUNDED
+    above = {(c, df) for c, df, entry, exact in differ if entry > exact}
+    assert above == {(4, 4), (5, 12), (10, 30), (19, 200)}
+    for _, _, entry, exact in differ:
+        assert abs(round(exact, 2) - entry) == pytest.approx(0.01)
+        assert abs(entry - exact) < 0.01
+
+
+def test_table_is_wrs2s_published_table() -> None:
+    # Every entry is WRS2's own (probe-smm, smmcrit on its df x C grid), except
+    # C = 9 at df 2, where WRS2 has 8.83 for the quantile 8.38 (D51).
+    grid = next(g for g in probe("probe-smm").rows("grids") if g["name"] == "smmcrit")
+    published: dict[tuple[int, int], float] = {}
+    for row in grid["rows"]:
+        df = r_double(str(row["df_hex"]))
+        if df not in SMM_ROWS:
+            continue
+        for c, text in zip(grid["c_grid"], row["values_hex"], strict=True):
+            if 2 <= int(c) <= SMM_MAX_TABLED:
+                value = r_double(str(text))
+                assert value is not None
+                published[(int(c), int(df))] = value
+    ours = {
+        (c, df): SMM_TABLE_05[c][i]
+        for c in SMM_TABLE_05
+        for i, df in enumerate(SMM_ROWS)
+    }
+    assert set(ours) == set(published)
+    differ = {
+        key: (published[key], ours[key]) for key in ours if ours[key] != published[key]
+    }
+    assert differ == {(9, 2): (8.83, 8.38)}
+
+
 def test_whole_table_is_regenerated_exactly() -> None:
     assert smm_table.build() == SMM_TABLE_05
+
+
+def test_c9_df2_is_the_quantile_not_wrs2s_transposed_digits() -> None:
+    # WRS2's table has 8.83 (D51); the quantile is 8.3846.
+    assert smm_table.CORRECTED == {(9, 2): (8.83, 8.38)}
+    assert smm_table.smm_quantile(9, 2) == pytest.approx(8.3846, abs=1e-4)
+    assert SMM_TABLE_05[9][0] == 8.38
 
 
 def test_c3_df5_is_the_published_value_not_the_rounded_quantile() -> None:
@@ -201,7 +280,7 @@ def test_c3_df5_is_the_published_value_not_the_rounded_quantile() -> None:
 
 
 def test_critical_value_interpolation() -> None:
-    for c in (1, 3, 10, 45):
+    for c in (2, 3, 10, 28):
         for index, df in enumerate(SMM_ROWS):
             assert smm_critical_value(c, df) == SMM_TABLE_05[c][index]
     # Linear in 1/df between rows: C = 3 between df 5 (3.39) and 6 (3.19).
@@ -212,6 +291,16 @@ def test_critical_value_interpolation() -> None:
     assert smm_critical_value(6, 200) == smm_critical_value(6, 1e6) == 2.63
 
 
+def test_above_28_comparisons_is_the_exact_quantile() -> None:
+    # No table, no interpolation: the quantile at the pair's own df (D52), at any
+    # df from 1 on (WRS2 simulates there and does not stop below df 2).
+    for c, df in ((29, 1.0), (36, 1.5), (36, 12.34), (45, 199.9), (66, 1490.0)):
+        assert smm_critical_value(c, df) == smm_quantile(c, df)
+    assert smm_critical_value(36, math.inf) == pytest.approx(
+        float(stats.norm.ppf((1 + 0.95 ** (1 / 36)) / 2)), rel=1e-15
+    )
+
+
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
@@ -220,11 +309,12 @@ def test_critical_value_interpolation() -> None:
             NotImplementedError,
             "0.95",
         ),
-        ({"n_comparisons": 46, "df": 10}, NotImplementedError, "45"),
         ({"n_comparisons": 3, "df": 1.5}, NotImplementedError, "below 2"),
+        ({"n_comparisons": 1, "df": 1.5}, NotImplementedError, "below 2"),
         ({"n_comparisons": 0, "df": 10}, ValueError, "at least 1"),
-        ({"n_comparisons": 3, "df": 0.0}, ValueError, "positive"),
-        ({"n_comparisons": 3, "df": math.nan}, ValueError, "positive"),
+        ({"n_comparisons": 3, "df": 0.0}, ValueError, "at least 1"),
+        ({"n_comparisons": 36, "df": 0.5}, ValueError, "at least 1"),
+        ({"n_comparisons": 3, "df": math.nan}, ValueError, "at least 1"),
         ({"n_comparisons": 3, "df": 10, "conf_level": 1.0}, ValueError, "conf_level"),
     ],
 )
@@ -239,10 +329,17 @@ def test_lincon_refuses_what_the_table_cannot_give() -> None:
     data = _draw([8, 8, 8], 2)
     with pytest.raises(NotImplementedError, match="conf_level"):
         lincon(data, conf_level=0.9)
-    with pytest.raises(NotImplementedError, match="45"):
-        lincon(_draw([6] * 11, 3))
     with pytest.raises(NotImplementedError, match="below 2"):
         lincon([np.array([0.0, 1.0]), np.array([5.0, 9.0]), np.array([2.0, 2.5])])
+
+
+def test_lincon_above_eight_groups() -> None:
+    # 11 groups, 55 pairs: every pair's critical value is the exact quantile.
+    data = _draw([6] * 11, 3)
+    pairs = lincon(data)
+    assert len(pairs) == 55
+    for pair in pairs:
+        assert pair.critical_value == smm_quantile(55, pair.df)
 
 
 # ------------------------------------------------------------------ reference

@@ -134,6 +134,8 @@ def caption_rows(case: OracleCase) -> list[Row]:
 
 
 def _partial_rows(case: OracleCase, component: str) -> list[Row]:
+    if component not in case.partial_components:
+        return []  # not computed for this type (a caption outside parametric)
     value = case.partial(component)
     return [] if value is None else list(value)
 

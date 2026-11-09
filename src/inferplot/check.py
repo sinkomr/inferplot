@@ -130,13 +130,39 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
     )
 
 
+def _pairwise_conf_level(result: StatsResult) -> Issue | None:
+    """Pairwise intervals at another level than ``settings.conf_level`` (type
+    robust: always 95%, as in ggstatsplot; DECISIONS.md D53)."""
+    level = result.settings.conf_level
+    levels = sorted(
+        {
+            pair.conf_level
+            for pair in result.pairwise
+            if pair.conf_level is not None and pair.conf_level != level
+        }
+    )
+    if not levels:
+        return None
+    shown = ", ".join(f"{100 * v:g}%" for v in levels)
+    return Issue(
+        code="pairwise_conf_level",
+        severity="info",
+        message=(
+            f"The pairwise confidence intervals are {shown} intervals, while "
+            f"conf_level={level!r} applies to the effect size, as in ggstatsplot."
+        ),
+        fix="Report the pairwise intervals' own level, or pass conf_level=0.95.",
+    )
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, heavy_ties, rows_dropped,
-    pairs_hidden."""
+    pairs_hidden, pairwise_conf_level."""
     found = (
         _small_n(result),
         _heavy_ties(result),
         _rows_dropped(result),
         _pairs_hidden(result),
+        _pairwise_conf_level(result),
     )
     return tuple(issue for issue in found if issue is not None)
