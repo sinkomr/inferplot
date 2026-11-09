@@ -238,7 +238,8 @@ def _check_groups(
         tiny = [
             level
             for level, v, sample in zip(levels, variances, values, strict=True)
-            if not v / sample.size >= TINY  # as stats.scaled_weight_terms
+            # as stats.parametric.checked_scaled_variances
+            if not v / sample.size >= TINY
         ]
         if tiny:
             whose = (

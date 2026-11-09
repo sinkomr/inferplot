@@ -144,7 +144,11 @@ explaining that pairing by row order is not allowed.
   they did).
 - Parametric type (Welch's t and ANOVA, Games-Howell): every level needs n >= 2, two
   groups may not both be constant, and with three or more groups every level needs a
-  variance above 0. The error names the levels (D35).
+  variance above 0. The error names the levels (D35). A group that varies by less
+  than double precision can resolve next to the largest |y| (a standard deviation
+  below roughly 1e-154 times it; §4, "Scale and range") raises too, naming the
+  levels; with two groups this happens only when the group with the largest |y| is
+  constant. A group whose values span more than the largest double raises.
 - `withinstats`: pivot `subject_id × x`. A repeated subject within a level raises,
   naming the first duplicates. Subjects missing any level are removed from statistics
   **and** the plot and counted (ggstatsplot 1.1.3 behavior).
@@ -203,6 +207,26 @@ a docstring):
 | nonparametric | Kruskal-Wallis (`stats::kruskal.test`) | rank epsilon squared (`effectsize::rank_epsilon_squared`), one-sided percentile bootstrap CI [lower, 1] (ggstatsplot: 100 iterations) | Dunn (`PMCMRplus::kwAllPairsDunnTest`): z = abs(mean-rank difference) / tie-corrected SE, reported unsigned; two-sided normal p (reproduced to 2.4e-15) | median |
 | robust | trimmed-means ANOVA (`WRS2::t1way`); p computed as 1 - pf (§10, `wrs2_p`) | explanatory effect size (`WRS2::t1way`), bootstrap CI (ggstatsplot: 100 resamples, `alpha = 1 - conf.level` computed in floating point, 0.050000000000000044: with 100 resamples only that value, not 0.05, reproduces ggstatsplot's bounds, so the CI's order statistics depend on alpha / 2 x resamples rounding past 2.5); with unequal group sizes the point estimate is itself random (oracle replicate SD 0.0048 on mtcars), so compare it within Monte Carlo error | `WRS2::lincon`: estimate = trimmed mean(group1) - trimmed mean(group2); p = per-pair Yuen p (1 - pt), then `p_adjust_method` (lincon's own Hochberg is not used); CI = estimate -/+ c x Yuen SE. c comes from a two-decimal table of the Studentized maximum modulus at (alpha, C = number of pairs, not groups: `edge_k5` has 10, `bugs_long` 6), whose rows are every df from 2 to 12, then 14, 16, 18, 20, 24, 30, 40, 60 and a last row at df 200 holding the infinite-df (normal) values; c is interpolated linearly in 1/df between the rows on either side of the pair's Yuen df (fixtures: df 5.2 to 110, rows up to 60/200; reproduced to 1e-14). The entries are the published table's, not recomputed quantiles: for C = 3 at df 5 the table has 3.39 where the quantile, 3.3992, rounds to 3.40 *(verify: take the table from its published source; no fixture has df above 200 or alpha other than 0.05)* | trimmed mean |
 | bayes | v0.2: `BayesFactor::anovaBF` (method and precision to measure when implemented) | v0.2: Bayesian R squared, posterior median with 95% HDI (`conf.method` "HDI" in the fixtures) | v0.2: `ttestBF` per pair as for two groups, unadjusted, always with prior 0.707 and 95% intervals whatever `bf_prior` and `conf_level` say (every pair's Bayes factor is reproduced by `tools/reference`) | MAP |
+
+**Scale and range (parametric).** Every parametric statistic, interval and Bayes
+factor is computed on y times one power of two that brings the largest |y| of all
+groups into [1/2, 1). Multiplying by a power of two is exact, so the results do not
+depend on the units of y: the data times 2^k give bit-identical numbers for every k
+that keeps them normal doubles (§11). The Welch-Satterthwaite df is computed from the
+variance shares w_i / (w_a + w_b), so no square of a variance term can overflow or
+underflow. In that scale a variance term v / n below 2^-1022 (the smallest normal
+double) is not accurate, so inferplot raises a plain `ValueError` naming the group
+instead of reporting a number: for two groups the term is the squared standard
+error the t statistic divides by (Welch's; also Student's when the Bayes factor is
+drawn), for three or more groups each group's v / n. In units of y that is roughly a
+group standard deviation below 1e-154 times the largest |y| (§3). Consequently a
+two-sample |t| stays below 2^512; `t_ncp_interval` accepts |t| up to 1e300 and the
+JZS Bayes factor any finite t. The noncentral F behind the omega squared interval is
+a Poisson mixture of beta distributions; from a Poisson mean of 1e4 on it is summed
+on every h-th term, h = floor(sqrt(mu) / 8), the trapezoidal rule on an analytic
+summand (Trefethen & Weideman 2014) with Loader's (2000) saddle-point weights, and
+beta factors with a >= 1e5 max(b, 1) use an expansion through a^-2, so the interval
+takes at most about 0.04 s at any F (DECISIONS log).
 
 ### withinstats, two conditions
 
@@ -314,6 +338,12 @@ Statistical and behavioral differences are exactly these:
 7. The partial omega squared lower bound is the accurate root of ggstatsplot's own
    construction. Where effectsize's root search stops early (up to 2.1e-3 on the
    probe grid, never in the fixtures), inferplot's bound differs (D33).
+8. At the limits of double precision the parametric statistics are computed in one
+   power-of-two scale of all groups (§4, "Scale and range"), so data at any
+   magnitude give the same numbers, and a group whose standard deviation is below
+   roughly 1e-154 times the largest |y| raises a plain `ValueError`, also for some
+   data a computation in the data's own units could handle (one constant group at
+   1e160 against [1, 2, 3]). No fixture comes near either limit.
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -581,7 +611,7 @@ again.
 | --- | --- | --- |
 | closed-form statistics, df, t/F/chi-square/normal p-values | rtol 1e-10 | both sides exact to double precision |
 | Games-Howell p against ggstatsplot (`games_howell_p`) | rtol 1e-6, atol 3e-9 | R's ptukey error (probe-ptukey) grows as the df falls; on the fixtures' pairs it is at most about 4.7e-10 raw and, times the Holm multiplier, 2.8e-9 after Holm (InsectSprays B-E, 15 pairs); inferplot computes the accurate value (§5 item 6), checked against high-precision references under `studentized_range_tail` |
-| studentized range tail against mpmath references (`studentized_range_tail`) | rtol 4e-13 | 711 frozen mpmath values (`tests/data/studentized_range_reference.json`, regenerated by `tools/reference/studentized_range_mpmath.py`); measured at most 1.45e-13, the rounding of exp(log P) at P = 1e-300 |
+| studentized range tail against mpmath references (`studentized_range_tail`) | rtol 4e-13 | 792 frozen mpmath values (`tests/data/studentized_range_reference.json`, regenerated by `tools/reference/studentized_range_mpmath.py`): a grid, df = Inf, exact k = 2 values, and every Games-Howell pair of the completed parametric fixtures (109 pairs) plus the 3 of `edge_n2`; measured at most 1.45e-13, the rounding of exp(log P) at P = 1e-300, and 5.2e-15 on the fixture pairs |
 | noncentral t and F distribution functions (`noncentral_cdf`) | rtol 2e-11 | 521 frozen mpmath points (`tests/data/noncentral_reference.json`); measured at most 2.5e-12 (F at SciPy 1.11), 1.6e-14 for t |
 | p-values WRS2 computes as 1 - pt or 1 - pf (`wrs2_p`: t1way, lincon, presumably Yuen) | rtol 1e-10, atol 2^-53 x the factor applied to the one-sided tail afterwards (2 for two-sided, times the number of pairs after Holm) | the one-sided tail rounded to the spacing of doubles just below 1 (2^-53); rounding the tail the same way matches all fixtures but iris t1way, which lands one grid step away |
 | noncentral-distribution CIs (`noncentral_ci`) | rtol 1e-6, atol 4e-8 | R's root finding is accurate to about 1e-8 absolute: Hedges' g bounds at most 1.9e-8 absolute and 7.5e-7 relative (ToothGrowth lower bound, -0.0217), omega lower bounds at most 1.5e-8 absolute; an omega bound where effectsize's search stopped early is compared with the accurate root instead (D33) |

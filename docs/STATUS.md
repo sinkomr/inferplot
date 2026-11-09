@@ -42,8 +42,22 @@ are logged in DECISIONS.md.
 - [x] Oracle parity tests pass for every betweenstats parametric fixture: `ip.analyze.betweenstats` matches all 40 completed parametric fixtures on pandas, polars and pyarrow (`tests/test_betweenstats_parity.py`); three bracket labels differ by design (D31, SPEC §5 item 6); `edge_n2`, where ggstatsplot fails, matches its partial outputs (D37)
 
 Slices: two groups (ToothGrowth) and three or more groups (iris) render to SVG with
-`fig.check()` empty (`tests/test_betweenstats_end_to_end.py`). End-of-phase review:
-pending.
+`fig.check()` empty (`tests/test_betweenstats_end_to_end.py`).
+
+End-of-phase review: done. A fresh-context review of the Phase 1 diff against SPEC.md
+confirmed 21 findings, all fixed. The four major ones: the omega squared interval took
+minutes, and crashed near F = 1e17, for very well separated groups (now at most 0.04 s
+at any F); a bracket label drawn across another bracket's line went unreported with
+`ax=`; artist dicts for layers that are not drawn were ignored, and a bad one left a
+half-drawn Axes; statsExpressions' templates were adapted without its notice (NOTICE
+added; the D5 question is below). The others: statistics that depended on the units
+of y (now bit-identical under any power of two), -0.00 for Hedges' g at df 1,
+arguments with no effect accepted silently (now a warning each, D39), Games-Howell
+references for every fixture pair (109), coverage simulated at nonzero effects,
+`order=` with NumPy values, user text as mathtext (D40), clearer messages, and stale
+counts. The lead's review of the fixes found that very wide ranges between groups gave
+silent errors or NaN; such data now compute exactly or raise a plain error (SPEC §4,
+"Scale and range").
 
 Phase 1 notes: fixtures come from oracle run 42522555302: the 45 Phase 0 cases,
 unchanged, plus 28 parametric ggbetweenstats cases (edge data and every argument the
@@ -75,7 +89,7 @@ confirmed the omega squared CI construction (D33, flagged for the owner).
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
 - [ ] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples
-- [ ] simulation tests (`slow` marker); started in Phase 1: Welch t and ANOVA Type I error and Hedges' g CI coverage under the null with unequal variances and n (0.0475, 0.0515, 0.9525; `tests/test_simulation.py`)
+- [ ] simulation tests (`slow` marker); started in Phase 1: Welch t and ANOVA Type I error under the null (0.0475, 0.0515) and Hedges' g CI coverage at nonzero standardized differences (0.9445, 0.9480, 0.9515), with unequal variances and n (`tests/test_simulation.py`)
 - [ ] agent evaluation harness (ask the human before running it)
 - [ ] release workflow; human publishes to TestPyPI, then PyPI
 
@@ -112,6 +126,10 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   the renderer sets DejaVu Sans on every text of that Axes, including the user's.
 - Negative zero in number formatting is not pinned (R received the probe's -0 as +0);
   inferplot prints "-0.00" as C `sprintf` does.
+- Wide dynamic range: one constant group with a value of at least about 1e154 times the
+  other group's standard deviation raises (SPEC §5 item 8), although its t fits in a
+  double; a second scale per group could compute it. Not worth it for such data unless
+  a user needs it.
 - R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
   (`?TDist`); no fixture has a two-group \|t\| above 3.7, so Hedges' g CI parity at
   large \|t\| is untested.
