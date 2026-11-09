@@ -720,8 +720,9 @@ def akp_effect(
     floor((1 - alpha / 2) B)-th smallest of the resampled deltas, alpha =
     1 - conf_level (WRS2's order statistics, read off the oracle's replay). A
     resample whose first sample has a winsorized variance of 0 while the trimmed
-    means differ gives delta = +/-inf; it is kept, as WRS2's arithmetic keeps it,
-    so a bound can be infinite, and counted in ``infinite_resamples``.
+    means differ gives delta = +/-inf; it is kept (WRS2's formula gives the same;
+    no oracle fixture has one), so a bound can be infinite, and counted in
+    ``infinite_resamples``.
 
     WRS2 evaluates s_N numerically, off the exact value used here by an amount
     that varies with tr: 1.2e-9 relative above it at tr = 0.2, 4.6e-9 at 0.1, up
@@ -795,7 +796,7 @@ def explanatory_effect(
     1 - conf_level in floating point (WRS2's rule; at B = 100 alpha / 2 B is
     2.5000000000000022, so l = 3, which ggstatsplot's own values need). A resample
     whose pooled winsorized variance is 0 while its trimmed means differ gives
-    xi = inf; it is kept, as in WRS2, and counted in ``infinite_resamples``.
+    xi = inf; it is kept and counted in ``infinite_resamples``.
 
     Estimate: with equal group sizes, xi of the data (inf when the pooled
     winsorized variance is 0 and the trimmed means differ). With unequal sizes the

@@ -699,8 +699,8 @@ def test_robust_infinite_akp_resamples_are_counted(teeth: pd.DataFrame) -> None:
     assert result.warnings == (
         "721 of 2,000 bootstrap resamples give an infinite AKP robust standardized "
         "difference, because in them the first group's winsorized variance is 0 "
-        "while the trimmed means differ. They are kept, as in ggstatsplot (WRS2), "
-        "so the confidence interval [-Inf, -2.45] can be unbounded. Pass a smaller "
+        "while the trimmed means differ. They are kept, so "
+        "the confidence interval [-Inf, -2.45] can be unbounded. Pass a smaller "
         "tr, or use type='nonparametric'.",
     )
     (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]
@@ -728,7 +728,7 @@ def test_robust_infinite_xi_resamples() -> None:
     assert [w for w in result.warnings if "infinite" in w] == [
         "162 of 2,000 bootstrap resamples give an infinite explanatory effect size "
         "xi, because in them the pooled winsorized variance is 0 while the trimmed "
-        "means differ. They are kept, as in ggstatsplot (WRS2), so the confidence "
+        "means differ. They are kept, so the confidence "
         "interval [0.65, Inf] can be unbounded. Pass a smaller tr, or use "
         "type='nonparametric'."
     ]

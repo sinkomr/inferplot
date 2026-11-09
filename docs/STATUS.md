@@ -3,8 +3,8 @@
 Read this at the start of every session; update it at the end of every slice.
 A slice is done only when its definition of done in `CLAUDE.md` is met.
 
-Current phase: **2 — betweenstats nonparametric, robust, bayes** (Phase 1 merged to main
-2026-11-08; its close-out findings are open below)
+Current phase: **3 — withinstats, all types** (Phase 2 merged to main 2026-11-09; D50
+and D52 await the owner's confirmation)
 
 ## Phase 0 — Scaffold
 
@@ -139,7 +139,15 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   pinned: 3 subtitles and 3 bracket labels (D43), 1 label (D50), 36 edge_k9 critical
   values (D52). New: WRS2's published lincon table (D51), the exact SMM quantile above
   28 pairs (D52), tied resamples left out (D54), MAP without a density (D55)
-- [ ] end-of-phase fresh-context review of the Phase 2 diff against SPEC.md
+- [x] end-of-phase fresh-context review of the Phase 2 diff against SPEC.md: two
+  reviewers (statistics; API, text and rendering) found no wrong formula, tail, df or
+  seeding error and 13 smaller findings, all fixed (DECISIONS log 2026-11-09): BF10
+  beyond a double printed from log(BF01) (4.19e+330, not Inf), Bayes alt text, robust
+  pairs below 2 df at any pair count, Bayes pair errors, infinite AKP and xi
+  resamples counted and reported (721 of 2,000 in the review's example), MAP bins
+  anchored at min(x) far from zero, NumPy integer seeds, probe-ranks and probe-wrs2p
+  run through inferplot's own functions. CI green on all nine jobs, including the
+  lowest-dependency job
 
 ## Phase 3 — withinstats, all types
 
@@ -210,6 +218,19 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   `NotImplementedError` (WRS2 stops too). An AKP or xi resample whose effect size is
   0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at 10,000
   values per group; a counting-based sort could make it about 5 times faster.
+- MAP binning: R anchors bw.SJ's bins at min(x) far from zero; inferplot does so from
+  2^31 bin widths, inferred from probe-map (49 vectors at most 2.8e4, two at 2.4e10
+  and 7.5e11). Pin it in the next oracle run with the base vector
+  [0,1,2,2,3,3,3,4,5,7,9,12] plus c = 1200, 1211988, 26027440 and 26027507 (1e5, 1e8,
+  just below and just above 2^31 bin widths; the anchors' bandwidths differ by about
+  1e-3 there; avoid c = 26027539, where they agree).
+- Infinite AKP and xi resamples are kept on the assumption that WRS2 computes the
+  same ±Inf; no fixture has one. Add a case when an oracle run is next due.
+- The APA sentence prints a huge statistic in fixed notation (an F of 1e250 gives 251
+  digits), the only way the alt text can exceed 400 characters.
+- Unverified lead (statistics review): SciPy's betainc is used where both beta
+  parameters are at least 1e4 within a factor of 10 (large Welch df2 and ncp in the
+  omega squared interval); `noncentral_f_df1_two` covers df1 = 2 only.
 - Phases 3 and 4: `ttest_bayes_factor` was measured on two-sample Bayes factors only;
   measure paired and one-sample ones against an exact integral when their fixtures
   arrive, and log any change.

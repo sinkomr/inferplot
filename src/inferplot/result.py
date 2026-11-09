@@ -190,7 +190,7 @@ class EffectSize(_Plain):
     resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``, and
     in ``infinite_resamples`` how many resamples gave an infinite effect size (the
     AKP and explanatory effect sizes when a resample's winsorized variance is 0;
-    kept, as in WRS2, so a bound can be infinite); all three are None for a CI
+    kept, so a bound can be infinite); all three are None for a CI
     without resampling. With unequal group sizes the explanatory effect size's
     estimate is itself the median of the bootstrap values, so it depends on the
     seed too.

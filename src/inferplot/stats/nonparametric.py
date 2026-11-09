@@ -124,7 +124,7 @@ class BootstrapEffectSizeCI:
     comes from the other ``resamples - undefined_resamples``.
     ``infinite_resamples`` counts the resamples where it is +/-inf (the AKP and
     explanatory effect sizes when a resample's winsorized variance is 0 and its
-    numerator is not); they are kept, so a bound can be infinite, as in WRS2.
+    numerator is not); they are kept, so a bound can be infinite.
     """
 
     estimate: float

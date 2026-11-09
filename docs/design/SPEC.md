@@ -208,7 +208,7 @@ a docstring):
 | parametric | Welch's t (`stats::t.test`, var.equal = FALSE); p follows `alternative` | Hedges' g (`effectsize::hedges_g(pooled_sd = FALSE)`): d = (mean1 - mean2) / sqrt((var1 + var2) / 2), the unpooled standardizer, not the pooled SD and not the average of the two SDs; g = d x J(df_W), with J Hedges' exact gamma-ratio correction at the Welch df df_W. CI: the noncentral-t interval for the noncentrality parameter at the Welch t and df_W, each bound times (Welch SE / sqrt((var1 + var2) / 2)) x J(df_W). The CI follows `alternative`: "greater" gives [lower bound, Inf] and "less" [-Inf, upper bound], one-sided at `conf_level`; the subtitle prints "Inf" and "-Inf". Reproduced in every two-group fixture, balanced and unbalanced (mtcars `am`, `edge_k2`), at 90% and 95% and one-sided: g to 1e-10, CI bounds to 1.9e-8 absolute (`noncentral_ci`). inferplot computes the noncentral t itself: SciPy's `nctdtr` is off by up to 1.5e-3 at the SciPy 1.11 floor and returns NaN far in the tails at 1.18 | mean |
 | nonparametric | Mann-Whitney U (`stats::wilcox.test(exact = FALSE)`): always the normal approximation with continuity correction, never exact, also without ties and with fewer than 50 values per group (`edge_k2`: ggstatsplot reports p = 0.0025; the exact p would be 0.0013); the fixture's method string omits "with continuity correction"; p follows `alternative` | rank-biserial r = 2U / (n1 n2) - 1 (`effectsize::rank_biserial`), U the Mann-Whitney U of group 1; CI tanh(atanh(r) -/+ z x sqrt((n1 + n2 + 1) / (3 n1 n2))), ties ignored; follows `alternative` ("greater" gives [lower bound, 1], "less" [-1, upper bound]); reproduced to 1e-10 | median |
 | robust | Yuen, 20% trim (`WRS2::yuen`): t is reported unsigned, \|t\|, even when group 1's trimmed mean is the smaller (mtcars `am`, `edge_k2`), while the AKP effect size keeps its sign; WRS2 computes p as 2 (1 - pt(|t|, df)) (probe-wrs2p: all 84 yuen p-values equal it bit for bit; iris_no_setosa-petal: 5.77e-15 where the exact tail is 5.93e-15); inferplot reports the accurate tail, 2 P(T > |t|), which agrees within that rounding and stays positive where 1 - cdf is 0 (D43; §10, `wrs2_p`). `alternative` has no effect (ToothGrowth-greater-robust equals the two-sided case) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); percentile bootstrap CI: each resample draws group 1 then group 2 with replacement at full size; the bounds are the (floor(alpha/2 B) + 1)-th and floor((1 - alpha/2) B)-th smallest of B values (alpha = 1 - `conf_level`; ggstatsplot: 100 resamples, inferplot 2,000), proved by replaying ggstatsplot's own 100-resample values exactly. AKP = c(tr) x trimmed-mean difference / group 1's winsorized SD, with c(tr) the square root of the winsorized normal variance: WRS2 evaluates it numerically, 1.2e-9 relative above the exact value at tr 0.2, 4.6e-9 at 0.1 and up to 4.2e-7 at 0.49 (probe-akp); inferplot uses the exact value (D42) | trimmed mean |
-| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces 75 of the 77 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 2.3e-9; BayesFactor misses the other two (iris Petal.Length setosa-versicolor and setosa-virginica, t -39.5 and -50.0) by 1.2e-3 and 6.1e-5, where inferplot reports the accurate value (D50, §5 item 10); Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`): Gaussian kernel density with `bw.SJ` (Sheather & Jones 1991, solve-the-equation; pair distances binned in 1,000 bins of 1.01 x range / 1000 anchored at zero, root by Brent's zero finder at tol 0.1 x lower) by `stats::density` (linear binning on 1,024 points from min - 4 bw to max + 4 bw, FFT, linear interpolation), read at 1,024 points from min(x) to max(x); the first point with the largest density (probe-map: 49 of its 52 vectors on R's grid point or the same double, among them negative values, data spanning zero, values near 1e8 and 1.7e9, n up to 1e5 and tight clusters; normal_n1e5 is one step away, where R's two densities differ by 6.2e-15; for values near 1e8 and above R anchors the bins at min(x), so its bandwidth differs by up to 9.6e-4 relative, the MAP not). Constant data: the value itself. Where bw.SJ fails on data with spread (zero IQR), the group's MAP is `None`, no label is drawn and `warnings` says why; ggstatsplot prints an empty label (D55, §5 item 12). Fewer than 2 values raise `ValueError` |
+| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces 75 of the 77 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 2.3e-9; BayesFactor misses the other two (iris Petal.Length setosa-versicolor and setosa-virginica, t -39.5 and -50.0) by 1.2e-3 and 6.1e-5, where inferplot reports the accurate value (D50, §5 item 10); Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`): Gaussian kernel density with `bw.SJ` (Sheather & Jones 1991, solve-the-equation; pair distances binned in 1,000 bins of 1.01 x range / 1000 anchored at zero, root by Brent's zero finder at tol 0.1 x lower) by `stats::density` (linear binning on 1,024 points from min - 4 bw to max + 4 bw, FFT, linear interpolation), read at 1,024 points from min(x) to max(x); the first point with the largest density (probe-map: 49 of its 52 vectors on R's grid point or the same double, among them negative values, data spanning zero, values near 1e8 and 1.7e9, n up to 1e5 and tight clusters; normal_n1e5 is one step away, where R's two densities differ by 6.2e-15; for values near 1e8 and above R anchors the bins at min(x), so its bandwidth differs by up to 9.6e-4 relative, the MAP not). Constant data: the value itself. Where bw.SJ fails on data with spread (zero IQR), the group's MAP is `None`, no label is drawn and `warnings` says why; ggstatsplot prints an empty label (D55, §5 item 12). Fewer than 2 values raise `ValueError`. bw.SJ's pair distances are binned from zero with truncation toward zero (pinned by probe-map's 17 vectors that span zero; floor misses by up to 0.53 relative), and from min(x) once max\|x\| / bin width reaches 2^31 (probe-map's two far vectors, 2.4e10 and 7.5e11 bin widths, match to 1e-14; the threshold between 2.8e4 and 2.4e10 is inferred, likely R's integer bin index) |
 
 ### betweenstats, three or more groups
 
@@ -322,6 +322,11 @@ it as parametric).
   as "0.00" (iris-petal-robust); inferplot reports the accurate tail (D43, §5 item 9).
   lincon's CI uses WRS2's published two-decimal table, 24 of whose alpha-0.05 entries
   are one unit off the rounded quantile (D51), always at 95% (D53).
+- An AKP or xi resample (or, for xi with equal sizes, the data) whose winsorized
+  variance is 0 while the trimmed means differ gives ±inf; inferplot keeps the value
+  (WRS2's formulas give the same; no fixture has one), counts it in
+  `infinite_resamples`, warns and reports `infinite_effect_size`. A 0/0 resample
+  raises `ValueError`.
 - `alternative` has no effect on the robust and bayes types (ToothGrowth-greater-*).
 - One-sided `alternative` makes the two-group effect-size CIs one-sided; the Bayes
   caption stays two-sided.
@@ -426,7 +431,7 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `values` | per level, the analyzed `y` values in data order; the renderer draws from them (D36) |
 | `descriptives` | per level: `n`, centrality name (`mean`, `median`, `trimmed_mean`, `map`) and value |
 | `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45) |
-| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples` and `bootstrap_seed` (`None` without resampling); `None` for type bayes (D45) |
+| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
 | `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46) |
 | `n_obs`, `n_dropped`, `dropped_subjects` | counts |
@@ -515,7 +520,9 @@ from it has `values == ()` and cannot be drawn again.
   p = .008, explanatory effect size xi = 0.67, 95% CI [0.28, 0.99], n = 30.";
   "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18, n = 60.";
   "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 = 0.65;
-  ...; n = 30." BF10 has two decimals, scientific from 1e5 and below 0.01; xi and AKP
+  ...; n = 30." BF10 has two decimals, scientific from 1e5 and below 0.01; a BF10
+  beyond the range of a double (stored as inf or 0) prints from log(BF01) as
+  m.mme±NNN ("BF10 = 4.19e+330"), also in the alt text and `str(result)`; xi and AKP
   keep the leading zero (not bounded by 1). Without a computed test (type bayes, two
   groups, `results_subtitle=False`): "No test was computed (results_subtitle=False), n
   = 60."
@@ -523,12 +530,16 @@ from it has `values == ()` and cannot be drawn again.
   across the <k> groups of <x>: <level> (n = <n>, mean <value>), ...", then the APA
   sentence, then "<s> of <m> pairwise comparisons are significant (<test>,
   <adjustment>, alpha = <alpha>)." When that is longer than 400 characters the groups
-  are summarized as ranges and long names are shortened with an ellipsis (U+2026).
+  are summarized as ranges and long names are shortened with an ellipsis (U+2026);
+  if it is still too long the group description is dropped, and the result sentence
+  is never cut (so only a result sentence over 400 characters exceeds the limit).
   The centrality reads "mean", "median", "<tr x 100>% trimmed mean" or "MAP
-  estimate". Type bayes with three or more groups replaces the result and pair
-  sentences with "Bayesian t-tests of each of the <m> pairs (JZS prior, r = 0.707,
-  Student's t): BF10 from <min> (<g1> vs <g2>) to <max> (<g1> vs <g2>); brackets show
-  log(BF01) for every pair."
+  estimate", and "no MAP estimate" for a group without one (D55). Type bayes with
+  three or more groups replaces the result and pair sentences with "Bayesian t-tests
+  of each of the <m> pairs (JZS prior, r = 0.707, Student's t): BF10 from <min> (<g1>
+  vs <g2>) to <max> (<g1> vs <g2>); brackets show log(BF01) for every pair.", pairs
+  ranked by -log(BF01), level names shortened like the groups'; with
+  `pairwise_display="none"` it ends "no brackets are drawn (pairwise_display='none')."
 
 ## 8. `check()`
 
@@ -542,6 +553,7 @@ no problems.
 | `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.values`) |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed |
+| `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |
 | `pairwise_conf_level` | result | info | the pairwise intervals are at a level other than `conf_level` (type robust with three or more groups: lincon's are always 95%, D53) |
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |

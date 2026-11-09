@@ -1020,8 +1020,8 @@ def _infinite_effect_warnings(
         total = effect_size.bootstrap_resamples or 0
         out.append(
             f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
-            f"{effect_size.label}, because in them {why}. They are kept, as in "
-            "ggstatsplot (WRS2), so the confidence interval "
+            f"{effect_size.label}, because in them {why}. They are kept, so "
+            "the confidence interval "
             f"[{format_value(effect_size.conf_low)}, "
             f"{format_value(effect_size.conf_high)}] can be unbounded. Pass a smaller "
             "tr, or use type='nonparametric'."

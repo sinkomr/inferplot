@@ -159,7 +159,8 @@ def _pairwise_conf_level(result: StatsResult) -> Issue | None:
 def _infinite_effect_size(result: StatsResult) -> Issue | None:
     """An infinite effect size, or bootstrap resamples where it is infinite (type
     robust: a winsorized variance of 0 under trimmed means that differ). The values
-    are kept, as in WRS2, so the estimate or a CI bound can be -Inf or Inf."""
+    are kept (WRS2's formulas give the same values; no oracle fixture has one), so
+    the estimate or a CI bound can be -Inf or Inf."""
     es = result.effect_size
     if es is None:
         return None
@@ -182,7 +183,7 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         severity="warning",
         message=" ".join(parts)
         + " A winsorized variance of 0 next to trimmed means that differ makes the "
-        "effect size infinite (as WRS2 computes it).",
+        "effect size infinite.",
         fix=(
             "Report the effect size as unbounded, pass a smaller tr, or use "
             "type='nonparametric'."
