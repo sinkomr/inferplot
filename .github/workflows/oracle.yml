@@ -118,6 +118,9 @@ jobs:
           git diff --exit-code --stat -- oracle/datasets
 
       - name: Generate fixtures
+        env:
+          # Temporary experiment: these cases alone in a fresh session.
+          ORACLE_SUBSET: '^ggbetweenstats-(edge_k5|bugs_long|InsectSprays)-(parametric|bayes)$'
         run: Rscript oracle/generate.R oracle/datasets oracle/out
 
       - name: Upload fixtures
