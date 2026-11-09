@@ -17,7 +17,7 @@ from scipy import special, stats
 
 from inferplot.stats import f_ncp_bound, t_ncp_interval
 from inferplot.stats.noncentral import (
-    _beta_large_a,  # pyright: ignore[reportPrivateUsage]
+    _log_gamma_ratio,  # pyright: ignore[reportPrivateUsage]
     log_beta_factors,
     noncentral_f_logcdf,
     noncentral_t_logcdf,
@@ -55,6 +55,82 @@ def test_noncentral_t_matches_high_precision_reference() -> None:
 def test_noncentral_f_matches_high_precision_reference() -> None:
     keys = ("f", "df1", "df2", "ncp")
     assert _check_tails("noncentral_f", noncentral_f_logcdf, keys) > 300
+
+
+def test_noncentral_f_at_large_ncp_matches_the_integral_reference() -> None:
+    # NEW-2: Poisson means 1e5 to 1e12, both tails from 1e-3 to 1e-20
+    # (references by the chi'^2 x chi^2 integral, which shares nothing with the
+    # Poisson sum).
+    keys = ("f", "df1", "df2", "ncp")
+    assert _check_tails("noncentral_f_large", noncentral_f_logcdf, keys) >= 60
+
+
+def test_noncentral_f_at_large_df2_matches_the_exact_sum() -> None:
+    # NEW-5: df2 = 1e6 and 1e8, where SciPy's betainc with b = 5e7 is off by
+    # about 1e-10 (exact negative-binomial sums for df1 = 2).
+    keys = ("f", "df1", "df2", "ncp")
+    assert _check_tails("noncentral_f_df1_two", noncentral_f_logcdf, keys) >= 40
+
+
+def test_noncentral_f_far_in_its_tails_matches_the_integral_reference() -> None:
+    # NEW-4: log P down to -2000, where SciPy's betainc underflows (it returned 0
+    # below about 1e-280 and log P came out 12 too small at -677.7). Compared as
+    # log probabilities (the probabilities are below the doubles).
+    checked = 0
+    for point in _reference()["sets"]["noncentral_f_deep"]["points"]:
+        args = [float(point[k]) for k in ("f", "df1", "df2", "ncp")]
+        for side in ("lower", "upper"):
+            expected = float(Decimal(point[f"log_{side}"]))
+            if expected > math.log(SMALLEST):
+                continue  # within the range of the other reference tests
+            ours = noncentral_f_logcdf(*args, upper=side == "upper")
+            assert_close("noncentral_cdf", ours, expected, what=f"deep {args} {side}")
+            checked += 1
+    assert checked >= 8
+
+
+@pytest.mark.parametrize(
+    ("f", "df1", "ncp"),
+    [
+        (1e-100, 2.0, 2e5),  # NEW-3: was log P = 0 (a NaN taken as P = 1)
+        (1e-300, 4.0, 1e3),
+        (0.5, 2.0, 2e5),
+        (1e-3, 7.0, 3e7),
+        (2.0, 2.0, 40.0),
+        (1e5, 3.0, 2e5),
+        (3e5, 2.5, 1e11),
+        (4.0, 9.0, 1e14),
+    ],
+)
+def test_noncentral_f_with_two_denominator_df_is_closed_form(
+    f: float, df1: float, ncp: float
+) -> None:
+    # df2 = 2 makes every beta factor I_x(a, 1) = x^a, so the Poisson mixture sums
+    # to P(F' <= f) = x^(df1 / 2) exp(-ncp (1 - x) / 2), x = df1 f / (df1 f + 2):
+    # an exact reference at any ncp and any depth.
+    x = df1 * f / (df1 * f + 2.0)
+    y = 2.0 / (df1 * f + 2.0)
+    log_lower = 0.5 * df1 * math.log(x) - 0.5 * ncp * y
+    log_upper = math.log(-math.expm1(log_lower))
+    ours_lower = noncentral_f_logcdf(f, df1, 2.0, ncp)
+    ours_upper = noncentral_f_logcdf(f, df1, 2.0, ncp, upper=True)
+    assert_close("noncentral_cdf", ours_lower, log_lower, what="log lower")
+    if log_upper < -1e-300:
+        assert_close("noncentral_cdf", ours_upper, log_upper, what="log upper")
+    else:
+        assert ours_upper == pytest.approx(log_upper, abs=1e-15)
+
+
+def test_a_nan_is_never_a_probability(monkeypatch: pytest.MonkeyPatch) -> None:
+    # NEW-3: min(0.0, nan) is 0.0, so a NaN beta factor read as P = 1.
+    from inferplot.stats import noncentral
+
+    def nan_factors(a: np.ndarray, *args: Any, **kwargs: Any) -> np.ndarray:
+        return np.full_like(a, math.nan)
+
+    monkeypatch.setattr(noncentral, "log_beta_factors", nan_factors)
+    with pytest.raises(ArithmeticError, match="not a number"):
+        noncentral_f_logcdf(2.0, 3.0, 10.0, 5.0)
 
 
 def test_noncentral_t_special_cases() -> None:
@@ -367,15 +443,13 @@ LARGE_A_BETA = (
 
 
 @pytest.mark.parametrize(("b", "a", "z", "expected"), LARGE_A_BETA)
-def test_large_a_beta_expansion(b: float, a: float, z: float, expected: str) -> None:
-    # For a >= 1e5 max(b, 1) the expansion through a^-2 replaces SciPy's betainc,
-    # which is off by up to 2.8e-10 here (b = 3 and 30; the expansion by 1.2e-15).
-    r = z / a
-    value = float(expected)
-    upper = _beta_large_a(np.array([a]), b, r, upper=True)[0]
-    assert upper == pytest.approx(value, rel=1e-13, abs=1e-16)
-    lower = _beta_large_a(np.array([a]), b, r, upper=False)[0]
-    assert lower == pytest.approx(1.0 - value, rel=1e-13, abs=1e-16)
+def test_large_a_beta_factors(b: float, a: float, z: float, expected: str) -> None:
+    # For a >= 1e4 max(b, 1) the gamma-ratio route replaces SciPy's betainc,
+    # which is off by up to 2.8e-10 here (b = 3 and 30).
+    log_u, log_l = _log_gamma_ratio(np.array([a]), np.array([b]), z / a)
+    value = Decimal(expected)
+    assert math.exp(log_u[0]) == pytest.approx(float(value), rel=1e-13)
+    assert math.exp(log_l[0]) == pytest.approx(float(1 - value), rel=1e-13)
 
 
 @pytest.mark.parametrize("f", [1e6, 1e12, 1e50, 1e200, 1e300])

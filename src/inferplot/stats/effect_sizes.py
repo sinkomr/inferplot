@@ -141,9 +141,13 @@ def partial_omega_squared(
     (F near 1e17); the two agree within 3e-15 relative where both are defined. A
     bound beyond the largest double gives a lower bound of 1.
 
-    Run time: at most 0.04 s per call at any F up to the largest double (the
-    subsampled Poisson sum and the large-lambda bracket of ``f_ncp_bound``; before
-    them the cost grew like sqrt(F), 125 s at F = 1e12). Against the full Poisson
+    Run time: about 1 ms at the F values of the fixtures and at most 0.23 s per
+    call at any F up to the largest double (264 calls, F from 10 to 1e302 at six
+    (df1, df2, level) settings up to df2 = 2e6: mean 78 ms; 37 ms at most before
+    the beta factors with a large parameter moved to log space, which made them
+    accurate; the subsampled Poisson sum and the large-lambda bracket of
+    ``f_ncp_bound`` keep it bounded; before them the cost grew like sqrt(F), 125 s
+    at F = 1e12). Against the full Poisson
     sum inverted from 0 (the method before), for 114 values of F from 10 to 1e10 at
     six (df1, df2, level) settings, the lower bounds agree within 1.1e-15 absolute
     and lambda within 3.4e-12 relative (SciPy 1.18; tests/stats/test_effect_sizes.py

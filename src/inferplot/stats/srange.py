@@ -231,7 +231,7 @@ def stirlerr_large(x: FloatArray) -> FloatArray:
     return acc * inv
 
 
-def _expm1_minus_x(y: FloatArray) -> FloatArray:
+def expm1_minus_x(y: FloatArray) -> FloatArray:
     """e^y - 1 - y without cancellation near y = 0."""
     out = np.expm1(y) - y
     small = np.abs(y) < 1.0
@@ -255,7 +255,7 @@ def log_scaled_chi_density(t: FloatArray, nu: float) -> FloatArray:
     """
     x = 0.5 * nu
     const = _LN2 + 0.5 * math.log(x / (2.0 * math.pi)) - stirlerr(x)
-    return const - x * _expm1_minus_x(2.0 * t)
+    return const - x * expm1_minus_x(2.0 * t)
 
 
 def _check(q: float, k: int, df: float) -> None:

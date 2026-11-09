@@ -219,7 +219,7 @@ def test_partial_omega_squared_is_fast_at_any_f(
     f: float, df1: float, df2: float, level: float
 ) -> None:
     # API-1 / STAT-6: 125 s at F = 1e12 and ZeroDivisionError from F about 1e17
-    # before; measured now at most 0.04 s per call (F = 1e300).
+    # before; measured now at most 0.23 s per call (F = 1e302, df2 = 2e6).
     start = time.perf_counter()
     omega = partial_omega_squared(f, df1, df2, conf_level=level)
     seconds = time.perf_counter() - start

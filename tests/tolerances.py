@@ -198,7 +198,17 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "probabilities >= 1e-20. Measured max relative error: t 1.6e-14 at "
                 "SciPy 1.11 and 1.18; F 1.8e-13 at SciPy 1.18 and 2.5e-12 at SciPy "
                 "1.11, whose incomplete beta function is less accurate at df2 = 5000. "
-                "2e-11 leaves 8 times headroom over the worst."
+                "2e-11 leaves 8 times headroom over the worst. The same bound holds "
+                "for the larger arguments added with the beta factors in log space "
+                "(SciPy 1.18; all within it at the lowest-direct SciPy too): 63 "
+                "values of noncentral_f_large (Poisson means 1e5 to "
+                "1e12, references by the chi'^2 x chi^2 integral), max 5.0e-14 "
+                "(4.96e-10 before, from the large-a expansion); 45 values of "
+                "noncentral_f_df1_two (df2 = 1e6 and 1e8, exact sums), max 3.1e-13 "
+                "(9.2e-11 before, SciPy's betainc at b = 5e7). Below 1e-20 the rtol "
+                "applies to log P: 15 values of noncentral_f_deep down to log P = "
+                "-2000, max 2.3e-15 (before, betainc's underflow gave log P 12 too "
+                "small at -677.7, and -inf further out)."
             ),
         ),
         "ttest_bayes_factor": Tolerance(
