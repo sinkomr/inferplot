@@ -110,19 +110,21 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 
-- [ ] nonparametric (Mann-Whitney / Kruskal-Wallis, Dunn). Statistics layer done
-  (`inferplot.stats.nonparametric`): every nonparametric fixture reproduced, closed-form
-  values within 1.9e-14 relative, the rank epsilon squared lower bound within 1.21
-  Monte Carlo SDs of the 20,000-resample reference; analysis, text and rendering next
-- [ ] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes with bootstrap CIs). Statistics layer done
-  (`inferplot.stats.robust`): all 10 robust fixtures reproduced (statistics within
-  4.3e-15 relative, p within one rounding step of R's, bootstrap CIs within 2.72 Monte
-  Carlo SDs), every bootstrap method proved by exact replay of ggstatsplot's draws;
-  exact constants (D42) and accurate p-values (D43); analysis, text and rendering next
-- [ ] bayes (two-group JZS Bayes factor; MAP centrality). MAP centrality done
-  (`inferplot.stats.map_estimate`): all 30 MAP labels of the 10 bayes fixtures on
-  ggstatsplot's grid point; v0.1 behaviour decided (D41); analysis, text and rendering
-  next
+- [x] nonparametric (Mann-Whitney / Kruskal-Wallis, Dunn): `ip.betweenstats` matches all
+  12 nonparametric fixtures on pandas, polars and pyarrow (statistics within 2.3e-15
+  relative, the rank epsilon squared bound within 1.21 Monte Carlo SDs); every subtitle,
+  centrality and bracket label AST-equal; `heavy_ties` check (D47)
+- [x] robust (Yuen / t1way, lincon, AKP and explanatory effect sizes): all 10 robust
+  fixtures on three backends (p within `wrs2_p`, D43; bootstrap bounds within 2.72 MC
+  SDs); texts AST-equal; every bootstrap method proved by exact replay; three or more
+  groups at a `conf_level` other than 0.95 raise `NotImplementedError` (lincon's table
+  is at 95% only)
+- [x] bayes (D41): the two-group subtitle (3 fixtures, BF within 3.5e-11); three or more
+  groups with `results_subtitle=False` (7 fixtures; 31 pair BFs within 1.5e-9, 31
+  bracket labels and all 30 MAP labels on ggstatsplot's grid point)
+- [ ] Phase 2 oracle cases and probes (oracle/phase2-cases: edge data, conf_level 0.90,
+  tr 0.1, every p_adjust method, probe-smm, probe-map, probe-wrs2p, probe-akp) pass
+- [ ] end-of-phase fresh-context review of the Phase 2 diff against SPEC.md
 
 ## Phase 3 — withinstats, all types
 
