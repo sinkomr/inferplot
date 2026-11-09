@@ -17,6 +17,7 @@ from inferplot.stats import (
     partial_omega_squared,
     welch_anova,
 )
+from tests.stats.test_noncentral import OLD_BETAINC
 from tests.tolerances import assert_close
 
 RNG = np.random.Generator(np.random.PCG64(5))
@@ -191,8 +192,10 @@ def test_partial_omega_squared_matches_the_full_poisson_sum(
     assert abs(omega.conf_low - ncp / (ncp + df2)) <= 1e-12
     f_w = (f - 1.0) * (df2 / (df1 + df2 + 1.0))
     ours = f_ncp_bound(f_w, df1, df2, prob=level)
-    # Measured: within 3.4e-12 relative over 114 values from F = 10 to 1e10.
-    assert ours == pytest.approx(ncp, rel=1e-11, abs=1e-9)
+    # Measured: within 3.4e-12 relative over 114 values from F = 10 to 1e10 with
+    # SciPy 1.18; 7.8e-11 with SciPy 1.11.1, whose betainc carries up to 1e-10
+    # relative error at a = 1e4 to 1e7 (tests/stats/test_noncentral.py).
+    assert ours == pytest.approx(ncp, rel=2e-10 if OLD_BETAINC else 1e-11, abs=1e-9)
 
 
 @pytest.mark.parametrize("f", [1.0001, 1.5, 3.0, 47.0, 1e3, 1e8, 1e14])

@@ -12,11 +12,13 @@ from typing import Any
 
 import numpy as np
 import pytest
+import scipy
 from scipy import special, stats
 
 from inferplot.stats import f_ncp_bound, t_ncp_interval
 from inferplot.stats.noncentral import (
     _beta_large_a,  # pyright: ignore[reportPrivateUsage]
+    log_beta_factors,
     noncentral_f_logcdf,
     noncentral_t_logcdf,
 )
@@ -215,6 +217,14 @@ def test_f_bound_is_zero_when_lambda_zero_is_already_below() -> None:
         f_ncp_bound(math.inf, 2.0, 10.0, prob=0.5)
 
 
+# SciPy before 1.12 computes betainc with older code whose error at these a
+# (1e4 to 1e7) is noise of up to about 1e-10 relative per value; it does not cancel
+# between the subsampled and the full sum (measured: 4.7e-10 on SciPy 1.11.1,
+# 2.4e-14 on 1.12.0 and 1.18.1). The subsampling itself is checked at 1e-12.
+OLD_BETAINC = tuple(int(p) for p in scipy.__version__.split(".")[:2]) < (1, 12)
+SUBSAMPLE_TOL = 1e-9 if OLD_BETAINC else 1e-12
+
+
 def _compensated_cumsum(terms: list[float]) -> list[float]:
     """Running sums with Neumaier's compensation."""
     out: list[float] = []
@@ -253,13 +263,19 @@ def _full_poisson_sum(
     j = np.arange(lo, hi + 1)
     rel = _log_poisson_ratios(mu, lo, hi)
     log_w = rel - special.logsumexp(rel)
-    a = 0.5 * df1 + j
     denom = df1 * f + df2
-    if upper:
-        terms = special.betainc(0.5 * df2, a, df2 / denom)
-    else:  # through the complement: x = df1 f / denom has lost the digits of 1 - x
-        terms = 1.0 - special.betainc(0.5 * df2, a, df2 / denom)
-    return float(special.logsumexp(log_w + np.log(terms)))
+    # The same beta factors as noncentral_f_logcdf, at every integer j: the test
+    # checks the subsampling and the weights, not SciPy's betainc (whose error,
+    # up to 1e-10 relative at these a in SciPy 1.11, would otherwise not cancel).
+    log_i = log_beta_factors(
+        0.5 * df1 + j.astype(np.float64),
+        0.5 * df2,
+        df1 * f / denom,
+        df2 / denom,
+        df2 / (df1 * f),
+        upper=upper,
+    )
+    return float(special.logsumexp(log_w + log_i))
 
 
 @pytest.mark.parametrize("mu", [1.2e4, 1e5, 2.5e6])
@@ -277,7 +293,7 @@ def test_subsampled_poisson_sum_matches_the_full_sum(
     f = median * math.exp(spread * math.sqrt(2.0 / df2 + 4.0 / ncp))
     ours = noncentral_f_logcdf(f, df1, df2, ncp, upper=upper)
     full = _full_poisson_sum(f, df1, df2, ncp, upper)
-    assert ours == pytest.approx(full, rel=1e-12, abs=1e-12)
+    assert ours == pytest.approx(full, rel=SUBSAMPLE_TOL, abs=SUBSAMPLE_TOL)
 
 
 # I_y(b, a) at y = r / (1 + r), r = z / a, from mpmath 1.3 at 50 digits

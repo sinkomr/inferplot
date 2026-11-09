@@ -31,11 +31,10 @@ mixture of beta distributions,
     P(F' <= f) = sum_j w_j I_x(df1 / 2 + j, df2 / 2),   x = df1 f / (df1 f + df2),
 
 and the upper tail as sum_j w_j I_{1 - x}(df2 / 2, df1 / 2 + j) with 1 - x computed as
-df2 / (df1 f + df2); for x > 1/2 the lower tail's factors are taken as
-1 - I_{1-x}(df2 / 2, df1 / 2 + j) (SciPy's ``betaincc``), since x itself has lost
-the digits of 1 - x (eps / (1 - x) relative: 4e-12 at 1 - x = 3e-5). The Poisson
-weights are normalized over a window of +/- (15 sqrt(mu) + 30) terms around the
-mode, mu = lambda / 2.
+df2 / (df1 f + df2); for x > 1/2 the lower tail's factors of at least 1/2 are taken
+as 1 - I_{1-x}(df2 / 2, df1 / 2 + j), since x itself has lost the digits of 1 - x
+(eps / (1 - x) relative: 4e-12 at 1 - x = 3e-5). The Poisson weights are normalized
+over a window of +/- (15 sqrt(mu) + 30) terms around the mode, mu = lambda / 2.
 
 * mu below 1e4: every term of the window is summed; the weights are built from the
   mode by cumulative sums of log i, which avoids the cancellation of
@@ -87,6 +86,7 @@ FloatArray = NDArray[np.float64]
 __all__ = [
     "check_conf_level",
     "f_ncp_bound",
+    "log_beta_factors",
     "noncentral_f_logcdf",
     "noncentral_t_logcdf",
     "t_ncp_interval",
@@ -219,10 +219,14 @@ def _log_poisson_window(mu: float) -> tuple[FloatArray, FloatArray]:
         return np.zeros(1), np.zeros(1)
     if mu >= _SUBSAMPLE_FROM:
         sd = math.sqrt(mu)
-        step = math.floor(sd / _NODES_PER_SD)
+        # As floats: a Python int above 2^63 would make NumPy 1.26 build an
+        # object array.
+        step = float(math.floor(sd / _NODES_PER_SD))
         count = math.ceil((_POISSON_SD * sd + _POISSON_PAD) / step)
         # mu >= 1e4: the window, 15 sqrt(mu) + 30 wide, stays far above j = 15.
-        nodes = math.floor(mu) + step * np.arange(-count, count + 1, dtype=np.float64)
+        nodes = float(math.floor(mu)) + step * np.arange(
+            -count, count + 1, dtype=np.float64
+        )
         log_w = (
             -stirlerr_large(nodes) - mu * _phi((nodes - mu) / mu) - 0.5 * np.log(nodes)
         )
@@ -268,6 +272,38 @@ def _beta_large_a(a: FloatArray, b: float, r: float, *, upper: bool) -> FloatArr
     return special.gammaincc(b, z) - correction
 
 
+def log_beta_factors(
+    a: FloatArray, b: float, x: float, y: float, r: float, *, upper: bool
+) -> FloatArray:
+    """log I_y(b, a) (``upper``) or log I_x(a, b), with y = 1 - x and r = y / x
+    given separately (all accurate), per element of a: the beta factors of the
+    noncentral F mixture (module docstring)."""
+    large = a >= _LARGE_A * max(b, 1.0)
+    values = np.empty_like(a)
+    if bool(large.any()):
+        values[large] = _beta_large_a(a[large], b, r, upper=upper)
+    if not bool(large.all()):
+        small = a[~large]
+        if upper:
+            values[~large] = special.betainc(b, small, y)
+        elif x > 0.5:
+            # I_x(a, b) = 1 - I_y(b, a) from y, which keeps the digits that x has
+            # lost, where that complement is at least 1/2 (so 1 - c keeps its
+            # relative accuracy); below 1/2, from x as before.
+            lower: FloatArray = 1.0 - np.asarray(
+                special.betainc(b, small, y), dtype=np.float64
+            )
+            direct = lower < 0.5
+            if bool(direct.any()):
+                lower[direct] = special.betainc(small[direct], b, x)
+            values[~large] = lower
+        else:
+            values[~large] = special.betainc(small, b, x)
+    with np.errstate(divide="ignore"):
+        # A large-a value can only fall below 0 far in a tail, where P is ~0.
+        return np.log(np.maximum(values, 0.0))
+
+
 def noncentral_f_logcdf(
     f: float, df1: float, df2: float, ncp: float, *, upper: bool = False
 ) -> float:
@@ -289,23 +325,7 @@ def noncentral_f_logcdf(
     else:  # df1 f overflows: 1 - x = r / (1 + r) = r to double precision
         r = df2 / df1 / f
         y, x = r, 1.0
-    large = a >= _LARGE_A * max(b, 1.0)
-    values = np.empty_like(a)
-    if bool(large.any()):
-        values[large] = _beta_large_a(a[large], b, r, upper=upper)
-    if not bool(large.all()):
-        small = a[~large]
-        if upper:
-            values[~large] = special.betainc(b, small, y)
-        elif x > 0.5:
-            # I_x(a, b) = 1 - I_y(b, a) from y, which keeps the digits that x has
-            # lost (eps / y relative: 4e-12 at y = 3e-5 with I_x(a, b) itself).
-            values[~large] = special.betaincc(b, small, y)
-        else:
-            values[~large] = special.betainc(small, b, x)
-    with np.errstate(divide="ignore"):
-        # A large-a value can only fall below 0 far in a tail, where P is ~0.
-        log_i = np.log(np.maximum(values, 0.0))
+    log_i = log_beta_factors(a, b, x, y, r, upper=upper)
     return min(0.0, _logsumexp(log_w + log_i))
 
 
