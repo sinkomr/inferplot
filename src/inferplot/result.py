@@ -149,7 +149,8 @@ class _Plain:
 
 @dataclass(frozen=True, slots=True)
 class Descriptive(_Plain):
-    """One analyzed level: its size and centrality value ("mean" in Phase 1)."""
+    """One analyzed level: its size and centrality: "mean", "median", "trimmed_mean"
+    (at the settings' tr) or "map", with its value."""
 
     level: str
     n: int

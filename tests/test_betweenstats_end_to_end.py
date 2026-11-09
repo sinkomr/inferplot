@@ -16,6 +16,7 @@ import pytest
 
 import inferplot as ip
 from inferplot.render import StatsFigure
+from inferplot.text import figure_texts
 from tests import betweenstats_cases
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
@@ -25,6 +26,7 @@ from tests.oracle_fixtures import (
     read_dataset,
     require_cases,
 )
+from tests.render._helpers import numbered_texts, text_of
 
 FIGURE_CODES = frozenset({"label_overlap", "text_clipped", "points_subsampled"})
 CASES = require_cases(
@@ -137,10 +139,30 @@ def test_every_fixture_of_the_other_types(name: str, tmp_path: Path) -> None:
     args, kwargs = betweenstats_cases.replay_arguments(case)
     data = read_dataset(case)
     fig = ip.betweenstats(data, *args, **kwargs)
-    assert fig.result == ip.analyze.betweenstats(data, *args, **kwargs)
+    result = fig.result
+    assert result == ip.analyze.betweenstats(data, *args, **kwargs)
     issues = fig.check()
     assert not [i for i in issues if i.code in FIGURE_CODES], issues
-    assert issues == fig.result.check()
+    assert issues == result.check()
+    # Every drawn text is the result's: the centrality label of the type, the
+    # subtitle, bracket labels of the displayed pairs (log Bayes factors for type
+    # bayes) and the caption lines.
+    texts = figure_texts(result)
+    assert text_of(fig, "subtitle") == texts.subtitle
+    assert numbered_texts(fig, "centrality-label") == list(texts.centrality_labels)
+    displayed = [n for n, pair in enumerate(result.pairwise) if pair.displayed]
+    assert numbered_texts(fig, "bracket-label") == [
+        texts.pairwise_labels[n] for n in displayed
+    ]
+    assert numbered_texts(fig, "caption") == list(texts.caption_lines)
+    symbol = {
+        "median": "median",
+        "trimmed_mean": "trimmed",
+        "map": "MAP",
+    }[result.descriptives[0].centrality]
+    assert all(symbol in label for label in texts.centrality_labels)
+    if result.type == "bayes":
+        assert all("BF" in label for label in texts.pairwise_labels)
     fig.save(tmp_path / "figure.svg")
     assert (tmp_path / "figure.svg").stat().st_size > 0
 

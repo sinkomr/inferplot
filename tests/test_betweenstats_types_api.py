@@ -300,6 +300,16 @@ def test_robust_plain_errors() -> None:
         betweenstats(tiny, "g", "y", type="robust", tr=0.0)
 
 
+def test_robust_bootstrap_error_names_x() -> None:
+    # Most values of 'a' are 5, as are all of 'b': 759 of 2,000 AKP resamples
+    # have a winsorized variance of 0 and a difference of 0.
+    data = frame({"a": [5.0] * 7 + [6.0, 7.0, 8.0], "b": [5.0] * 10})
+    with pytest.raises(
+        ValueError, match=r"0 / 0.*\(the groups of x='g'\)\. Pass a smaller tr"
+    ):
+        betweenstats(data, "g", "y", type="robust")
+
+
 def test_robust_seed_and_order(plants: pd.DataFrame) -> None:
     base = betweenstats(plants, "group", "weight", type="robust")
     other = betweenstats(plants, "group", "weight", type="robust", seed=3)

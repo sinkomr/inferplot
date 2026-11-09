@@ -751,6 +751,8 @@ def _named_groups(message: str, levels: Sequence[str], x: str) -> str:
     if len(levels) == 2:
         out = out.replace("sample a", f"the group {levels[0]!r} of x={x!r}")
         out = out.replace("sample b", f"the group {levels[1]!r} of x={x!r}")
+    if f"x={x!r}" not in out:
+        out += f" (the groups of x={x!r})"
     return out[0].upper() + out[1:]
 
 
