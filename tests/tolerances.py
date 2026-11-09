@@ -96,15 +96,20 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             rtol=1e-10,
             atol=2.0**-53,
             reason=(
-                "p-values WRS2 computes as 1 - pt or 1 - pf (t1way and lincon in the "
-                "fixtures; yuen presumably too): the one-sided tail rounded to the "
-                "spacing of doubles just below 1 (2**-53). Rounding SciPy's tail the "
-                "same way, 1 - (1 - sf), matches every fixture to 2.4e-11 relative "
-                "except iris t1way, where R's tail lands on the neighbouring grid "
-                "point: one step, 1.1e-16 absolute (1.6e-6 relative). The absolute "
-                "part is that one step of the one-sided tail; pass atol_scale = the "
-                "factor applied to the tail afterwards (2 for a two-sided p, times "
-                "the number of pairs for a Holm-adjusted p)."
+                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way, lincon): R "
+                "rounds the one-sided tail to the spacing of doubles just below 1 "
+                "(2**-53), and all 10 robust omnibus p-values lie on that grid. "
+                "inferplot reports the accurate tail (DECISIONS.md D43), which lies "
+                "within one step of R's on every fixture. Measured on the 10 robust "
+                "fixtures: Yuen 1.17e-16 absolute (0.53 of the two-sided step, "
+                "mtcars-am); t1way 7.5e-17 (0.67 step, PlantGrowth), largest "
+                "relative 8.0e-7 (iris, p 7.0e-11); lincon after Holm 4.4e-16 (0.67 "
+                "of 2 x 3 steps, edge_unbalanced a-b), largest relative 3.2e-6 "
+                "(iris setosa-versicolor, p 5.1e-11). Rounding SciPy's tail R's way, "
+                "1 - (1 - sf), lands on R's grid point except iris t1way (one step). "
+                "The absolute part is one step of the one-sided tail; pass "
+                "atol_scale = the factor applied to the tail afterwards (2 for a "
+                "two-sided p, times the number of pairs for a Holm-adjusted p)."
             ),
         ),
         "wrs2_akp_constant": Tolerance(
