@@ -96,15 +96,50 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             rtol=1e-10,
             atol=2.0**-53,
             reason=(
-                "p-values WRS2 computes as 1 - pt or 1 - pf (t1way and lincon in the "
-                "fixtures; yuen presumably too): the one-sided tail rounded to the "
-                "spacing of doubles just below 1 (2**-53). Rounding SciPy's tail the "
-                "same way, 1 - (1 - sf), matches every fixture to 2.4e-11 relative "
-                "except iris t1way, where R's tail lands on the neighbouring grid "
-                "point: one step, 1.1e-16 absolute (1.6e-6 relative). The absolute "
-                "part is that one step of the one-sided tail; pass atol_scale = the "
-                "factor applied to the tail afterwards (2 for a two-sided p, times "
-                "the number of pairs for a Holm-adjusted p)."
+                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way, lincon): R "
+                "rounds the one-sided tail to the spacing of doubles just below 1 "
+                "(2**-53), and all 10 robust omnibus p-values lie on that grid. "
+                "inferplot reports the accurate tail (DECISIONS.md D43), which lies "
+                "within one step of R's on every fixture. Measured on the 10 robust "
+                "fixtures: Yuen 1.17e-16 absolute (0.53 of the two-sided step, "
+                "mtcars-am); t1way 7.5e-17 (0.67 step, PlantGrowth), largest "
+                "relative 8.0e-7 (iris, p 7.0e-11); lincon after Holm 4.4e-16 (0.67 "
+                "of 2 x 3 steps, edge_unbalanced a-b), largest relative 3.2e-6 "
+                "(iris setosa-versicolor, p 5.1e-11). Rounding SciPy's tail R's way, "
+                "1 - (1 - sf), lands on R's grid point except iris t1way (one step). "
+                "The absolute part is one step of the one-sided tail; pass "
+                "atol_scale = the factor applied to the tail afterwards (2 for a "
+                "two-sided p, times the number of pairs for a Holm-adjusted p)."
+            ),
+        ),
+        "wrs2_akp_constant": Tolerance(
+            rtol=1.3e-9,
+            atol=0.0,
+            reason=(
+                "AKP effect size against WRS2::akp.effect. WRS2 scales by a constant "
+                "1.2026e-9 relative above the exact square root of the winsorized "
+                "standard normal variance (0.64193981625799 against "
+                "0.64193981548600 at tr = 0.2), which inferplot uses (DECISIONS.md "
+                "log). Measured: every AKP estimate in the 3 two-group robust "
+                "fixtures (subtitle and 20,000-resample reference) is 1.20259e-9 "
+                "relative above inferplot's, the same ratio to 2e-15; the rest of "
+                "the computation agrees to rounding. 1.3e-9 leaves 8% headroom."
+            ),
+        ),
+        "wrs2_xi_constant": Tolerance(
+            rtol=3.3e-8,
+            atol=0.0,
+            reason=(
+                "Explanatory effect size xi against WRS2::t1way with equal group "
+                "sizes, where it does not depend on the resamples. WRS2 divides the "
+                "pooled winsorized variance by 0.4120867, inferplot by the exact "
+                "winsorized standard normal variance 0.41208672670619 (DECISIONS.md "
+                "log), so WRS2's xi is sqrt(0.4120867 / 0.41208672670619) = 1 - "
+                "3.2404e-8 times inferplot's. Measured on the 3 equal-size robust "
+                "fixtures with three or more groups: 3.2404e-8 relative in each, "
+                "the same ratio to 1e-15; with 0.4120867 the 20,000-resample "
+                "references replay exactly. 3.3e-8 leaves 2% headroom. With "
+                "unequal sizes the estimate is random and compared under BOOTSTRAP."
             ),
         ),
         "noncentral_ci": Tolerance(
