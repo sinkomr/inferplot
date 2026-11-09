@@ -22,6 +22,18 @@ from inferplot.stats.effect_sizes import (
     partial_omega_squared,
 )
 from inferplot.stats.noncentral import f_ncp_bound, t_ncp_interval
+from inferplot.stats.nonparametric import (
+    BOOTSTRAP_RESAMPLES,
+    BootstrapEffectSizeCI,
+    DunnPair,
+    KruskalWallis,
+    MannWhitney,
+    dunn,
+    kruskal_wallis,
+    mann_whitney,
+    rank_biserial,
+    rank_epsilon_squared,
+)
 from inferplot.stats.padjust import P_ADJUST_METHODS, PAdjustMethod, p_adjust
 from inferplot.stats.pairwise import PairResult, games_howell
 from inferplot.stats.parametric import (
@@ -38,9 +50,14 @@ from inferplot.stats.srange import srange_logsf, srange_sf
 
 __all__ = [
     "ALTERNATIVES",
+    "BOOTSTRAP_RESAMPLES",
     "P_ADJUST_METHODS",
     "Alternative",
+    "BootstrapEffectSizeCI",
+    "DunnPair",
     "EffectSizeCI",
+    "KruskalWallis",
+    "MannWhitney",
     "PAdjustMethod",
     "PairResult",
     "Sidedness",
@@ -48,15 +65,20 @@ __all__ = [
     "WelchAnova",
     "WelchT",
     "common_scale",
+    "dunn",
     "f_ncp_bound",
     "games_howell",
     "hedges_g",
     "hedges_j",
     "jzs_bf10_two_sample",
     "jzs_log_bf10",
+    "kruskal_wallis",
+    "mann_whitney",
     "mean",
     "p_adjust",
     "partial_omega_squared",
+    "rank_biserial",
+    "rank_epsilon_squared",
     "scaled_variance",
     "srange_logsf",
     "srange_sf",
