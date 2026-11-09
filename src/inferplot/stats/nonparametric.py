@@ -24,7 +24,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Final
+from typing import Any, Final, TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
@@ -41,6 +41,8 @@ __all__ = [
     "DunnPair",
     "KruskalWallis",
     "MannWhitney",
+    "SeedLike",
+    "check_bootstrap_seed",
     "dunn",
     "kruskal_wallis",
     "mann_whitney",
@@ -49,6 +51,8 @@ __all__ = [
 ]
 
 IntArray = NDArray[np.int64]
+# A bootstrap seed: a non-negative Python or NumPy integer (never a bool).
+SeedLike: TypeAlias = int | np.integer[Any]
 
 BOOTSTRAP_RESAMPLES: Final = 2000
 """Resamples of every bootstrap in inferplot (SPEC.md section 5, item 2)."""
@@ -95,6 +99,22 @@ class DunnPair:
     p_value: float
 
 
+def check_bootstrap_seed(seed: SeedLike) -> int:
+    """A bootstrap seed as a Python int: a non-negative ``int`` or NumPy integer,
+    never a bool (the one check every bootstrap in ``inferplot.stats`` uses).
+
+    Raises:
+        ValueError: a bool, a negative number, or not an integer.
+    """
+    if (
+        isinstance(seed, bool)
+        or not isinstance(seed, int | np.integer)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or seed < 0
+    ):
+        raise ValueError(f"seed must be a non-negative integer; got {seed!r}")
+    return int(seed)
+
+
 @dataclass(frozen=True, slots=True)
 class BootstrapEffectSizeCI:
     """An effect size with a percentile bootstrap CI and how it was drawn.
@@ -102,6 +122,9 @@ class BootstrapEffectSizeCI:
     ``undefined_resamples`` counts the resamples where the effect size is undefined
     (rank epsilon squared when every value of a resample is tied); the interval
     comes from the other ``resamples - undefined_resamples``.
+    ``infinite_resamples`` counts the resamples where it is +/-inf (the AKP and
+    explanatory effect sizes when a resample's winsorized variance is 0 and its
+    numerator is not); they are kept, so a bound can be infinite, as in WRS2.
     """
 
     estimate: float
@@ -112,6 +135,7 @@ class BootstrapEffectSizeCI:
     seed: int
     resamples: int
     undefined_resamples: int = 0
+    infinite_resamples: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,7 +411,7 @@ def _canonical_groups(codes: IntArray, sizes: Sequence[int]) -> list[IntArray]:
 
 
 def rank_epsilon_squared(
-    groups: Sequence[SampleLike], *, conf_level: float = 0.95, seed: int = 0
+    groups: Sequence[SampleLike], *, conf_level: float = 0.95, seed: SeedLike = 0
 ) -> BootstrapEffectSizeCI:
     """Rank epsilon squared with a one-sided percentile bootstrap CI [lower, 1].
 
@@ -429,12 +453,7 @@ def rank_epsilon_squared(
             none tied), or a negative seed.
     """
     level = check_conf_level(conf_level)
-    if (
-        isinstance(seed, bool)
-        or not isinstance(seed, int | np.integer)  # pyright: ignore[reportUnnecessaryIsInstance]
-        or seed < 0
-    ):
-        raise ValueError(f"seed must be a non-negative integer; got {seed!r}")
+    rng_seed = check_bootstrap_seed(seed)
     samples = _samples(groups, "Rank epsilon squared")
     ranked = _rank(samples, "rank epsilon squared")
     estimate = float(12 * _ssb(ranked) / ranked.sst12)
@@ -447,7 +466,7 @@ def rank_epsilon_squared(
     starts = np.concatenate(([0], np.cumsum(sizes)[:-1])).astype(np.int64)
     high = np.repeat(sizes, sizes)
     offset = np.repeat(starts, sizes)
-    rng = np.random.Generator(np.random.PCG64(int(seed)))
+    rng = np.random.Generator(np.random.PCG64(rng_seed))
     block = max(1, min(BOOTSTRAP_RESAMPLES, _BLOCK_ELEMENTS // max(n, counts.size)))
     values = np.empty(BOOTSTRAP_RESAMPLES, dtype=np.float64)
     sizes_f = sizes.astype(np.float64)
@@ -476,7 +495,7 @@ def rank_epsilon_squared(
         conf_high=1.0,
         conf_level=level,
         sidedness="greater",
-        seed=int(seed),
+        seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
         undefined_resamples=undefined,
     )

@@ -663,6 +663,36 @@ def test_alt_text_summarizes_many_or_long_groups(k: int, name_length: int) -> No
     assert f"0 of {len(base.pairwise)} pairwise comparisons" in alt
 
 
+def test_alt_text_never_cuts_the_result_sentence() -> None:
+    # A result sentence too long for the limit by itself (an F printed with 251
+    # digits) and 500-character names: the text keeps its start and the whole
+    # result, leaves the groups out, and runs past 400 characters rather than cut.
+    base = result_from_fixture(_case("PlantGrowth-parametric"))
+    assert base.test is not None
+    test = dataclasses.replace(base.test, statistic=1e250)
+    long_name = "x" * 500
+    texts = tx.build_texts(
+        x=long_name,
+        y=long_name,
+        descriptives=tuple(
+            dataclasses.replace(d, level=d.level + long_name) for d in base.descriptives
+        ),
+        test=test,
+        effect_size=base.effect_size,
+        bayes=None,
+        pairwise=base.pairwise,
+        n_obs=base.n_obs,
+        settings=base.settings,
+    )
+    head = f"Plot comparing {'x' * 11}… across the 3 groups of {'x' * 11}…. "
+    assert texts.alt_text.startswith(head)
+    assert texts.alt_text == head + texts.apa + (
+        " 0 of 3 pairwise comparisons are significant (Games-Howell, Holm adjusted, "
+        "alpha = 0.05)."
+    )
+    assert len(texts.alt_text) > tx.ALT_TEXT_MAX_CHARS
+
+
 def test_settings_in_figure_texts() -> None:
     base = result_from_fixture(_case("PlantGrowth-parametric"))
     settings = Settings(**{**dataclasses.asdict(base.settings), "digits": 1})

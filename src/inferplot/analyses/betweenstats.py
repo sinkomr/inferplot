@@ -63,8 +63,8 @@ from inferplot.result import (
     current_provenance,
 )
 from inferplot.stats.parametric import TINY
-from inferplot.stats.robust import SMM_MAX_TABLED, SMM_ROWS
-from inferplot.text import build_texts, r_number_text
+from inferplot.stats.robust import SMM_ROWS
+from inferplot.text import build_texts, format_value, r_number_text
 
 __all__ = ["betweenstats"]
 
@@ -120,6 +120,9 @@ _DEFAULT_P_ADJUST: Final = "holm"
 _DEFAULT_DISPLAY: Final = "significant"
 _DEFAULT_ALPHA: Final = 0.05
 _DEFAULT_BF_PRIOR: Final = 0.707
+# Every pairwise Bayes factor uses this prior scale, whatever bf_prior says
+# (statsExpressions' pairwise_comparisons(); SPEC.md section 4).
+_PAIRWISE_BF_PRIOR: Final = 0.707
 
 _HEDGES_J_ZERO_WARNING: Final = (
     "Hedges' g is 0 by construction at 1 degree of freedom. Welch's df is 1 here "
@@ -312,13 +315,17 @@ def _no_effect_warnings(
                     + reason.format(what=what)
                 )
     if not bayes_computed and canonical["bf_prior"] != _DEFAULT_BF_PRIOR:
+        if type_name == "bayes" and k >= 3:
+            # Bayes factors are computed, for every pair, at the fixed scale.
+            scale = r_number_text(_PAIRWISE_BF_PRIOR)
+            out.append(
+                f"bf_prior={passed['bf_prior']!r} has no effect: the pairwise Bayes "
+                f"factors always use the prior scale {scale}, as in ggstatsplot; the "
+                "Bayesian ANOVA arrives in inferplot 0.2."
+            )
+            return out
         if type_name in ("nonparametric", "robust"):
             why = f"type={type_name!r} has no Bayes factor"
-        elif type_name == "bayes" and k >= 3:
-            why = (
-                "the pairwise Bayes factors always use the prior scale 0.707, as "
-                "in ggstatsplot, and the Bayesian ANOVA arrives in inferplot 0.2"
-            )
         elif k >= 3:
             why = (
                 f"x={x!r} has {k} groups, and the Bayes factor for three or more "
@@ -672,6 +679,7 @@ def _nonparametric(
             sidedness=epsilon.sidedness,
             bootstrap_resamples=epsilon.resamples,
             bootstrap_seed=epsilon.seed,
+            infinite_resamples=epsilon.infinite_resamples,
         )
         pairwise = _dunn_pairs(levels, values, args)
         if epsilon.undefined_resamples:
@@ -783,8 +791,16 @@ def _named_groups(message: str, levels: Sequence[str], x: str) -> str:
         out = out.replace("sample a", f"the group {levels[0]!r} of x={x!r}")
         out = out.replace("sample b", f"the group {levels[1]!r} of x={x!r}")
     if f"x={x!r}" not in out:
-        out += f" (the groups of x={x!r})"
+        stem = out.removesuffix(".")
+        out = f"{stem} (the groups of x={x!r})" + out[len(stem) :]
     return out[0].upper() + out[1:]
+
+
+def _with_advice(message: str, advice: str, *, given: str) -> str:
+    """``message`` ended by one period, then ``advice`` unless the message already
+    gives it (contains ``given``)."""
+    text = message.rstrip().rstrip(".") + "."
+    return text if given in text else f"{text} {advice}"
 
 
 def _check_robust(
@@ -849,8 +865,10 @@ def _check_robust(
             "the other group first with order=, pass a smaller tr, or use "
             "type='nonparametric'."
         )
-    pairs = k * (k - 1) // 2
-    if k >= 3 and pairs <= SMM_MAX_TABLED:
+    if k >= 3:
+        # Any number of pairs (SPEC sections 2 and 4): above 28 pairs WRS2 simulates
+        # its critical values and inferplot computes the exact quantile, which
+        # exists from df 1, but neither is defined where lincon's table is not.
         low_df = [
             f"{levels[i]!r} and {levels[j]!r}"
             for i in range(k)
@@ -862,8 +880,9 @@ def _check_robust(
                 f"The pairwise comparison of {', '.join(low_df)} (x={x!r}) has "
                 f"fewer than {SMM_ROWS[0]} degrees of freedom, where the "
                 "critical values of WRS2's lincon table stop (ggstatsplot stops "
-                "with an error there too). Collect more observations per group, "
-                "or use type='nonparametric'."
+                "with an error there with up to 8 groups, and inferplot with any "
+                "number). Collect more observations per group, or use "
+                "type='nonparametric'."
             )
 
 
@@ -902,6 +921,7 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
                 sidedness=akp.sidedness,
                 bootstrap_resamples=akp.resamples,
                 bootstrap_seed=akp.seed,
+                infinite_resamples=akp.infinite_resamples,
             )
             citations = [_YUEN_1974, _AKP_2005, _EFRON_TIBSHIRANI_1993]
         else:
@@ -931,6 +951,7 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
                 sidedness=xi.sidedness,
                 bootstrap_resamples=xi.resamples,
                 bootstrap_seed=xi.seed,
+                infinite_resamples=xi.infinite_resamples,
             )
             pairwise = _lincon_pairs(levels, values, args)
             citations = [
@@ -943,8 +964,11 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
             ]
     except ValueError as error:
         raise ValueError(
-            _named_groups(str(error), levels, x)
-            + ". Pass a smaller tr, or use type='nonparametric'."
+            _with_advice(
+                _named_groups(str(error), levels, x),
+                "Pass a smaller tr, or use type='nonparametric'.",
+                given="Pass a smaller tr",
+            )
         ) from None
     return _Parts(
         test=test,
@@ -954,12 +978,55 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
         centrality="trimmed_mean",
         centers=tuple(stats.trimmed_mean(v, tr=tr) for v in values),
         warnings=(
-            (_lincon_level_warning(level),)
-            if pairwise and level != _LINCON_CONF_LEVEL
-            else ()
+            *_infinite_effect_warnings(
+                effect_size,
+                two_groups=len(levels) == 2,
+                # t1way's estimate with unequal sizes is the bootstrap median.
+                median_estimate=len(levels) > 2 and len({v.size for v in values}) > 1,
+            ),
+            *(
+                (_lincon_level_warning(level),)
+                if pairwise and level != _LINCON_CONF_LEVEL
+                else ()
+            ),
         ),
         citations=tuple(citations),
     )
+
+
+def _infinite_effect_warnings(
+    effect_size: EffectSize, *, two_groups: bool, median_estimate: bool
+) -> list[str]:
+    """The robust effect size or its bootstrap values are infinite: a winsorized
+    variance of 0 under trimmed means that differ. WRS2 does the same arithmetic,
+    so the values are kept (DECISIONS.md log); these warnings say how many and
+    why, and ``check()`` reports ``infinite_effect_size``."""
+    why = (
+        "the first group's winsorized variance is 0 while the trimmed means differ"
+        if two_groups
+        else "the pooled winsorized variance is 0 while the trimmed means differ"
+    )
+    out: list[str] = []
+    if math.isinf(effect_size.estimate):
+        where = (
+            "in more than half of the bootstrap resamples, whose median it is "
+            "(unequal group sizes)"
+            if median_estimate
+            else "in the data"
+        )
+        out.append(f"The {effect_size.label} is infinite: {why} {where}.")
+    infinite = effect_size.infinite_resamples or 0
+    if infinite:
+        total = effect_size.bootstrap_resamples or 0
+        out.append(
+            f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
+            f"{effect_size.label}, because in them {why}. They are kept, as in "
+            "ggstatsplot (WRS2), so the confidence interval "
+            f"[{format_value(effect_size.conf_low)}, "
+            f"{format_value(effect_size.conf_high)}] can be unbounded. Pass a smaller "
+            "tr, or use type='nonparametric'."
+        )
+    return out
 
 
 def _lincon_pairs(
@@ -1005,13 +1072,11 @@ def _lincon_pairs(
 # type bayes
 # --------------------------------------------------------------------------- #
 
-# Every pairwise Bayes factor uses this prior scale, whatever bf_prior says
-# (statsExpressions' pairwise_comparisons(); SPEC.md section 4).
-_PAIRWISE_BF_PRIOR: Final = 0.707
 _SHEATHER_JONES_1991: Final = (
     "Sheather, S. J. & Jones, M. C. (1991). Journal of the Royal Statistical "
     "Society B 53: 683-690 (kernel density bandwidth of the MAP estimate)."
 )
+_CHECK_DATA: Final = "Check the data for entry or unit errors."
 _POSTERIOR_WARNING: Final = (
     "The posterior difference and its credible interval, which ggstatsplot adds to "
     "the Bayes factor subtitle, arrive in inferplot 0.2."
@@ -1099,8 +1164,11 @@ def _bayes(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> 
             pairwise = _bayes_pairs(levels, values, args)
     except ValueError as error:
         raise ValueError(
-            _named_groups(str(error), levels, x)
-            + ". Check the data for entry or unit errors."
+            _with_advice(
+                _named_groups(str(error), levels, x),
+                _CHECK_DATA,
+                given="Check the data for entry or unit errors",
+            )
         ) from None
     return _Parts(
         test=None,
@@ -1126,10 +1194,18 @@ def _bayes_pairs(
     for i in range(k):
         for j in range(i + 1, k):
             a, b = values[i], values[j]
-            student = stats.student_t(a, b)
-            bf10, log_bf01 = stats.jzs_bf10_two_sample(
-                a, b, prior_scale=_PAIRWISE_BF_PRIOR
-            )
+            try:
+                student = stats.student_t(a, b)
+                bf10, log_bf01 = stats.jzs_bf10_two_sample(
+                    a, b, prior_scale=_PAIRWISE_BF_PRIOR
+                )
+            except ValueError as error:
+                # "sample a" and "sample b" are this pair's levels.
+                detail = _named_groups(str(error), (levels[i], levels[j]), args.x)
+                raise ValueError(
+                    f"The Bayes factor of {levels[i]!r} against {levels[j]!r} cannot "
+                    f"be computed: {detail[0].lower()}{detail[1:]}"
+                ) from None
             rows.append(
                 PairwiseComparison(
                     group1=levels[i],

@@ -7,6 +7,7 @@ import csv
 import math
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -22,6 +23,7 @@ from inferplot.stats import (
     akp_effect,
     explanatory_effect,
     lincon,
+    rank_epsilon_squared,
     smm_critical_value,
     smm_quantile,
     trimmed_mean,
@@ -149,11 +151,64 @@ def test_equal_sizes_give_a_fixed_explanatory_estimate() -> None:
     )
 
 
-@pytest.mark.parametrize("seed", [-1, 1.5, True])
+@pytest.mark.parametrize(
+    "seed", [-1, 1.5, True, np.True_, np.int64(-2), np.float64(3.0), "3"]
+)
 def test_bad_seeds(seed: object) -> None:
     a, b = _draw([8, 8], 1)
-    with pytest.raises(ValueError, match="seed"):
-        akp_effect(a, b, seed=seed)  # type: ignore[arg-type]
+    for effect in (
+        lambda: akp_effect(a, b, seed=seed),  # type: ignore[arg-type]
+        lambda: explanatory_effect([a, b, a + 1.0], seed=seed),  # type: ignore[arg-type]
+        lambda: rank_epsilon_squared([a, b], seed=seed),  # type: ignore[arg-type]
+    ):
+        with pytest.raises(ValueError, match="seed"):
+            effect()
+
+
+@pytest.mark.parametrize("seed", [np.int64(7), np.uint8(7), np.int32(7)])
+def test_numpy_integer_seeds(seed: np.integer[Any]) -> None:
+    # One shared check (nonparametric.check_bootstrap_seed): every bootstrap takes
+    # a NumPy integer as the int it equals, and records a Python int.
+    a, b = _draw([8, 8], 1)
+    groups = [a, b, a + 1.0]
+    for got, want in (
+        (akp_effect(a, b, seed=seed), akp_effect(a, b, seed=7)),
+        (explanatory_effect(groups, seed=seed), explanatory_effect(groups, seed=7)),
+        (rank_epsilon_squared(groups, seed=seed), rank_epsilon_squared(groups, seed=7)),
+    ):
+        assert got == want
+        assert type(got.seed) is int
+
+
+def test_infinite_resamples_are_kept_and_counted() -> None:
+    # AKP: a resample of the first group with every value from its 2nd to its
+    # 7th smallest equal has a winsorized variance of 0; the trimmed means differ.
+    a = np.array([0.0, 0, 0, 0, 0, 0, 1, 2])
+    b = np.array([3.0, 4, 5, 6, 7, 8])
+    akp = akp_effect(a, b, seed=0)
+    assert akp.infinite_resamples == 721
+    assert akp.conf_low == -math.inf  # as WRS2's arithmetic gives it
+    assert math.isfinite(akp.estimate)
+    # xi: the pooled winsorized variance of a resample is 0, its trimmed means not.
+    xi = explanatory_effect(
+        [
+            np.array([1.0, 0, 1, 1, 1, 1, 1, 1, 0]),
+            np.array([0.0, 0, -1, -1, -1]),
+            np.array([0.0, -1, -1, 0, 0, 0, 0]),
+        ],
+        seed=0,
+    )
+    assert xi.infinite_resamples == 162
+    assert xi.conf_high == math.inf
+    # Equal sizes with a pooled winsorized variance of 0: the estimate is inf.
+    low = np.array([-1.0] * 20 + [0.0] * 30)
+    high = np.array([0.0] * 30 + [1.0] * 20)
+    flat = explanatory_effect([low, high, low, high], seed=0)
+    assert flat.estimate == math.inf
+    assert flat.infinite_resamples == 593
+    clean = explanatory_effect(_draw([10, 10, 10], 4), seed=0)
+    assert clean.infinite_resamples == 0
+    assert rank_epsilon_squared(_draw([10, 10, 10], 4)).infinite_resamples == 0
 
 
 # ------------------------------------------------------------------ SMM table

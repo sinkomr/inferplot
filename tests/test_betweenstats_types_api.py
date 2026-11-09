@@ -7,6 +7,7 @@ Numbers against the R oracle are in ``tests/test_betweenstats_types_parity.py``.
 from __future__ import annotations
 
 import math
+from decimal import ROUND_FLOOR, Decimal, localcontext
 from typing import Any
 
 import numpy as np
@@ -492,9 +493,9 @@ def test_bayes_argument_rules(plants: pd.DataFrame, teeth: pd.DataFrame) -> None
         "pairwise_display='ns' has no effect: Bayes factors have no significance, "
         "so every pair is drawn (as in ggstatsplot); pass pairwise_display='none' "
         "to draw none.",
-        "bf_prior=0.5 has no effect: no Bayes factor is computed (the pairwise "
-        "Bayes factors always use the prior scale 0.707, as in ggstatsplot, and "
-        "the Bayesian ANOVA arrives in inferplot 0.2).",
+        "bf_prior=0.5 has no effect: the pairwise Bayes factors always use the "
+        "prior scale 0.707, as in ggstatsplot; the Bayesian ANOVA arrives in "
+        "inferplot 0.2.",
     )
     assert all(pair.displayed for pair in many.pairwise)
     assert all(pair.bayes and pair.bayes.prior_scale == 0.707 for pair in many.pairwise)
@@ -527,7 +528,8 @@ def test_bayes_map_of_constant_and_zero_iqr_groups() -> None:
         "is drawn for it: no Sheather-Jones bandwidth"
     )
     assert result.text.centrality_labels[1] == "μ_MAP = "
-    assert "b (n = 8, MAP estimate NA)" in result.text.alt_text
+    assert "b (n = 8, no MAP estimate)" in result.text.alt_text
+    assert "NA" not in result.text.alt_text
     assert StatsResult.from_json(result.to_json()) == result
     fig = ip.render.betweenstats(result)
     assert numbered_texts(fig, "centrality-label") == [
@@ -546,3 +548,209 @@ def test_bayes_row_order(plants: pd.DataFrame) -> None:
     assert again.text == base.text
     for a, b in zip(again.descriptives, base.descriptives, strict=True):
         assert a.value == pytest.approx(b.value, rel=1e-12)
+
+
+# --------------------------------------------------------------------------- #
+# end-of-phase-2 review findings
+# --------------------------------------------------------------------------- #
+
+
+def _bf10_from_log(log_bf01: float) -> str:
+    """BF10 = exp(-log_bf01) as "m.mme+NNN", from 50-digit decimal arithmetic."""
+    with localcontext() as ctx:
+        ctx.prec = 50
+        log10 = Decimal(-log_bf01) / Decimal(10).ln()
+        exponent = int(log10.to_integral_value(rounding=ROUND_FLOOR))
+        mantissa = (Decimal(10) ** (log10 - exponent)).quantize(Decimal("0.01"))
+        if mantissa >= 10:
+            mantissa = (mantissa / 10).quantize(Decimal("0.01"))
+            exponent += 1
+    return f"{mantissa}e{'-' if exponent < 0 else '+'}{abs(exponent):02d}"
+
+
+@pytest.fixture(scope="module")
+def separated() -> pd.DataFrame:
+    # Bayes factors beyond the largest double: log(BF01) -761 (a-b), -991 (a-c).
+    rng = np.random.default_rng(2)
+    values = [rng.normal(m, 1, 3000) for m in (0.0, 1.0, 1.2)]
+    return pd.DataFrame(
+        {"g": np.repeat(["a", "b", "c"], 3000), "y": np.concatenate(values)}
+    )
+
+
+def test_bayes_factor_beyond_a_double_prints_from_its_log(
+    separated: pd.DataFrame,
+) -> None:
+    two = betweenstats(separated[separated["g"] != "c"], "g", "y", type="bayes")
+    assert two.bayes.bf10 == math.inf  # the stored double; log_bf01 has the value
+    log_bf01 = two.bayes.log_bf01
+    assert log_bf01 == pytest.approx(-761.29, abs=0.005)
+    text = _bf10_from_log(log_bf01)
+    assert text == "4.19e+330"
+    assert two.text.apa == (
+        f"Bayesian t-test (JZS prior, r = 0.707): BF10 = {text}, "
+        "log(BF01) = -761.29, n = 6,000."
+    )
+    assert "Inf" not in two.text.alt_text
+    assert StatsResult.from_json(two.to_json()) == two
+    three = betweenstats(separated, "g", "y", type="bayes", results_subtitle=False)
+    by_pair = {(p.group1, p.group2): p.bayes for p in three.pairwise}
+    assert by_pair["a", "c"].bf10 == by_pair["a", "b"].bf10 == math.inf
+    strongest = _bf10_from_log(by_pair["a", "c"].log_bf01)
+    assert strongest == "2.02e+430"
+    # The strongest pair is a-c (the largest -log BF01), not the first infinite one.
+    alt = three.text.alt_text
+    assert f"BF10 from 7.04e+09 (b vs c) to {strongest} (a vs c);" in alt
+    assert f"a vs c, BF10 = {strongest};" in three.text.apa
+    table = str(three)
+    assert "Inf" not in table
+    assert "2.02e+430" in table
+    assert "4.19e+330" in table
+
+
+def test_bayes_alt_text_without_brackets(plants: pd.DataFrame) -> None:
+    drawn = betweenstats(
+        plants, "group", "weight", type="bayes", results_subtitle=False
+    )
+    assert drawn.text.alt_text.endswith("brackets show log(BF01) for every pair.")
+    hidden = betweenstats(
+        plants,
+        "group",
+        "weight",
+        type="bayes",
+        results_subtitle=False,
+        pairwise_display="none",
+    )
+    assert hidden.text.alt_text.endswith(
+        "; no brackets are drawn (pairwise_display='none')."
+    )
+    assert "pairs_hidden" in _codes(hidden)
+
+
+def test_bayes_alt_text_shortens_long_levels() -> None:
+    names = [
+        f"Treatment with the experimental compound at a very high dose level number {i}"
+        for i in (1, 2, 3)
+    ]
+    rng = np.random.default_rng(0)
+    data = pd.DataFrame(
+        {
+            "g": np.repeat(names, 10),
+            "y": np.concatenate([rng.normal(m, 1, 10) for m in (0.0, 1.0, 2.0)]),
+        }
+    )
+    bayes = betweenstats(data, "g", "y", type="bayes", results_subtitle=False)
+    robust = betweenstats(data, "g", "y", type="robust")
+    for result in (bayes, robust):
+        alt = result.text.alt_text
+        assert alt.startswith("Plot comparing y across the 3 groups of g ("), alt
+        assert len(alt) <= 400, alt
+    short = "Treatment with the …"
+    assert bayes.text.alt_text.endswith(
+        f"BF10 from 0.67 ({short} vs {short}) to 659.96 ({short} vs {short}); "
+        "brackets show log(BF01) for every pair."
+    )
+
+
+def test_robust_low_df_raises_for_any_number_of_pairs() -> None:
+    # 9 groups of 2 values: 36 pairs, above WRS2's table (28), each with a Yuen df
+    # below 2. SPEC sections 2 and 4: NotImplementedError whatever the count.
+    nine = frame({f"g{i}": [float(i), float(i) + 1.0 + 0.1 * i] for i in range(9)})
+    with pytest.raises(NotImplementedError, match="fewer than 2 degrees of freedom"):
+        betweenstats(nine, "g", "y", type="robust")
+
+
+def test_bayes_pair_errors_name_the_pair() -> None:
+    a, b, c = [1.0, 2, 3, 4, 5], [2.0, 3, 4, 5, 6], [1e200] * 5
+    with pytest.raises(ValueError, match="cannot be computed") as info:
+        betweenstats(
+            frame({"a": a, "b": b, "c": c}),
+            "g",
+            "y",
+            type="bayes",
+            results_subtitle=False,
+        )
+    message = str(info.value)
+    assert message.startswith(
+        "The Bayes factor of 'a' against 'c' cannot be computed: the group 'c' of "
+        "x='g' is constant and the group 'a' of x='g' varies"
+    )
+    assert "sample a" not in message
+    assert "sample b" not in message
+    assert ".." not in message
+    assert message.count("Check the data") == 1
+    with pytest.raises(ValueError, match="is constant") as info:
+        betweenstats(frame({"a": a, "c": c}), "g", "y", type="bayes")
+    message = str(info.value)
+    assert message.startswith("The group 'c' of x='g' is constant")
+    assert ".." not in message
+    assert message.count("Check the data") == 1
+    assert message.endswith("since it keeps their ratio.")
+
+
+def test_robust_infinite_akp_resamples_are_counted(teeth: pd.DataFrame) -> None:
+    data = frame({"a": [0.0, 0, 0, 0, 0, 0, 1, 2], "b": [3.0, 4, 5, 6, 7, 8]})
+    result = betweenstats(data, "g", "y", type="robust")
+    es = result.effect_size
+    assert es.infinite_resamples == 721
+    assert es.conf_low == -math.inf  # kept, as WRS2's arithmetic gives it
+    assert math.isfinite(es.estimate)
+    assert "95% CI [-Inf, -2.45]" in result.text.apa
+    assert result.warnings == (
+        "721 of 2,000 bootstrap resamples give an infinite AKP robust standardized "
+        "difference, because in them the first group's winsorized variance is 0 "
+        "while the trimmed means differ. They are kept, as in ggstatsplot (WRS2), "
+        "so the confidence interval [-Inf, -2.45] can be unbounded. Pass a smaller "
+        "tr, or use type='nonparametric'.",
+    )
+    (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]
+    assert issue.severity == "warning"
+    assert "721 of 2,000" in issue.message
+    assert StatsResult.from_json(result.to_json()) == result
+    clean = betweenstats(teeth, "supp", "len", type="robust")
+    assert clean.effect_size.infinite_resamples == 0
+    assert "infinite_effect_size" not in _codes(clean)
+
+
+def test_robust_infinite_xi_resamples() -> None:
+    data = frame(
+        {
+            "a": [1.0, 0, 1, 1, 1, 1, 1, 1, 0],
+            "b": [0.0, 0, -1, -1, -1],
+            "c": [0.0, -1, -1, 0, 0, 0, 0],
+        }
+    )
+    result = betweenstats(data, "g", "y", type="robust")
+    es = result.effect_size
+    assert es.infinite_resamples == 162
+    assert es.conf_high == math.inf
+    assert math.isfinite(es.estimate)  # the median of the resamples (unequal n)
+    assert [w for w in result.warnings if "infinite" in w] == [
+        "162 of 2,000 bootstrap resamples give an infinite explanatory effect size "
+        "xi, because in them the pooled winsorized variance is 0 while the trimmed "
+        "means differ. They are kept, as in ggstatsplot (WRS2), so the confidence "
+        "interval [0.65, Inf] can be unbounded. Pass a smaller tr, or use "
+        "type='nonparametric'."
+    ]
+    assert "infinite_effect_size" in _codes(result)
+
+
+def test_robust_infinite_xi_estimate() -> None:
+    # Equal sizes: every group varies after winsorizing, the pooled values do not
+    # (40 of 200 at -1 and 40 at 1, winsorized to 0), and the trimmed means differ:
+    # xi = sqrt(var / 0) = inf, as in WRS2.
+    low = [-1.0] * 20 + [0.0] * 30
+    high = [0.0] * 30 + [1.0] * 20
+    result = betweenstats(
+        frame({"a": low, "b": high, "c": low, "d": high}), "g", "y", type="robust"
+    )
+    es = result.effect_size
+    assert es.estimate == math.inf
+    assert es.infinite_resamples == 593
+    assert "xi = Inf, 95% CI [0.43, Inf]" in result.text.apa
+    assert result.warnings[0] == (
+        "The explanatory effect size xi is infinite: the pooled winsorized variance "
+        "is 0 while the trimmed means differ in the data."
+    )
+    (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]
+    assert issue.message.startswith("The explanatory effect size xi is infinite.")

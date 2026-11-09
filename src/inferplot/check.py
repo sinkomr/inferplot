@@ -7,6 +7,7 @@ problems were found.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
@@ -155,12 +156,57 @@ def _pairwise_conf_level(result: StatsResult) -> Issue | None:
     )
 
 
+def _infinite_effect_size(result: StatsResult) -> Issue | None:
+    """An infinite effect size, or bootstrap resamples where it is infinite (type
+    robust: a winsorized variance of 0 under trimmed means that differ). The values
+    are kept, as in WRS2, so the estimate or a CI bound can be -Inf or Inf."""
+    es = result.effect_size
+    if es is None:
+        return None
+    infinite = es.infinite_resamples or 0
+    estimate_infinite = math.isinf(es.estimate)
+    if not infinite and not estimate_infinite:
+        return None
+    parts: list[str] = []
+    if estimate_infinite:
+        parts.append(f"The {es.label} is infinite.")
+    if infinite:
+        total = es.bootstrap_resamples or 0
+        parts.append(
+            f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
+            f"{es.label}, so its {_percent(es.conf_level)} CI "
+            f"[{_bound(es.conf_low)}, {_bound(es.conf_high)}] may be unbounded."
+        )
+    return Issue(
+        code="infinite_effect_size",
+        severity="warning",
+        message=" ".join(parts)
+        + " A winsorized variance of 0 next to trimmed means that differ makes the "
+        "effect size infinite (as WRS2 computes it).",
+        fix=(
+            "Report the effect size as unbounded, pass a smaller tr, or use "
+            "type='nonparametric'."
+        ),
+    )
+
+
+def _percent(level: float) -> str:
+    return f"{100 * level:g}%"
+
+
+def _bound(x: float) -> str:
+    if math.isinf(x):
+        return "Inf" if x > 0 else "-Inf"
+    return f"{x:.2f}"
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
-    """The statistical issues of ``result``: small_n, heavy_ties, rows_dropped,
-    pairs_hidden, pairwise_conf_level."""
+    """The statistical issues of ``result``: small_n, heavy_ties,
+    infinite_effect_size, rows_dropped, pairs_hidden, pairwise_conf_level."""
     found = (
         _small_n(result),
         _heavy_ties(result),
+        _infinite_effect_size(result),
         _rows_dropped(result),
         _pairs_hidden(result),
         _pairwise_conf_level(result),
