@@ -161,4 +161,9 @@ mpl-baseline-path = "tests/render/baseline"
 mpl-results-path = "build/mpl-results"
 mpl-default-style = "default"
 mpl-default-backend = "agg"
-mpl-default-tolerance = "2"
+# RMS difference on the 0-255 scale. The baselines come from the job that compares
+# them, and they match a macOS arm64 render exactly (RMS 0), so the tolerance only
+# absorbs sub-pixel drift: one pixel turned from white to black in a 500 x 600 figure
+# is RMS 0.47. pytest-mpl's usual 2 let a changed centrality color (#8B0000 to
+# #A00000, RMS 0.45-0.60) and a jitter 0.12 to 0.11 wide (RMS 1.47-1.80) pass.
+mpl-default-tolerance = "0.1"
