@@ -73,6 +73,9 @@ class MapEstimate:
         index: its position on the grid, 0 to 1023.
         grid_step: the grid spacing, (max(x) - min(x)) / 1023.
         bandwidth: the Sheather-Jones bandwidth of the kernel density.
+
+    For constant data there is no density: ``estimate`` is the value itself and
+    ``index``, ``grid_step`` and ``bandwidth`` are 0.
     """
 
     estimate: float
@@ -353,14 +356,24 @@ def map_estimate(x: SampleLike) -> MapEstimate:
     Computed on ``x`` times a power of two that brings it near 1 (exact), so the
     estimate scales exactly with the data.
 
+    Constant data give the value itself, as ``map_estimate`` does (probe-map,
+    "constant"; DECISIONS.md D55), although R's ``bw.SJ`` fails on them. Where
+    ``bw.SJ`` fails on data with spread (a zero interquartile range, probe-map
+    "zero_iqr": R's MAP is NA and ggstatsplot prints an empty label), this raises.
+
     Raises:
         ValueError: fewer than two values, values that are not finite, or no
-            Sheather-Jones bandwidth (no spread, or too sparse; see ``bw_sj``).
+            Sheather-Jones bandwidth for data with spread (too sparse; see
+            ``bw_sj``).
     """
     arr = as_sample(x, name="x", min_size=1)
     if arr.size < 2:
         raise ValueError(
             "a MAP estimate needs at least 2 values to estimate a density; got 1"
+        )
+    if float(np.min(arr)) == float(np.max(arr)):
+        return MapEstimate(
+            estimate=float(arr[0]), index=0, grid_step=0.0, bandwidth=0.0
         )
     scale = common_scale(arr)
     scaled = arr * scale

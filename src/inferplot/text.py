@@ -665,11 +665,14 @@ def pairwise_bf_expression(*, log_bf01: float, digits: int = 2) -> Call:
     return _call("list", _log_bf01_item(log_bf01, digits))
 
 
-def centrality_expression(*, centrality: str, value: float, digits: int = 2) -> Call:
+def centrality_expression(
+    *, centrality: str, value: float | None, digits: int = 2
+) -> Call:
     """Centrality label ``list(widehat(mu)[mean]=='5.03')``.
 
     ``centrality`` is :attr:`~inferplot.result.Descriptive.centrality`: "mean",
-    "median", "trimmed_mean" or "map".
+    "median", "trimmed_mean" or "map". A missing ``value`` (a MAP without a density)
+    gives ggstatsplot's empty label, ``list(widehat(mu)[MAP]=='')``.
     """
     try:
         sub = _CENTRALITY_SUBSCRIPTS[centrality]
@@ -1174,15 +1177,19 @@ def _alt_groups_summary(
         if min(ns) == max(ns)
         else f"n = {format_n(min(ns))} to {format_n(max(ns))} per group"
     )
-    finite = [d for d in descriptives if math.isfinite(d.value)]
+    finite = [
+        (d, d.value)
+        for d in descriptives
+        if d.value is not None and math.isfinite(d.value)
+    ]
     if not finite:
         return n_text
-    low = min(finite, key=lambda d: d.value)
-    high = max(finite, key=lambda d: d.value)
+    low, low_value = min(finite, key=lambda item: item[1])
+    high, high_value = max(finite, key=lambda item: item[1])
     word = _centrality_word(low.centrality, tr)
     return (
-        f"{n_text}; {word}s from {format_value(low.value, digits)} "
-        f"({_short(low.level, limit)}) to {format_value(high.value, digits)} "
+        f"{n_text}; {word}s from {format_value(low_value, digits)} "
+        f"({_short(low.level, limit)}) to {format_value(high_value, digits)} "
         f"({_short(high.level, limit)})"
     )
 
