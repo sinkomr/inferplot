@@ -166,7 +166,7 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             reason=(
                 "JZS Bayes factors of t tests (BayesFactor::ttestBF, one-dimensional "
                 "quadrature), measured on two-sample values only: tools/reference "
-                "reproduces all 35 distinct ones in the 45 ggstatsplot 1.1.4 "
+                "reproduces all 36 distinct ones in the 73 ggstatsplot 1.1.4 "
                 "fixtures to at most 1.5e-9 relative (iris setosa-virginica, BF10 "
                 "2.2e6), and that residual is BayesFactor's own integration error. "
                 "A prior scale of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or "

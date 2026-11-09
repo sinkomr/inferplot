@@ -49,6 +49,8 @@ fig.save("score.svg")
 | `xlab`, `ylab`, `title` | `None` | user text (see below the table) |
 | `subtitle` | `None` | used only when `results_subtitle=False`; passing it with `results_subtitle=True` raises `ValueError` (ggstatsplot silently ignores it there) |
 | `caption` | `None` | user text drawn below the generated caption lines |
+| `palette` | `None` | list of colors or a matplotlib colormap name; default Okabe-Ito |
+| `ax` | `None` | draw into an existing Axes; subtitle and caption go inside that Axes; not allowed with marginal panels |
 
 User texts (`title`, `subtitle`, `caption`, `xlab`, `ylab`) are matplotlib text and
 follow its convention: text between two `$` signs is mathtext (`r"Dose ($\mu$g)"`),
@@ -56,8 +58,6 @@ and `\$` is a literal dollar sign. Each is laid out once before anything is draw
 an expression matplotlib cannot read raises `ValueError` at the call, also with `ax=`,
 and leaves a given Axes unchanged (D40). Default labels from column names are never
 read as mathtext.
-| `palette` | `None` | list of colors or a matplotlib colormap name; default Okabe-Ito |
-| `ax` | `None` | draw into an existing Axes; subtitle and caption go inside that Axes; not allowed with marginal panels |
 
 ### Function-specific arguments
 
@@ -158,7 +158,8 @@ explaining that pairing by row order is not allowed.
 ## 4. Statistical methods
 
 R reference = what the oracle runs (via ggstatsplot 1.1.4). Implement from the method
-references below; never translate R source. Bayes rows marked v0.2 raise
+references below; never translate R source (D5's exceptions, ggstatsplot and
+statsExpressions, cover the texts, not the statistics). Bayes rows marked v0.2 raise
 `NotImplementedError` in v0.1.
 
 **Method references** (compiled from memory: confirm each citation before quoting it in
@@ -197,7 +198,7 @@ a docstring):
 | parametric | Welch's t (`stats::t.test`, var.equal = FALSE); p follows `alternative` | Hedges' g (`effectsize::hedges_g(pooled_sd = FALSE)`): d = (mean1 - mean2) / sqrt((var1 + var2) / 2), the unpooled standardizer, not the pooled SD and not the average of the two SDs; g = d x J(df_W), with J Hedges' exact gamma-ratio correction at the Welch df df_W. CI: the noncentral-t interval for the noncentrality parameter at the Welch t and df_W, each bound times (Welch SE / sqrt((var1 + var2) / 2)) x J(df_W). The CI follows `alternative`: "greater" gives [lower bound, Inf] and "less" [-Inf, upper bound], one-sided at `conf_level`; the subtitle prints "Inf" and "-Inf". Reproduced in every two-group fixture, balanced and unbalanced (mtcars `am`, `edge_k2`), at 90% and 95% and one-sided: g to 1e-10, CI bounds to 1.9e-8 absolute (`noncentral_ci`). inferplot computes the noncentral t itself: SciPy's `nctdtr` is off by up to 1.5e-3 at the SciPy 1.11 floor and returns NaN far in the tails at 1.18 | mean |
 | nonparametric | Mann-Whitney U (`stats::wilcox.test(exact = FALSE)`): always the normal approximation with continuity correction, never exact, also without ties and with fewer than 50 values per group (`edge_k2`: ggstatsplot reports p = 0.0025; the exact p would be 0.0013); the fixture's method string omits "with continuity correction"; p follows `alternative` | rank-biserial r = 2U / (n1 n2) - 1 (`effectsize::rank_biserial`), U the Mann-Whitney U of group 1; CI tanh(atanh(r) -/+ z x sqrt((n1 + n2 + 1) / (3 n1 n2))), ties ignored; follows `alternative` ("greater" gives [lower bound, 1], "less" [-1, upper bound]); reproduced to 1e-10 | median |
 | robust | Yuen, 20% trim (`WRS2::yuen`): t is reported unsigned, \|t\|, even when group 1's trimmed mean is the smaller (mtcars `am`, `edge_k2`), while the AKP effect size keeps its sign; p presumably 1 - pt like lincon's *(verify: every two-group robust fixture has p of 0.0047 or more, where the two computations agree)* (§10, `wrs2_p`) | AKP robust standardized difference, `WRS2::akp.effect(EQVAR = FALSE)`: trimmed-mean difference scaled by group 1's winsorized SD, not the pooled SD (oracle: 0.6827 vs pooled 0.6393 on ToothGrowth); bootstrap CI (ggstatsplot: 100 resamples) | trimmed mean |
-| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces all 35 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 1.5e-9; Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`: kernel density, Sheather-Jones bandwidth, 2^10 grid points) |
+| bayes | JZS Bayes factor, r = 0.707 (`BayesFactor::ttestBF(formula, rscale = bf.prior)`) on Student's (pooled) t, two-sided whatever `alternative` says. `tools/reference`'s one-dimensional quadrature reproduces all 36 distinct two-sample values in the fixtures (subtitles, parametric captions, pairs) to 1.5e-9; Welch's t differs on every unbalanced pair, by 1.5e-4 or more | v0.2: posterior median of the mean difference with a 95% equal-tailed interval (`conf.method` "ETI" in the fixtures; 4,000 posterior draws per `parameters::model_parameters()`'s help page, to confirm) | MAP (`bayestestR::map_estimate`: kernel density, Sheather-Jones bandwidth, 2^10 grid points) |
 
 ### betweenstats, three or more groups
 
@@ -615,7 +616,7 @@ again.
 | noncentral t and F distribution functions (`noncentral_cdf`) | rtol 2e-11 | 521 frozen mpmath points (`tests/data/noncentral_reference.json`); measured at most 2.5e-12 (F at SciPy 1.11), 1.6e-14 for t |
 | p-values WRS2 computes as 1 - pt or 1 - pf (`wrs2_p`: t1way, lincon, presumably Yuen) | rtol 1e-10, atol 2^-53 x the factor applied to the one-sided tail afterwards (2 for two-sided, times the number of pairs after Holm) | the one-sided tail rounded to the spacing of doubles just below 1 (2^-53); rounding the tail the same way matches all fixtures but iris t1way, which lands one grid step away |
 | noncentral-distribution CIs (`noncentral_ci`) | rtol 1e-6, atol 4e-8 | R's root finding is accurate to about 1e-8 absolute: Hedges' g bounds at most 1.9e-8 absolute and 7.5e-7 relative (ToothGrowth lower bound, -0.0217), omega lower bounds at most 1.5e-8 absolute; an omega bound where effectsize's search stopped early is compared with the accurate root instead (D33) |
-| JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces all 35 distinct `ttestBF` values in the fixtures to at most 1.5e-9, which is BayesFactor's own integration error; a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive |
+| JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces all 36 distinct `ttestBF` values in the fixtures to at most 1.5e-9, which is BayesFactor's own integration error; a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive |
 | other Bayes factors (correlation; v0.2 ANOVA and contingency) | own entry, measured when first implemented | not yet measured |
 | bootstrap CIs and p-values | within 4 Monte Carlo SDs of the 20,000-resample R reference, never less than the closed-form tolerance | randomness; a quantity whose replicate SD is 0 does not depend on the resamples (AKP and rank epsilon squared estimates, an upper bound of 1) and is stored to 15 significant digits |
 | MAP centrality | one grid step of the density grid | kernel density grid |

@@ -3,7 +3,8 @@
 Read this at the start of every session; update it at the end of every slice.
 A slice is done only when its definition of done in `CLAUDE.md` is met.
 
-Current phase: **1 — betweenstats, parametric, end to end** (Phase 0 done 2026-11-08)
+Current phase: **2 — betweenstats nonparametric, robust, bayes** (Phase 1 merged to main
+2026-11-08; its close-out findings are open below)
 
 ## Phase 0 — Scaffold
 
@@ -65,10 +66,34 @@ parametric slice exposes) and four probe files (number formatting, `p.adjust`,
 `ptukey`, the omega squared CI). In `edge_n2` (two values per group) ggstatsplot 1.1.4
 itself fails, because R's ptukey returns NaN below 2 df; the fixture keeps the
 subtitle, caption and labels computed before the failure, and inferplot computes the
-accurate p-values there (D37, flagged for the owner). The probes pinned every number
+accurate p-values there (D37, confirmed by the owner). The probes pinned every number
 formatting rule except negative zero, showed that ggstatsplot's adjusted Games-Howell p
 is exactly `p.adjust` of gamesHowellTest's raw p, measured ptukey's error by df, and
-confirmed the omega squared CI construction (D33, flagged for the owner).
+confirmed the omega squared CI construction (D33, confirmed by the owner). The owner
+extended D5's exception to statsExpressions, whose templates the text layer adapts.
+
+Phase 1 close-out. A final fresh-context verification of the review fixes at 0469bdc
+was cut off by a restart; its rendering and documentation parts finished and
+confirmed 9 problems. The four documentation ones are fixed on main (a broken SPEC §2
+table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 of
+106, a stale large-|t| note). Open:
+
+- [ ] `point_args` values matplotlib checks only when drawing (`{'linewidth': 'bad'}`)
+  pass the pre-draw check: with `ax=` the call draws into the user's Axes and a later
+  `savefig` fails; without it the user gets matplotlib's raw message (SPEC §2; major)
+- [ ] a known property with a wrongly typed value (`alpha='x'`) is reported as an
+  unknown property, `TypeError` instead of `ValueError` (SPEC §2)
+- [ ] `ip.render.betweenstats(df, x='g', y='y')` suggests `ax='g'` instead of saying
+  it draws the result of `ip.analyze.betweenstats`
+- [ ] `ip.analyze.betweenstats(df, 'g', 'y', ax=None)` suggests `x=None`, which the
+  call already gives
+- [ ] `fig.check()` reports sub-pixel contact (under 0.5 px) between a bracket leg and
+  a label as a crossing on large figures
+- [ ] the statistics part did not finish. Its unjudged leads: `variance()` on subnormal
+  data; the noncentral F lower tail near 1e-300 (log P off by about 3); the noncentral
+  F next to the Poisson-mean switch with df2 = 0.5 (1.6e-10 relative in log P) and at
+  df2 = 1e8 (4.6e-11); the refusal of a group whose values span more than the largest
+  double. Re-run from a fresh context.
 
 ## Phase 2 — betweenstats nonparametric, robust, bayes
 
@@ -109,16 +134,6 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   rebuilt from measurement with the reason it has (R's raw error, which the raw-p
   check against probe-ptukey bounds, times the adjustment's multiplier, as `wrs2_p`
   scales), never widened to fit.
-- D33 and D37 follow the owner's D31 precedent (accurate value over R's numerical
-  accident) and await the owner's confirmation.
-- Owner decision needed (fixed D5, CLAUDE.md rule 4): the text layer
-  (`src/inferplot/text.py`) adapts statsExpressions 2.2.1's expression templates, symbol
-  tables and number-formatting routes, read from its MIT source, while rule 4 allows
-  adapting source only from ggstatsplot. statsExpressions is ggstatsplot's own text
-  engine, by the same authors, and MIT-licensed; `NOTICE` now carries its notice. Either
-  extend the D5 exception to statsExpressions or rebuild those tables from the fixtures
-  and documentation (every template in use is pinned by AST equality with the fixtures;
-  the symbol entries no v0.1 fixture exercises would go).
 - Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
   ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
   figure). Figures with several bracket levels are tall (three levels 7.3 in,
@@ -131,8 +146,8 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   double; a second scale per group could compute it. Not worth it for such data unless
   a user needs it.
 - R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
-  (`?TDist`); no fixture has a two-group \|t\| above 3.7, so Hedges' g CI parity at
-  large \|t\| is untested.
+  (`?TDist`); the largest two-group \|t\| in the fixtures is 5.65 (mtcars `am` x `drat`),
+  whose Hedges' g CI matches within `noncentral_ci`; parity above that is untested.
 - The generator handles ggbetweenstats only: `between_analysis`,
   `statsexpressions_rows` (`paired = FALSE`) and `bootstrap_candidates` stop on any
   other function. Each one needs its own bookkeeping (complete subjects for

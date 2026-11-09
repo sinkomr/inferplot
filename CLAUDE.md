@@ -25,8 +25,9 @@ and update it at the end of every slice. Read these when the task needs them:
    reduced bootstrap work, no partial results. Unsupported combinations raise
    `NotImplementedError` naming what is missing.
 4. Clean-room statistics: implement methods from the papers cited in `SPEC.md`. Do not
-   translate R package source code, except ggstatsplot itself (MIT; keep its notice in
-   `NOTICE`). Reading R documentation and oracle outputs is fine.
+   translate R package source code, except ggstatsplot itself and statsExpressions,
+   its text engine (both MIT; keep their notices in `NOTICE`). Reading R documentation
+   and oracle outputs is fine.
 5. Runtime dependencies: numpy, scipy, matplotlib, narwhals. pandas, polars and pyarrow
    are optional extras. Any other runtime dependency needs a `DECISIONS.md` entry; never
    add a GPL-licensed package (for example pingouin).
