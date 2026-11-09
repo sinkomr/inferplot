@@ -7,6 +7,7 @@ every completed parametric ggbetweenstats fixture.
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from pathlib import Path
 from typing import Any
@@ -140,7 +141,17 @@ def test_every_fixture_of_the_other_types(name: str, tmp_path: Path) -> None:
     data = read_dataset(case)
     fig = ip.betweenstats(data, *args, **kwargs)
     result = fig.result
-    assert result == ip.analyze.betweenstats(data, *args, **kwargs)
+    analyzed = ip.analyze.betweenstats(data, *args, **kwargs)
+    # The figure's result is the analysis plus any rendering warnings: with more
+    # than 8 levels (edge_k9) the palette falls back to tab20 and says so.
+    rendering = result.warnings[len(analyzed.warnings) :]
+    assert result.warnings[: len(analyzed.warnings)] == analyzed.warnings
+    if len(result.levels) > 8:
+        assert len(rendering) == 1
+        assert "tab20" in rendering[0]
+    else:
+        assert rendering == ()
+    assert dataclasses.replace(result, warnings=analyzed.warnings) == analyzed
     issues = fig.check()
     assert not [i for i in issues if i.code in FIGURE_CODES], issues
     assert issues == result.check()

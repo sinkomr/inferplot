@@ -130,6 +130,18 @@ class OracleCase:
         """
         return self.raw["expected_error"]
 
+    @property
+    def partial_components(self) -> tuple[str, ...]:
+        """The hidden calls that ran before ggstatsplot failed, in call order.
+
+        A Bayes caption is computed for type parametric only, so the other types'
+        failed cases have no ``caption`` entry.
+        """
+        entries = self.raw["partial"]
+        if entries is None:
+            raise ValueError(f"{self.name}: ggstatsplot did not fail; read its outputs")
+        return tuple(str(entry["component"]) for entry in entries)
+
     def partial(self, component: str) -> Any:
         """What a hidden call returned before ggstatsplot failed (failed cases only).
 
@@ -466,6 +478,157 @@ def r_double(text: str) -> float | None:
     if not text.removeprefix("-").startswith("0x"):
         raise ValueError(f"not a hex double: {text!r}")
     return float.fromhex(text)
+
+
+# Bayes factors where BayesFactor::ttestBF (ggstatsplot's pairwise Bayes factors)
+# misses the accurate value by more than `ttest_bayes_factor` (rtol 1e-8). Following
+# DECISIONS.md D31, inferplot reports the accurate value and is compared with it.
+# (case, group1, group2) -> (accurate BF10, ggstatsplot's relative miss). iris
+# Petal.Length, 50 + 50 values: at Student t -39.49 and -49.99 BayesFactor's quadrature
+# is off by +1.16e-3 and -6.1e-5. The accurate values are 50-digit mpmath quadratures
+# of Rouder et al. (2009), eq. 1, which tools/reference matches to 1.6e-14; every
+# other one of the 77 distinct two-sample Bayes factors in the fixtures is within
+# 2.3e-9 of it.
+ACCURATE_BAYES_FACTORS: Mapping[tuple[str, str, str], tuple[float, float]] = (
+    MappingProxyType(
+        {
+            ("ggbetweenstats-iris-petal-bayes", "setosa", "versicolor"): (
+                1.1443263236860359e58,
+                1.16e-3,
+            ),
+            ("ggbetweenstats-iris-petal-bayes", "setosa", "virginica"): (
+                3.183438242038274e67,
+                -6.1e-5,
+            ),
+        }
+    )
+)
+
+
+def expected_bf10(case_name: str, group1: str, group2: str, oracle: float) -> float:
+    """The BF10 to compare with: ggstatsplot's, or the accurate one where it misses.
+
+    For a registered miss, also checks that ggstatsplot's value still misses by the
+    recorded amount, so a stale entry fails instead of hiding a difference.
+    """
+    entry = ACCURATE_BAYES_FACTORS.get((case_name, group1, group2))
+    if entry is None:
+        return oracle
+    accurate, miss = entry
+    measured = oracle / accurate - 1
+    assert abs(measured - miss) <= 0.01 * abs(miss), (
+        case_name,
+        group1,
+        group2,
+        measured,
+    )
+    return accurate
+
+
+@functools.cache
+def wrs2_akp_constant(tr: float) -> float:
+    """WRS2::akp.effect's scaling constant at trimming ``tr``, as probe-akp measures
+    it: AKP / ((trimmed mean 1 - trimmed mean 2) / winsorized SD of group 1), the
+    same to 4 ulps on every dataset at a given tr, for tr = 0.01 to 0.49 by 0.01.
+
+    WRS2 evaluates the winsorized standard normal SD numerically, off the exact value
+    inferplot uses by an amount that varies irregularly with tr (1.2e-9 relative at
+    0.2, 4.6e-9 at 0.1, up to 4.2e-7 at 0.49; tolerance ``akp_constant``), so AKP
+    estimates are compared after scaling inferplot's by this constant over the exact
+    one, under ``closed_form``.
+    """
+    akp = probe("probe-akp")
+    # The constants were run on R's seq(0.01, 0.49, 0.01), whose 0.1 is one ulp
+    # below 0.1; match on the printed tr and confirm with the per-dataset rows,
+    # which use tr exactly, where they have it.
+    found = [
+        r_double(str(row["ratio_to_group1_hex"]))
+        for row in akp.rows("constants")
+        if float(row["tr"]) == tr and row["error"] is None
+    ]
+    if len(found) != 1 or found[0] is None:
+        raise KeyError(f"probe-akp has no AKP constant at tr {tr!r}")
+    value = found[0]
+    for row in akp.rows("rows"):
+        if r_double(str(row["tr_hex"])) == tr:
+            ratio = r_double(str(row["akp"][0]["ratio_to_group1_hex"]))
+            if ratio is not None and math.isfinite(ratio):
+                assert abs(ratio - value) <= 4 * math.ulp(value), (tr, ratio, value)
+    return value
+
+
+# lincon's critical values above 28 comparisons, where WRS2 replaces its table by a
+# simulation seeded by itself and inferplot computes the exact Studentized maximum
+# modulus quantile at the pair's df (DECISIONS.md D52). WRS2's simulated values are
+# not that quantile, so the intervals differ by more than any rounding: (case,
+# group1, group2) -> (R's critical value, implied by its interval as
+# (conf.high - conf.low) / (2 x Yuen SE), and inferplot's), 6 decimals. edge_k9
+# (9 groups of 6, Yuen df 4.69 to 5.98): R's value is 0.35% below to 4.7% above the
+# exact quantile, the most where the df is lowest (a-i); on probe-smm's lincon runs
+# (36 and 45 comparisons, df 9.7 to 19) it is 3.4% to 6.6% below.
+SIMULATED_LINCON_CRITICAL_VALUES: Mapping[tuple[str, str, str], tuple[float, float]] = (
+    MappingProxyType(
+        {
+            ("ggbetweenstats-edge_k9-robust", g1, g2): values
+            for (g1, g2), values in {
+                ("a", "b"): (4.847880, 4.849568),
+                ("a", "c"): (4.923635, 4.896593),
+                ("a", "d"): (4.988970, 4.959015),
+                ("a", "e"): (5.099571, 5.039438),
+                ("a", "f"): (5.243255, 5.122068),
+                ("a", "g"): (5.361642, 5.215088),
+                ("a", "h"): (5.492718, 5.304154),
+                ("a", "i"): (5.649805, 5.398081),
+                ("b", "c"): (4.844058, 4.849251),
+                ("b", "d"): (4.910205, 4.886927),
+                ("b", "e"): (4.979111, 4.945127),
+                ("b", "f"): (5.053385, 5.010888),
+                ("b", "g"): (5.171081, 5.089548),
+                ("b", "h"): (5.300584, 5.168226),
+                ("b", "i"): (5.427776, 5.254010),
+                ("c", "d"): (4.834097, 4.844806),
+                ("c", "e"): (4.902295, 4.878290),
+                ("c", "f"): (4.948830, 4.924376),
+                ("c", "g"): (5.020942, 4.985385),
+                ("c", "h"): (5.109359, 5.050485),
+                ("c", "i"): (5.245551, 5.124785),
+                ("d", "e"): (4.827567, 4.844669),
+                ("d", "f"): (4.890908, 4.872359),
+                ("d", "g"): (4.947312, 4.916205),
+                ("d", "h"): (4.974801, 4.967526),
+                ("d", "i"): (5.074250, 5.029598),
+                ("e", "f"): (4.839591, 4.841890),
+                ("e", "g"): (4.879637, 4.867211),
+                ("e", "h"): (4.932912, 4.903161),
+                ("e", "i"): (4.971316, 4.951107),
+                ("f", "g"): (4.834818, 4.841961),
+                ("f", "h"): (4.875191, 4.863588),
+                ("f", "i"): (4.926057, 4.897994),
+                ("g", "h"): (4.831618, 4.840112),
+                ("g", "i"): (4.875203, 4.860048),
+                ("h", "i"): (4.831624, 4.840116),
+            }.items()
+        }
+    )
+)
+
+
+def check_simulated_lincon_pair(
+    case_name: str,
+    group1: str,
+    group2: str,
+    *,
+    r_critical: float,
+    critical: float,
+) -> None:
+    """Assert a pinned pair (``SIMULATED_LINCON_CRITICAL_VALUES``) still reads as
+    pinned: R's implied critical value and inferplot's, each to 6 decimals."""
+    r_pinned, ours_pinned = SIMULATED_LINCON_CRITICAL_VALUES[
+        (case_name, group1, group2)
+    ]
+    what = f"{case_name} {group1}-{group2}"
+    assert abs(r_critical - r_pinned) <= 5e-7, (what, r_critical, r_pinned)
+    assert abs(critical - ours_pinned) <= 5e-7, (what, critical, ours_pinned)
 
 
 # Geoms whose layer parameters generate.R records (the drawn pairs and labels).

@@ -97,7 +97,12 @@ class DunnPair:
 
 @dataclass(frozen=True, slots=True)
 class BootstrapEffectSizeCI:
-    """An effect size with a percentile bootstrap CI and how it was drawn."""
+    """An effect size with a percentile bootstrap CI and how it was drawn.
+
+    ``undefined_resamples`` counts the resamples where the effect size is undefined
+    (rank epsilon squared when every value of a resample is tied); the interval
+    comes from the other ``resamples - undefined_resamples``.
+    """
 
     estimate: float
     conf_low: float
@@ -106,6 +111,7 @@ class BootstrapEffectSizeCI:
     sidedness: Alternative
     seed: int
     resamples: int
+    undefined_resamples: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +399,14 @@ def rank_epsilon_squared(
     values with replacement within every group g (group sizes fixed, every value
     re-ranked); the lower bound is the bootstrap (1 - conf_level) quantile with
     ``boot.ci``'s percentile rule (``_percentile_lower``), the upper bound 1.
+    A resample whose values are all tied (possible only when one value occurs in
+    every group) has no epsilon squared; such resamples are left out and the
+    quantile is taken over the others, which are counted in
+    ``undefined_resamples`` (DECISIONS.md D54). That is R's rule as the oracle pins
+    it (edge_ties_small, 0.65% of resamples tied): over 40 seeds the 20,000-resample
+    lower bound is R's reference 0.008754 every time and the 2,000-resample bound
+    averages 0.00739 over 400 seeds against R's 0.00730 (0.16 standard errors).
+    Counting them as 0 instead gives 0.00204 and 0.00321 (6.7 standard errors).
     Matches R's ``effectsize::rank_epsilon_squared(ci = conf_level,
     alternative = "greater")`` as statsExpressions 2.2.1 calls it (with 100
     resamples there), within Monte Carlo error. The stratified scheme was found
@@ -410,10 +424,9 @@ def rank_epsilon_squared(
 
     Raises:
         ValueError: fewer than two groups, an empty group, a non-finite value,
-            every value tied, a resample with every value tied (possible only when
-            one value occurs in every group; the interval is then undefined),
-            conf_level not strictly between 0 and 1 or too extreme for 2,000
-            resamples (below 1/2001 or above 2000/2001), or a negative seed.
+            every value tied, conf_level not strictly between 0 and 1 or too
+            extreme for the resamples left (below 1/2001 or above 2000/2001 with
+            none tied), or a negative seed.
     """
     level = check_conf_level(conf_level)
     if (
@@ -444,15 +457,19 @@ def rank_epsilon_squared(
         for row in range(last - first):
             draws[row] = rng.integers(0, high, dtype=np.int64) + offset
         values[first:last] = _epsilon_block(pooled[draws], counts.size, starts, sizes_f)
-    undefined = int(np.isnan(values).sum())
-    if undefined:
+    defined = values[~np.isnan(values)]
+    undefined = BOOTSTRAP_RESAMPLES - defined.size
+    try:
+        low = _percentile_lower(defined, 1.0 - level)
+    except ValueError:
+        if not undefined:
+            raise
         raise ValueError(
             f"{undefined} of {BOOTSTRAP_RESAMPLES} bootstrap resamples have every "
-            "value tied, so rank epsilon squared has no bootstrap interval for "
-            "these data (one value occurs in every group, and the groups are small "
-            "or dominated by it)"
-        )
-    low = _percentile_lower(values, 1.0 - level)
+            f"value tied, which leaves {defined.size}, too few for a percentile "
+            f"interval at conf_level={level!r} (one value occurs in every group, and "
+            "the groups are small or dominated by it)"
+        ) from None
     return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
@@ -461,4 +478,5 @@ def rank_epsilon_squared(
         sidedness="greater",
         seed=int(seed),
         resamples=BOOTSTRAP_RESAMPLES,
+        undefined_resamples=undefined,
     )

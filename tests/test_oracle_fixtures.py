@@ -75,6 +75,46 @@ PARAMETRIC_LABELS = (
     "ToothGrowth-nobf",
     "ToothGrowth-prior08",
 )
+# Phase 2 (betweenstats nonparametric, robust, bayes): the Phase 1 edge data and every
+# argument these types take, with the types each label runs (see generate.R).
+PHASE2_TYPES = ("nonparametric", "robust", "bayes")
+PHASE2_LABELS: dict[str, tuple[str, ...]] = {
+    "edge_missing": PHASE2_TYPES,
+    "edge_empty_level": PHASE2_TYPES,
+    "PlantGrowth-declared": PHASE2_TYPES,
+    "edge_n2": PHASE2_TYPES,
+    "edge_ties": PHASE2_TYPES,
+    "edge_ties_small": ("nonparametric",),
+    "edge_negative": PHASE2_TYPES,
+    "edge_outliers": PHASE2_TYPES,
+    "InsectSprays": PHASE2_TYPES,
+    "edge_null": PHASE2_TYPES,
+    "edge_large_n": PHASE2_TYPES,
+    "edge_k9": ("robust",),
+    "iris-petal": PHASE2_TYPES,
+    "iris_no_setosa-petal": PHASE2_TYPES,
+    "iris_no_setosa-petalwidth": ("robust",),
+    **{
+        f"PlantGrowth-padj-{method}": ("nonparametric", "robust")
+        for method in P_ADJUST_METHODS
+    },
+    "ToothGrowth-cl90": PHASE2_TYPES,
+    "PlantGrowth-cl90": PHASE2_TYPES,
+    "ToothGrowth-tr01": ("robust",),
+    "PlantGrowth-tr01": ("robust",),
+    "mtcars-am-digits3": PHASE2_TYPES,
+    "mtcars-digits3": PHASE2_TYPES,
+    "PlantGrowth-display-all": PHASE2_TYPES,
+    "PlantGrowth-display-ns": PHASE2_TYPES,
+    "PlantGrowth-display-none": PHASE2_TYPES,
+    "ToothGrowth-nosubtitle": PHASE2_TYPES,
+    "PlantGrowth-nosubtitle": PHASE2_TYPES,
+    "edge_k2-greater": ("nonparametric",),
+    "edge_k2-less": ("nonparametric",),
+    "ToothGrowth-greater": ("robust", "bayes"),
+    "ToothGrowth-prior08": ("bayes",),
+    "PlantGrowth-prior08": ("bayes",),
+}
 EXPECTED_CASES = frozenset(
     {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
     | {"ggbetweenstats-mtcars-am-drat-parametric"}
@@ -84,11 +124,32 @@ EXPECTED_CASES = frozenset(
         for t in ("parametric", "nonparametric")
     }
     | {f"ggbetweenstats-{label}-parametric" for label in PARAMETRIC_LABELS}
+    | {
+        f"ggbetweenstats-{label}-{t}"
+        for label, types in PHASE2_LABELS.items()
+        for t in types
+    }
 )
 # Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
-EXPECTED_FAILURES = frozenset({"ggbetweenstats-edge_n2-parametric"})
+EXPECTED_FAILURES = frozenset(
+    {
+        "ggbetweenstats-edge_n2-parametric",
+        "ggbetweenstats-edge_n2-robust",
+        "ggbetweenstats-edge_n2-bayes",
+    }
+)
 EXPECTED_PROBES = frozenset(
-    {"probe-format", "probe-padjust", "probe-ptukey", "probe-omega"}
+    {
+        "probe-format",
+        "probe-padjust",
+        "probe-ptukey",
+        "probe-omega",
+        "probe-smm",
+        "probe-wrs2p",
+        "probe-akp",
+        "probe-map",
+        "probe-ranks",
+    }
 )
 
 
@@ -103,6 +164,7 @@ def test_case_list_is_what_the_generator_writes() -> None:
         f"{sorted(names - EXPECTED_CASES)}"
     )
     assert len(PARAMETRIC_LABELS) == 28
+    assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
 
 
 ALL_CASES = [
@@ -280,6 +342,95 @@ def test_probe_omega_covers_its_grid() -> None:
     greater = [r for r in rows if r["alternative"] == "greater"]
     assert all(r["accurate_low"] is not None for r in greater)
     assert all(r["accurate_low"] is None for r in rows if r["alternative"] != "greater")
+
+
+def test_probe_smm_covers_its_grid() -> None:
+    smm = probe("probe-smm")
+    alphas = {"0.05", "1 - 0.95", "0.01", "1 - 0.99", "0.1", "1 - 0.9"}
+    lincon = smm.rows("lincon")
+    assert {(e["groups"], e["alpha"]) for e in lincon} == {
+        (k, a) for k in range(2, 11) for a in alphas
+    }
+    # lincon's table functions, found by recording what lincon calls: one per alpha
+    # the table supports.
+    grids = {g["name"]: g for g in smm.rows("grids")}
+    assert set(grids) == {"smmcrit", "smmcrit01"}
+    for grid in grids.values():
+        assert (grid["df_arg"], grid["c_arg"]) == ("nuhat", "C")
+        assert len(grid["rows"]) == len(smm.section("df_grid_hex"))
+        assert all(len(row["values_hex"]) == 50 for row in grid["rows"])
+    calls = smm.rows("calls")
+    assert len(calls) == 3 * len(alphas)
+    for entry in calls:
+        found = [c["name"] for c in entry["critical_value_calls"]]
+        tabled = entry["alpha"] in {"0.05", "0.01"} and entry["comparisons"] <= 28
+        assert found == ([] if not tabled else [grids_for(entry["alpha"])])
+        assert ("smmvalv2" in entry["call_counts"]) == (not tabled)
+
+
+def grids_for(alpha: str) -> str:
+    return {"0.05": "smmcrit", "0.01": "smmcrit01"}[alpha]
+
+
+def test_probe_wrs2p_covers_its_grid() -> None:
+    wrs2p = probe("probe-wrs2p")
+    shifts = 28
+    assert len(wrs2p.rows("yuen")) == 3 * shifts
+    assert len(wrs2p.rows("t1way")) == 3 * shifts
+    lincon = wrs2p.rows("lincon")
+    assert len(lincon) == 3 * shifts
+    assert all(len(row["pairs"]) == 3 for row in lincon)
+    # The grid reaches p = 0 (1 - cdf exactly 0) and p = 1.
+    p_values = [r_double(row["p_value_hex"]) for row in wrs2p.rows("yuen")]
+    assert 0.0 in p_values
+    assert 1.0 in p_values
+
+
+def test_probe_akp_covers_its_grid() -> None:
+    akp = probe("probe-akp")
+    rows = akp.rows("rows")
+    assert len(rows) == len(akp.section("data")) * len(akp.section("tr_grid"))
+    assert all([e["EQVAR"] for e in row["akp"]] == [False, True] for row in rows)
+    assert len(akp.rows("constants")) == 49
+
+
+def test_probe_map_pins_the_grid() -> None:
+    # ggstatsplot's MAP label for type "bayes" (centrality_description) is
+    # bayestestR::map_estimate with its defaults, which is the grid point of highest
+    # density of stats::density(x, bw = "SJ", n = 1024, from = min(x), to = max(x)):
+    # on every vector where bw.SJ works. Where it fails (constant data, zero IQR),
+    # map_estimate still returns a value; the probe records what.
+    rows = probe("probe-map").rows("rows")
+    assert len(rows) >= 50
+    assert len({row["name"] for row in rows}) == len(rows)
+    sizes = {row["n"] for row in rows}
+    assert {2, 501, 1000, 100000} <= sizes
+    for row in rows:
+        what = row["name"]
+        density = row["density_data_range"]
+        if row["bw_sj"]["error"] is not None:
+            assert density["error"] is not None, what
+            continue
+        assert row["centrality_error"] is None, what
+        assert row["map_estimate_error"] is None, what
+        assert row["centrality_hex"] == row["map_estimate_hex"], what
+        assert density["n"] == 1024, what
+        assert row["map_estimate_hex"] == density["x_at_max_hex"], what
+        assert density["bw_hex"] == row["bw_sj"]["hex"], what
+        # Without from/to, density's grid is wider and the maximum moves.
+        assert row["density_default_range"]["n"] == 1024, what
+    failures = [row["name"] for row in rows if row["bw_sj"]["error"] is not None]
+    assert {"constant", "zero_iqr"} <= set(failures)
+
+
+def test_probe_ranks_covers_its_grid() -> None:
+    ranks = probe("probe-ranks")
+    two = ranks.rows("two_sample")
+    assert len(two) == 9
+    assert all(len(entry["wilcox"]) == 6 for entry in two)
+    assert all(len(entry["rank_biserial"]) == 3 for entry in two)
+    k = ranks.rows("k_sample")
+    assert [entry["name"] for entry in k] == ["edge_ties", "InsectSprays", "mtcars_cyl"]
 
 
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
@@ -472,14 +623,22 @@ def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
 def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     ref = case.bootstrap_reference
     k = len(case.analysis_levels)
-    expects_reference = (case.type == "robust") or (
-        case.type == "nonparametric" and k > 2
-    )
-    if not expects_reference:
+    # Bootstrapped designs (SPEC.md section 9), and only when ggstatsplot computed the
+    # effect size: without a subtitle (results.subtitle = FALSE) there is no CI.
+    bootstrapped = (case.type == "robust") or (case.type == "nonparametric" and k > 2)
+    with_subtitle = case.args.get("results.subtitle", True) is not False
+    if not (bootstrapped and with_subtitle):
         assert ref is None
         return
     assert ref is not None
     assert ref["resamples"] >= 20000
+    # The reference runs at the case's own confidence level and trimming.
+    assert ref["conf_level"] == case.args.get("conf.level", 0.95)
+    tr = case.args.get("tr", 0.2)
+    if case.type == "robust":
+        assert f"tr = {tr:g}," in ref["call"], ref["call"]
+    else:
+        assert f"ci = {ref['conf_level']:g}," in ref["call"], ref["call"]
     reps = ref["replicates"]
     assert reps["resamples"] == 2000
     # The oracle replayed ggstatsplot's own bootstrap (set.seed, then the same call

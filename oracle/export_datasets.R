@@ -42,3 +42,8 @@ for (name in c("iris", "ToothGrowth", "PlantGrowth", "morley", "sleep", "InsectS
 for (name in c("bugs_long", "Titanic_full")) {
   write_dataset(package_data(name, "ggstatsplot"), name)
 }
+
+# Two groups (versicolor, virginica) of iris: Yuen p-values of about 1e-15 for the
+# petal measurements, where 1 - pt and the exact upper tail differ visibly.
+iris_df <- package_data("iris", "datasets")
+write_dataset(iris_df[iris_df$Species != "setosa", ], "iris_no_setosa")

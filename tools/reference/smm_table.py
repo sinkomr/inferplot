@@ -1,16 +1,21 @@
 """Regenerate ``src/inferplot/stats/_smm_table.py``, lincon's critical values.
 
 WRS2's ``lincon`` takes its critical value from a two-decimal table of the
-Studentized maximum modulus distribution at alpha = 0.05 (SPEC.md section 4): rows
-at df 2..12, 14, 16, 18, 20, 24, 30, 40, 60 and a last row, labelled df 200, that
-holds the infinite-df values; one column per number of comparisons C. The table is
-rebuilt here from the distribution itself and rounded to two decimals, and the
-entries where WRS2's published table is known to differ from the rounded quantile
-(oracle evidence) are written as WRS2 has them (``PUBLISHED_DIFFERS``).
+Studentized maximum modulus distribution at alpha = 0.05 (its ``smmcrit``; SPEC.md
+section 4): rows at df 2..12, 14, 16, 18, 20, 24, 30, 40, 60 and a last row,
+labelled df 200, that holds the infinite-df values; one column per number of
+comparisons C = 2..28. (C = 1 is Student's t quantile at the pair's df, and above
+28 comparisons lincon simulates: neither reads the table.) The entries written are
+WRS2's own, read from the oracle's probe-smm (``smmcrit`` on its df x C grid), with
+one exception (DECISIONS.md D51): C = 9 at df 2 reads 8.83 in WRS2, a transposition
+of the quantile 8.38 (8.3846), and is written as 8.38, following the
+accuracy-over-bug-parity precedent (D31); C = 9 never occurs in betweenstats, whose
+C is k (k - 1) / 2.
 
-The Studentized maximum modulus with C comparisons and df degrees of freedom is
-M = max_i |Z_i| / S, with Z_1..Z_C independent standard normal and
-S = sqrt(chi2_df / df) independent of them, so
+The module docstring also lists every entry that differs from the quantile rounded
+to two decimals. The quantile is computed here independently of
+``inferplot.stats.smm``: with M = max_i |Z_i| / S, Z_1..Z_C independent standard
+normal and S = sqrt(chi2_df / df) independent of them,
 
     P(M <= c) = int_0^inf (2 Phi(c s) - 1)^C f_S(s) ds,
     f_S(s) = 2 (df/2)^(df/2) / Gamma(df/2) s^(df - 1) exp(-df s^2 / 2),
@@ -28,6 +33,7 @@ Run from the repository root (takes about 30 seconds):
 from __future__ import annotations
 
 import itertools
+import json
 import math
 import sys
 from pathlib import Path
@@ -36,16 +42,14 @@ from scipy import integrate, optimize, special
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = ROOT / "src" / "inferplot" / "stats" / "_smm_table.py"
+PROBE = ROOT / "tests" / "fixtures" / "oracle" / "probe-smm.json"
 ROWS = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 30, 40, 60, 200)
 INFINITE_ROW = 200
-MAX_COMPARISONS = 45
+COMPARISONS = range(2, 29)
 ALPHA = 0.05
 
-# (C, df row) -> WRS2's entry, where it is not the rounded quantile. Evidence: the
-# lincon CIs of the oracle fixtures (tests/stats/test_robust_parity.py,
-# edge_unbalanced a-b: C = 3 at df 5.16 interpolates 3.39 at df 5; the quantile is
-# 3.39924).
-PUBLISHED_DIFFERS: dict[tuple[int, int], float] = {(3, 5): 3.39}
+# (C, df row) -> (WRS2's entry, the entry written): WRS2's transcription errors.
+CORRECTED: dict[tuple[int, int], tuple[float, float]] = {(9, 2): (8.83, 8.38)}
 
 
 def smm_cdf(c: float, comparisons: int, df: float) -> float:
@@ -83,27 +87,64 @@ def smm_quantile(comparisons: int, df: float, alpha: float = ALPHA) -> float:
     )
 
 
-def build() -> dict[int, tuple[float, ...]]:
-    table: dict[int, tuple[float, ...]] = {}
-    for comparisons in range(1, MAX_COMPARISONS + 1):
-        row: list[float] = []
-        for df in ROWS:
-            exact = smm_quantile(comparisons, math.inf if df == INFINITE_ROW else df)
-            rounded = round(exact, 2)
-            row.append(PUBLISHED_DIFFERS.get((comparisons, df), rounded))
-        table[comparisons] = tuple(row)
+def published() -> dict[tuple[int, int], float]:
+    """WRS2's alpha-0.05 table from probe-smm: {(C, df row): entry}."""
+    probe = json.loads(PROBE.read_text(encoding="utf-8"))
+    (grid,) = [g for g in probe["grids"] if g["name"] == "smmcrit"]
+    columns = [int(c) for c in grid["c_grid"]]
+    table: dict[tuple[int, int], float] = {}
+    for row in grid["rows"]:
+        df = float.fromhex(row["df_hex"])
+        if df not in ROWS:
+            continue
+        for c, text in zip(columns, row["values_hex"], strict=True):
+            if c in COMPARISONS:
+                table[(c, int(df))] = float.fromhex(text)
+    if len(table) != len(ROWS) * len(COMPARISONS):
+        raise SystemExit(f"probe-smm has {len(table)} table entries")
     return table
 
 
+def build() -> dict[int, tuple[float, ...]]:
+    """The table written to the module: WRS2's entries with ``CORRECTED`` applied."""
+    entries = published()
+    for key, (wrs2, corrected) in CORRECTED.items():
+        if entries[key] != wrs2:
+            raise SystemExit(f"probe-smm has {entries[key]} at {key}, not {wrs2}")
+        entries[key] = corrected
+    return {c: tuple(entries[(c, df)] for df in ROWS) for c in COMPARISONS}
+
+
+def not_rounded_quantiles(
+    table: dict[int, tuple[float, ...]],
+) -> list[tuple[int, int, float, float]]:
+    """(C, df row, entry, quantile) wherever the entry is not round(quantile, 2)."""
+    out: list[tuple[int, int, float, float]] = []
+    for c, row in table.items():
+        for df, entry in zip(ROWS, row, strict=True):
+            exact = smm_quantile(c, math.inf if df == INFINITE_ROW else df)
+            if entry != round(exact, 2):
+                out.append((c, df, entry, round(exact, 5)))
+    return out
+
+
 def render(table: dict[int, tuple[float, ...]]) -> str:
+    differ = not_rounded_quantiles(table)
     lines = [
         '"""lincon\'s Studentized maximum modulus table at alpha = 0.05 (generated).',
         "",
-        "Written by tools/reference/smm_table.py; do not edit by hand. One tuple per",
-        "number of comparisons C = 1..45, one entry per row of ``SMM_ROWS``; the row",
-        "labelled 200 holds the infinite-df values. Entries are the quantiles rounded",
-        "to two decimals, except where WRS2's published table differs:",
-        f"{sorted(PUBLISHED_DIFFERS.items())!r}.",
+        "Written by tools/reference/smm_table.py from the oracle's probe-smm; do",
+        "not edit by hand. One tuple per number of comparisons C = 2..28, one entry",
+        "per row of ``SMM_ROWS``; the row labelled 200 holds the infinite-df values.",
+        "The",
+        "entries are WRS2's published ones (its ``smmcrit``), except C = 9 at df 2,",
+        "where WRS2 has 8.83 and this table the quantile 8.38 (DECISIONS.md D51).",
+        f"{len(differ)} entries are not the quantile rounded to two decimals",
+        "(C, df row, entry, quantile):",
+        "",
+    ]
+    lines += [f"    {item!r}" for item in differ]
+    lines += [
         '"""',
         "",
         "from __future__ import annotations",

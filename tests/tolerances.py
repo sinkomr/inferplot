@@ -96,9 +96,12 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             rtol=1e-10,
             atol=2.0**-53,
             reason=(
-                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way, lincon): R "
-                "rounds the one-sided tail to the spacing of doubles just below 1 "
-                "(2**-53), and all 10 robust omnibus p-values lie on that grid. "
+                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way and lincon: "
+                "probe-wrs2p's 420 p-values over |t| from 0 to about 40 at df 4 to "
+                "700 all equal R's 1 - cdf bit for bit, and only 27 equal the exact "
+                "tail): R rounds the one-sided tail to the spacing of doubles just "
+                "below 1 (2**-53), and all 10 robust omnibus p-values lie on that "
+                "grid. "
                 "inferplot reports the accurate tail (DECISIONS.md D43), which lies "
                 "within one step of R's on every fixture. Measured on the 10 robust "
                 "fixtures: Yuen 1.17e-16 absolute (0.53 of the two-sided step, "
@@ -112,34 +115,26 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "two-sided p, times the number of pairs for a Holm-adjusted p)."
             ),
         ),
-        "wrs2_akp_constant": Tolerance(
-            rtol=1.3e-9,
-            atol=0.0,
-            reason=(
-                "AKP effect size against WRS2::akp.effect. WRS2 scales by a constant "
-                "1.2026e-9 relative above the exact square root of the winsorized "
-                "standard normal variance (0.64193981625799 against "
-                "0.64193981548600 at tr = 0.2), which inferplot uses (DECISIONS.md "
-                "log). Measured: every AKP estimate in the 3 two-group robust "
-                "fixtures (subtitle and 20,000-resample reference) is 1.20259e-9 "
-                "relative above inferplot's, the same ratio to 2e-15; the rest of "
-                "the computation agrees to rounding. 1.3e-9 leaves 8% headroom."
-            ),
-        ),
         "wrs2_xi_constant": Tolerance(
             rtol=3.3e-8,
             atol=0.0,
             reason=(
                 "Explanatory effect size xi against WRS2::t1way with equal group "
                 "sizes, where it does not depend on the resamples. WRS2 divides the "
-                "pooled winsorized variance by 0.4120867, inferplot by the exact "
-                "winsorized standard normal variance 0.41208672670619 (DECISIONS.md "
-                "log), so WRS2's xi is sqrt(0.4120867 / 0.41208672670619) = 1 - "
-                "3.2404e-8 times inferplot's. Measured on the 3 equal-size robust "
-                "fixtures with three or more groups: 3.2404e-8 relative in each, "
-                "the same ratio to 1e-15; with 0.4120867 the 20,000-resample "
-                "references replay exactly. 3.3e-8 leaves 2% headroom. With "
-                "unequal sizes the estimate is random and compared under BOOTSTRAP."
+                "pooled winsorized variance by its own approximation of the "
+                "winsorized standard normal variance, inferplot by the exact value "
+                "(DECISIONS.md D42), so the two differ by a constant ratio at each "
+                "tr. tr 0.2: WRS2 divides by 0.4120867 for the exact "
+                "0.41208672670619, so its xi is 1 - 3.2404e-8 times inferplot's; "
+                "measured on the 3 equal-size robust fixtures with three or more "
+                "groups and a subtitle, the same ratio to 1e-15 in each, and with "
+                "0.4120867 the 20,000-resample references replay exactly. tr 0.1 "
+                "(PlantGrowth-tr01, subtitle and reference): 1 + 3.0242e-8 times "
+                "inferplot's (WRS2's divisor 0.6786545179 for the exact "
+                "0.6786545590). 3.3e-8 leaves 2% headroom over the larger; it is "
+                "measured at tr 0.1 and 0.2 only, and the parity tests refuse an "
+                "equal-size fixture at another tr. With unequal sizes the estimate "
+                "is random and compared under BOOTSTRAP."
             ),
         ),
         "noncentral_ci": Tolerance(
@@ -207,14 +202,53 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             reason=(
                 "JZS Bayes factors of t tests (BayesFactor::ttestBF, one-dimensional "
                 "quadrature), measured on two-sample values only: tools/reference "
-                "reproduces all 36 distinct ones in the 73 ggstatsplot 1.1.4 "
-                "fixtures to at most 1.5e-9 relative (iris setosa-virginica, BF10 "
-                "2.2e6), and that residual is BayesFactor's own integration error. "
+                "reproduces 75 of the 77 distinct ones in the 158 completed "
+                "ggstatsplot 1.1.4 fixtures to at most 2.3e-9 relative "
+                "(edge_large_n a-c, BF10 5.1e5; iris setosa-virginica Sepal.Width, "
+                "1.5e-9), and that residual is BayesFactor's own integration error. "
+                "The other two, iris Petal.Length setosa-versicolor and "
+                "setosa-virginica (t -39.5 and -50.0, BF10 1e58 and 3e67), BayesFactor "
+                "misses by 1.2e-3 and 6.1e-5; they are compared with 50-digit values "
+                "(tests/oracle_fixtures.py ACCURATE_BAYES_FACTORS, DECISIONS.md D31 "
+                "pattern). "
                 "A prior scale of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or "
                 "more, and Welch's t instead of Student's moves every unbalanced "
                 "pair by 1.5e-4 or more (bugs_long, 92 against 91), so both fail. "
                 "Measure paired and one-sample values when their fixtures arrive; "
                 "other Bayes factor families need their own entry."
+            ),
+        ),
+        "akp_constant": Tolerance(
+            rtol=5e-7,
+            atol=0.0,
+            reason=(
+                "WRS2::akp.effect's scaling constant against the exact SD of a "
+                "standard normal winsorized at tr (DECISIONS.md D42): probe-akp "
+                "measures it as AKP / ((trimmed mean 1 - trimmed mean 2) / "
+                "winsorized SD of group 1), the same to 4 ulps on every dataset at "
+                "a given tr, so WRS2 evaluates it numerically. Its relative offset "
+                "from the exact value is irregular in tr: 1.2e-9 at 0.2 "
+                "(ggstatsplot's default), 4.6e-9 at 0.1, at most 3.4e-8 for tr up "
+                "to 0.25 and 9.7e-9 at 0.3, rising to 4.2e-7 at 0.49 (tr 0.01 to "
+                "0.49 by 0.01). The bound is that maximum, rounded up. The AKP "
+                "parity tests do not use this bound: they scale inferplot's "
+                "estimate by the probe's constant at the case's tr over the exact "
+                "one and compare under closed_form (every AKP estimate of the 4 "
+                "two-group robust fixtures with a subtitle, at tr 0.1 and 0.2, and "
+                "its 20,000-resample reference, agrees to 2.2e-16 relative)."
+            ),
+        ),
+        "smm_quantile": Tolerance(
+            rtol=3e-14,
+            atol=0.0,
+            reason=(
+                "inferplot.stats.smm_quantile, the Studentized maximum modulus "
+                "quantile, against the 30-digit mpmath references in "
+                "tests/data/smm_reference.json (tools/reference/smm_mpmath.py; "
+                "148 points: C = 1 to 300 comparisons, df 1 to 1e5 and infinity, "
+                "levels 0.5 to 0.99). Measured max relative error 1.1e-14 at finite "
+                "df (C 300, df 1) and 2.2e-16 at infinite df. 3e-14 leaves 2.7 "
+                "times headroom."
             ),
         ),
     }

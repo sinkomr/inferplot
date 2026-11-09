@@ -650,6 +650,8 @@ class _Drawing:
         for i, (d, label) in enumerate(
             zip(self.result.descriptives, self.texts.centrality_labels, strict=True)
         ):
+            if d.value is None:
+                continue  # a MAP without a density: nothing to mark (D55)
             ax.add_line(
                 Line2D(
                     [i, i + LABEL_OFFSET],
@@ -885,7 +887,7 @@ class _Drawing:
         data_min = min(float(x.min()) for x in data)
         data_max = max(float(x.max()) for x in data)
         centers = (
-            [d.value for d in self.result.descriptives]
+            [d.value for d in self.result.descriptives if d.value is not None]
             if self.centrality_labels
             else []
         )

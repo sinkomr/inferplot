@@ -16,7 +16,9 @@ import pytest
 import inferplot as ip
 from inferplot import stats
 from inferplot.result import StatsResult
+from inferplot.text import figure_texts
 from tests.oracle_fixtures import DATASET_DIR
+from tests.render._helpers import numbered_texts
 
 betweenstats: Any = ip.analyze.betweenstats
 
@@ -272,11 +274,31 @@ def test_robust_argument_rules(plants: pd.DataFrame, teeth: pd.DataFrame) -> Non
         betweenstats(teeth, "supp", "len", type="robust", alternative="greater")
     with pytest.raises(ValueError, match="only for type='parametric'"):
         betweenstats(teeth, "supp", "len", type="robust", bf_message=True)
-    with pytest.raises(NotImplementedError, match=r"conf_level=0\.9 .*Pass conf_level"):
-        betweenstats(plants, "group", "weight", type="robust", conf_level=0.9)
-    # Two groups take any level (no lincon table involved).
+    # Three or more groups: the effect size follows conf_level, the pairwise
+    # intervals stay at 95% as in ggstatsplot (D53), and the result says so.
+    many = betweenstats(plants, "group", "weight", type="robust", conf_level=0.9)
+    assert many.effect_size.conf_level == many.settings.conf_level == 0.9
+    assert [pair.conf_level for pair in many.pairwise] == [0.95] * 3
+    at_95 = betweenstats(plants, "group", "weight", type="robust")
+    assert many.pairwise == at_95.pairwise
+    assert at_95.warnings == ()
+    (warning,) = many.warnings
+    assert warning.startswith("The pairwise confidence intervals are 95% intervals")
+    assert "conf_level=0.9," in warning
+    assert [i.code for i in many.check()] == ["pairs_hidden", "pairwise_conf_level"]
+    assert "pairwise_conf_level" not in [i.code for i in at_95.check()]
+    shown = betweenstats(
+        plants, "group", "weight", type="robust", conf_level=0.9, pairwise_display="all"
+    )
+    (issue,) = shown.check()
+    assert issue.code == "pairwise_conf_level"
+    assert issue.severity == "info"
+    assert "95% intervals" in issue.message
+    assert "conf_level=0.9 " in issue.message
+    # Two groups take any level (no pairwise comparisons).
     two = betweenstats(teeth, "supp", "len", type="robust", conf_level=0.9)
     assert two.effect_size.conf_level == 0.9
+    assert two.warnings == ()
     warned = betweenstats(teeth, "supp", "len", type="robust", bf_prior=0.5)
     assert warned.warnings == (
         "bf_prior=0.5 has no effect: no Bayes factor is computed "
@@ -482,11 +504,36 @@ def test_bayes_plain_errors() -> None:
     one = frame({"a": [1.0, 2.0, 4.0], "b": [3.0]})
     with pytest.raises(ValueError, match=r"at least 2 observations.*'b' \(n = 1\)"):
         betweenstats(one, "g", "y", type="bayes")
+
+
+def test_bayes_map_of_constant_and_zero_iqr_groups() -> None:
+    # D55, from probe-map. A constant group's MAP is its value (bayestestR's), with
+    # no warning.
     flat = frame({"a": [1.0, 2.0, 4.0, 7.0], "b": [3.0, 3.0, 3.0]})
-    with pytest.raises(ValueError, match=r"MAP estimate.*group 'b' of x='g'"):
-        betweenstats(flat, "g", "y", type="bayes")
-    with pytest.raises(ValueError, match="type='nonparametric'"):
-        betweenstats(flat, "g", "y", type="bayes")
+    result = betweenstats(flat, "g", "y", type="bayes")
+    assert result.descriptives[1].value == 3.0
+    assert result.text.centrality_labels[1] == "μ_MAP = 3.00"
+    assert not [w for w in result.warnings if "MAP" in w]
+    # A zero interquartile range with spread: R's bw.SJ fails, the MAP is NA and
+    # ggstatsplot prints an empty label. inferplot: value None, a warning that says
+    # why, the same empty label in the result's texts, nothing drawn for it.
+    sparse = frame({"a": [1.0, 2.0, 4.0, 7.0], "b": [1.0] * 7 + [5.0]})
+    result = betweenstats(sparse, "g", "y", type="bayes")
+    assert result.descriptives[0].value == stats.map_estimate([1.0, 2, 4, 7]).estimate
+    assert result.descriptives[1].value is None
+    (warning,) = [w for w in result.warnings if "MAP" in w]
+    assert warning.startswith(
+        "The group 'b' of x='g' (n = 8) has no MAP estimate, so no centrality label "
+        "is drawn for it: no Sheather-Jones bandwidth"
+    )
+    assert result.text.centrality_labels[1] == "μ_MAP = "
+    assert "b (n = 8, MAP estimate NA)" in result.text.alt_text
+    assert StatsResult.from_json(result.to_json()) == result
+    fig = ip.render.betweenstats(result)
+    assert numbered_texts(fig, "centrality-label") == [
+        figure_texts(result).centrality_labels[0]
+    ]
+    assert not [i for i in fig.check() if i.code in ("label_overlap", "text_clipped")]
 
 
 def test_bayes_row_order(plants: pd.DataFrame) -> None:

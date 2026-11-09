@@ -178,6 +178,7 @@ def test_means(name: str, backend: Backend) -> None:
             row = layer[d.level]
             assert d.centrality == "mean"
             assert int(row["n.obs"]) == d.n
+            assert d.value is not None
             assert_close(
                 "closed_form", d.value, number(row[y]), what=f"{name} mean {d.level}"
             )
@@ -480,6 +481,7 @@ def test_failed_case_computes(name: str, backend: Backend) -> None:
             result.text.tick_labels[i] == figure.tick_labels[i] == row["n.expression"]
         )
         key = y if y in row else "value"
+        assert d.value is not None
         assert_close("closed_form", d.value, number(row[key]), what=f"mean {d.level}")
     # pairwise: finite p from the accurate tail, where R's ptukey gives NaN
     k = len(result.levels)
