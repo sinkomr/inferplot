@@ -130,6 +130,18 @@ class OracleCase:
         """
         return self.raw["expected_error"]
 
+    @property
+    def partial_components(self) -> tuple[str, ...]:
+        """The hidden calls that ran before ggstatsplot failed, in call order.
+
+        A Bayes caption is computed for type parametric only, so the other types'
+        failed cases have no ``caption`` entry.
+        """
+        entries = self.raw["partial"]
+        if entries is None:
+            raise ValueError(f"{self.name}: ggstatsplot did not fail; read its outputs")
+        return tuple(str(entry["component"]) for entry in entries)
+
     def partial(self, component: str) -> Any:
         """What a hidden call returned before ggstatsplot failed (failed cases only).
 
@@ -466,6 +478,51 @@ def r_double(text: str) -> float | None:
     if not text.removeprefix("-").startswith("0x"):
         raise ValueError(f"not a hex double: {text!r}")
     return float.fromhex(text)
+
+
+# Bayes factors where BayesFactor::ttestBF (ggstatsplot's pairwise Bayes factors)
+# misses the accurate value by more than `ttest_bayes_factor` (rtol 1e-8). Following
+# DECISIONS.md D31, inferplot reports the accurate value and is compared with it.
+# (case, group1, group2) -> (accurate BF10, ggstatsplot's relative miss). iris
+# Petal.Length, 50 + 50 values: at Student t -39.49 and -49.99 BayesFactor's quadrature
+# is off by +1.16e-3 and -6.1e-5. The accurate values are 50-digit mpmath quadratures
+# of Rouder et al. (2009), eq. 1, which tools/reference matches to 1.6e-14; every
+# other one of the 77 distinct two-sample Bayes factors in the fixtures is within
+# 2.3e-9 of it.
+ACCURATE_BAYES_FACTORS: Mapping[tuple[str, str, str], tuple[float, float]] = (
+    MappingProxyType(
+        {
+            ("ggbetweenstats-iris-petal-bayes", "setosa", "versicolor"): (
+                1.1443263236860359e58,
+                1.16e-3,
+            ),
+            ("ggbetweenstats-iris-petal-bayes", "setosa", "virginica"): (
+                3.183438242038274e67,
+                -6.1e-5,
+            ),
+        }
+    )
+)
+
+
+def expected_bf10(case_name: str, group1: str, group2: str, oracle: float) -> float:
+    """The BF10 to compare with: ggstatsplot's, or the accurate one where it misses.
+
+    For a registered miss, also checks that ggstatsplot's value still misses by the
+    recorded amount, so a stale entry fails instead of hiding a difference.
+    """
+    entry = ACCURATE_BAYES_FACTORS.get((case_name, group1, group2))
+    if entry is None:
+        return oracle
+    accurate, miss = entry
+    measured = oracle / accurate - 1
+    assert abs(measured - miss) <= 0.01 * abs(miss), (
+        case_name,
+        group1,
+        group2,
+        measured,
+    )
+    return accurate
 
 
 # Geoms whose layer parameters generate.R records (the drawn pairs and labels).
