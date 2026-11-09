@@ -762,7 +762,7 @@ def _lincon_critical_value(alpha: float, n_comparisons: int, df: float) -> float
     if df < SMM_TABLE_DF[0]:
         raise ValueError(f"lincon's table starts at df 2, not {df}")
     if n_comparisons == 1:
-        return float(stats.t.isf(alpha / 2, df))
+        return ref.t_isf(alpha / 2, df)
     table = _smm_table(alpha)
     if df >= SMM_LAST_ROW:
         return table[(SMM_LAST_ROW, n_comparisons)]

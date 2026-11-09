@@ -443,7 +443,8 @@ def smm_critical_value(
       the exact Studentized maximum modulus quantile at the pair's df
       (``inferplot.stats.smm.smm_quantile``; DECISIONS.md D52). WRS2's simulated
       values are not that quantile: 3.4% to 6.6% below it at 36 and 45
-      comparisons (probe-smm), so these intervals are wider than ggstatsplot's.
+      comparisons (probe-smm) and -0.35% to +4.7% off it on edge_k9, so these
+      intervals differ from ggstatsplot's.
 
     Args:
         n_comparisons: C, the number of pairwise comparisons (k (k - 1) / 2 for k
@@ -476,7 +477,9 @@ def smm_critical_value(
             f"(WRS2's table starts at df 2); got df {value!r}"
         )
     if n_comparisons == 1:
-        return float(special.stdtrit(value, 0.5 + 0.5 * level))
+        # |T_df| is the maximum modulus of one comparison; smm_quantile computes it
+        # to 1e-14 at any SciPy (SciPy 1.11's stdtrit is off by up to about 1e-9).
+        return smm_quantile(1, value, conf_level=level)
     entries = SMM_TABLE_05[n_comparisons]
     if value >= SMM_ROWS[-1]:
         return entries[-1]

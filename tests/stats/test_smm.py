@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 import pytest
-from scipy import stats
+from tools.reference import stats_reference as ref
 
 from inferplot.stats import smm_cdf, smm_quantile
 from tests.tolerances import assert_close
@@ -45,7 +45,7 @@ def test_quantile_against_mpmath(row: dict[str, object]) -> None:
 @pytest.mark.parametrize("df", [1.0, 2.0, 4.69, 10.0, 60.0, 1490.0, 1e7])
 def test_one_comparison_is_students_t(df: float) -> None:
     # max |Z| / S with one Z is |T_df|.
-    expected = float(stats.t.isf(0.025, df))
+    expected = ref.t_isf(0.025, df)
     assert_close("smm_quantile", smm_quantile(1, df), expected, what=f"df {df}")
     assert smm_cdf(expected, 1, df) == pytest.approx(0.95, abs=1e-14)
 

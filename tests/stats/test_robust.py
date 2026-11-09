@@ -174,7 +174,7 @@ def test_one_comparison_is_student_t_and_infinite_df_is_normal() -> None:
         assert_close(
             "closed_form",
             smm_critical_value(1, df),
-            float(stats.t.isf(0.025, df)),
+            ref.t_isf(0.025, df),
             what=f"C = 1 at df {df}",
         )
     for c in SMM_TABLE_05:
