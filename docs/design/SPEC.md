@@ -46,9 +46,16 @@ fig.save("score.svg")
 | `results_subtitle` | `True` | |
 | `alternative` | `"two-sided"` | `"less"`, `"greater"` only for two-group, paired and one-sample tests with type parametric or nonparametric; otherwise `ValueError` (ggstatsplot silently ignores it for robust and bayes types, for correlations, which have no `alternative` in ggscatterstats or `corr_test`, for the Bayes caption and for pairwise comparisons) |
 | `seed` | `0` | every random step; recorded in provenance |
-| `xlab`, `ylab`, `title` | `None` | user text |
+| `xlab`, `ylab`, `title` | `None` | user text (see below the table) |
 | `subtitle` | `None` | used only when `results_subtitle=False`; passing it with `results_subtitle=True` raises `ValueError` (ggstatsplot silently ignores it there) |
 | `caption` | `None` | user text drawn below the generated caption lines |
+
+User texts (`title`, `subtitle`, `caption`, `xlab`, `ylab`) are matplotlib text and
+follow its convention: text between two `$` signs is mathtext (`r"Dose ($\mu$g)"`),
+and `\$` is a literal dollar sign. Each is laid out once before anything is drawn, so
+an expression matplotlib cannot read raises `ValueError` at the call, also with `ax=`,
+and leaves a given Axes unchanged (D40). Default labels from column names are never
+read as mathtext.
 | `palette` | `None` | list of colors or a matplotlib colormap name; default Okabe-Ito |
 | `ax` | `None` | draw into an existing Axes; subtitle and caption go inside that Axes; not allowed with marginal panels |
 
@@ -56,7 +63,7 @@ fig.save("score.svg")
 
 | Function | Positional | Specific keywords (defaults) |
 | --- | --- | --- |
-| `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`, so unknown properties raise) |
+| `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. They are checked on throwaway artists of the receiving classes before anything is drawn, so an unknown property raises `TypeError` and a rejected value `ValueError`, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
 | `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=True`, `centrality_path=True` |
 | `histostats` | `data, x` | `test_value=0.0`, `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True` |
 | `scatterstats` | `data, x, y` | `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `label_var=None` |
@@ -65,6 +72,14 @@ fig.save("score.svg")
 `p_adjust_method` accepts R's names: `holm`, `hochberg`, `hommel`, `bonferroni`, `BH`,
 `BY`, `fdr`, `none`. `pairwise_display`: `significant`, `non-significant`, `all`, `none`
 (aliases `s`, `ns`).
+
+Arguments without effect on the given data warn (D39). With two groups there are no
+pairwise comparisons, so a non-default `p_adjust_method`, `pairwise_display` or
+`pairwise_alpha` adds one `warnings` entry each, and a non-default `bf_prior` does so
+wherever no Bayes factor is computed (`bf_message=False`, `results_subtitle=False`, or
+three or more groups in v0.1). Defaults and their aliases add nothing. `tr` with a
+type that trims nothing and a one-sided `alternative` with three or more groups raise
+instead, because they would change what the reported numbers mean.
 
 ### API errors (exact behavior)
 
@@ -77,8 +92,8 @@ These names get a targeted message instead:
 | `nboot` | removed in 1.0.0; inferplot uses 2,000 seeded resamples; pass `seed` |
 | `effsize.type` | removed in 1.0.0; Hedges' g and partial omega squared are always used |
 | `k` | renamed `digits` in ggstatsplot 0.12.3 |
-| `package` | removed in 1.0.0; pass `palette` |
-| `plot.type` | removed in 0.12.0; use `layers` |
+| `package` | removed in 1.0.0; pass `palette` (given to `ip.analyze.<name>`: colors are a drawing option of `ip.<name>` and `ip.render.<name>`) |
+| `plot.type` | removed in 0.12.0; use `layers` (given to `ip.analyze.<name>`: pass `layers=` when drawing, to `ip.<name>` or `ip.render.<name>`) |
 | `pairwise.comparisons` | removed in 0.12.0; use `pairwise_display="none"` |
 | `output` | removed in 0.10.0; use `fig.result` |
 | `messages` | inferplot never prints |
@@ -97,7 +112,11 @@ lowercase underscores) is a valid argument raises `TypeError` naming that spelli
 `betweenstats` they, and `subject_id`, say the groups are independent and point to
 `withinstats(..., subject_id=...)`. When several keywords are wrong, the first in call
 order is reported. More positional arguments than `data, x[, y]` raise `TypeError`
-naming the extra values and saying everything after them is keyword-only.
+naming the extra values and saying everything after them is keyword-only. A drawing
+function (`ip.render.<name>`) given anything but a `StatsResult` raises `TypeError`
+saying it draws the result of `ip.analyze.<name>(data, x, y)`, or to use
+`ip.<name>(data, x, y, ...)` to analyze and draw in one call; this comes before the
+positional count.
 
 Passing a numpy array, list or dict as `data` → `TypeError` saying to build a pandas
 or polars DataFrame in long format. `withinstats` without `subject_id` → `TypeError`
@@ -116,7 +135,11 @@ explaining that pairing by row order is not allowed.
 - Level order: the declared order of a pandas `Categorical`, polars `Enum` or pyarrow
   dictionary column, else sorted unique values (a polars `Categorical` counts as text:
   its category order changed within polars 1.x); `order=` must be a permutation of the
-  present levels. Empty declared levels are dropped before analysis and listed in
+  present levels. It is any ordered collection other than a string (list, tuple, NumPy
+  array, pandas Index or Series, polars Series, pyarrow array, generator) of level
+  names or of the values `x` holds: any integer (Python or NumPy), any finite float
+  (8.0 names level "8") or a pyarrow scalar. A set or a mapping raises `TypeError`
+  (no order, or an ambiguous one). Empty declared levels are dropped before analysis and listed in
   `warnings`; they must never suppress results (ggstatsplot 1.1.4 fixed a bug where
   they did).
 - Parametric type (Welch's t and ANOVA, Games-Howell): every level needs n >= 2, two
@@ -268,7 +291,9 @@ Statistical and behavioral differences are exactly these:
 3. When only significant pairs are drawn, the caption states how many pairs were tested.
 4. Nothing is silently dropped or aliased: unknown arguments, `type` values without a
    distinct method, a `subtitle` passed while `results_subtitle=True`, and a `tr`
-   other than 0.2 with a type that trims nothing raise.
+   other than 0.2 with a type that trims nothing raise; arguments that have no effect
+   on the given data (pairwise arguments with two groups, `bf_prior` where no Bayes
+   factor is computed) add a `warnings` entry each (§2, D39).
 5. v0.1 only: where ggstatsplot's default adds a Bayes factor that inferplot computes only
    from v0.2 (the Bayes ANOVA caption after a parametric test with three or more groups
    or conditions; unpaired contingency tables and one-way goodness of fit with a type
@@ -408,7 +433,7 @@ no problems.
 | `heavy_ties` | result | warning | rank-based test with more than 25% tied values |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed |
-| `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect |
+| `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box crosses the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |
 | `points_subsampled` | figure | info | large-n subsampling used |
 
@@ -417,7 +442,11 @@ subtitle, caption lines, axis labels, visible tick labels, centrality labels wit
 label boxes, bracket labels; with `ax=` only the texts of that Axes. `text_clipped`
 fires when a text extends more than 0.5 px outside the figure, or a text drawn inside
 the Axes (centrality and bracket labels; with `ax=` also the subtitle and caption)
-extends outside it. Messages name texts in plain words, never mathtext source.
+extends outside it. For bracket labels only the drawn lines of the other brackets
+count: a label inside the area an enclosing bracket spans is fine. With `ax=` the
+bracket levels are fitted to the Axes height and nothing is resized, so a short Axes
+can put a label on another bracket's line; `check()` reports it. Messages name texts
+in plain words, never mathtext source.
 
 ## 9. R oracle
 
@@ -516,7 +545,7 @@ extends outside it. Messages name texts in plain words, never mathtext source.
 | `analysis_levels`, `n_per_level` | group order and counts after dropping incomplete rows and empty levels; the generator checks the counts against ggstatsplot's own `n.obs` |
 | `error`, `r_warnings`, `r_messages` | conditions that reached the generator; `error` is null unless the case expects ggstatsplot to fail |
 | `expected_error` | null, or the failure the case declares: `component`, `message`, `reason` |
-| `partial` | null unless ggstatsplot failed; then one entry per hidden call that ran (`component`, `value`, data frames as row objects with plotmath deparsed): the subtitle, caption and centrality tables computed before the failure |
+| `partial` | null unless ggstatsplot failed; then one entry per hidden call that ran (`component`, `value`, data frames as row objects with plotmath deparsed): the subtitle, caption and centrality tables computed before the failure, and last the failing call itself (`pairwise_comparisons` in `edge_n2`) with value null |
 | `suppressed` | what ggstatsplot hid, one entry per hidden call in call order: `component` (`subtitle`, `caption`, `centrality_description`, `pairwise_comparisons`), `error` (null unless ggstatsplot swallowed one; errors of the last two are not swallowed and end up in `error`), and the muted `warnings` and `messages` |
 | `expected_hidden_errors` | components whose error the case declares ggstatsplot swallows; empty for every current case. An error raised inside `centrality_description()` or `pairwise_comparisons()` is also logged on its `suppressed` entry (it is not swallowed and ends in `error` as well) |
 | `subtitle`, `caption` | deparsed plotmath from `extract_subtitle()` and `extract_caption()` |
@@ -589,9 +618,16 @@ Every other subtitle number is compared as the exact string inferplot produces.
 
 - **Reference cross-checks:** where `tools/reference/stats_reference.py` covers a method,
   production code must agree with it too.
-- **Simulation (marker `slow`):** under the null with unequal variances and unequal n,
-  2,000 replications: Type I error at alpha 0.05 inside the binomial 99% band; 95% CI
-  coverage likewise.
+- **Simulation (marker `slow`):** 2,000 seeded replications each, unequal variances and
+  unequal n, every rate inside the binomial 99% band of its nominal value: Type I error
+  at alpha 0.05 under the null; coverage of the 95% Hedges' g interval at nonzero true
+  standardized differences delta = (mu1 - mu2) / sqrt((s1^2 + s2^2) / 2) (0.263, 0.788
+  and -0.525). At delta = 0 the interval covers 0 exactly when the Welch p is at least
+  alpha, so coverage there repeats the Type I error test and is kept only as that.
+- **Scale:** the data times 2^k give bit-identical statistics, intervals, Bayes factors
+  and Games-Howell rows for every k that keeps them normal doubles; times 10^k (k =
+  -300..300) they agree within `closed_form` (`noncentral_ci` for interval bounds)
+  (`tests/stats/test_scale.py`).
 - **Properties (hypothesis):** row-order invariance; level relabeling invariance; pandas,
   polars and pyarrow inputs give identical results; standardized effect sizes invariant
   to location and positive scale.
