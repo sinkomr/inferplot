@@ -17,7 +17,7 @@ seeded simulation, where inferplot computes the exact quantile with
 The integral is a composite Gauss-Legendre rule over panels whose edges are quantiles
 of S (from 1e-20 to 1 - 1e-20; the mass outside them is below 2e-20), evaluated with
 NumPy in one pass per c, and the quantile is found with Brent's method to 1e-14
-relative. Accuracy against 40-digit mpmath references
+relative. Accuracy against 30-digit mpmath references
 (``tests/data/smm_reference.json``, ``tools/reference/smm_mpmath.py``): see the
 ``smm_quantile`` tolerance in ``tests/tolerances.py``.
 """

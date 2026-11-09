@@ -1308,7 +1308,8 @@ def betweenstats(
         KeyError: a column that the data frame does not have.
         NotImplementedError: a design this version does not have: the Bayes factor
             caption or subtitle for three or more groups (a Bayesian ANOVA), and
-            the robust pairwise comparisons at a conf_level other than 0.95.
+            the robust pairwise comparisons when a pair has fewer than 2 degrees of
+            freedom (where WRS2's lincon stops).
     """
     type_name = canonical_type(type)
     display = canonical_pairwise_display(pairwise_display)
