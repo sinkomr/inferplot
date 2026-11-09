@@ -2,8 +2,8 @@
 
 The comparison runs only with ``--mpl``, in the Linux CI job that runs the newest
 Python; the baselines in ``tests/render/baseline`` are generated in that same
-environment by the "Image baselines" workflow, because text renders differently on
-other systems. Without ``--mpl`` each test still draws its figure and checks it.
+environment by ci.yml's "mpl-baselines" job (dispatch with ``mpl_generate=true``),
+because text renders differently on other systems. Without ``--mpl`` each test still draws its figure and checks it.
 
 Every figure is deterministic: the data come from the oracle datasets or a closed
 form, and jitter and subsampling use the default seed.
