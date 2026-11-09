@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import io
 import re
 
 import matplotlib
@@ -456,6 +457,105 @@ def test_artist_args_are_checked_before_drawing(
         betweenstats(_plant(), layers=layers, **{name: {"bogus": 1}})  # pyright: ignore[reportArgumentType]
     with pytest.raises(ValueError, match=f"{name} has a value matplotlib rejects"):
         betweenstats(_plant(), layers=layers, **{name: {"facecolor": "notacolor"}})  # pyright: ignore[reportArgumentType]
+
+
+# Values that Artist.set() stores without checking; matplotlib rejects them only
+# when it draws (Agg) or writes a vector file (PDF). Found by trying bad values for
+# every settable property of the three artist classes.
+_REJECTED_WHEN_DRAWN = [
+    ("point_args", {"linewidth": "bad"}),
+    ("point_args", {"linewidths": "bad"}),
+    ("point_args", {"lw": (1, "a")}),
+    ("point_args", {"linewidths": 1e9}),
+    ("point_args", {"linewidth": float("nan")}),
+    ("point_args", {"linewidths": 1.0, "linestyle": {}}),
+    ("boxplot_args", {"linewidth": float("nan")}),
+    ("violin_args", {"lw": float("nan")}),
+]
+
+
+@pytest.mark.parametrize("own", [True, False], ids=["own-figure", "ax"])
+@pytest.mark.parametrize(
+    ("name", "args"),
+    _REJECTED_WHEN_DRAWN,
+    ids=[f"{n}-{'-'.join(a)}" for n, a in _REJECTED_WHEN_DRAWN],
+)
+def test_a_value_rejected_only_when_drawn_raises_at_the_call(
+    name: str, args: dict[str, object], own: bool
+) -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    ax.plot([0.0, 1.0], [0.0, 1.0])
+    before = _state(ax)
+    with pytest.raises(ValueError, match=f"^{name} has a value matplotlib rejects"):
+        betweenstats(_plant(), ax=None if own else ax, **{name: args})  # pyright: ignore[reportArgumentType]
+    assert _state(ax) == before
+    figure.savefig(io.BytesIO(), format="pdf")  # the user's figure still saves
+
+
+@pytest.mark.parametrize("name", ["point_args", "boxplot_args", "violin_args"])
+def test_a_wrongly_typed_value_of_a_known_property_is_a_rejected_value(
+    name: str,
+) -> None:
+    with pytest.raises(ValueError, match=f"^{name} has a value matplotlib rejects"):
+        betweenstats(_plant(), **{name: {"alpha": "x"}})  # pyright: ignore[reportArgumentType]
+    with pytest.raises(TypeError, match=f"^{name} has a property") as info:
+        betweenstats(_plant(), **{name: {"alpah": 0.5}})  # pyright: ignore[reportArgumentType]
+    assert "'alpah'" in str(info.value)
+    assert "Did you mean 'alpha'?" in str(info.value)
+
+
+def test_artist_args_that_draw_are_accepted_with_ax() -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    fig = betweenstats(
+        _plant(),
+        ax=ax,
+        point_args={"linewidths": 0.5, "edgecolor": "black", "sizes": [20.0]},
+        boxplot_args={"linewidth": 1.5, "linestyle": "--", "hatch": "//"},
+        violin_args={"alpha": 0.4, "lw": 2.0},
+    )
+    assert np.asarray(_points(fig, 0).get_linewidth()).tolist() == [0.5]
+    assert figure_codes(fig) == []
+    figure.savefig(io.BytesIO(), format="svg")
+
+
+def test_texts_the_user_drew_before_keep_their_font() -> None:
+    figure, (ax,) = _user_axes(7.5, 7.0)
+    user_title = ax.set_title("My panel", fontfamily="serif", loc="right")
+    note = ax.annotate(
+        "note", (0.02, 0.5), xycoords="axes fraction", fontfamily="monospace"
+    )
+    fig = betweenstats(_plant(), ax=ax, title="Plant growth")
+    assert user_title.get_fontfamily() == ["serif"]
+    assert note.get_fontfamily() == ["monospace"]
+    assert user_title.get_text() == "My panel"
+    # Every text inferplot drew is DejaVu Sans, and check() measures them.
+    canvas = figure.canvas
+    assert isinstance(canvas, FigureCanvasAgg)
+    canvas.draw()
+    own = [
+        *ax.xaxis.findobj(Text),
+        *ax.yaxis.findobj(Text),
+        *(t for t in ax.texts if t is not note),
+    ]
+    title = by_gid(fig, "title")  # the title inferplot set (left)
+    assert isinstance(title, Text)
+    assert title.get_text() == "Plant growth"
+    own = [t for t in [*own, title] if t.get_text()]
+    assert len(own) > 10
+    for text in own:
+        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_math_fontfamily() == "dejavusans", text.get_text()
+    assert figure_codes(fig) == []
+
+
+def test_check_still_reports_inferplots_texts_beside_user_texts() -> None:
+    _, (ax,) = _user_axes(2.5, 2.0)
+    ax.set_title("Mine", fontfamily="serif", loc="right")
+    fig = betweenstats(_plant(), ax=ax)
+    codes = figure_codes(fig)
+    assert "text_clipped" in codes or "label_overlap" in codes
+    message = " ".join(i.message for i in fig.check() if i.code in codes)
+    assert "subtitle" in message
 
 
 def _state(ax: Axes) -> tuple[object, ...]:
