@@ -25,7 +25,7 @@ from inferplot.stats import (
     welch_anova,
     welch_t,
 )
-from tests.oracle_fixtures import OracleCase, number, r_level_label
+from tests.oracle_fixtures import OracleCase, expected_bf10, number, r_level_label
 from tests.stats.fixture_data import (
     PAIRWISE_BF_PRIOR,
     alternative,
@@ -169,11 +169,22 @@ def test_centrality_means(case: OracleCase) -> None:
 # ------------------------------------------------------------------ Bayes factors
 
 
-def _check_bf(row: object, a: object, b: object, prior: float, *, what: str) -> None:
+def _check_bf(
+    row: object,
+    a: object,
+    b: object,
+    prior: float,
+    *,
+    what: str,
+    pair: tuple[str, str, str] | None = None,
+) -> None:
     assert isinstance(row, dict)
     assert number(row["prior.scale"]) == prior, what
     bf10, log_bf01 = jzs_bf10_two_sample(a, b, prior_scale=prior)  # type: ignore[arg-type]
-    assert_close("ttest_bayes_factor", bf10, value(row, "bf10"), what=f"{what} BF10")
+    oracle = value(row, "bf10")
+    # Where BayesFactor misses the accurate value, compare with that (D31 pattern).
+    expected = oracle if pair is None else expected_bf10(*pair, oracle)
+    assert_close("ttest_bayes_factor", bf10, expected, what=f"{what} BF10")
     assert log_bf01 == pytest.approx(-math.log(bf10), rel=1e-15, abs=1e-15)
 
 
@@ -221,4 +232,5 @@ def test_bayes_pairwise(case: OracleCase) -> None:
             by_level[g2],
             PAIRWISE_BF_PRIOR,
             what=f"{case.name} {g1}-{g2}",
+            pair=(case.name, g1, g2),
         )

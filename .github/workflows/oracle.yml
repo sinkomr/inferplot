@@ -26,6 +26,14 @@ jobs:
     name: Generate fixtures with ggstatsplot 1.1.4
     runs-on: ubuntu-24.04
     timeout-minutes: 300
+    env:
+      # R links OpenBLAS, which picks its kernels by the runner's CPU and splits work
+      # across threads; BayesFactor's Bayes ANOVA then differed in the last digits
+      # between runners, and its posterior sampler amplified that (Phase 2 run
+      # 42564644835). One thread and one kernel family make the arithmetic the same on
+      # every x86-64 runner GitHub uses.
+      OPENBLAS_NUM_THREADS: "1"
+      OPENBLAS_CORETYPE: "Haswell"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -95,6 +103,11 @@ jobs:
           }
           sessioninfo::session_info(pkgs = "attached", include_base = TRUE)
           print(installed[, c("Package", "Version")], quote = FALSE)
+
+      - name: Runner CPU and the BLAS R uses
+        run: |
+          lscpu
+          Rscript -e 'print(La_library()); print(extSoftVersion()[["BLAS"]]); print(sessionInfo())'
 
       - name: Export R-provided datasets
         run: Rscript oracle/export_datasets.R oracle/datasets

@@ -341,6 +341,9 @@ CASES <- c(
   # Yuen df of about 1,400 in every lincon pair: past the last row (200) of the
   # Studentized maximum modulus table.
   phase2_cases("edge_large_n", x = "group", y = "value"),
+  # Nine groups of six, 36 pairs: past the 28 comparisons of lincon's table, where
+  # lincon simulates its critical values (probe-smm).
+  phase2_cases("edge_k9", x = "group", y = "value", types = "robust"),
   # t1way F of about 1,500: 1 - pf is exactly 0, as are lincon's setosa pairs.
   phase2_cases("iris", x = "Species", y = "Petal.Length", label = "iris-petal"),
   # Two groups with Yuen p near 6e-15 (Petal.Length) and 5e-16 (Petal.Width), where

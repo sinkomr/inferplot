@@ -49,6 +49,7 @@ from tests.oracle_fixtures import (
     OracleCase,
     Row,
     cases_for,
+    expected_bf10,
     number,
     oracle_params,
     probe,
@@ -551,11 +552,23 @@ def test_t1way(case: OracleCase) -> None:
 
 
 def _check_jzs(
-    row: Row, a: FloatArray, b: FloatArray, *, prior: float, what: str
+    row: Row,
+    a: FloatArray,
+    b: FloatArray,
+    *,
+    prior: float,
+    what: str,
+    pair: tuple[str, str, str] | None = None,
 ) -> None:
-    """BayesFactor::ttestBF on two groups: Student's t, Cauchy scale ``prior``."""
+    """BayesFactor::ttestBF on two groups: Student's t, Cauchy scale ``prior``.
+
+    ``pair`` (case, group1, group2) names a pairwise row, compared with the accurate
+    value where BayesFactor misses it (`ACCURATE_BAYES_FACTORS`).
+    """
     assert number(row["prior.scale"]) == prior, f"{what}: {row['prior.scale']}"
     bf10 = _value(row, "bf10")
+    if pair is not None:
+        bf10 = expected_bf10(*pair, bf10)
     n_eff = a.size * b.size / (a.size + b.size)
     df = float(a.size + b.size - 2)
     student = float(stats.ttest_ind(a, b, equal_var=True).statistic)
@@ -614,7 +627,7 @@ def test_absent_outputs(case: OracleCase) -> None:
         assert case.pairwise == []
 
 
-@pytest.mark.parametrize("case", _params("bayes", two_groups=False))
+@pytest.mark.parametrize("case", _params("bayes", two_groups=False, needs="pairwise"))
 def test_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
     # Every pair gets its own ttestBF, always with prior 0.707 (SPEC.md section 4).
     groups = dict(zip(case.analysis_levels, _groups(case), strict=True))
@@ -622,7 +635,12 @@ def test_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
     for row in case.pairwise:
         g1, g2 = str(row["group1"]), str(row["group2"])
         _check_jzs(
-            row, groups[g1], groups[g2], prior=JZS_PRIOR, what=f"{case.name} {g1}-{g2}"
+            row,
+            groups[g1],
+            groups[g2],
+            prior=JZS_PRIOR,
+            what=f"{case.name} {g1}-{g2}",
+            pair=(case.name, g1, g2),
         )
 
 
@@ -649,7 +667,9 @@ def _dunn(groups: Sequence[FloatArray]) -> tuple[list[tuple[int, int]], list[flo
     return pairs, z_values
 
 
-@pytest.mark.parametrize("case", _params("nonparametric", two_groups=False))
+@pytest.mark.parametrize(
+    "case", _params("nonparametric", two_groups=False, needs="pairwise")
+)
 def test_dunn_holm(case: OracleCase) -> None:
     # Dunn (1964), `_dunn`. ggstatsplot 1.1.4 (PMCMRplus::kwAllPairsDunnTest) reports
     # |z|, not a signed z, and adjusts two-sided normal p-values across all
@@ -764,10 +784,16 @@ def _adjustment_scale(method: str, m: int) -> float:
     return float(m)
 
 
-def _lincon_alpha(row: Row) -> float:
-    """The alpha lincon ran at for a pairwise row (see test_lincon)."""
-    level = _value(row, "conf.level")
-    return {0.95: 0.05, 0.9: 0.1}[level]
+def _lincon_alpha(case: OracleCase, row: Row) -> float:
+    """The alpha lincon ran at: always its default 0.05.
+
+    ggstatsplot 1.1.4 does not pass `conf.level` to lincon: with 0.90
+    (PlantGrowth-cl90-robust) the subtitle's CI is 90% but every pairwise row says
+    0.95 and has the 95% interval. Had it passed alpha = 1 - conf.level, lincon would
+    have simulated its critical value (probe-smm), since 1 - 0.95 is not 0.05.
+    """
+    assert _value(row, "conf.level") == 0.95, case.name
+    return 0.05
 
 
 @pytest.mark.parametrize("case", _params("robust", two_groups=False, needs="pairwise"))
@@ -806,8 +832,7 @@ def test_lincon(case: OracleCase) -> None:
         mean2, d2, _ = ref._trimmed_kernel(groups[g2], tr)
         estimate = mean1 - mean2
         _, df, _ = yuen[(g1, g2)]
-        critical = _lincon_critical_value(_lincon_alpha(row), len(pairs), df)
-        half_width = critical * math.sqrt(d1 + d2)
+        alpha = _lincon_alpha(case, row)
         assert_close(
             "closed_form", estimate, _value(row, "estimate"), what=f"{what} estimate"
         )
@@ -820,17 +845,18 @@ def test_lincon(case: OracleCase) -> None:
             what=f"{what} {method} p",
             atol_scale=2 * _adjustment_scale(method, len(pairs)),
         )
+        low, high = _value(row, "conf.low"), _value(row, "conf.high")
+        if len(pairs) > SMM_MAX_COMPARISONS:
+            # Past the table (edge_k9, 36 pairs) lincon simulates its critical
+            # value with a seed of its own (probe-smm): the interval is still
+            # estimate -/+ c x Yuen SE, but c has no closed form to compare with.
+            assert_close("closed_form", estimate - low, high - estimate, what=what)
+            continue
+        critical = _lincon_critical_value(alpha, len(pairs), df)
+        half_width = critical * math.sqrt(d1 + d2)
+        assert_close("closed_form", estimate - half_width, low, what=f"{what} conf.low")
         assert_close(
-            "closed_form",
-            estimate - half_width,
-            _value(row, "conf.low"),
-            what=f"{what} conf.low",
-        )
-        assert_close(
-            "closed_form",
-            estimate + half_width,
-            _value(row, "conf.high"),
-            what=f"{what} conf.high",
+            "closed_form", estimate + half_width, high, what=f"{what} conf.high"
         )
 
 

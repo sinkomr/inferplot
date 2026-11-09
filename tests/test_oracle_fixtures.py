@@ -90,6 +90,7 @@ PHASE2_LABELS: dict[str, tuple[str, ...]] = {
     "InsectSprays": PHASE2_TYPES,
     "edge_null": PHASE2_TYPES,
     "edge_large_n": PHASE2_TYPES,
+    "edge_k9": ("robust",),
     "iris-petal": PHASE2_TYPES,
     "iris_no_setosa-petal": PHASE2_TYPES,
     "iris_no_setosa-petalwidth": ("robust",),
@@ -130,7 +131,13 @@ EXPECTED_CASES = frozenset(
     }
 )
 # Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
-EXPECTED_FAILURES = frozenset({"ggbetweenstats-edge_n2-parametric"})
+EXPECTED_FAILURES = frozenset(
+    {
+        "ggbetweenstats-edge_n2-parametric",
+        "ggbetweenstats-edge_n2-robust",
+        "ggbetweenstats-edge_n2-bayes",
+    }
+)
 EXPECTED_PROBES = frozenset(
     {
         "probe-format",
@@ -157,7 +164,7 @@ def test_case_list_is_what_the_generator_writes() -> None:
         f"{sorted(names - EXPECTED_CASES)}"
     )
     assert len(PARAMETRIC_LABELS) == 28
-    assert sum(len(types) for types in PHASE2_LABELS.values()) == 87
+    assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
 
 
 ALL_CASES = [
