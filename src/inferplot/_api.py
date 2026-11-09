@@ -8,7 +8,7 @@ Each function here validates its keyword names (``checked``), runs the matching
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from inferplot import analyze
@@ -40,7 +40,7 @@ def betweenstats(
     results_subtitle: bool = True,
     alternative: str = "two-sided",
     seed: int = 0,
-    order: Sequence[str | int] | None = None,
+    order: Iterable[str | int | float] | None = None,
     centrality_plotting: bool = True,
     layers: Sequence[str] = ("violin", "box", "points"),
     xlab: str | None = None,
@@ -61,6 +61,13 @@ def betweenstats(
     labels and ``y`` the numeric column. The analysis arguments are those of
     :func:`inferplot.analyze.betweenstats`; the drawing arguments those of
     :func:`inferplot.render.betweenstats`.
+
+    ``title``, ``subtitle``, ``caption``, ``xlab`` and ``ylab`` are matplotlib
+    text, which follows matplotlib's convention: text between two dollar signs is
+    a mathtext expression (``r"Weight ($\\mu$g)"``). Write ``\\$`` for a literal
+    dollar sign (``r"Revenue in \\$"``). An expression matplotlib cannot read
+    raises ``ValueError`` at the call. Column names drawn as default labels are
+    never read as mathtext.
 
     Returns:
         A ``StatsFigure``: ``fig.result`` holds every number (``fig.result.to_json()``,

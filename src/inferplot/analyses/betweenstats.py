@@ -19,7 +19,7 @@ What it reproduces is ggstatsplot 1.1.4's ``ggbetweenstats()`` (SPEC.md section 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Final
 
 import numpy as np
@@ -388,7 +388,7 @@ def betweenstats(
     results_subtitle: bool = True,
     alternative: str = "two-sided",
     seed: int = 0,
-    order: Sequence[str | int] | None = None,
+    order: Iterable[str | int | float] | None = None,
 ) -> StatsResult:
     """Compare ``y`` across the independent groups of ``x``; no plotting.
 
