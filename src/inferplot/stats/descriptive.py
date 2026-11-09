@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from fractions import Fraction
 from typing import Any, Final, TypeAlias
 
 import numpy as np
@@ -26,6 +27,9 @@ __all__ = [
     "SampleLike",
     "as_sample",
     "common_scale",
+    "deviations_from_weighted_mean",
+    "exact_mean",
+    "exact_variance",
     "mean",
     "scaled_variance",
     "variance",
@@ -68,6 +72,48 @@ def _exact_sum_scaled(x: FloatArray) -> tuple[int, int]:
             exact = (int(sum_hi[shift]) << 27) + int(sum_lo[shift])
             total += exact << shift
     return total, e_min - 53
+
+
+def exact_mean(x: FloatArray) -> Fraction:
+    """The arithmetic mean of ``x`` (a non-empty, finite float64 array) as an exact
+    rational: the exact sum of the doubles over n, not rounded.
+
+    Differences of means are formed from these and rounded once,
+    ``float(exact_mean(a) - exact_mean(b))``: the correctly rounded difference of
+    the true means. Subtracting the two rounded means instead loses up to half a
+    unit in the last place of each, an error of about ulp(mean) / |difference|
+    relative, which is large when the means differ by about the rounding of
+    their common level (DECISIONS.md, the exact-difference rule).
+    """
+    numerator, scale = _exact_sum_scaled(x)
+    if scale >= 0:
+        return Fraction(numerator << scale, x.size)
+    return Fraction(numerator, x.size << -scale)
+
+
+def deviations_from_weighted_mean(
+    weights: Sequence[float], means: Sequence[Fraction]
+) -> list[float]:
+    """m_i - c for every i, c = sum w_i m_i / sum w_i, each correctly rounded.
+
+    ``weights`` are doubles (> 0) and ``means`` exact rationals (``exact_mean``);
+    the weighted centre and every deviation from it are formed exactly and rounded
+    once, so a deviation keeps its relative accuracy however close the means lie
+    next to their common level.
+    """
+    exact_weights = [Fraction(w) for w in weights]
+    centre = sum(
+        (w * m for w, m in zip(exact_weights, means, strict=True)), Fraction(0)
+    ) / sum(exact_weights, Fraction(0))
+    return [float(m - centre) for m in means]
+
+
+def exact_variance(values: Sequence[Fraction]) -> float:
+    """The sample variance (denominator n - 1) of exact rationals, computed exactly
+    and rounded once (at least two values)."""
+    n = len(values)
+    centre = sum(values, Fraction(0)) / n
+    return float(sum(((v - centre) ** 2 for v in values), Fraction(0)) / (n - 1))
 
 
 def mean(x: SampleLike) -> float:
@@ -114,6 +160,14 @@ def scaled_variance(x: FloatArray) -> float:
 
     For values already brought near 1 by ``common_scale``; on raw data the squares
     can overflow (|x| above 1e154) or underflow (below 1e-154).
+
+    The corrected two-pass form sums the squared deviations about the rounded mean
+    m and subtracts (sum(x - m))^2 / n, which is algebraically the sum of squared
+    deviations about the exact mean; with exact sums (``math.fsum``) it stays
+    accurate also when the values differ only in their last bits: against exact
+    rational arithmetic on such data, timestamp-like offsets (1.7e9 + [0, 1)) and
+    wide-ranging values, within 3.1e-16 relative in 3,000 random samples
+    (tests/stats/test_exact_differences.py).
     """
     centred = x - mean(x)
     n = x.size

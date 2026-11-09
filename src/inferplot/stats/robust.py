@@ -13,9 +13,16 @@ log).
 
 Deterministic statistics are computed on the groups times their ``common_scale``
 (a power of two, exact), so they do not depend on the units of y, bit for bit for
-any power-of-two rescaling that keeps the data normal doubles. Bootstraps resample
-each group's sorted values (so the row order of the data does not matter) with
-``numpy.random.Generator(PCG64(seed))`` and :data:`BOOTSTRAP_RESAMPLES` resamples.
+any power-of-two rescaling that keeps the data normal doubles. Trimmed means are
+kept exact (``exact_mean``), and every difference of them, and every deviation from
+t1way's weighted grand trimmed mean, is formed exactly and rounded once, so it
+keeps its relative accuracy when the trimmed means differ by about the rounding of
+their common level (DECISIONS.md, exact differences); WRS2 subtracts rounded
+means. Bootstrap resamples are drawn from the data shifted by one of its values
+(``_centred``), so resampled trimmed means are rounded relative to the spread.
+Bootstraps resample each group's sorted values (so the row order of the data does
+not matter) with ``numpy.random.Generator(PCG64(seed))`` and
+:data:`BOOTSTRAP_RESAMPLES` resamples.
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Final
 
 import numpy as np
@@ -35,6 +43,9 @@ from inferplot.stats.descriptive import (
     SampleLike,
     as_sample,
     common_scale,
+    deviations_from_weighted_mean,
+    exact_mean,
+    exact_variance,
     mean,
     scaled_variance,
     variance,
@@ -187,6 +198,12 @@ def trimmed_mean(x: SampleLike, *, tr: float = 0.2) -> float:
     return mean(arr[g : arr.size - g])
 
 
+def _exact_trimmed_mean(sorted_x: FloatArray, tr: float) -> Fraction:
+    """The tr-trimmed mean of sorted values as an exact rational (``exact_mean``)."""
+    g = _trim_count(sorted_x.size, tr)
+    return exact_mean(sorted_x[g : sorted_x.size - g])
+
+
 def _winsorize_sorted(sorted_x: FloatArray, g: int) -> FloatArray:
     out = sorted_x.copy()
     n = out.size
@@ -217,7 +234,7 @@ class _Kernel:
 
     n: int
     h: int
-    tmean: float
+    tmean: Fraction  # exact (``exact_mean``): differences are rounded once
     wvar: float
     d: float  # squared standard error of the trimmed mean (Yuen 1974)
 
@@ -238,7 +255,7 @@ def _kernel(scaled: FloatArray, tr: float, name: str, method: str) -> _Kernel:
     return _Kernel(
         n=n,
         h=h,
-        tmean=mean(ordered[g : n - g]),
+        tmean=_exact_trimmed_mean(ordered, tr),
         wvar=wvar,
         d=(n - 1) * wvar / (h * (h - 1)),
     )
@@ -320,7 +337,7 @@ def yuen_t(a: SampleLike, b: SampleLike, *, tr: float = 0.2) -> YuenT:
         which, values = ("sample a", raw_a) if ka.d < kb.d else ("sample b", raw_b)
         raise ValueError(_zero_spread_message(which, values, t_trim, "Yuen's test"))
     se = math.sqrt(total)
-    difference = ka.tmean - kb.tmean
+    difference = float(ka.tmean - kb.tmean)  # exact, rounded once
     t = difference / se
     df = satterthwaite_df(ka.d, ka.h, kb.d, kb.h)
     return YuenT(
@@ -391,12 +408,13 @@ def trimmed_means_anova(
     shift = max(0, math.frexp(max(weights))[1] - top)
     if shift:
         weights = [math.ldexp(w, -shift) for w in weights]
-    tmeans = [kern.tmean for kern in kernels]
     total = math.fsum(weights)
-    centre = math.fsum(w * m for w, m in zip(weights, tmeans, strict=True)) / total
-    a = math.fsum(
-        w * (m - centre) ** 2 for w, m in zip(weights, tmeans, strict=True)
-    ) / (k - 1)
+    # Deviations from the weighted grand trimmed mean, formed exactly from the
+    # exact trimmed means and rounded once.
+    deviations = deviations_from_weighted_mean(
+        weights, [kern.tmean for kern in kernels]
+    )
+    a = math.fsum(w * d * d for w, d in zip(weights, deviations, strict=True)) / (k - 1)
     lam = math.fsum(
         (1.0 - w / total) ** 2 / (kern.h - 1)
         for w, kern in zip(weights, kernels, strict=True)
@@ -532,7 +550,7 @@ def lincon(
                     )
                 )
             se = math.sqrt(total)
-            estimate = ki.tmean - kj.tmean
+            estimate = float(ki.tmean - kj.tmean)  # exact, rounded once
             t = estimate / se
             df = satterthwaite_df(ki.d, ki.h, kj.d, kj.h)
             critical = smm_critical_value(n_comparisons, df, conf_level=conf_level)
@@ -605,6 +623,23 @@ def _replicates(
         out[start : start + rows] = statistic(draws)
         start += rows
     return out
+
+
+def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:
+    """The sorted groups minus one common value, the middle of the pooled values.
+
+    The bootstrap statistics are differences of trimmed means over winsorized
+    standard deviations, unchanged by a common shift. Resampled trimmed means are
+    rounded at the level of the values they average, so on data far from 0 next to
+    their spread (timestamps such as 1.7e9 + fractions, or groups that differ in
+    their last bits) the rounding would swamp the differences; after the shift it
+    is relative to the spread. The shift is a data value, so values within a factor
+    of 2 of it are shifted exactly (Sterbenz), the order is kept, and the shifted
+    data scale exactly with powers of two.
+    """
+    pooled = _sorted(_joined(list(ordered)))
+    middle = float(pooled[pooled.size // 2])
+    return [o - middle for o in ordered]
 
 
 def _check_replicates(values: NDArray[np.float64], what: str) -> None:
@@ -691,7 +726,7 @@ def akp_effect(
     if not ka.wvar >= TINY:
         raise ValueError(_zero_spread_message("sample a", raw_a, t_trim, method))
     constant = math.sqrt(winsorized_normal_variance(t_trim))
-    estimate = constant * (ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
+    estimate = constant * float(ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
 
     def deltas(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
         tm_a, wv_a = _rows_trimmed(draws[0], t_trim)
@@ -700,7 +735,7 @@ def akp_effect(
             return constant * (tm_a - tm_b) / np.sqrt(wv_a)
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
-    values = _replicates(rng, (x, y), (x.size, y.size), deltas)
+    values = _replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
     _check_replicates(values, method)
     low, high = _floor_percentile_bounds(_sorted(values), level)
     return BootstrapEffectSizeCI(
@@ -775,16 +810,16 @@ def explanatory_effect(
             return np.sqrt(top / (pooled / normal))
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
-    values = _replicates(rng, ordered, [size] * k, xis)
+    values = _replicates(rng, _centred(ordered), [size] * k, xis)
     _check_replicates(values, method)
     values = _sorted(values)
     if all(o.size == size for o in ordered):
-        tmeans = np.array([trimmed_mean(o, tr=t_trim) for o in ordered])
+        # The variance of the exact trimmed means, rounded once.
+        top = exact_variance([_exact_trimmed_mean(o, t_trim) for o in ordered])
         pooled = _sorted(_joined(ordered))
         wvar = scaled_variance(
             _winsorize_sorted(pooled, _trim_count(pooled.size, t_trim))
         )
-        top = scaled_variance(tmeans)
         if wvar == 0.0:
             if top == 0.0:
                 raise ValueError(

@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from inferplot.stats.descriptive import SampleLike, as_sample, common_scale, mean
+from inferplot.stats.descriptive import SampleLike, as_sample, common_scale, exact_mean
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import checked_scaled_variances, satterthwaite_df
 from inferplot.stats.srange import srange_sf
@@ -39,7 +39,9 @@ def games_howell(
     far tail, DECISIONS.md D31). The k(k-1)/2 raw p-values are then adjusted together
     with ``p_adjust_method``. Computed on the groups times their ``common_scale``
     (q and df do not depend on the scale of the data, bit for bit under powers of
-    two), with the df from the variance shares (``satterthwaite_df``). R reference:
+    two), with the df from the variance shares (``satterthwaite_df``), and with
+    each mean difference formed from the exact means and rounded once
+    (``exact_mean``; DECISIONS.md, exact differences). R reference:
     ``PMCMRplus::gamesHowellTest`` followed by
     ``stats::p.adjust`` (Holm by default), as statsExpressions 2.2.1 calls them.
 
@@ -64,14 +66,15 @@ def games_howell(
     samples = [s * scale for s in raw]
     k = len(samples)
     n = [s.size for s in samples]
-    means = [mean(s) for s in samples]
+    means = [exact_mean(s) for s in samples]
     variances = checked_scaled_variances(raw, samples, "Games-Howell")
     weights = [v / size for v, size in zip(variances, n, strict=True)]
     rows: list[tuple[int, int, float, float, float]] = []
     for i in range(k):
         for j in range(i + 1, k):
             w = weights[i] + weights[j]
-            q = (means[j] - means[i]) / math.sqrt(0.5 * w)
+            # The exact difference of the exact means, rounded once.
+            q = float(means[j] - means[i]) / math.sqrt(0.5 * w)
             df = satterthwaite_df(weights[i], n[i], weights[j], n[j])
             rows.append((i, j, q, df, srange_sf(abs(q), k, df)))
     adjusted = p_adjust([row[4] for row in rows], p_adjust_method)
