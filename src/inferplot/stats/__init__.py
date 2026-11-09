@@ -8,6 +8,7 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.density import MapEstimate, bw_sj, map_estimate
 from inferplot.stats.descriptive import (
     common_scale,
     mean,
@@ -58,12 +59,14 @@ __all__ = [
     "EffectSizeCI",
     "KruskalWallis",
     "MannWhitney",
+    "MapEstimate",
     "PAdjustMethod",
     "PairResult",
     "Sidedness",
     "StudentT",
     "WelchAnova",
     "WelchT",
+    "bw_sj",
     "common_scale",
     "dunn",
     "f_ncp_bound",
@@ -74,6 +77,7 @@ __all__ = [
     "jzs_log_bf10",
     "kruskal_wallis",
     "mann_whitney",
+    "map_estimate",
     "mean",
     "p_adjust",
     "partial_omega_squared",
