@@ -81,7 +81,7 @@ def test_reference_holm_bit_for_bit() -> None:
 # --------------------------------------------------------------------- fixtures
 
 
-def _raw_pairwise_p(type_: str, data: list[FloatArray]) -> list[float]:
+def _raw_pairwise_p(type_: str, data: list[FloatArray], tr: float = 0.2) -> list[float]:
     """Unadjusted pairwise p-values, pairs i < j in level order."""
     index_pairs = list(itertools.combinations(range(len(data)), 2))
     if type_ == "parametric":
@@ -107,7 +107,7 @@ def _raw_pairwise_p(type_: str, data: list[FloatArray]) -> list[float]:
     # robust: lincon's per-pair Yuen p, which WRS2 computes as 1 - pt
     raw: list[float] = []
     for i, j in index_pairs:
-        t, df, _ = ref.yuen(data[i], data[j], tr=0.2)
+        t, df, _ = ref.yuen(data[i], data[j], tr=tr)
         raw.append(2 * (1.0 - (1.0 - float(stats.t.sf(abs(t), df)))))
     return raw
 
@@ -142,15 +142,26 @@ def test_fixture_adjusted_p_values(case: object) -> None:
     adjusted = dict(
         zip(
             pairs,
-            p_adjust(_raw_pairwise_p(case.type, groups(case)), p_adjust_method(case)),
+            p_adjust(
+                _raw_pairwise_p(
+                    case.type, groups(case), float(case.args.get("tr", 0.2))
+                ),
+                p_adjust_method(case),
+            ),
             strict=True,
         )
     )
     by_pair = {(str(r["group1"]), str(r["group2"])): r for r in case.pairwise}
     assert set(by_pair) == set(pairs), case.name
-    # wrs2_p: one grid step of a one-sided tail becomes 2 x pairs steps after
-    # doubling and Holm.
-    scale = 2.0 * len(pairs) if case.type == "robust" else 1.0
+    # wrs2_p: one grid step of a one-sided tail becomes 2 x (the adjustment's largest
+    # factor) steps after doubling and adjusting: m for most methods, m times the
+    # harmonic sum for BY, 1 for none.
+    m = len(pairs)
+    method = p_adjust_method(case)
+    factor = {"none": 1.0, "BY": m * math.fsum(1 / k for k in range(1, m + 1))}.get(
+        method, float(m)
+    )
+    scale = 2.0 * factor if case.type == "robust" else 1.0
     for pair in pairs:
         assert_close(
             FIXTURE_KINDS[case.type],

@@ -2376,6 +2376,7 @@ ranks_probe <- function() {
     }
     list(
       name = name, levels = as.list(levels), n_per_level = as.list(table(analysis$x)),
+      groups_hex = lapply(levels, function(level) hex_list(analysis$y[analysis$x == level])),
       kruskal_statistic_hex = hex(unname(kw$value$statistic)),
       kruskal_parameter = unname(kw$value$parameter),
       kruskal_p_value_hex = hex(kw$value$p.value),

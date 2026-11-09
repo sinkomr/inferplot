@@ -337,6 +337,95 @@ def test_probe_omega_covers_its_grid() -> None:
     assert all(r["accurate_low"] is None for r in rows if r["alternative"] != "greater")
 
 
+def test_probe_smm_covers_its_grid() -> None:
+    smm = probe("probe-smm")
+    alphas = {"0.05", "1 - 0.95", "0.01", "1 - 0.99", "0.1", "1 - 0.9"}
+    lincon = smm.rows("lincon")
+    assert {(e["groups"], e["alpha"]) for e in lincon} == {
+        (k, a) for k in range(2, 11) for a in alphas
+    }
+    # lincon's table functions, found by recording what lincon calls: one per alpha
+    # the table supports.
+    grids = {g["name"]: g for g in smm.rows("grids")}
+    assert set(grids) == {"smmcrit", "smmcrit01"}
+    for grid in grids.values():
+        assert (grid["df_arg"], grid["c_arg"]) == ("nuhat", "C")
+        assert len(grid["rows"]) == len(smm.section("df_grid_hex"))
+        assert all(len(row["values_hex"]) == 50 for row in grid["rows"])
+    calls = smm.rows("calls")
+    assert len(calls) == 3 * len(alphas)
+    for entry in calls:
+        found = [c["name"] for c in entry["critical_value_calls"]]
+        tabled = entry["alpha"] in {"0.05", "0.01"} and entry["comparisons"] <= 28
+        assert found == ([] if not tabled else [grids_for(entry["alpha"])])
+        assert ("smmvalv2" in entry["call_counts"]) == (not tabled)
+
+
+def grids_for(alpha: str) -> str:
+    return {"0.05": "smmcrit", "0.01": "smmcrit01"}[alpha]
+
+
+def test_probe_wrs2p_covers_its_grid() -> None:
+    wrs2p = probe("probe-wrs2p")
+    shifts = 28
+    assert len(wrs2p.rows("yuen")) == 3 * shifts
+    assert len(wrs2p.rows("t1way")) == 3 * shifts
+    lincon = wrs2p.rows("lincon")
+    assert len(lincon) == 3 * shifts
+    assert all(len(row["pairs"]) == 3 for row in lincon)
+    # The grid reaches p = 0 (1 - cdf exactly 0) and p = 1.
+    p_values = [r_double(row["p_value_hex"]) for row in wrs2p.rows("yuen")]
+    assert 0.0 in p_values
+    assert 1.0 in p_values
+
+
+def test_probe_akp_covers_its_grid() -> None:
+    akp = probe("probe-akp")
+    rows = akp.rows("rows")
+    assert len(rows) == len(akp.section("data")) * len(akp.section("tr_grid"))
+    assert all([e["EQVAR"] for e in row["akp"]] == [False, True] for row in rows)
+    assert len(akp.rows("constants")) == 49
+
+
+def test_probe_map_pins_the_grid() -> None:
+    # ggstatsplot's MAP label for type "bayes" (centrality_description) is
+    # bayestestR::map_estimate with its defaults, which is the grid point of highest
+    # density of stats::density(x, bw = "SJ", n = 1024, from = min(x), to = max(x)):
+    # on every vector where bw.SJ works. Where it fails (constant data, zero IQR),
+    # map_estimate still returns a value; the probe records what.
+    rows = probe("probe-map").rows("rows")
+    assert len(rows) >= 50
+    assert len({row["name"] for row in rows}) == len(rows)
+    sizes = {row["n"] for row in rows}
+    assert {2, 501, 1000, 100000} <= sizes
+    for row in rows:
+        what = row["name"]
+        density = row["density_data_range"]
+        if row["bw_sj"]["error"] is not None:
+            assert density["error"] is not None, what
+            continue
+        assert row["centrality_error"] is None, what
+        assert row["map_estimate_error"] is None, what
+        assert row["centrality_hex"] == row["map_estimate_hex"], what
+        assert density["n"] == 1024, what
+        assert row["map_estimate_hex"] == density["x_at_max_hex"], what
+        assert density["bw_hex"] == row["bw_sj"]["hex"], what
+        # Without from/to, density's grid is wider and the maximum moves.
+        assert row["density_default_range"]["n"] == 1024, what
+    failures = [row["name"] for row in rows if row["bw_sj"]["error"] is not None]
+    assert {"constant", "zero_iqr"} <= set(failures)
+
+
+def test_probe_ranks_covers_its_grid() -> None:
+    ranks = probe("probe-ranks")
+    two = ranks.rows("two_sample")
+    assert len(two) == 9
+    assert all(len(entry["wilcox"]) == 6 for entry in two)
+    assert all(len(entry["rank_biserial"]) == 3 for entry in two)
+    k = ranks.rows("k_sample")
+    assert [entry["name"] for entry in k] == ["edge_ties", "InsectSprays", "mtcars_cyl"]
+
+
 @pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
 def test_between_fixture_contents(case: OracleCase) -> None:
     versions = case.raw["versions"]

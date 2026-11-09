@@ -130,6 +130,18 @@ class OracleCase:
         """
         return self.raw["expected_error"]
 
+    @property
+    def partial_components(self) -> tuple[str, ...]:
+        """The hidden calls that ran before ggstatsplot failed, in call order.
+
+        A Bayes caption is computed for type parametric only, so the other types'
+        failed cases have no ``caption`` entry.
+        """
+        entries = self.raw["partial"]
+        if entries is None:
+            raise ValueError(f"{self.name}: ggstatsplot did not fail; read its outputs")
+        return tuple(str(entry["component"]) for entry in entries)
+
     def partial(self, component: str) -> Any:
         """What a hidden call returned before ggstatsplot failed (failed cases only).
 

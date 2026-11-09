@@ -26,6 +26,7 @@ EXPECTED_KINDS = {
     "noncentral_cdf",
     "studentized_range_tail",
     "ttest_bayes_factor",
+    "akp_constant",
 }
 
 
@@ -54,6 +55,7 @@ def test_spec_values() -> None:
         "noncentral_cdf": (2e-11, 0.0),
         "studentized_range_tail": (4e-13, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),
+        "akp_constant": (5e-7, 0.0),
     }
     for kind, (rtol, atol) in expected.items():
         assert (TOLERANCES[kind].rtol, TOLERANCES[kind].atol) == (rtol, atol), kind

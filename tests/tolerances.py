@@ -90,8 +90,10 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
             rtol=1e-10,
             atol=2.0**-53,
             reason=(
-                "p-values WRS2 computes as 1 - pt or 1 - pf (t1way and lincon in the "
-                "fixtures; yuen presumably too): the one-sided tail rounded to the "
+                "p-values WRS2 computes as 1 - pt or 1 - pf (yuen, t1way and lincon: "
+                "probe-wrs2p's 420 p-values over |t| from 0 to about 40 at df 4 to "
+                "700 all equal R's 1 - cdf bit for bit, and only 27 equal the exact "
+                "tail): the one-sided tail rounded to the "
                 "spacing of doubles just below 1 (2**-53). Rounding SciPy's tail the "
                 "same way, 1 - (1 - sf), matches every fixture to 2.4e-11 relative "
                 "except iris t1way, where R's tail lands on the neighbouring grid "
@@ -174,6 +176,20 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "pair by 1.5e-4 or more (bugs_long, 92 against 91), so both fail. "
                 "Measure paired and one-sample values when their fixtures arrive; "
                 "other Bayes factor families need their own entry."
+            ),
+        ),
+        "akp_constant": Tolerance(
+            rtol=5e-7,
+            atol=0.0,
+            reason=(
+                "WRS2::akp.effect's scaling constant against the exact SD of a "
+                "standard normal winsorized at tr: probe-akp measures it as AKP / "
+                "((trimmed mean 1 - trimmed mean 2) / winsorized SD of group 1), the "
+                "same to 4 ulps on every dataset at a given tr, so WRS2 evaluates it "
+                "numerically. Its relative offset from the exact value is irregular "
+                "in tr: 1.2e-9 at 0.2 (ggstatsplot's default), at most 3.4e-8 for tr "
+                "up to 0.25 and 9.7e-9 at 0.3, rising to 4.2e-7 at 0.49 (tr 0.01 to "
+                "0.49 by 0.01). The bound is that maximum, rounded up."
             ),
         ),
     }
