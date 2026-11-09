@@ -369,7 +369,9 @@ points show them). A panel with more than 5,000 values draws a uniform seeded
 2,000-point subsample of the points; the violins (or, without a violin layer, unfilled
 density outlines) and boxes show all values. A level with fewer than two distinct
 values gets no violin, and `warnings` says so. inferplot sizes its own figure from the
-rendered text extents, so no text is clipped or overlaps (D38); with `ax=` nothing is
+rendered text extents, so no text is clipped or overlaps (D38): significance brackets
+are stacked in points on top of a data region of at least 2.5 in, so the figure grows
+only by the height the brackets need; with `ax=` nothing is
 resized and `check()` reports what does not fit.
 
 ## 6. Result contract
@@ -481,7 +483,7 @@ no problems.
 | `heavy_ties` | result | warning | rank-based test with more than 25% tied values |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed |
-| `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box crosses the bar or a leg of another bracket |
+| `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |
 | `points_subsampled` | figure | info | large-n subsampling used |
 
@@ -491,9 +493,13 @@ label boxes, bracket labels; with `ax=` only the texts of that Axes. `text_clipp
 fires when a text extends more than 0.5 px outside the figure, or a text drawn inside
 the Axes (centrality and bracket labels; with `ax=` also the subtitle and caption)
 extends outside it. For bracket labels only the drawn lines of the other brackets
-count: a label inside the area an enclosing bracket spans is fine. With `ax=` the
-bracket levels are fitted to the Axes height and nothing is resized, so a short Axes
-can put a label on another bracket's line; `check()` reports it. Messages name texts
+count: a label inside the area an enclosing bracket spans is fine, and so is contact
+within anti-aliasing slack: the label's box must reach more than 0.5 px into the
+line's stroke (caps included) in both directions, or past its centre when the stroke
+is thinner than 1 px. With `ax=` nothing is resized: the bracket levels keep their
+spacing while the data keep 2.5 in or half the Axes height left after the subtitle
+and caption, whichever is less; a shorter Axes pushes the levels closer together,
+which can put a label on another bracket's line, and `check()` reports it. Messages name texts
 in plain words, never mathtext source.
 
 ## 9. R oracle

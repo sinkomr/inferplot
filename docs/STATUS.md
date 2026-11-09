@@ -89,8 +89,10 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   it draws the result of `ip.analyze.betweenstats`
 - [x] `ip.analyze.betweenstats(df, 'g', 'y', ax=None)` suggests `x=None`, which the
   call already gives
-- [ ] `fig.check()` reports sub-pixel contact (under 0.5 px) between a bracket leg and
-  a label as a crossing on large figures
+- [x] `fig.check()` reports sub-pixel contact (under 0.5 px) between a bracket leg and
+  a label as a crossing on large figures. Fixed with the bracket layout (D38): levels are
+  spaced in points, so three levels take 4.8 in instead of 7.3 in and InsectSprays with
+  every pair 7.15 in instead of 9.8 in
 - [ ] the statistics part did not finish. Its unjudged leads: `variance()` on subnormal
   data; the noncentral F lower tail near 1e-300 (log P off by about 3); the noncentral
   F next to the Poisson-mean switch with df2 = 0.5 (1.6e-10 relative in log P) and at
@@ -144,8 +146,7 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   scales), never widened to fit.
 - Renderer: pytest-mpl image baselines are not generated yet (Linux CI only; candidates:
   ToothGrowth, PlantGrowth-display-all, InsectSprays, a subsampled panel, an `ax=`
-  figure). Figures with several bracket levels are tall (three levels 7.3 in,
-  InsectSprays 8.6 in), because a 9 pt label must fit in the 7% level step. With `ax=`,
+  figure); in progress after the Phase 1 close-out. With `ax=`,
   inferplot sets its font only on the axis texts and the texts it draws; the user's own
   texts keep theirs.
 - Negative zero in number formatting is not pinned (R received the probe's -0 as +0);
