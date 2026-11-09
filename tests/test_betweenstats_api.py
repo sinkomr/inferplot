@@ -197,8 +197,6 @@ def test_type_aliases(plants: pd.DataFrame, anova: StatsResult) -> None:
 @pytest.mark.parametrize(
     ("value", "canonical"),
     [
-        ("robust", "robust"),
-        ("r", "robust"),
         ("bayes", "bayes"),
         ("bf", "bayes"),
     ],
@@ -211,7 +209,7 @@ def test_other_types_are_not_implemented(
     message = str(info.value)
     assert repr(value) in message
     assert canonical in message
-    assert "type='nonparametric' exist for now" in message
+    assert "'nonparametric' and 'robust' exist for now" in message
 
 
 @pytest.mark.parametrize("tr", [0.0, 0.1, 0.25, 0.49])

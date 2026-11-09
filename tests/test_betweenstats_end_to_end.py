@@ -157,6 +157,8 @@ TYPE_EXAMPLES = [
         {"pairwise_display": "all"},
         id="np-k3",
     ),
+    pytest.param("robust", "ToothGrowth", "supp", "len", {}, id="robust-k2"),
+    pytest.param("robust", "iris", "Species", "Sepal.Width", {}, id="robust-k3"),
 ]
 
 

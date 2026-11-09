@@ -433,6 +433,8 @@ _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "welch_anova": ("welch_f", False, True),
     "mann_whitney": ("mann_whitney_w", False, False),
     "kruskal_wallis": ("kruskal_wallis_chi2", False, False),
+    "yuen_t": ("yuen_t", False, True),
+    "trimmed_means_anova": ("trimmed_means_f", False, True),
 }
 
 
@@ -1065,19 +1067,28 @@ def _short(name: str, limit: int) -> str:
     return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
 
+def _centrality_word(centrality: str, tr: float) -> str:
+    """The centrality in words: "mean", "median", "20% trimmed mean", "MAP
+    estimate"."""
+    word = _CENTRALITY_WORDS.get(centrality, centrality)
+    if centrality == "trimmed_mean":
+        return f"{r_number_text(tr * 100)}% {word}"
+    return word
+
+
 def _alt_groups_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
 ) -> str:
     parts: list[str] = []
     for d in descriptives:
-        word = _CENTRALITY_WORDS.get(d.centrality, d.centrality)
+        word = _centrality_word(d.centrality, tr)
         value = format_value(d.value, digits, missing="NA")
         parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {word} {value})")
     return ", ".join(parts)
 
 
 def _alt_groups_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
 ) -> str:
     ns = [d.n for d in descriptives]
     n_text = (
@@ -1090,7 +1101,7 @@ def _alt_groups_summary(
         return n_text
     low = min(finite, key=lambda d: d.value)
     high = max(finite, key=lambda d: d.value)
-    word = _CENTRALITY_WORDS.get(low.centrality, low.centrality)
+    word = _centrality_word(low.centrality, tr)
     return (
         f"{n_text}; {word}s from {format_value(low.value, digits)} "
         f"({_short(low.level, limit)}) to {format_value(high.value, digits)} "
@@ -1138,8 +1149,10 @@ def alt_text(
             f"Plot comparing {_short(y, limit)} across the {k} groups of "
             f"{_short(x, limit)}"
         )
-        detailed = _alt_groups_detailed(descriptives, settings.digits, limit)
-        summary = _alt_groups_summary(descriptives, settings.digits, limit)
+        detailed = _alt_groups_detailed(
+            descriptives, settings.digits, limit, settings.tr
+        )
+        summary = _alt_groups_summary(descriptives, settings.digits, limit, settings.tr)
         candidates.append(f"{head}: {detailed}. {result}{pairs}")
         candidates.append(f"{head} ({summary}). {result}{pairs}")
     for text in candidates:

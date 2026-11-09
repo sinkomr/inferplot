@@ -27,7 +27,7 @@ from typing import Any
 from tests.oracle_args import translate
 from tests.oracle_fixtures import OracleCase, cases_for, require_cases
 
-TYPES: tuple[str, ...] = ("nonparametric",)
+TYPES: tuple[str, ...] = ("nonparametric", "robust")
 
 ALL = require_cases(
     [c for c in cases_for("ggbetweenstats") if c.type in TYPES],

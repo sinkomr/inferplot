@@ -18,11 +18,16 @@ What it reproduces is ggstatsplot 1.1.4's ``ggbetweenstats()`` (SPEC.md section 
   continuity correction) with the rank-biserial r, or the Kruskal-Wallis test
   with rank epsilon squared (seeded percentile bootstrap CI) and Dunn's pairwise
   z; medians as centrality.
+* type robust: Yuen's test with the AKP effect size, or the trimmed-means ANOVA
+  with the explanatory effect size and lincon's pairwise comparisons (WRS2), all
+  at trimming ``tr``, with seeded percentile bootstrap CIs; trimmed means as
+  centrality. p-values are the accurate tails, not WRS2's 1 - cdf (D43).
 """
 
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -58,7 +63,8 @@ from inferplot.result import (
     current_provenance,
 )
 from inferplot.stats.parametric import TINY
-from inferplot.text import build_texts
+from inferplot.stats.robust import SMM_ROWS
+from inferplot.text import build_texts, r_number_text
 
 __all__ = ["betweenstats"]
 
@@ -694,10 +700,285 @@ def _dunn_pairs(
 
 
 # --------------------------------------------------------------------------- #
+# type robust
+# --------------------------------------------------------------------------- #
+
+_YUEN_1974: Final = (
+    "Yuen, K. K. (1974). Biometrika 61: 165-170 (Yuen's trimmed-means t-test)."
+)
+_WILCOX_2017: Final = (
+    "Wilcox, R. R. (2017). Introduction to Robust Estimation and Hypothesis "
+    "Testing, 4th ed. Academic Press (trimmed-means ANOVA, lincon)."
+)
+_AKP_2005: Final = (
+    "Algina, J., Keselman, H. J. & Penfield, R. D. (2005). Psychological Methods "
+    "10: 317-328 (AKP robust standardized difference)."
+)
+_WILCOX_TIAN_2011: Final = (
+    "Wilcox, R. R. & Tian, T. S. (2011). Journal of Applied Statistics 38: "
+    "1359-1368 (explanatory measure of effect size)."
+)
+_STOLINE_URY_1979: Final = (
+    "Stoline, M. R. & Ury, H. K. (1979). Technometrics 21: 87-93 (Studentized "
+    "maximum modulus critical values)."
+)
+
+_GROUP_NUMBER = re.compile(r"\bgroups? (\d+)(?: and (\d+))?")
+
+
+def _percent(tr: float) -> str:
+    """``tr`` as a percentage the way R prints it: 0.2 -> "20", 0.125 -> "12.5"."""
+    return r_number_text(tr * 100)
+
+
+def _named_groups(message: str, levels: Sequence[str], x: str) -> str:
+    """A statistics-layer message with its group numbers ("group 2", "sample a")
+    replaced by the level names of ``x``."""
+
+    def name(match: re.Match[str]) -> str:
+        first = levels[int(match.group(1)) - 1]
+        if match.group(2) is None:
+            return f"the group {first!r} of x={x!r}"
+        second = levels[int(match.group(2)) - 1]
+        return f"the groups {first!r} and {second!r} of x={x!r}"
+
+    out = _GROUP_NUMBER.sub(name, message)
+    if len(levels) == 2:
+        out = out.replace("sample a", f"the group {levels[0]!r} of x={x!r}")
+        out = out.replace("sample b", f"the group {levels[1]!r} of x={x!r}")
+    return out[0].upper() + out[1:]
+
+
+def _check_robust(
+    x: str, levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> None:
+    """Raise plain errors, naming the levels, for data the trimmed-means methods
+    cannot use (SPEC.md section 4), before any of them runs."""
+    tr, pct = args.tr, _percent(args.tr)
+    small = [
+        f"{level!r} (n = {v.size})"
+        for level, v in zip(levels, values, strict=True)
+        if v.size < 2
+    ]
+    if small:
+        has = "this group has" if len(small) == 1 else "these groups have"
+        raise ValueError(
+            f"Every group of x={x!r} needs at least 2 observations for the "
+            f"trimmed-means methods; {has} fewer: {', '.join(small)}. Remove "
+            f"{'it' if len(small) == 1 else 'them'} from the data or collect more "
+            "observations."
+        )
+    # WRS2 trims g = floor(tr n) values at each end and needs 2 left.
+    short = [
+        f"{level!r} (n = {v.size})"
+        for level, v in zip(levels, values, strict=True)
+        if v.size - 2 * math.floor(tr * v.size) < 2
+    ]
+    if short:
+        raise ValueError(
+            f"Trimming {pct}% of the values from each end (tr={tr!r}) leaves fewer "
+            f"than 2 values in the {_group_word(short)} {', '.join(short)} of "
+            f"x={x!r}. Pass a smaller tr (for example tr=0.1), or collect more "
+            "observations."
+        )
+    flat = [
+        level
+        for level, v in zip(levels, values, strict=True)
+        if stats.winsorized_variance(v, tr=tr) == 0.0
+    ]
+    k = len(levels)
+    why = (
+        f"after winsorizing {pct}% of the values at each end every remaining value "
+        "is the same"
+    )
+    if k >= 3 and flat:
+        raise ValueError(
+            f"The trimmed-means ANOVA weights each group by its winsorized variance, "
+            f"which is 0 for the {_group_word(flat)} {_names(flat)} of x={x!r} "
+            f"({why}). Remove {'that group' if len(flat) == 1 else 'those groups'}, "
+            "pass a smaller tr, or use type='nonparametric'."
+        )
+    if k == 2 and len(flat) == 2:
+        raise ValueError(
+            f"Both groups of x={x!r} ({_names(levels)}) have a winsorized variance "
+            f"of 0 ({why}), so Yuen's test has no standard error. Pass a smaller "
+            "tr, or use type='nonparametric'."
+        )
+    if k == 2 and levels[0] in flat:
+        raise ValueError(
+            f"The AKP effect size divides by the winsorized standard deviation of "
+            f"the first group, {levels[0]!r} of x={x!r}, which is 0 ({why}). Put "
+            "the other group first with order=, pass a smaller tr, or use "
+            "type='nonparametric'."
+        )
+    if k >= 3:
+        if args.conf_level != 0.95:
+            raise NotImplementedError(
+                f"conf_level={args.conf_level!r} with type='robust' and {k} groups: "
+                "the pairwise comparisons (WRS2's lincon) take their critical values "
+                "from the Studentized maximum modulus table at 95%, the only level "
+                "inferplot has. Pass conf_level=0.95; two groups take any level."
+            )
+        pairs = k * (k - 1) // 2
+        try:
+            stats.smm_critical_value(pairs, SMM_ROWS[-1])
+        except NotImplementedError:
+            raise NotImplementedError(
+                f"x={x!r} has {k} groups ({pairs} pairs): the critical values of "
+                "the pairwise comparisons (WRS2's lincon) are tabulated here for up "
+                "to 45 pairs (10 groups). Compare fewer groups at a time."
+            ) from None
+        low_df = [
+            f"{levels[i]!r} and {levels[j]!r}"
+            for i in range(k)
+            for j in range(i + 1, k)
+            if stats.yuen_t(values[i], values[j], tr=tr).df < SMM_ROWS[0]
+        ]
+        if low_df:
+            raise NotImplementedError(
+                f"The pairwise comparison of {', '.join(low_df)} (x={x!r}) has "
+                f"fewer than {SMM_ROWS[0]} degrees of freedom, where the "
+                "critical values of WRS2's lincon table stop (ggstatsplot stops "
+                "with an error there too). Collect more observations per group, "
+                "or use type='nonparametric'."
+            )
+
+
+def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> _Parts:
+    """Yuen's test with the AKP effect size, or the trimmed-means ANOVA with the
+    explanatory effect size and lincon's pairwise comparisons, all at trimming
+    ``tr``; bootstrap CIs seeded with ``seed`` (SPEC.md section 4)."""
+    x, tr, level = args.x, args.tr, args.conf_level
+    _check_robust(x, levels, values, args)
+    trimmed = f"{_percent(tr)}% trimmed means"
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    try:
+        if len(levels) == 2:
+            a, b = values
+            yuen = stats.yuen_t(a, b, tr=tr)
+            akp = stats.akp_effect(a, b, tr=tr, conf_level=level, seed=args.seed)
+            test = TestResult(
+                name="yuen_t",
+                label=f"Yuen's t-test ({trimmed})",
+                method="Yuen's test on trimmed means for independent samples",
+                statistic_name="t",
+                statistic=yuen.t,
+                df=None,
+                df_error=yuen.df,
+                p_value=yuen.p_value,
+                alternative="two-sided",
+            )
+            effect_size = EffectSize(
+                name="akp_delta",
+                label="AKP robust standardized difference",
+                estimate=akp.estimate,
+                conf_level=akp.conf_level,
+                conf_low=akp.conf_low,
+                conf_high=akp.conf_high,
+                ci_method="percentile bootstrap",
+                sidedness=akp.sidedness,
+                bootstrap_resamples=akp.resamples,
+                bootstrap_seed=akp.seed,
+            )
+            citations = [_YUEN_1974, _AKP_2005, _EFRON_TIBSHIRANI_1993]
+        else:
+            anova = stats.trimmed_means_anova(values, tr=tr)
+            xi = stats.explanatory_effect(
+                values, tr=tr, conf_level=level, seed=args.seed
+            )
+            test = TestResult(
+                name="trimmed_means_anova",
+                label=f"Trimmed-means ANOVA ({trimmed})",
+                method="A heteroscedastic one-way ANOVA for trimmed means",
+                statistic_name="F",
+                statistic=anova.f,
+                df=anova.df1,
+                df_error=anova.df2,
+                p_value=anova.p_value,
+                alternative="two-sided",
+            )
+            effect_size = EffectSize(
+                name="explanatory_xi",
+                label="explanatory effect size xi",
+                estimate=xi.estimate,
+                conf_level=xi.conf_level,
+                conf_low=xi.conf_low,
+                conf_high=xi.conf_high,
+                ci_method="percentile bootstrap",
+                sidedness=xi.sidedness,
+                bootstrap_resamples=xi.resamples,
+                bootstrap_seed=xi.seed,
+            )
+            pairwise = _lincon_pairs(levels, values, args)
+            citations = [
+                _WILCOX_2017,
+                _WILCOX_TIAN_2011,
+                _EFRON_TIBSHIRANI_1993,
+                _YUEN_1974,
+                _STOLINE_URY_1979,
+                *_adjustment_citation(args.p_adjust_method),
+            ]
+    except ValueError as error:
+        raise ValueError(
+            _named_groups(str(error), levels, x)
+            + ". Pass a smaller tr, or use type='nonparametric'."
+        ) from None
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        pairwise=pairwise,
+        centrality="trimmed_mean",
+        centers=tuple(stats.trimmed_mean(v, tr=tr) for v in values),
+        warnings=(),
+        citations=tuple(citations),
+    )
+
+
+def _lincon_pairs(
+    levels: Sequence[str], values: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """lincon's comparison of every pair i < j in level order: the trimmed-mean
+    difference group1 - group2 with its CI, Yuen's t (signed, as the difference)
+    and df, and the raw p adjusted with ``p_adjust_method`` over all pairs; rows in
+    ggstatsplot's order (``_sorted_pairs``)."""
+    pairs = stats.lincon(
+        values,
+        tr=args.tr,
+        conf_level=args.conf_level,
+        p_adjust_method=args.p_adjust_method,
+    )
+    rows: list[PairwiseComparison] = []
+    for pair in pairs:
+        significant = pair.p_adjusted < args.pairwise_alpha
+        rows.append(
+            PairwiseComparison(
+                group1=levels[pair.i],
+                group2=levels[pair.j],
+                statistic_name="t",
+                statistic=pair.t,
+                df=pair.df,
+                p_value=pair.p_value,
+                p_adjusted=pair.p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test="yuen_trimmed_means",
+                test_label="Yuen's trimmed means",
+                significant=significant,
+                displayed=_displayed(args.pairwise_display, significant),
+                estimate=pair.estimate,
+                conf_level=args.conf_level,
+                conf_low=pair.conf_low,
+                conf_high=pair.conf_high,
+            )
+        )
+    return _sorted_pairs(rows)
+
+
+# --------------------------------------------------------------------------- #
 # the analysis
 # --------------------------------------------------------------------------- #
 
-_IMPLEMENTED_TYPES: Final = ("parametric", "nonparametric")
+_IMPLEMENTED_TYPES: Final = ("parametric", "nonparametric", "robust")
 
 
 def _check_type_arguments(
@@ -713,6 +994,18 @@ def _check_type_arguments(
             f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
             f"type={type_name!r} trims nothing, so it would have no effect. Remove "
             "tr=, or pass type='robust' to compare trimmed means."
+        )
+    if side != "two-sided" and type_name in ("robust", "bayes"):
+        why = (
+            "Yuen's trimmed-means test and its AKP interval are always two-sided"
+            if type_name == "robust"
+            else "the Bayes factor is always two-sided"
+        )
+        raise ValueError(
+            f"alternative={side!r} applies to type='parametric' and "
+            f"type='nonparametric' only: with type={type_name!r} {why} (ggstatsplot "
+            "silently ignores alternative there). Remove alternative=, or use "
+            "type='nonparametric' for a one-sided rank test."
         )
     if show_bf is True and type_name != "parametric":
         raise ValueError(
@@ -758,13 +1051,18 @@ def betweenstats(
     * "nonparametric" ("np"): the Mann-Whitney U test with the rank-biserial r (two
       groups); the Kruskal-Wallis test with rank epsilon squared (bootstrap CI) and
       Dunn's comparisons (three or more). Centrality: medians.
+    * "robust" ("r"): Yuen's test on ``tr``-trimmed means with the AKP robust
+      standardized difference (two groups); the heteroscedastic trimmed-means
+      ANOVA with the explanatory effect size and lincon's comparisons (three or
+      more). Both effect sizes have percentile bootstrap CIs. Centrality: trimmed
+      means.
 
     Args:
         data: a pandas, polars or pyarrow data frame in long format.
         x: the grouping column.
         y: the numeric outcome column.
-        type: "parametric" ("p") or "nonparametric" ("np"); "robust" and "bayes"
-            are not available yet in this development version.
+        type: "parametric" ("p"), "nonparametric" ("np") or "robust" ("r");
+            "bayes" is not available yet in this development version.
         pairwise_display: which pairs the figure draws: "significant" ("s"),
             "non-significant" ("ns"), "all" or "none". Every pair is computed.
         p_adjust_method: R's ``p.adjust`` method for the pairwise p-values.
@@ -780,8 +1078,8 @@ def betweenstats(
             subtitle (False also drops the Bayes factor caption).
         alternative: "two-sided", "less" or "greater"; one-sided only with two
             groups.
-        seed: random seed of the bootstrap intervals (three or more groups with
-            type "nonparametric"), recorded in the result.
+        seed: random seed of the bootstrap intervals (type "robust"; type
+            "nonparametric" with three or more groups), recorded in the result.
         order: the level order, a permutation of the levels present.
 
     Returns:
@@ -810,7 +1108,8 @@ def betweenstats(
         shown = repr(type) if type == type_name else f"{type!r} ({type_name})"
         raise NotImplementedError(
             f"type={shown} is not available yet in this development version of "
-            "inferplot; type='parametric' and type='nonparametric' exist for now."
+            "inferplot; type='parametric', 'nonparametric' and 'robust' exist for "
+            "now."
         )
     if show_bf is True and not subtitle_on:
         raise ValueError(
@@ -827,6 +1126,7 @@ def betweenstats(
         omnibus = {
             "parametric": "Welch's ANOVA",
             "nonparametric": "the Kruskal-Wallis test",
+            "robust": "the trimmed-means ANOVA",
         }[type_name]
         raise ValueError(
             f"alternative={side!r} applies only to two groups; x={x!r} has {k} "
@@ -859,7 +1159,11 @@ def betweenstats(
         tr=trim,
         seed=rng_seed,
     )
-    analyses = {"parametric": _parametric, "nonparametric": _nonparametric}
+    analyses = {
+        "parametric": _parametric,
+        "nonparametric": _nonparametric,
+        "robust": _robust,
+    }
     parts = analyses[type_name](levels, values, args)
 
     warnings: list[str] = []
