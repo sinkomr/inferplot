@@ -148,11 +148,13 @@ phase2_cases <- function(dataset, x, y, label = dataset, types = PHASE2_TYPES,
 
 # Phase 3 (withinstats): ggwithinstats cases, one per type in `types`. Every case
 # names its subject column (subject.id); inferplot pairs by subject, never by row
-# order. `expect_error` maps a type to the failure that case declares, as above.
+# order. `expect_error` maps a type to the failure that case declares, as above, and
+# `expect_hidden_errors` a type to the components whose error ggstatsplot swallows.
 within_cases <- function(dataset, x, y, subject, label = dataset, types = TYPES,
-                         extra_args = list(), factor_levels = NULL, expect_error = list()) {
-  unknown <- setdiff(names(expect_error), types)
-  if (length(unknown) > 0L) stop(label, ": expect_error for types without a case: ", unknown)
+                         extra_args = list(), factor_levels = NULL, expect_error = list(),
+                         expect_hidden_errors = list()) {
+  unknown <- setdiff(c(names(expect_error), names(expect_hidden_errors)), types)
+  if (length(unknown) > 0L) stop(label, ": expectations for types without a case: ", unknown)
   lapply(types, function(type) {
     list(
       name = paste("ggwithinstats", label, type, sep = "-"),
@@ -162,7 +164,7 @@ within_cases <- function(dataset, x, y, subject, label = dataset, types = TYPES,
       args = c(list(x = x, y = y, subject.id = subject, type = type), extra_args),
       columns = c("x", "y", "subject.id"),
       expect_error = expect_error[[type]],
-      expect_hidden_errors = character()
+      expect_hidden_errors = expect_hidden_errors[[type]] %||% character()
     )
   })
 }
@@ -512,8 +514,13 @@ CASES <- c(
     "edge_within_missing", label = "edge_within_missing-declared",
     factor_levels = list(condition = c("pre", "empty", "mid", "post"))
   ),
-  # Four subjects.
-  edge_within("edge_within_small"),
+  # Four subjects, every one ranking the conditions a < b < c: Kendall's W is 1 in
+  # every bootstrap resample, kendalls_w's CI fails ("arguments imply differing
+  # number of rows: 1, 0"; probe-friedman) and ggstatsplot swallows the error, so
+  # the nonparametric type has no subtitle; Durbin-Conover's t is infinite there.
+  edge_within(
+    "edge_within_small", expect_hidden_errors = list(nonparametric = "subtitle")
+  ),
   # Integer scores with ties within subjects: Friedman, Durbin-Conover, Kendall's W.
   edge_within("edge_within_ties"),
   edge_within("edge_within_negative"),
@@ -3057,6 +3064,12 @@ friedman_probe <- function() {
     kendall <- probe_attempt(effectsize::kendalls_w(
       formula, data = long, ci = NULL, verbose = FALSE
     ))
+    # With its bootstrap CI, as statsExpressions calls it (100 resamples, the cases'
+    # seed).
+    set.seed(CASE_SEED)
+    kendall_ci <- probe_attempt(effectsize::kendalls_w(
+      formula, data = long, ci = 0.95, iterations = 100L, verbose = FALSE
+    ))
     levels <- design$levels
     k <- length(levels)
     durbin_pairs <- list()
@@ -3083,7 +3096,9 @@ friedman_probe <- function() {
       durbin_error = durbin$error, durbin_warnings = durbin$warnings,
       durbin_pairs = durbin_pairs,
       kendalls_w_hex = if (is.null(kendall$value)) NULL else hex(kendall$value[[1L]]),
-      kendalls_w_error = kendall$error, kendalls_w_warnings = kendall$warnings
+      kendalls_w_error = kendall$error, kendalls_w_warnings = kendall$warnings,
+      kendalls_w_ci = if (is.null(kendall_ci$value)) NULL else frame_with_hex(kendall_ci$value),
+      kendalls_w_ci_error = kendall_ci$error, kendalls_w_ci_warnings = kendall_ci$warnings
     )
   })
   probe_file(

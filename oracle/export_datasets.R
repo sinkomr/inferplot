@@ -224,7 +224,7 @@ write_dataset(
   "edge_within_k5"
 )
 
-# Strongly non-spherical: w, x and y move with the subject; z adds a large
+# Strongly non-spherical: a, b and c move with the subject; d adds a large
 # subject-specific term, so one direction dominates the differences and
 # Greenhouse-Geisser's epsilon is near its lower bound 1 / (k - 1).
 set.seed(3108L)
@@ -232,7 +232,7 @@ base <- rnorm(12L, 30, 5)
 values <- outer(base, c(0, 0.4, 0.8, 1), "+") + matrix(rnorm(48L, 0, 0.3), 12L)
 values[, 4L] <- values[, 4L] + 6 * rnorm(12L)
 write_dataset(
-  within_long(values, subject_ids(12L), c("w", "x", "y", "z")),
+  within_long(values, subject_ids(12L), c("a", "b", "c", "d")),
   "edge_within_nonspherical"
 )
 
