@@ -3,7 +3,7 @@
 Read this at the start of every session; update it at the end of every slice.
 A slice is done only when its definition of done in `CLAUDE.md` is met.
 
-Current phase: **3 — withinstats, all types** (Phase 2 merged to main 2026-11-09)
+Current phase: **4 — histostats, scatterstats, barstats** (Phase 3 closed 2026-11-10)
 
 ## Phase 0 — Scaffold
 
@@ -200,7 +200,9 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   D72); `heavy_ties` counts what the paired tests rank (D71). Every fixture drawn,
   checked and saved as SVG, PDF and PNG; three within image baselines. 20,864 tests
   pass on the newest and on the oldest supported versions
-- [ ] end-of-phase fresh-context review of the Phase 3 diff against SPEC.md.
+- [x] end-of-phase fresh-context review of the Phase 3 diff against SPEC.md: two
+  fresh reviewers, both halves' correctness findings fixed; W3, W4, W6, W8 and W9 stay
+  open below as documentation items or the owner's call.
   Statistics half done (2026-11-10; 28 of 29 planted bugs caught; test statistics, df,
   p-values, closed-form effect sizes and the paired Bayes factor right to about 1e-15
   on hostile data; scripts in `reviewW/`). Findings:
@@ -237,31 +239,31 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   in `reviewX/`): counts, centrality values, paths, brackets, one-sided direction and
   saved files matched hand computation on 30 hand-built frames and 18 drawn designs;
   the three forms agree byte for byte (48 cases); no argument value is silently
-  ignored (about 700 calls). Findings, being fixed on `fix/phase3-review-visible`:
-  - [ ] X1 (figure): with four or more conditions and close centres a centrality label
-    is moved beside a neighbouring condition's point and reads as that condition's
-    (6 of 72 figures at 4 conditions, 24 of 58 at 5, 28 of 49 at 6), mostly without a
-    check; inferplot's own default figure gets `path_hidden` or `label_overlap` in 15
-    of 222 random figures. Image checked by the lead.
-  - [ ] X2: conditions named "week 1" to "week 12" are analyzed and drawn in text order
-    (week 1, 10, 11, 12, 2, ...) without a word (as R does); the average AKP is -0.07
-    in that order and -2.49 in time order.
-  - [ ] X3: the alt text shortens long names that share a beginning to the same stub,
-    so the one-sided direction reads "Mean reaction time ... less than Mean reaction
-    time ...".
-  - [ ] X4: wide-format paired data (columns pre and post) is pointed to scatterstats
-    or to converting numbers to text, not to reshaping.
-  - [ ] X5: `pairwise_conf_level` for the within robust type says conf_level applies
-    to the effect size, which is always 95% there (D66).
-  - [ ] X6: for the average AKP, `infinite_resamples` and `undefined_resamples` count
-    pair-resample values ("2,901 of 2,000"), against SPEC §6's arithmetic.
-  - [ ] X7: the alt text names a centrality line that is not drawn (a condition without
-    a MAP estimate) and lists centrality values with `centrality_plotting=False`.
-  - [ ] X8, X9: wrong words for a paired design in five messages; six hints that lead
-    to another error.
-  - [ ] X10: a tab in a condition name is drawn as an empty box, and a control
-    character gives an SVG that is not well-formed XML, both unreported.
-  - [ ] X11: `rows_dropped` stays "info" when most subjects are dropped (26 of 30).
+  ignored (about 700 calls). Findings, all fixed (merge bf5b3b1; D75 to D80; the lead
+  re-ran the reviewer's scripts, swept 196 more figures and changed two things, below):
+  - [x] X1 (figure): with four or more conditions a centrality label was moved beside
+    a neighbouring condition's point and read as that condition's (58 of 228 default
+    figures, 47 unreported). Fixed (D75): now 0 of 241 on the reviewer's script and 0
+    of 196 on the lead's sweep of 3 to 8 conditions in both functions; inferplot's own
+    figure widens when no place fits; with `ax=` the new check
+    `centrality_label_ambiguous` reports it. `path_hidden`/`label_overlap` on own
+    default figures: 15 of 222 before, 0 after.
+  - [x] X2: numbered text levels ("week 10" before "week 2") stay in text order, as in
+    R, and a `warnings` entry now says so and gives `order=` (D76). Lead's change: no
+    entry where the numbers read two ways (the first version advised
+    order=['0.5', '0.25', '1'] for decimal names).
+  - [x] X3: shortened names stay distinguishable in the alt text and APA sentence (D77).
+  - [x] X4: wide-format data gets a message that says so and shows the reshape.
+  - [x] X5, X6: `pairwise_conf_level` wording for the within robust type; the average
+    AKP's resample counts are the largest of one pair (D78; "72 of 2,000" now 24).
+  - [x] X7: the alt text names only what the figure draws.
+  - [x] X8, X9: words that fit a paired design; hints that lead to a call that works
+    (one more dead end found and fixed: the Durbin-Conover tied-pair message).
+  - [x] X10: control characters in level names are drawn replaced, with a `warnings`
+    entry, and the SVG is well-formed (D79). Lead's change: column names too.
+  - [x] X11: `rows_dropped` is a warning above half (D80).
+  - [ ] Small, open: on a `transparent=True` save the link line's casing (D75) stays
+    in the Axes background colour, a short light stroke on a dark page.
 
 ## Phase 4 — histostats, scatterstats, barstats
 

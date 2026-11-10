@@ -108,20 +108,20 @@ These names get a targeted message instead:
 
 | Keyword (dotted or snake_case) | Message must say |
 | --- | --- |
-| `var.equal` | removed in ggstatsplot 1.0.0; Welch's test is always used |
+| `var.equal` | removed in ggstatsplot 1.0.0; Welch's test is always used (withinstats: the paired tests have no equal-variance option) |
 | `nboot` | removed in 1.0.0; inferplot uses 2,000 seeded resamples; pass `seed` |
 | `effsize.type` | removed in 1.0.0; Hedges' g and partial omega squared are always used |
 | `k` | renamed `digits` in ggstatsplot 0.12.3 |
 | `package` | removed in 1.0.0; pass `palette` (given to `ip.analyze.<name>`: colors are a drawing option of `ip.<name>` and `ip.render.<name>`) |
 | `plot.type` | removed in 0.12.0; use `layers` (given to `ip.analyze.<name>`: pass `layers=` when drawing, to `ip.<name>` or `ip.render.<name>`) |
-| `pairwise.comparisons` | removed in 0.12.0; use `pairwise_display="none"` |
+| `pairwise.comparisons` | removed in 0.12.0; use `pairwise_display="none"` ("conditions" in withinstats; given to a render function: the comparisons are part of the result and which pairs are drawn is the analysis' `pairwise_display`) |
 | `output` | removed in 0.10.0; use `fig.result` |
 | `messages` | inferplot never prints |
 | `sampling.plan`, `fixed.margin`, `prior.concentration` | removed from ggbarstats in 1.0.0 |
 | `grouping.var`, `grouping_var` | arrives in v0.2 (`NotImplementedError`) |
 | `hue` | no second grouping in this function; `grouping_var` arrives in v0.2 |
 | `ci`, `errorbar` | intervals are always `conf_level` confidence intervals |
-| `subject`, `id`, `subject.id` | use `subject_id` |
+| `subject`, `id`, `subject.id` | use `subject_id`; next to `subject_id=`: it is already given, remove the other |
 | `paired` | withinstats: not needed; measurements are always paired by `subject_id`. betweenstats: the groups are independent; for repeated measures use `withinstats(data, x, y, subject_id=...)` |
 | `tail`, `tails`, `sided`, `sides`, `alternative_hypothesis`, `one_sided` | use `alternative=`: 'two-sided' (default), 'greater' (the first level of x is greater than the second), 'less'; the first level is the first in `order=`, else the first declared category, else the first sorted |
 | `alpha` | `pairwise_alpha=` sets the threshold for the brackets, `conf_level=` the interval level; for transparency `point_args={'alpha': 0.5}`, `boxplot_args`, `violin_args` (where the function draws) |
@@ -131,6 +131,16 @@ These names get a targeted message instead:
 | `label`, `labels` | `xlab=`, `ylab=`, `title=` |
 | `point_path`, `centrality_path` | betweenstats: arguments of withinstats; independent groups have no paths |
 | `centrality.path.args`, `point.path.args` | withinstats: no equivalent; `centrality_path` and `point_path` switch the paths |
+
+Every hint leads to a call that works, or says that none does (review of Phase 3):
+a one-sided `alternative` with type robust or bayes, and `bf_message=True` with
+`results_subtitle=False`, are checked once the number of levels is known, so the
+message names a test that exists for that design (with three or more levels and
+`bf_message=True` it is the `NotImplementedError` for the missing Bayes caption);
+data in which every subject has the same value at every level advise no other type;
+equal paired differences advise a smaller `tr` only where trimming is the cause.
+`point_args={"s": ...}` and `{"c": ...}` (scatter()'s names) name the points'
+properties `sizes` and `color`.
 
 Other ggbetweenstats 1.1.4 arguments with no inferplot equivalent (`centrality.type`,
 `centrality.point.args`, `centrality.label.args`, `ggsignif.args`, `ggtheme`,
@@ -219,6 +229,22 @@ raise `ValueError` naming the label.
   withinstats `y` or `subject_id`) is also dropped and named in `warnings` (D60); with
   fewer than two levels left, the usual error applies. Levels that differ only in
   leading or trailing whitespace stay separate groups and are named in `warnings`.
+  Text levels stay in sorted text order, as R sorts them; when the order by the
+  numbers in their names differs ("week 10" before "week 2"), a `warnings` entry says
+  where and gives the `order=` that sorts them by number (D76). It is given only where
+  the numbers read one way: reading each run of digits as a whole number and reading
+  digits, a point and digits as one decimal must give the same order ("0.25", "0.5"
+  and "1.10", "1.5" get none), and a minus sign at the start of a name or word belongs
+  to the number. A level name or a column name with control characters is drawn with a
+  tab as a space and any other control character, except the line break, as U+FFFD
+  (tick labels and default axis labels), with a `warnings` entry; the result keeps the
+  name (D79).
+- Wide-format data: withinstats with an `x` of numbers that
+  are not whole, or a numeric `x` where every subject has a single row, says the data
+  are very likely in wide format and shows the reshape to long format in the frame's
+  own library (pandas `melt`, polars `unpivot`, pyarrow through `to_pandas().melt`).
+  betweenstats with a non-whole numeric `x` whose values are mostly distinct says it
+  looks like a measurement and does not advise converting it to text.
 - Parametric type (Welch's t and ANOVA, Games-Howell): every level needs n >= 2, two
   groups may not both be constant, and with three or more groups every level needs a
   variance above 0. The error names the levels (D35). A group that varies by less
@@ -533,9 +559,17 @@ density averaged over its cell. A level with fewer than two distinct values gets
 violin, and a violin that cannot be drawn is named in `warnings`, never claimed as
 shown. A continuous colormap given as `palette` is sampled at (i + 0.5) / k, away from
 its near-white end; a listed colormap gives its colours in order. Centrality labels
-never cover a centrality point: each takes the first of its usual place, above or
-below the point's height on that side, or the same three on the other side, that
-covers no centrality point and no other centrality label. Tick labels wrap long level
+never cover a centrality point and read as their own level's (D75): each takes the
+first of its usual place, above or below the point's height on that side, or the same
+three on the other side, that covers no centrality point and no other centrality
+label, reads as its own and, where possible, clears the paths. A label has a usual
+side (right of its point; the first of two within-subjects conditions: left). On that
+side it may reach across the gap toward the next point, as every label does, but its
+box's middle may not lie beyond that point; on the other side it stays within its own
+half of the level spacing; and it never lies over the centrality path between two
+other conditions. inferplot's own figure widens its levels when no place fits; with
+`ax=` the least bad place is taken (reading as its own first, then the usual side,
+then the least overlap) and `fig.check()` reports it. Tick labels wrap long level
 names on spaces into at most three lines of the narrowest level width (1.1 in) and
 shorten what does not fit with "…"; the result keeps the full name. withinstats (D57) jitters each subject's
 points by one seeded offset shared across its levels (ggwithinstats draws them
@@ -544,6 +578,8 @@ grey lines in one collection, under the points; the centrality path is drawn in 
 centrality colour. Centrality labels avoid the paths: with two conditions the first
 level's label is left of its point, and with three or more a middle level's label sits
 above or below the point's height on the side the path to the next level leaves free.
+A link line that leaves its point along the centrality path is drawn over a casing of
+the Axes background colour, so it stays visible there (D75).
 inferplot sizes its own figure from the
 rendered text extents, so no text is clipped or overlaps (D38): significance brackets
 are stacked in points on top of a data region of at least 2.5 in, so the figure grows
@@ -568,7 +604,7 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `subjects` | withinstats: labels of the complete subjects, in matrix row order (D56); empty for betweenstats |
 | `descriptives` | per level: `n`, centrality name (`mean`, `median`, `trimmed_mean`, `map`) and value |
 | `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45). `alternative` "greater" tests whether `levels[0]` is greater than `levels[1]` (paired: the differences `levels[0]` - `levels[1]` are positive), "less" whether it is less (D68). Sign and df: Welch's t, the paired t and Yuen's dependent t signed first minus second, df in `df_error`; Mann-Whitney W the U of the first level and signed-rank V the positive rank sum, no df; Yuen's two-group t unsigned (\|t\|, as ggstatsplot reports it) while AKP keeps its sign, df in `df_error`; F tests numerator df in `df`, denominator in `df_error` (the repeated-measures ANOVAs: the corrected df); Kruskal-Wallis and Friedman chi-square df in `df_error` |
-| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); a bootstrap interval records both counts (0 when there are none), so `bootstrap_resamples` - `undefined_resamples` is the number of values it comes from; `None` for type bayes (D45) |
+| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); a bootstrap interval records both counts (0 when there are none), so `bootstrap_resamples` - `undefined_resamples` is the number of values it comes from (for the average AKP, `akp_delta_avg`, both counts are the largest of any one pair, in resamples, so it is the fewest values any pair's bounds come from; the `warnings` entry gives the totals over the pairs, D78); `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
 | `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46). Signs: Games-Howell q group2 minus group1; lincon's and rmmcp's t and estimate, the paired t and a Bayes pair's t group1 minus group2; Dunn's z and Durbin-Conover's t unsigned |
 | `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: the ties among what the design's rank test ranks (`heavy_ties` reads it; D71): betweenstats, analyzed values pooled minus distinct values; withinstats with two conditions, subjects minus distinct nonzero \|a - b\| (zero differences and repeated sizes); with three or more, the sum over subjects of levels minus the subject's distinct values |
@@ -725,7 +761,14 @@ entry is validated, not only the first k.
   the means" (the centrality's plural), "lines join the values of a random sample of
   <m> of the <n> subjects ...", or nothing. The analysis describes `ip.withinstats`'
   default figure; a figure drawn with other path, layer or centrality arguments, or a
-  subsample, returns a result whose alt text describes it, and `save()` embeds that.
+  subsample, returns a result whose alt text describes it, and `save()` embeds that:
+  with `centrality_plotting=False` it names the levels without centrality values (both
+  functions), and a centrality path is named only where a line is drawn. A level that
+  draws no centrality label has an empty `text.centrality_labels` entry. Shortened
+  level names stay distinguishable (D77): names that would shorten to the same text
+  keep the part where they differ after the start they share ("Mean reaction …
+  congruent trials"), and a name that would still collide is not shortened; this
+  applies to the one-sided direction in the APA sentence too.
   Shortening drops the group description, then the path clause.
 
 ## 8. `check()`
@@ -738,19 +781,20 @@ no problems.
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once) |
 | `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too |
-| `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
+| `rows_dropped` | result | info or warning | `n_dropped > 0` or subjects dropped; a warning, with the share, when more than half of the subjects (within) or of the rows (between) were left out (D80) |
 | `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |
 | `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |
 | `estimate_outside_interval` | result | warning | the effect size lies outside its own CI (percentile bootstrap intervals: rank epsilon squared, xi; 12 noise groups of 6: 0.074 with [0.107, 1]); the message explains the bootstrap's bias and that the p-value is unaffected |
-| `pairwise_conf_level` | result | info | the pairwise intervals are at a level other than `conf_level` (type robust with three or more groups: lincon's are always 95%, D53) |
+| `pairwise_conf_level` | result | info | the pairwise intervals are at a level other than `conf_level` (type robust with three or more groups: lincon's are always 95%, D53); for a robust within result the message says that every interval is a 95% interval whatever `conf_level` is (D66) |
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |
 | `points_subsampled` | figure | info | large-n subsampling used |
 | `path_hidden` | figure | warning | withinstats: a text's rendered box covers more than 1 px of the centrality path or of a subject path (0.5 px slack at the box edges) |
 | `paths_crowded` | figure | warning | withinstats: the subject paths, rendered alone as drawn, are at least half opaque over more than 15% of the area between the two conditions (about 250 subjects in inferplot's own figure); the fix is `point_path=False` |
 | `centrality_label_overlap` | figure | warning | a centrality point at least half covered by a text's box |
+| `centrality_label_ambiguous` | figure | warning | a centrality label reads as another level's, wherever it is when checked: on its usual side its box's middle lies beyond the neighbouring point, on the other side it reaches past the middle toward the neighbouring point, or it lies over the centrality path between two other conditions (D75) |
 | `low_contrast` | figure | warning | a text under 3:1 (WCAG 2.1, large text and graphics) against its background, or a level's colour under 1.1:1 against the Axes background (WCAG's 3:1 would report the default palette's yellow, 1.32:1 on white) |
-| `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX) |
+| `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX); matplotlib's own "Glyph ... missing" warning for these characters is held back during inferplot's drawing, `check()` and `save()`, and passes through for characters this check does not report (D79) |
 | `axis_changed` | figure | warning | an inverted x or y axis, or a non-linear scale: brackets and labels were placed for an upright linear axis |
 | `data_outside_view` | figure | warning | values, levels or brackets outside the axis limits, whoever changed them |
 | `flat_data` | figure | warning | values that differ drawn within 2 px of height |
