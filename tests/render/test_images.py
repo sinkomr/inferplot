@@ -27,7 +27,7 @@ from inferplot.render import StatsFigure
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
 
 DATASETS = Path(__file__).resolve().parents[2] / "oracle" / "datasets"
-FIGURE_CODES = frozenset({"label_overlap", "text_clipped"})
+FIGURE_CODES = frozenset({"label_overlap", "text_clipped", "figure_oversized"})
 
 image = pytest.mark.mpl_image_compare
 

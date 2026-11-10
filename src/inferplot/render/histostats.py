@@ -26,8 +26,9 @@ number the result's.
 from __future__ import annotations
 
 import dataclasses
+import math
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, NoReturn, cast
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -41,14 +42,14 @@ from numpy.typing import NDArray
 from inferplot import _validate as v
 from inferplot.render import base, theme
 from inferplot.render.base import GAP_PT, LABEL_BOX_PAD, LABEL_PAD_PT, LayerArgs, px
-from inferplot.render.figure import DrawnData, DrawnView, StatsFigure
+from inferplot.render.figure import DrawnData, DrawnView, LineLabel, StatsFigure
 from inferplot.result import StatsResult
 from inferplot.stats.plot_geometry import HistogramBins, histogram_bins
 from inferplot.text import (
     drawable,
     figure_alt_text,
     figure_texts,
-    r_number_text,
+    shown_test_value,
 )
 
 if TYPE_CHECKING:
@@ -187,9 +188,10 @@ def histostats(
         ),
         palette=palette,
         k=1,
+        uses="the bars",
         options=options,
         artist_args=lambda: base.check_artist_args(
-            [(_BAR_ARGS, options.bar_args, None)]
+            [(_BAR_ARGS, options.bar_args, None)], ax=ax, colors=True
         ),
     )
 
@@ -204,17 +206,32 @@ def _test_value(result: StatsResult) -> float:
 
 
 def _bins(values: Sequence[float], binwidth: float | None) -> HistogramBins:
-    bins = histogram_bins(np.asarray(values, dtype=np.float64), binwidth=binwidth)
+    x = np.asarray(values, dtype=np.float64)
+    if binwidth is not None and x.size:
+        # Refused before the bins are made, with the one message for every width
+        # that gives too many bars (the binning itself refuses a million bins
+        # with a message of its own). Bars of width w that cover the range of
+        # the values number at least range / w.
+        span = float(x.max() - x.min())
+        least = math.ceil(span / binwidth)
+        if least > MAX_BARS:
+            _too_many_bars(binwidth, least, span, about=True)
+    bins = histogram_bins(x, binwidth=binwidth)
     count = len(bins.counts)
     if count > MAX_BARS:
-        span = bins.edges[-1] - bins.edges[0]
-        raise ValueError(
-            f"binwidth={bins.binwidth!r} gives {count:,} bars, more than the "
-            f"{MAX_BARS:,} inferplot draws (each would be narrower than a pixel). "
-            f"Pass a larger binwidth, for example binwidth={span / 100:.3g} "
-            "(100 bars)."
-        )
+        _too_many_bars(bins.binwidth, count, bins.edges[-1] - bins.edges[0])
     return bins
+
+
+def _too_many_bars(
+    binwidth: float, count: int, span: float, *, about: bool = False
+) -> NoReturn:
+    raise ValueError(
+        f"binwidth={binwidth!r} gives {'at least ' if about else ''}{count:,} "
+        f"bars, more than the {MAX_BARS:,} inferplot draws (each would be "
+        "narrower than a pixel). Pass a larger binwidth, for example "
+        f"binwidth={span / 100:.3g} (100 bars)."
+    )
 
 
 def _bar_artist(
@@ -249,14 +266,18 @@ _BAR_ARGS: Final = LayerArgs(
 
 
 class _NonNegative(MaxNLocator):
-    """Integer-friendly ticks from 0 up: counts and their shares are never
-    negative, also where the view reaches below 0 (the caption's room with
-    ``ax=``)."""
+    """Integer-friendly ticks from 0 up to ``most``: counts and their shares are
+    never negative, also where the view reaches below 0 (the caption's room with
+    ``ax=``), and never above n values or 100% (the label strip's room above
+    the tallest bar)."""
+
+    most: float = math.inf
 
     def tick_values(self, vmin: float, vmax: float) -> Any:
         low, high = sorted((float(vmin), float(vmax)))
         ticks = np.asarray(super().tick_values(max(low, 0.0), max(high, 0.0)))
-        return ticks[(ticks >= 0.0) & (ticks <= high * (1 + 1e-9))]
+        top = min(high, self.most) * (1 + 1e-9)
+        return ticks[(ticks >= 0.0) & (ticks <= top)]
 
 
 def _percent(value: float, position: object) -> str:
@@ -270,14 +291,17 @@ Side = Literal["left", "right"]
 
 @dataclasses.dataclass(slots=True)
 class _StripLabel:
-    """A label in the strip above the bars: at data x ``x`` (None: at an edge of
-    the Axes, ``edge``), on ``side`` of it, in ``row`` (0 the top one)."""
+    """A label in the strip above the bars: at data x ``x``, beside its ``line``
+    (None: at an edge of the Axes, ``edge``), on ``side`` of it (``usual``
+    unless there is no room there), in ``row`` (0 the top one)."""
 
     text: Text
     x: float | None
     side: Side
     row: int = 0
     edge: Side = "left"
+    line: Line2D | None = None
+    usual: Side = "right"
 
 
 class _HistDrawing(base.BaseDrawing):
@@ -308,6 +332,10 @@ class _HistDrawing(base.BaseDrawing):
         self.rows = 1
         self.top_px = 0.0
         self.bottom_px = 0.0
+        self.below_px = 0.0  # the lines' room below the bars (ax=: the caption)
+        # The label whose line ends at it (in the lower row, under the other
+        # label reaching across that line), or None.
+        self.ends_at_label: _StripLabel | None = None
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         lo, hi = bins.edges[0], bins.edges[-1]
         reach = TEST_VALUE_REACH * (hi - lo)
@@ -344,6 +372,19 @@ class _HistDrawing(base.BaseDrawing):
             colors=tuple(self.colors),
             data=self.drawn_data(),
             color_names=("the bars",),
+            line_labels=tuple(
+                LineLabel(
+                    text=label.text,
+                    line=label.line,
+                    name=(
+                        "the centrality line"
+                        if label.line is self.center_line
+                        else "the test value line"
+                    ),
+                )
+                for label in self.labels
+                if label.line is not None
+            ),
         )
 
     def draw_bars(self) -> None:
@@ -374,7 +415,7 @@ class _HistDrawing(base.BaseDrawing):
                 gid="centrality-line",
             )
             text = ax.text(
-                center,
+                0.5,
                 1.0,
                 self.texts.centrality_labels[0],
                 fontproperties=theme.font(theme.SIZE_LABEL),
@@ -386,11 +427,17 @@ class _HistDrawing(base.BaseDrawing):
                 },
                 zorder=6.0,
                 gid="centrality-label",
+                transform=ax.transAxes,
             )
             plain = self.result.text.centrality_labels
             self.role(text, "centrality label", plain[0] if plain else None)
-            texts.append(_StripLabel(text=text, x=center, side="right"))
+            texts.append(
+                _StripLabel(text=text, x=center, side="right", line=self.center_line)
+            )
         tv = self.test_value
+        # As written when short, else rounded and marked (shown_test_value).
+        number, rounded = shown_test_value(tv, self.result.settings.digits)
+        shown = f"≈ {number}" if rounded else number
         if self.test_mark == "line":
             self.test_line = ax.axvline(
                 tv,
@@ -399,28 +446,26 @@ class _HistDrawing(base.BaseDrawing):
                 zorder=3.5,
                 gid="test-value-line",
             )
-            words = f"test value {r_number_text(tv)}"
+            words = f"test value {shown}"
             where: float | None = tv
         else:
             below = tv < self.bins.edges[0]
-            shown = r_number_text(tv)
             words = f"← test value {shown}" if below else f"test value {shown} →"
             where = None
         text = ax.text(
-            tv if where is not None else 0.0,
-            1.0 if where is not None else 0.0,
+            0.5,
+            1.0,
             words,
             fontproperties=theme.font(theme.SIZE_LABEL),
             color=theme.SOFT_INK,
             parse_math=False,
             zorder=6.0,
             gid="test-value-label",
-            # The arrow label starts inside the Axes, not at data (0, 1): the
-            # layout measures it before place_labels moves it to its edge.
-            transform=ax.transData if where is not None else ax.transAxes,
+            # Placed in its strip below (put_label), before any layout.
+            transform=ax.transAxes,
         )
         self.role(text, "test value label")
-        label = _StripLabel(text=text, x=where, side="right")
+        label = _StripLabel(text=text, x=where, side="right", line=self.test_line)
         if where is None:
             label.edge = "left" if tv < self.bins.edges[0] else "right"
         texts.append(label)
@@ -429,8 +474,14 @@ class _HistDrawing(base.BaseDrawing):
         # from the test value, the test value's label on the other.
         if center is not None:
             above = tv > center
-            texts[0].side = "left" if above else "right"
-            texts[1].side = "right" if above else "left"
+            texts[0].side = texts[0].usual = "left" if above else "right"
+            texts[1].side = texts[1].usual = "right" if above else "left"
+        # Every label starts in its strip, at its line or edge: the layout
+        # measures the Axes with its texts, and a text left at a data
+        # coordinate far outside the view (a test value of 0 for data near
+        # 1e9) would size the figure to reach it.
+        for label in texts:
+            self.put_label(label, 0.0)
 
     def draw_axes_texts(self) -> None:
         ax, result, options = self.ax, self.result, self.options
@@ -445,8 +496,10 @@ class _HistDrawing(base.BaseDrawing):
             parse_math=options.ylab is not None,
         )
         ax.tick_params(axis="both", labelsize=theme.SIZE_TICK)
-        ax.yaxis.set_major_locator(_NonNegative(integer=True))
         n = float(self.bins.n)
+        counts = _NonNegative(integer=True)
+        counts.most = n
+        ax.yaxis.set_major_locator(counts)
 
         def share(count: FloatArray) -> FloatArray:
             return np.asarray(count, dtype=np.float64) * 100.0 / n
@@ -456,11 +509,17 @@ class _HistDrawing(base.BaseDrawing):
 
         # matplotlib types the functions over ArrayLike; they get float arrays.
         percent = ax.secondary_yaxis("right", functions=cast("Any", (share, count)))
-        percent.yaxis.set_major_locator(_NonNegative(steps=[1, 2, 5, 10]))
+        shares = _NonNegative(steps=[1, 2, 5, 10])
+        shares.most = 100.0
+        percent.yaxis.set_major_locator(shares)
         percent.yaxis.set_major_formatter(FuncFormatter(_percent))
-        percent.set_ylabel(
-            "percent of values", fontproperties=theme.font(theme.SIZE_AXIS_LABEL)
+        # With a y axis shared with other panels the count axis is theirs too,
+        # while each panel's percentages are of its own values: say how many.
+        shared = not self.own and len(base.siblings(ax, "y")) > 1
+        words = (
+            f"percent of the {self.bins.n:,} values" if shared else "percent of values"
         )
+        percent.set_ylabel(words, fontproperties=theme.font(theme.SIZE_AXIS_LABEL))
         percent.tick_params(axis="y", labelsize=theme.SIZE_TICK)
         # A SecondaryAxis: an Axes for every use here (labels, ticks, fonts).
         self.percent = cast("Axes", percent)
@@ -496,9 +555,15 @@ class _HistDrawing(base.BaseDrawing):
         return self.rows * self.row_px() + px(LABEL_PAD_PT, self.dpi)
 
     def layout(self) -> None:
-        for _ in range(2):
+        for _ in range(3):
             if self.own:
                 self.set_limits(BARS_HEIGHT_IN * self.dpi + self.strip_px())
+                # The labels in their places before the figure is fitted around
+                # the Axes and its texts, so that it is measured with them there.
+                rows = self.place_labels()
+                if rows != self.rows:
+                    self.rows = rows
+                    continue
                 self.fit_figure(
                     AXES_WIDTH_IN * self.dpi,
                     BARS_HEIGHT_IN * self.dpi + self.strip_px(),
@@ -535,74 +600,132 @@ class _HistDrawing(base.BaseDrawing):
         self.ax.set_ylim(bottom, top)
         self.view.xlim = (left, right)
         self.view.ylim = (bottom, top)
-        # The lines span the bars and the label strip, not the subtitle and
-        # caption that ax= puts inside the Axes (in Axes fractions, so they keep
-        # their span when the Axes is resized).
-        span = [below / height, 1.0 - self.top_px / height]
-        for line in (self.center_line, self.test_line):
-            if line is not None:
-                line.set_ydata(span)
+        self.below_px = below
+        self.span_lines()
+
+    def span_lines(self) -> None:
+        """The lines span the bars and the label strip, not the subtitle and
+        caption that ax= puts inside the Axes (in Axes fractions, so they keep
+        their span when the Axes is resized); a line whose label lies in the
+        lower row, under the other line's label reaching across it, ends at the
+        middle of its own label."""
+        height = float(self.ax.bbox.height)
+        if height <= 0.0:
+            return
+        bottom = self.below_px / height
+        for label in self.labels:
+            line = label.line
+            if line is None:
+                continue
+            top_px = self.top_px
+            if label is self.ends_at_label:
+                box = self.extent(label.text)
+                top_px = float(self.ax.bbox.y1) - (box.y0 + box.y1) / 2
+            line.set_ydata([bottom, 1.0 - top_px / height])
 
     def place_labels(self) -> int:
         """Put the labels in the strip, each beside its line on its side, or on
-        the other side where it would reach out of the Axes; the rows needed (2
-        where the two labels would still touch)."""
-        frame = self.ax.bbox
-        gap = LINE_GAP_PT
+        the other side where it would reach out of the Axes; the rows needed.
+
+        Two labels take two rows where they would touch, or where one reaches
+        across the other's line (its own side has no room): that one goes in
+        the top row, and the other line ends at its own label in the row below,
+        so that each label sits at its own line and no line runs through the
+        other's label."""
         to_pt = 72.0 / self.dpi
         down = (self.top_px + px(LABEL_PAD_PT, self.dpi)) * to_pt
         row_pt = self.row_px() * to_pt
-        boxes: list[Bbox] = []
         for label in self.labels:
-            y = -(down + label.row * row_pt)
-            if label.x is None:
-                at_left = label.edge == "left"
-                label.text.set_transform(
-                    offset_copy(
-                        self.ax.transAxes, fig=self.figure,
-                        x=gap if at_left else -gap, y=y, units="points",
+            self.choose_side(label, -(down + label.row * row_pt))
+        self.ends_at_label = None
+        lines = [label for label in self.labels if label.x is not None]
+        if len(self.labels) == 2:
+            first, second = self.labels
+            boxes = [self.extent(label.text) for label in self.labels]
+            # (how far a label reaches toward the other line, the label)
+            across = sorted(
+                (
+                    (reach, label)
+                    for label, box, other in (
+                        (first, boxes[0], second),
+                        (second, boxes[1], first),
                     )
-                )  # fmt: skip
-                label.text.set_position((0.0 if at_left else 1.0, 1.0))
-                label.text.set_horizontalalignment("left" if at_left else "right")
-                label.text.set_verticalalignment("top")
-                boxes.append(self.extent(label.text))
-                continue
-            tried: list[tuple[float, Side]] = []
-            for side in (label.side, "left" if label.side == "right" else "right"):
-                self.put(label, side, y)
-                box = self.extent(label.text)
-                out = max(0.0, frame.x0 - box.x0) + max(0.0, box.x1 - frame.x1)
-                tried.append((out, side))
-                if out <= 0.5:
-                    break
-            out, side = min(tried, key=lambda t: t[0])
-            self.put(label, side, y)
-            boxes.append(self.extent(label.text))
-        if len(boxes) == 2 and self.rows == 2:
-            # The test value's label, turned toward the centrality line (no room
-            # on its own side), starts beyond that line, so that the line does
-            # not run through it.
-            label, center = self.labels[1], self.center
-            assert center is not None
-            if label.x is not None and (
-                (label.side == "right" and center > label.x)
-                or (label.side == "left" and center < label.x)
-            ):
-                self.put(label, label.side, -(down + row_pt), at=center)
-        if len(boxes) == 2 and self.rows == 1:
-            a, b = boxes
+                    if label.x is not None
+                    and other.x is not None
+                    and (reach := self.reach(box, label.x, other.x)) > -1.0
+                ),
+                key=lambda t: t[0],
+            )
             gap_px = px(GAP_PT, self.dpi)
-            if a.x0 < b.x1 + gap_px and b.x0 < a.x1 + gap_px:
-                self.labels[-1].row = 1
-                return 2
+            a, b = boxes
+            touch = a.x0 < b.x1 + gap_px and b.x0 < a.x1 + gap_px
+            if across or touch:
+                if self.rows == 1:
+                    return 2
+                # The label that reaches farthest across the other's line on
+                # top; else the test value's label below the centrality label.
+                top = across[-1][1] if across else first
+                low = second if top is first else first
+                top.row, low.row = 0, 1
+                for label in self.labels:
+                    self.choose_side(label, -(down + label.row * row_pt))
+                if across and len(lines) == 2:
+                    self.ends_at_label = low
+        self.span_lines()
         return self.rows
 
-    def put(
-        self, label: _StripLabel, side: Side, y: float, *, at: float | None = None
-    ) -> None:
-        """Put ``label`` on ``side`` of its line (or of ``at``), ``y`` points
-        below the top of the Axes."""
+    def reach(self, box: Bbox, own: float, other: float) -> float:
+        """How much nearer a label's ``box`` (pixels) beside its line at data x
+        ``own`` lies to the line at ``other`` than to its own, in pixels: above
+        -1 it reaches across that line or lies no farther from it (two lines a
+        pixel or two apart), and in one row would read as that line's label."""
+
+        def away(x: float) -> float:
+            at = float(self.ax.transData.transform((x, 0.0))[0])
+            return max(box.x0 - at, at - box.x1, 0.0)
+
+        return away(own) - away(other)
+
+    def choose_side(self, label: _StripLabel, y: float) -> None:
+        """Put ``label`` ``y`` points below the top of the Axes on its own side
+        of its line, or on the other side where it would reach out of the Axes
+        there (on the side where it reaches out least where it does on both); a
+        label at an edge stays there."""
+        if label.x is None:
+            self.put_label(label, y)
+            return
+        frame = self.ax.bbox
+        tried: list[tuple[float, Side]] = []
+        for side in (label.usual, "left" if label.usual == "right" else "right"):
+            self.put(label, side, y)
+            box = self.extent(label.text)
+            out = max(0.0, frame.x0 - box.x0) + max(0.0, box.x1 - frame.x1)
+            tried.append((out, side))
+            if out <= 0.5:
+                break
+        _, side = min(tried, key=lambda t: t[0])
+        self.put(label, side, y)
+
+    def put_label(self, label: _StripLabel, y: float) -> None:
+        """Put ``label`` ``y`` points below the top of the Axes: at its edge
+        (the test value beyond the bars), or on its side of its line."""
+        if label.x is not None:
+            self.put(label, label.side, y)
+            return
+        at_left = label.edge == "left"
+        label.text.set_transform(
+            offset_copy(
+                self.ax.transAxes, fig=self.figure,
+                x=LINE_GAP_PT if at_left else -LINE_GAP_PT, y=y, units="points",
+            )
+        )  # fmt: skip
+        label.text.set_position((0.0 if at_left else 1.0, 1.0))
+        label.text.set_horizontalalignment("left" if at_left else "right")
+        label.text.set_verticalalignment("top")
+
+    def put(self, label: _StripLabel, side: Side, y: float) -> None:
+        """Put ``label`` on ``side`` of its line, ``y`` points below the top of
+        the Axes."""
         assert label.x is not None
         gap = LINE_GAP_PT + (
             LABEL_BOX_PAD * theme.SIZE_LABEL if label.text.get_bbox_patch() else 0.0
@@ -613,7 +736,7 @@ class _HistDrawing(base.BaseDrawing):
                 x=gap if side == "right" else -gap, y=y, units="points",
             )
         )  # fmt: skip
-        label.text.set_position((label.x if at is None else at, 1.0))
+        label.text.set_position((label.x, 1.0))
         label.text.set_horizontalalignment("left" if side == "right" else "right")
         label.text.set_verticalalignment("top")
         label.side = side
@@ -653,7 +776,8 @@ class _HistDrawing(base.BaseDrawing):
             result,
             centrality=self.center is not None,
             test_value_line=self.test_mark == "line",
-            bins=len(self.bins.counts),
+            # Bars made invisible by bar_args are not described.
+            bins=None if "bar_args" in self.hidden else len(self.bins.counts),
         )
         if alt == result.text.alt_text:
             return result

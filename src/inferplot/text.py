@@ -123,6 +123,7 @@ __all__ = [
     "percent_text",
     "r_number_text",
     "results_sentence",
+    "shown_test_value",
     "subtitle_expression",
     "tick_label",
     "to_mathtext",
@@ -1170,7 +1171,32 @@ def _apa_test(test: TestResult) -> str:
     return f"{test.statistic_name}{dfs} = {statistic}, {_apa_p(test.p_value)}"
 
 
-def _apa_effect_size(effect_size: EffectSize) -> str:
+# Effect sizes in the data's units (the trimmed mean of a one-sample robust
+# test): printed with the subtitle's number rule, not with two fixed decimals.
+DATA_UNIT_EFFECT_SIZES: Final = frozenset({"trimmed_mean"})
+
+
+def data_number(x: float, digits: int) -> str:
+    """A quantity in the data's units as the texts print it: the subtitle's
+    number rule (:func:`format_value` with ``digits``: fixed with ``digits``
+    decimals, scientific below 10^-digits and from 1e5), so that "19.24" stays
+    "19.24" and 3.1e-9 prints "3.10e-09", not "0.00"; no negative zero."""
+    if math.isnan(x):
+        return "NA"
+    return _no_neg_zero(format_value(x, digits))
+
+
+def _apa_effect_size(effect_size: EffectSize, digits: int = 2) -> str:
+    """ "<label> = <estimate>, 95% CI [<low>, <high>]": two decimals, without the
+    leading zero where bounded by 1; in the data's units
+    (DATA_UNIT_EFFECT_SIZES) with :func:`data_number` and ``digits``."""
+    if effect_size.name in DATA_UNIT_EFFECT_SIZES:
+        estimate, low, high = (
+            data_number(x, digits)
+            for x in (effect_size.estimate, effect_size.conf_low, effect_size.conf_high)
+        )
+        level = format_conf_level(effect_size.conf_level)
+        return f"{effect_size.label} = {estimate}, {level} CI [{low}, {high}]"
     bounded = effect_size.name in _BOUNDED_EFFECT_SIZES
     estimate = _apa_number(effect_size.estimate, bounded=bounded)
     low = _apa_number(effect_size.conf_low, bounded=bounded)
@@ -2015,15 +2041,39 @@ def caption_lines(
 # designs (SPEC section 7).
 
 
+# The longest test value printed as written (R's 15-significant-digit print).
+TEST_VALUE_CHARS: Final = 8
+
+
+def shown_test_value(test_value: float, digits: int) -> tuple[str, bool]:
+    """The test value as the texts print it, and whether that is rounded.
+
+    As written (R's print of the double, :func:`r_number_text`: "18", "5.8",
+    "-10", "1.7e+09", "0.001") when that takes at most TEST_VALUE_CHARS
+    characters; otherwise rounded with the subtitle's number rule
+    (:func:`format_value` with ``digits``: "0.33" for 1/3, "36.12" for
+    36.123456789, "1.23e+05" for 123456.789) and marked as rounded by the
+    caller ("test value ≈ 0.33", "about 0.33"), so that a printed value never
+    stands for a different one. The result keeps the exact value
+    (``settings.test_value``).
+    """
+    written = r_number_text(test_value)
+    if len(written) <= TEST_VALUE_CHARS or not math.isfinite(test_value):
+        return written, False
+    return format_value(test_value, digits), True
+
+
 def _test_value_text(settings: Settings) -> str:
-    """The value a one-sample test is tested against, as R prints it ("18",
-    "5.8", "-10")."""
+    """The value a one-sample test is tested against, in the APA sentence and
+    the alt text: "18", or "about 0.33" where it is rounded
+    (:func:`shown_test_value`)."""
     if settings.test_value is None:
         raise ValueError(
             "a one-sample result needs settings.test_value, the value its test is "
             "tested against"
         )
-    return r_number_text(settings.test_value)
+    shown, rounded = shown_test_value(settings.test_value, settings.digits)
+    return f"about {shown}" if rounded else shown
 
 
 def _no_level_n(n_obs: int, design: str) -> str:
@@ -2077,7 +2127,8 @@ def one_sample_sentence(
             )
         else:
             raise ValueError(f"unknown alternative {test.alternative!r}")
-        return f"{heading}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, {n}."
+        shown = _apa_effect_size(effect_size, settings.digits)
+        return f"{heading}: {_apa_test(test)}, {shown}, {n}."
     if bayes is not None:
         return (
             f"Bayesian one-sample t-test against {against} ({_prior_text(bayes)}): "
@@ -2199,6 +2250,18 @@ def _marks_sentence(marks: Sequence[str]) -> str:
     return f"Vertical lines mark {', '.join(marks[:-1])}, and {marks[-1]}."
 
 
+def _value_range(low: float, high: float, digits: int) -> str:
+    """ "from 4.20 to 33.90" with the subtitle's number rule; "all equal to 5.00"
+    for one value; where the two ends would print alike but differ (1.7e9 plus a
+    few seconds), with as many more digits as tell them apart."""
+    if low == high:
+        return f"all equal to {data_number(low, digits)}"
+    shown = digits
+    while data_number(low, shown) == data_number(high, shown) and shown < 17:
+        shown += 1
+    return f"from {data_number(low, shown)} to {data_number(high, shown)}"
+
+
 def one_sample_alt_text(
     *,
     x: str,
@@ -2248,10 +2311,7 @@ def one_sample_alt_text(
     lines = " ".join(part for part in (_marks_sentence(marks), missing) if part)
     details: list[str] = []
     if values:
-        low, high = min(values), max(values)
-        details.append(
-            f"from {format_value(low, digits)} to {format_value(high, digits)}"
-        )
+        details.append(_value_range(min(values), max(values), digits))
     if bins is not None:
         details.append(f"in {format_n(bins)} {'bin' if bins == 1 else 'bins'}")
     count = f"{format_n(n_obs)} {'value' if n_obs == 1 else 'values'}"

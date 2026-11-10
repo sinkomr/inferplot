@@ -58,6 +58,7 @@ FIGURE_CODES = frozenset(
         "path_hidden",
         "paths_crowded",
         "point_labels_crowded",
+        "figure_oversized",
     }
 )
 
