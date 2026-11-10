@@ -985,26 +985,43 @@ def _robust_resample_warnings(
     akp: stats.BootstrapEffectSizeCI, effect_size: EffectSize, *, k: int
 ) -> list[str]:
     """How many bootstrap values were 0 / 0 (left out, D54's rule) or infinite
-    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``. The
-    undefined count lives on the statistics object until the result contract
-    carries it."""
-    total = akp.resamples if k == 2 else akp.resamples * k * (k - 1) // 2
+    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``.
+
+    With three or more conditions the counts are totals over the pairs, in
+    values (resamples times pairs); the result's ``undefined_resamples`` and
+    ``infinite_resamples`` are the largest count of one pair, in resamples."""
+    pairs = k * (k - 1) // 2
+    total = akp.resamples if k == 2 else akp.resamples * pairs
     where = (
         f"{total:,} bootstrap resamples"
         if k == 2
         else f"{total:,} bootstrap values ({akp.resamples:,} resamples of the "
-        f"subjects for each of the {k * (k - 1) // 2} pairs)"
+        f"subjects for each of the {pairs} pairs)"
     )
+    undefined = akp.undefined_resamples if k == 2 else sum(akp.pair_undefined)
+    infinite = akp.infinite_resamples if k == 2 else sum(akp.pair_infinite)
     out: list[str] = []
-    if akp.undefined_resamples:
+    if undefined:
+        most = (
+            ""
+            if k == 2
+            else f" (at most {akp.undefined_resamples:,} of one pair's "
+            f"{akp.resamples:,})"
+        )
         out.append(
-            f"{akp.undefined_resamples:,} of the {where} give an undefined (0/0) "
-            "AKP, because in them every winsorized difference is 0. They are left "
+            f"{undefined:,} of the {where} give an undefined (0/0) AKP{most}, "
+            "because in them every winsorized difference is 0. They are left "
             "out: each pair's confidence interval comes from the others."
         )
-    if akp.infinite_resamples:
+    if infinite:
+        most = (
+            ""
+            if k == 2
+            else f" (at most {akp.infinite_resamples:,} of one pair's "
+            f"{akp.resamples:,})"
+        )
         out.append(
-            f"{akp.infinite_resamples:,} of the {where} give an infinite AKP, because "
+            f"{infinite:,} of the {where} give an infinite AKP{most}, because "
             "in them every winsorized difference is the same nonzero value. They "
             "are kept, so the confidence interval "
             f"[{format_value(effect_size.conf_low)}, "

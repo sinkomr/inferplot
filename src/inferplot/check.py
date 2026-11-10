@@ -211,6 +211,26 @@ def _pairwise_conf_level(result: StatsResult) -> Issue | None:
     if not levels:
         return None
     shown = ", ".join(f"{100 * v:g}%" for v in levels)
+    es = result.effect_size
+    if (
+        result.design == "within"
+        and es is not None
+        and es.conf_level != level
+        and {es.conf_level} == set(levels)
+    ):
+        # Type robust with conditions (D66): the effect size's interval and the
+        # pairs' are both at the fixed level; conf_level changes neither.
+        return Issue(
+            code="pairwise_conf_level",
+            severity="info",
+            message=(
+                f"Every interval of this result is a {shown} interval: the "
+                f"{es.label}'s bootstrap interval and the pairwise intervals. "
+                f"conf_level={level!r} changes none of them; ggstatsplot does not "
+                "pass it to WRS2 here."
+            ),
+            fix=f"Report the intervals as {shown} intervals, or pass conf_level=0.95.",
+        )
     return Issue(
         code="pairwise_conf_level",
         severity="info",
@@ -239,11 +259,22 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         parts.append(f"The {es.label} is infinite.")
     if infinite:
         total = es.bootstrap_resamples or 0
-        parts.append(
-            f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
-            f"{es.label}, so its {_percent(es.conf_level)} CI "
-            f"[{_bound(es.conf_low)}, {_bound(es.conf_high)}] may be unbounded."
+        interval = (
+            f"{_percent(es.conf_level)} CI [{_bound(es.conf_low)}, "
+            f"{_bound(es.conf_high)}] may be unbounded"
         )
+        if es.name == "akp_delta_avg":
+            # Counted per pair, in resamples: the most of any one pair.
+            parts.append(
+                f"In up to {infinite:,} of the {total:,} bootstrap resamples a "
+                "pair's AKP is infinite (the most of any pair), so the "
+                f"{es.label}'s {interval}."
+            )
+        else:
+            parts.append(
+                f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
+                f"{es.label}, so its {interval}."
+            )
     return Issue(
         code="infinite_effect_size",
         severity="warning",
