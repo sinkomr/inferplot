@@ -460,6 +460,16 @@ class StatsResult(_Plain):
     renderer draws the points, boxes and violins from them, so a result read back
     with :meth:`from_json` draws the same figure (DECISIONS.md D36).
 
+    Design "within" (``withinstats``): ``subject_id`` names the subject column and
+    ``subjects`` lists the complete subjects; ``values[j][i]`` is the value of
+    ``subjects[i]`` at ``levels[j]``, so every level has one value per subject in
+    the same order and the renderer can join each subject's points.
+    ``dropped_subjects`` counts the subjects left out because they lack a value at
+    some level; ``n_obs`` is the number of complete subjects (ggstatsplot's
+    ``n.obs``, printed as the number of pairs), and ``n_dropped`` counts rows
+    dropped for a missing ``x``, ``y`` or ``subject_id``. Design "between" has
+    ``subject_id`` None and ``subjects`` empty.
+
     ``test`` and ``effect_size`` are None for type "bayes", which has no
     frequentist test: its two-group Bayes factor is in ``bayes`` and, with three or
     more groups, each pair's in ``pairwise`` (the Bayesian ANOVA and posterior
@@ -474,6 +484,7 @@ class StatsResult(_Plain):
     subject_id: str | None
     levels: tuple[str, ...]
     values: tuple[tuple[float, ...], ...]
+    subjects: tuple[str, ...]
     descriptives: tuple[Descriptive, ...]
     test: TestResult | None
     effect_size: EffectSize | None
@@ -496,14 +507,16 @@ class StatsResult(_Plain):
     def to_json(self, indent: int | None = 2, *, include_values: bool = True) -> str:
         """Strict, ASCII-only JSON: inf as "Inf", -inf as "-Inf", nan as null.
 
-        ``include_values=False`` writes ``values`` as an empty list: every number
-        and text except the analyzed observations, which can be large and are the
-        user's data. ``save()`` embeds this form in figure files; a result read
-        back from it has ``values == ()`` and cannot be drawn again.
+        ``include_values=False`` writes ``values`` and ``subjects`` as empty lists:
+        every number and text except the analyzed observations and the subject
+        labels, which can be large and are the user's data. ``save()`` embeds this
+        form in figure files; a result read back from it has ``values == ()`` and
+        ``subjects == ()`` and cannot be drawn again.
         """
         encoded = _encode(self)
         if not include_values:
             cast("dict[str, object]", encoded)["values"] = []
+            cast("dict[str, object]", encoded)["subjects"] = []
         return json.dumps(encoded, indent=indent, allow_nan=False, ensure_ascii=True)
 
     @classmethod

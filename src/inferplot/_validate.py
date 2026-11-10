@@ -55,6 +55,7 @@ __all__ = [
     "checked",
     "closest_name",
     "describe_value",
+    "subject_id_required",
 ]
 
 P = ParamSpec("P")
@@ -400,13 +401,28 @@ def _targeted(
                 f"{arg}= is not an argument of {fn}(); use subject_id={example}, the "
                 "column that identifies each subject."
             )
+        if fn in _SUBJECT_FUNCTIONS:  # its drawing function: the result holds it
+            return TypeError(
+                f"{arg}= is not an argument of render.{fn}(): the subject column is "
+                f"an argument of the analysis, subject_id=, and the result already "
+                f"holds it (result.subject_id). Pass subject_id= to "
+                f"ip.analyze.{fn}(data, x, y, subject_id=...) or ip.{fn}(...) and "
+                f"draw that result. Remove {arg}=."
+            )
         return TypeError(
             f"{fn}() compares independent groups and takes no {arg}=. For repeated "
             "measures of the same subjects use "
             "withinstats(data, x, y, subject_id=...); otherwise remove "
             f"{arg}=."
         )
+    if key == "paired" and fn in _SUBJECT_FUNCTIONS:
+        return TypeError(
+            f"{arg}= is not needed: {fn}() always pairs the measurements of each "
+            f"subject, matched by subject_id. Remove {arg}=."
+        )
     reason = _NO_EQUIVALENT.get(key)
+    if reason is None and fn in _SUBJECT_FUNCTIONS:
+        reason = _NO_EQUIVALENT_WITHIN.get(key)
     if reason is not None:
         return TypeError(
             f"{arg}= is a ggstatsplot argument that inferplot does not have: "
@@ -444,6 +460,41 @@ _NO_EQUIVALENT: Mapping[str, str] = {
         "matplotlib figure instead."
     ),
 }
+
+
+# ggwithinstats 1.1.4 arguments without an inferplot equivalent, beyond those of
+# ggbetweenstats. Only withinstats() reports them this way, so betweenstats()'s
+# messages for these names stay as they were.
+_NO_EQUIVALENT_WITHIN: Mapping[str, str] = {
+    "centrality_path_args": (
+        "the path joining the centrality points is not styled by an argument; "
+        "centrality_path=False leaves it out."
+    ),
+    "point_path_args": (
+        "the paths joining each subject's points are not styled by an argument; "
+        "point_path=False leaves them out."
+    ),
+}
+# Functions whose analysis takes subject_id (their drawing functions share the name).
+_SUBJECT_FUNCTIONS: Final = frozenset({"withinstats"})
+
+
+def subject_id_required(fn: str, *, given: str | None = None) -> TypeError:
+    """The error for a call to ``fn`` without a subject column (SPEC.md section 2):
+    measurements are never paired by row order. ``given`` is the value passed, if
+    any, as the message shows it (``subject_id=None``)."""
+    start = (
+        f"{fn}() needs subject_id="
+        if given is None
+        else f"subject_id={given} is not a column name: {fn}() needs subject_id="
+    )
+    return TypeError(
+        f"{start}, the column that identifies the subject of each row, for example "
+        f"{fn}(data, x, y, subject_id='subject'). Measurements are paired by subject "
+        "and never by row order, which silently pairs the wrong values once rows "
+        "are sorted, filtered or missing. Put the data in long format: one row per "
+        "subject and level of x, with a column naming the subject."
+    )
 
 
 def _keyword_problem(
@@ -498,6 +549,11 @@ def _positional_problem(
             hint = f" For example {fn}(..., type={first!r})."
         elif first in PAIRWISE_DISPLAYS and "pairwise_display" in valid:
             hint = f" For example {fn}(..., pairwise_display={first!r})."
+        elif "subject_id" in valid:
+            hint = (
+                f" If {first!r} is the column that identifies each subject, write "
+                f"{fn}(..., subject_id={first!r})."
+            )
     plural = "argument" if len(positional) == 1 else "arguments"
     return TypeError(
         f"{fn}() takes {len(positional)} positional {plural} ({names}) but {given} "
@@ -531,8 +587,10 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
     spelling of an R-style name, or the closest valid keyword. When several
     keywords are wrong, the first one in call order is reported. A drawing
     function (first parameter ``result``) given something other than a
-    ``StatsResult`` says so before the positional count is checked. Values are not
-    checked here otherwise; the value validators below do that.
+    ``StatsResult`` says so before the positional count is checked. A function with
+    a required ``subject_id`` called without one gets ``subject_id_required``'s
+    message instead of Python's. Values are not checked here otherwise; the value
+    validators below do that.
     """
     signature = inspect.signature(fn)
     kinds = inspect.Parameter
@@ -553,6 +611,11 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
         if p.kind in (kinds.POSITIONAL_OR_KEYWORD, kinds.KEYWORD_ONLY)
     )
     valid = frozenset(order)
+    required = tuple(
+        p.name
+        for p in signature.parameters.values()
+        if p.kind is kinds.KEYWORD_ONLY and p.default is p.empty
+    )
     name = fn.__name__
     draws_result = bool(positional) and positional[0] == "result"
 
@@ -580,6 +643,8 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
                 raise _keyword_problem(arg, value, name, valid, order, filled)
         if len(args) > len(positional):
             raise _positional_problem(name, positional, args[len(positional) :], valid)
+        if "subject_id" in required and "subject_id" not in kwargs:
+            raise subject_id_required(name)
         return fn(*args, **kwargs)
 
     return wrapper

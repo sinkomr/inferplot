@@ -8,5 +8,6 @@ from __future__ import annotations
 
 from inferplot.render.betweenstats import betweenstats
 from inferplot.render.figure import StatsFigure
+from inferplot.render.withinstats import withinstats
 
-__all__ = ["StatsFigure", "betweenstats"]
+__all__ = ["StatsFigure", "betweenstats", "withinstats"]

@@ -694,15 +694,25 @@ def read_dataset(case: OracleCase, backend: Backend = "pandas") -> Any:
     levels become a pandas Categorical, a polars Enum or a pyarrow dictionary
     column with that level order, including empty levels.
     """
+    return read_csv(case.dataset_file, backend, case.factor_levels)
+
+
+def read_csv(
+    file: str,
+    backend: Backend = "pandas",
+    factor_levels: Mapping[str, Sequence[str]] | None = None,
+) -> Any:
+    """A CSV of ``oracle/datasets`` read the way R reads it (see ``read_dataset``)."""
     import pandas as pd
 
+    factor_levels = factor_levels or {}
     frame = pd.read_csv(
-        DATASET_DIR / case.dataset_file,
+        DATASET_DIR / file,
         keep_default_na=False,
         na_values=[""],
         encoding="utf-8",
     )
-    for column, levels in case.factor_levels.items():
+    for column, levels in factor_levels.items():
         frame[column] = pd.Categorical(frame[column], categories=list(levels))
     if backend == "pandas":
         return frame
@@ -714,7 +724,7 @@ def read_dataset(case: OracleCase, backend: Backend = "pandas") -> Any:
         # string dtype carries those as nulls.
         text = {c: "string" for c in frame.columns if frame[c].dtype == object}
         out = pl.from_pandas(frame.astype(text))
-        for column, levels in case.factor_levels.items():
+        for column, levels in factor_levels.items():
             out = out.with_columns(
                 pl.col(column).cast(pl.String).cast(pl.Enum(list(levels)))
             )

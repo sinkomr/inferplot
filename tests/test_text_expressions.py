@@ -663,6 +663,7 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
         levels=levels,
         # The analyzed observations, read from the fixture's dataset.
         values=tuple(tuple(g.tolist()) for g in data),
+        subjects=(),
         descriptives=descriptives,
         test=test,
         effect_size=effect_size,

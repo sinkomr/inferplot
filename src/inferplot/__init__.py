@@ -13,7 +13,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 from inferplot import analyze
-from inferplot._api import betweenstats
+from inferplot._api import betweenstats, withinstats
 from inferplot.check import Issue
 from inferplot.result import StatsResult
 
@@ -31,6 +31,7 @@ __all__ = [
     "analyze",
     "betweenstats",
     "render",
+    "withinstats",
 ]
 
 # Names that import matplotlib, loaded on first access (PEP 562).

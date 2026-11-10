@@ -106,6 +106,23 @@ def test_values_hold_each_level_and_survive_json(anova: StatsResult) -> None:
     assert StatsResult.from_json(anova.to_json()).values == anova.values
 
 
+def test_subjects_survive_json_but_not_the_embedded_copy(anova: StatsResult) -> None:
+    # A between design has none; labels are plain strings, and the copy save()
+    # embeds leaves them out with the values (D36).
+    assert anova.subjects == ()
+    assert json.loads(anova.to_json())["subjects"] == []
+    labels: Any = (np.str_("s1"), "s2")
+    within = dataclasses.replace(
+        anova, design="within", subject_id="id", subjects=labels
+    )
+    assert within.subjects == ("s1", "s2")
+    assert all(type(s) is str for s in within.subjects)
+    assert StatsResult.from_json(within.to_json()) == within
+    embedded = StatsResult.from_json(within.to_json(include_values=False))
+    assert (embedded.values, embedded.subjects) == ((), ())
+    assert embedded.subject_id == "id"
+
+
 @pytest.mark.parametrize(
     "values",
     [
