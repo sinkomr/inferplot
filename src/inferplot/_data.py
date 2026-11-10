@@ -43,8 +43,11 @@ import datetime
 import difflib
 import math
 import numbers
+import re
+import unicodedata
 from collections.abc import Hashable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any, Final, Literal, cast
 
 import narwhals.stable.v2 as nw
@@ -124,6 +127,10 @@ class BetweenData:
     sorted; not analyzed. (Declared ones are in ``empty_levels``.)"""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """Sets of analyzed levels that differ only in leading or trailing whitespace."""
+    natural_order: tuple[str, ...] = ()
+    """``levels`` ordered by the numbers in their names (digits compared as
+    numbers), when the levels are text in sorted order and that order differs
+    ("week 2" before "week 10"); empty otherwise, and with ``order=``."""
 
     def counts(self) -> dict[str, int]:
         """``{level: n}`` in level order."""
@@ -168,6 +175,8 @@ class WithinData:
     ``subject_id``, sorted; not analyzed."""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """As ``BetweenData.lookalike_levels``."""
+    natural_order: tuple[str, ...] = ()
+    """As ``BetweenData.natural_order``."""
 
     @property
     def n_subjects(self) -> int:
@@ -693,11 +702,72 @@ def _grouping_labels(
     bad = ~np.isfinite(values) | (values != np.round(values))
     if bad.any():
         example = float(values[bad][0])
+        hint = group.role.not_whole_hint
+        distinct = len(set(values.tolist()))
+        if group.role is _X_ROLE and 2 * distinct > values.size:
+            # As text, most groups would hold one row: a measurement, not groups.
+            hint = (
+                f"its {values.size} values hold {distinct} different numbers, so "
+                "it looks like a measurement, not a column of groups (as text, most "
+                "groups would hold a single row). To relate two measurements use "
+                "scatterstats; if each row holds one subject's values in several "
+                "columns (wide format), reshape them to long format first and "
+                "compare them with withinstats(data, x, y, subject_id=...)."
+            )
         raise TypeError(
             f"{group.role.arg}={group.name!r} holds numbers that are not whole "
-            f"({example!r}); {group.role.not_whole_hint}"
+            f"({example!r}); {hint}"
         )
     return [str(int(v)) for v in values]
+
+
+def _reshape_example(
+    frame: nw.DataFrame[Any], subject_id: str, columns: Sequence[str]
+) -> str:
+    """The call that reshapes wide ``columns`` of ``frame`` to long format, in the
+    frame's own library, with the withinstats call that follows."""
+    melt = (
+        f"id_vars={subject_id!r}, value_vars={list(columns)!r}, "
+        "var_name='condition', value_name='value'"
+    )
+    implementation = frame.implementation
+    if implementation.is_polars():
+        reshape = (
+            f"long = data.unpivot(index={subject_id!r}, on={list(columns)!r}, "
+            "variable_name='condition', value_name='value')"
+        )
+    elif implementation.is_pyarrow():
+        reshape = f"long = data.to_pandas().melt({melt})"
+    else:
+        reshape = f"long = data.melt({melt})"
+    return (
+        f"{reshape}, then withinstats(long, 'condition', 'value', "
+        f"subject_id={subject_id!r})"
+    )
+
+
+def _wide_format(
+    frame: nw.DataFrame[Any], group: _Grouping, x_col: nw.Series[Any], y: str,
+    subject_id: str,
+) -> TypeError | None:  # fmt: skip
+    """withinstats with an ``x`` of measurements (numbers that are not whole) next
+    to a numeric ``y``: the data are very likely in wide format, one column per
+    condition. The error that says so and shows the reshape; None otherwise."""
+    if group.kind != "float":
+        return None
+    values = _float_values(x_col)[~group.missing]
+    bad = np.isfinite(values) & (values != np.round(values))
+    if not bad.any():
+        return None
+    x = group.name
+    return TypeError(
+        f"x={x!r} holds numbers that are not whole ({float(values[bad][0])!r}), "
+        f"like y={y!r}: it looks like a measurement, so the data are very likely in "
+        f"wide format, one row per subject and one column per condition ({x!r}, "
+        f"{y!r}). withinstats() needs long format: one row per subject and "
+        "condition, with a column naming the condition and a column of values. "
+        f"Reshape first: {_reshape_example(frame, subject_id, [x, y])}."
+    )
 
 
 def _grouping_order(
@@ -723,6 +793,44 @@ def _grouping_order(
     if group.kind == "text":
         return sorted(present), [], "sorted"
     return sorted(present, key=int), [], "sorted"
+
+
+# A number in a level name: a run of ASCII digits, with a minus sign where the name
+# or a word starts with it ("-10", not the hyphen of "group-10" or "1-5"); read as
+# a whole number, or together with the decimals that follow it.
+_WHOLE_NUMBERS: Final = re.compile(r"((?:(?<!\S)-)?[0-9]+)")
+_DECIMAL_NUMBERS: Final = re.compile(r"((?:(?<!\S)-)?[0-9]+(?:\.[0-9]+)?)")
+
+
+def _natural_key(label: str, numbers: re.Pattern[str]) -> tuple[str | Fraction, ...]:
+    """``label`` split into text and the numbers ``numbers`` finds, the numbers as
+    exact values: text at even places, numbers at odd ones, so two keys compare
+    place by place."""
+    parts = numbers.split(label)
+    return tuple(Fraction(part) if n % 2 else part for n, part in enumerate(parts))
+
+
+def _by_numbers(levels: Sequence[str], numbers: re.Pattern[str]) -> list[str]:
+    return sorted(levels, key=lambda label: (_natural_key(label, numbers), label))
+
+
+def _natural_order(group: _Grouping, levels: Sequence[str]) -> tuple[str, ...]:
+    """Text ``levels`` in sorted order, ordered by the numbers in their names when
+    that differs ("week 2" before "week 10"); empty otherwise. Numbers sort
+    numerically and declared categories keep their order, so neither has one.
+
+    Empty too where the names can be read two ways: "1.10" is after "1.5" as a
+    version and before it as a decimal, and "0.25", "0.5" are in order as
+    decimals. The order is given only when reading every run of digits as a
+    whole number and reading digits, a point and digits as one decimal number
+    agree.
+    """
+    if group.kind != "text":
+        return ()
+    natural = _by_numbers(levels, _WHOLE_NUMBERS)
+    if natural == list(levels) or natural != _by_numbers(levels, _DECIMAL_NUMBERS):
+        return ()
+    return tuple(natural)
 
 
 def _quiet_labels(group: _Grouping, series: nw.Series[Any], rows: IntArray) -> set[str]:
@@ -959,6 +1067,7 @@ def read_between(
     row_labels = _grouping_labels(group, x_col, rows)
     levels, empty, source = _grouping_order(group, set(row_labels))
     dictionary_order = _dictionary_order(x_dictionary, levels)
+    natural_order = _natural_order(group, levels)
     lost = np.nonzero(~missing_x & missing_y)[0]
     vanished = _vanished(group, _quiet_labels(group, x_col, lost), set(levels))
 
@@ -966,6 +1075,7 @@ def read_between(
         levels = _check_order(order, levels, [*empty, *vanished])
         source = "order"
         dictionary_order = ()
+        natural_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} groups with data; found "
@@ -997,6 +1107,7 @@ def read_between(
         dictionary_order=dictionary_order,
         vanished_levels=tuple(vanished),
         lookalike_levels=_lookalikes(levels),
+        natural_order=natural_order,
     )
 
 
@@ -1061,6 +1172,7 @@ def _too_few_subjects(
     seen: int,
     first_lacking: tuple[str, list[str]] | None,
     min_subjects: int,
+    wide: str = "",
 ) -> ValueError:
     names = ", ".join(repr(level) for level in levels)
     if complete:
@@ -1083,7 +1195,7 @@ def _too_few_subjects(
         f"subject_id={subject_id!r}, {found} a value at every level after rows "
         f"with missing values were dropped.{example} Subjects missing a level are "
         "left out of a within-subjects analysis; check the levels and the subject "
-        "column."
+        f"column.{wide}"
     )
 
 
@@ -1138,6 +1250,9 @@ def read_within(
         )
     _check_y(y_col, y, x_col, x)
     x_group = _read_grouping(x_col, x, _X_ROLE)
+    wide = _wide_format(frame, x_group, x_col, y, subject_id)
+    if wide is not None:
+        raise wide
     s_group = _read_grouping(s_col, subject_id, _SUBJECT_ROLE)
     for group in (x_group, s_group):
         # Two categories that print alike would otherwise look like a repeat.
@@ -1173,6 +1288,7 @@ def read_within(
     row_subjects = [subject_of[r] for r in rows.tolist()]
     levels, empty, source = _grouping_order(x_group, set(row_levels))
     dictionary_order = _dictionary_order(x_dictionary, levels)
+    natural_order = _natural_order(x_group, levels)
     vanished = _vanished(x_group, set(level_of.values()), set(levels))
     if order is not None:
         levels = _check_order(
@@ -1180,6 +1296,7 @@ def read_within(
         )
         source = "order"
         dictionary_order = ()
+        natural_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} conditions with data; found "
@@ -1199,6 +1316,17 @@ def read_within(
         if dropped:
             have = present.get(dropped[0], set())
             first_lacking = (dropped[0], [lv for lv in levels if lv not in have])
+        wide = ""
+        if x_group.kind in ("integer", "float") and all(
+            len(have) <= 1 for have in present.values()
+        ):
+            # One row per subject and numbers in x: very likely wide format.
+            wide = (
+                f" Every subject has a single row and x={x!r} holds numbers, so the "
+                "data are very likely in wide format, one row per subject and one "
+                f"column per condition ({x!r}, {y!r}). Reshape them to long format "
+                f"first: {_reshape_example(frame, subject_id, [x, y])}."
+            )
         raise _too_few_subjects(
             subject_id=subject_id,
             x=x,
@@ -1207,6 +1335,7 @@ def read_within(
             seen=len(seen_set),
             first_lacking=first_lacking,
             min_subjects=min_subjects,
+            wide=wide,
         )
 
     subject_index = {label: i for i, label in enumerate(subjects)}
@@ -1239,6 +1368,7 @@ def read_within(
         dictionary_order=dictionary_order,
         vanished_levels=tuple(vanished),
         lookalike_levels=_lookalikes(levels),
+        natural_order=natural_order,
     )
 
 
@@ -1281,6 +1411,8 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "does not declare an order. To choose the order, pass order= (a list "
             "of the levels) or mark the dictionary ordered."
         )
+    if data.natural_order:
+        notes.append(_natural_order_note(x, data.levels, data.natural_order))
     vanished = data.vanished_levels
     if vanished:
         needs = (
@@ -1294,6 +1426,20 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             f"{'was' if one else 'were'} left out of the analysis: every row of "
             f"{'it' if one else 'them'} has a missing {needs}."
         )
+    for level in data.levels:
+        drawn = _control_characters(level)
+        if drawn is not None:
+            notes.append(
+                f"The level {level!r} of {x!r} holds control characters {drawn}; the "
+                "result keeps the name as given."
+            )
+    for arg, name in (("x", x), ("y", data.y)):
+        drawn = _control_characters(name)
+        if drawn is not None:
+            notes.append(
+                f"The column name {arg}={name!r} holds control characters {drawn} "
+                "in the axis label; the result keeps the name as given."
+            )
     for same in data.lookalike_levels:
         notes.append(
             f"The levels {_quoted(same)} of {x!r} differ only in spaces at their "
@@ -1302,3 +1448,47 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "example with .str.strip() in pandas or .str.strip_chars() in polars."
         )
     return notes
+
+
+def _control_characters(name: str) -> str | None:
+    """How the figure draws the control characters of ``name`` (all but the line
+    break), "(U+0007), which the figure draws each as ...", or None without any."""
+    controls = sorted(
+        {c for c in name if c != "\n" and unicodedata.category(c) == "Cc"}
+    )
+    if not controls:
+        return None
+    codes = ", ".join(f"U+{ord(c):04X}" for c in controls)
+    drawn = (
+        "a tab as a space"
+        if controls == ["\t"]
+        else "a tab as a space and any other as \ufffd (U+FFFD)"
+        if "\t" in controls
+        else "each as \ufffd (U+FFFD)"
+    )
+    return f"({codes}), which the figure draws {drawn}"
+
+
+# An order= example longer than this is described instead of written out.
+_MAX_EXAMPLE: Final = 120
+
+
+def _natural_order_note(x: str, levels: Sequence[str], natural: Sequence[str]) -> str:
+    """The note for text levels sorted as text where the numbers in their names
+    give another order: the first place they differ, and how order= sets it."""
+    first = next(
+        n for n, (a, b) in enumerate(zip(levels, natural, strict=True)) if a != b
+    )
+    example = f"order={list(natural)!r}"
+    how = (
+        f"pass {example}"
+        if len(example) <= _MAX_EXAMPLE
+        else "pass order= with the levels in the order you want (for example by "
+        "the numbers in their names)"
+    )
+    return (
+        f"The levels of {x!r} are text, sorted as text (as R sorts them), so "
+        f"{levels[first]!r} comes before {natural[first]!r}: {_listed(levels)}. "
+        "The analysis and the figure use this order. To order them by the numbers "
+        f"in their names, {how}."
+    )

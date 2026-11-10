@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import unicodedata
+import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.text import Text
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from inferplot.result import StatsResult
 
 __all__ = [
+    "CenterLabel",
     "DrawnPaths",
     "DrawnView",
     "StatsFigure",
@@ -36,6 +39,7 @@ __all__ = [
     "figure_background",
     "plain_text",
     "remember",
+    "reported_glyphs",
     "root_figure",
     "shows_all",
 ]
@@ -83,6 +87,19 @@ class DrawnPaths:
     levels: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class CenterLabel:
+    """A drawn centrality label, for ``check()``: its level (position ``index``
+    on the x axis), its text and point, and the side of its point it goes on
+    unless something is in the way (``usual``)."""
+
+    index: int
+    level: str
+    text: Text
+    point: PathCollection
+    usual: Literal["right", "left"]
+
+
 @dataclass(slots=True)
 class DrawnView:
     """The axis limits inferplot set for a panel (updated when a later drawing
@@ -109,6 +126,7 @@ class StatsFigure:
         "_colors",
         "_figure",
         "_inside",
+        "_labels",
         "_own",
         "_paths",
         "_result",
@@ -132,6 +150,7 @@ class StatsFigure:
         view: DrawnView | None = None,
         colors: tuple[theme.Color, ...] = (),
         centers: tuple[tuple[str, PathCollection], ...] = (),
+        labels: tuple[CenterLabel, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -145,6 +164,7 @@ class StatsFigure:
         self._view = view
         self._colors = colors
         self._centers = centers
+        self._labels = labels
 
     @property
     def figure(self) -> Figure:
@@ -176,9 +196,10 @@ class StatsFigure:
         for withinstats also a text drawn over a path (``path_hidden``) and
         subject paths so many that they hide what lies beneath (``paths_crowded``).
         Also: a centrality point at least half under a text
-        (``centrality_label_overlap``), a level colour or text that can hardly be
-        told from its background (``low_contrast``), characters no font can draw
-        (``glyph_missing``), and, whatever changed the figure after drawing, an
+        (``centrality_label_overlap``), a centrality label that reads as another
+        level's (``centrality_label_ambiguous``), a level colour or text that can
+        hardly be told from its background (``low_contrast``), characters no font
+        can draw (``glyph_missing``), and, whatever changed the figure after drawing, an
         inverted axis or a non-linear scale (``axis_changed``), values or
         brackets outside the axis limits (``data_outside_view``) and values
         drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
@@ -264,6 +285,11 @@ class StatsFigure:
         return self._centers
 
     @property
+    def labels(self) -> tuple[CenterLabel, ...]:
+        """Each drawn centrality label, in level order."""
+        return self._labels
+
+    @property
     def colors(self) -> tuple[theme.Color, ...]:
         """Each level's colour from the palette, in level order."""
         return self._colors
@@ -276,11 +302,12 @@ class StatsFigure:
     def draw(self) -> None:
         """Draw the figure so text extents are current."""
         root = root_figure(self._figure)
-        if self._own:
-            with theme.context():
+        with reported_glyphs():
+            if self._own:
+                with theme.context():
+                    _draw(root)
+            else:
                 _draw(root)
-        else:
-            _draw(root)
 
 
 # What each text inferplot drew is, in words, for every drawing: a figure's check
@@ -371,6 +398,42 @@ def root_figure(figure: object) -> Figure:
             return current
         current = getattr(current, "figure", None)
     raise TypeError("could not find the matplotlib Figure that holds this Axes")
+
+
+# matplotlib's warning for a character no font has: "Glyph 26085 (...) missing
+# from font(s) DejaVu Sans." (3.9 and later), "... missing from current font."
+# (3.8).
+_GLYPH_WARNING: Final = re.compile(r"^Glyph (\d+) .*missing from")
+
+
+def _glyph_reported(code: int) -> bool:
+    """Whether ``fig.check()``'s glyph_missing reports the character ``code``
+    when a text has it: every character but controls, format characters and
+    spaces (Unicode categories C and Z)."""
+    return unicodedata.category(chr(code))[0] not in "CZ"
+
+
+@contextlib.contextmanager
+def reported_glyphs() -> Generator[None, None, None]:
+    """Hold back matplotlib's "Glyph ... missing" UserWarning for characters that
+    ``fig.check()`` reports as ``glyph_missing``, around inferplot's own drawing
+    and saving; every other warning, that one for other characters included,
+    reaches the caller as it was raised."""
+    with warnings.catch_warnings(record=True) as caught:
+        # Recorded, not raised, whatever the caller's filters say; decided below.
+        warnings.filterwarnings("always", message="Glyph ", category=UserWarning)
+        yield
+    for item in caught:
+        found = _GLYPH_WARNING.match(str(item.message))
+        if (
+            issubclass(item.category, UserWarning)
+            and found is not None
+            and _glyph_reported(int(found.group(1)))
+        ):
+            continue
+        warnings.warn_explicit(
+            item.message, item.category, item.filename, item.lineno, source=item.source
+        )
 
 
 def _draw(root: Figure) -> None:

@@ -20,6 +20,9 @@ Severity = Literal["warning", "info"]
 
 # A group with fewer observations than this gets a small_n warning.
 SMALL_N: Final = 5
+# rows_dropped is a warning when more than this share of the subjects (within) or
+# of the rows (between) was left out.
+_MOST_LEFT_OUT: Final = 0.5
 # A rank-based test on data with more than this share of tied values gets a
 # heavy_ties warning (SPEC section 8).
 HEAVY_TIES: Final = 0.25
@@ -92,9 +95,23 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
             f"{'it lacks' if one else 'they lack'} a value at some level of "
             f"{result.x!r}"
         )
+    # More than half of the subjects (within) or of the rows (between) left out:
+    # the analysis describes a minority of the data, which a reader must know.
+    if result.subject_id is not None:
+        out, unit = result.dropped_subjects, "subjects"
+        total = result.n_obs + out
+    else:
+        out, unit = result.n_dropped, "rows"
+        total = result.n_obs + out
+    share = out / total if total else 0.0
+    if share > _MOST_LEFT_OUT:
+        parts.append(
+            f"that is {share:.0%} of the {total:,} {unit}, so the analysis describes "
+            f"only the {result.n_obs:,} that are left"
+        )
     return Issue(
         code="rows_dropped",
-        severity="info",
+        severity="warning" if share > _MOST_LEFT_OUT else "info",
         message="; ".join(parts) + ".",
         fix="Check that the missing values are expected; impute or remove them "
         "yourself to silence this.",
@@ -211,6 +228,26 @@ def _pairwise_conf_level(result: StatsResult) -> Issue | None:
     if not levels:
         return None
     shown = ", ".join(f"{100 * v:g}%" for v in levels)
+    es = result.effect_size
+    if (
+        result.design == "within"
+        and es is not None
+        and es.conf_level != level
+        and {es.conf_level} == set(levels)
+    ):
+        # Type robust with conditions (D66): the effect size's interval and the
+        # pairs' are both at the fixed level; conf_level changes neither.
+        return Issue(
+            code="pairwise_conf_level",
+            severity="info",
+            message=(
+                f"Every interval of this result is a {shown} interval: the "
+                f"{es.label}'s bootstrap interval and the pairwise intervals. "
+                f"conf_level={level!r} changes none of them; ggstatsplot does not "
+                "pass it to WRS2 here."
+            ),
+            fix=f"Report the intervals as {shown} intervals, or pass conf_level=0.95.",
+        )
     return Issue(
         code="pairwise_conf_level",
         severity="info",
@@ -236,14 +273,25 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         return None
     parts: list[str] = []
     if estimate_infinite:
-        parts.append(f"The {es.label} is infinite.")
+        parts.append(f"{_named(es.label)} is infinite.")
     if infinite:
         total = es.bootstrap_resamples or 0
-        parts.append(
-            f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
-            f"{es.label}, so its {_percent(es.conf_level)} CI "
-            f"[{_bound(es.conf_low)}, {_bound(es.conf_high)}] may be unbounded."
+        interval = (
+            f"{_percent(es.conf_level)} CI [{_bound(es.conf_low)}, "
+            f"{_bound(es.conf_high)}] may be unbounded"
         )
+        if es.name == "akp_delta_avg":
+            # Counted per pair, in resamples: the most of any one pair.
+            parts.append(
+                f"In up to {infinite:,} of the {total:,} bootstrap resamples a "
+                "pair's AKP is infinite (the most of any pair), so the "
+                f"{es.label}'s {interval}."
+            )
+        else:
+            parts.append(
+                f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
+                f"{es.label}, so its {interval}."
+            )
     return Issue(
         code="infinite_effect_size",
         severity="warning",
@@ -278,12 +326,13 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
         return None
     level = _percent(es.conf_level)
     head = (
-        f"The {es.label}, {_three(es.estimate)}, lies outside its own {level} CI "
-        f"[{_three(es.conf_low)}, {_three(es.conf_high)}]."
+        f"{_named(es.label)}, {_three(es.estimate)}, lies outside its own {level} "
+        f"CI [{_three(es.conf_low)}, {_three(es.conf_high)}]."
     )
     if es.bootstrap_resamples is not None:
+        between = "conditions" if result.design == "within" else "groups"
         shift = (
-            "resampling adds chance differences between the groups, so the "
+            f"resampling adds chance differences between the {between}, so the "
             "resampled effect sizes run larger than the estimate"
             if es.estimate < es.conf_low
             else "the resampled effect sizes run smaller than the estimate"
@@ -306,6 +355,16 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             "test's p-value does not come from the bootstrap and is unaffected."
         ),
     )
+
+
+def _named(label: str) -> str:
+    """An effect size's name at the start of a sentence: "Kendall's W" and
+    "Hedges' g" as they are (a name with an owner takes no article), "The partial
+    omega squared"."""
+    first = label.split(" ", 1)[0]
+    if first.endswith(("'s", "'")):
+        return label
+    return f"The {label}"
 
 
 def _three(x: float) -> str:

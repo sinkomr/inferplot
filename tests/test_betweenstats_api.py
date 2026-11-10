@@ -495,7 +495,13 @@ def test_bf_message_true_without_subtitle_raises(
     teeth: pd.DataFrame, plants: pd.DataFrame, k: int
 ) -> None:
     data, x, y = (teeth, "supp", "len") if k == 2 else (plants, "group", "weight")
-    with pytest.raises(ValueError, match="results_subtitle"):
+    if k == 2:
+        with pytest.raises(ValueError, match="Pass results_subtitle=True"):
+            betweenstats(data, x, y, bf_message=True, results_subtitle=False)
+        return
+    # With three groups no Bayes caption exists yet: the advice must not lead to
+    # another error (review of phase 3, finding 9).
+    with pytest.raises(NotImplementedError, match="Remove bf_message=True"):
         betweenstats(data, x, y, bf_message=True, results_subtitle=False)
 
 

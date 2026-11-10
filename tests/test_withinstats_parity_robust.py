@@ -301,7 +301,12 @@ def _expected_warnings(case: OracleCase, result: StatsResult) -> list[str]:
     assert es is not None
     out: list[str] = []
     if es.infinite_resamples:
-        out.append(f"{es.infinite_resamples:,} of the ")
+        if len(result.levels) == 2:
+            out.append(f"{es.infinite_resamples:,} of the ")
+        else:
+            # The entry totals the pairs' values; the result keeps the most of
+            # one pair, in resamples (review of phase 3, finding 6).
+            out.append("")
     if level != EFFECT_CONF_LEVEL:
         out.append(f"conf_level={level!r} has no effect: ")
     return out
@@ -319,6 +324,13 @@ def test_warnings(name: str) -> None:
         assert warning.startswith(start)
     es = result.effect_size
     assert es is not None
+    if es.infinite_resamples and len(result.levels) > 2:
+        (entry,) = [w for w in method_warnings if "give an infinite AKP" in w]
+        total = int(entry.split(" of the ", 1)[0].replace(",", ""))
+        pairs = len(result.pairwise)
+        assert es.infinite_resamples <= total <= pairs * es.infinite_resamples
+        assert "bootstrap values" in entry
+        assert f"(at most {es.infinite_resamples:,} of one pair's 2,000)" in entry
     if es.infinite_resamples:
         codes = [issue.code for issue in result.check()]
         assert "infinite_effect_size" in codes
@@ -455,8 +467,9 @@ def test_data_errors_name_the_levels() -> None:
         "levels 'post' and 'pre' of x='condition' is the same (exactly, or to "
         "within the rounding of y in double precision), so the AKP effect size of "
         "the paired differences (their trimmed mean over their winsorized standard "
-        "deviation) is undefined. Pass a smaller tr, or use type='nonparametric'."
-    )
+        "deviation) is undefined. Check the data for entry errors, or use "
+        "type='nonparametric'."
+    )  # every difference is 1 before winsorizing too: a smaller tr cannot help
     # Every subject 0.1 lower, in decimals: the stored differences vary in their
     # 16th digit only. Refused like the exactly constant case, where an exact
     # computation on the doubles reported t = 6.4e14 and an AKP of 2.6e14.

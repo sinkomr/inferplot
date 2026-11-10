@@ -733,9 +733,11 @@ def _akp_bootstrap(
     conf_level: float,
     seed: SeedLike,
     method: str,
-) -> tuple[list[float], list[tuple[float, float]], int, int, int]:
-    """Each pair's AKP estimate and percentile bounds from one bootstrap of the
-    subjects; the counts of undefined and infinite resamples over all pairs."""
+) -> tuple[
+    list[float], list[tuple[float, float]], tuple[int, ...], tuple[int, ...], int
+]:
+    """Each pair's AKP estimate, percentile bounds, and counts of undefined and
+    infinite resamples, from one bootstrap of the subjects."""
     t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
@@ -758,15 +760,17 @@ def _akp_bootstrap(
     ]
     rng = np.random.Generator(np.random.PCG64(rng_seed))
     bounds: list[tuple[float, float]] = []
-    undefined = infinite = 0
+    undefined: list[int] = []
+    infinite: list[int] = []
     for values in _akp_replicates(rng, fitted, n, t_trim, constant):
         replicates = split_replicates(values)
         bounds.append(
             replicate_bounds(replicates, level, floor_percentile_bounds, method)
         )
-        undefined += replicates.undefined
-        infinite += replicates.infinite
-    return [p.estimate for p in fitted], bounds, undefined, infinite, rng_seed
+        undefined.append(replicates.undefined)
+        infinite.append(replicates.infinite)
+    estimates = [p.estimate for p in fitted]
+    return estimates, bounds, tuple(undefined), tuple(infinite), rng_seed
 
 
 def dependent_akp(
@@ -824,8 +828,8 @@ def dependent_akp(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
-        undefined_resamples=undefined,
-        infinite_resamples=infinite,
+        undefined_resamples=undefined[0],
+        infinite_resamples=infinite[0],
     )
 
 
@@ -853,8 +857,9 @@ def average_dependent_akp(
     matches the spread of R's replicate runs (mean log SD ratio +0.02, 0.9
     standard errors) better than a fresh draw per pair (-0.06, -2.4) (DECISIONS.md
     log). A pair's infinite bound makes the average infinite, as in R
-    (edge_within_small: -Inf at 100 resamples). ``undefined_resamples`` and
-    ``infinite_resamples`` count over all pairs (C x 2,000 values).
+    (edge_within_small: -Inf at 100 resamples). ``pair_undefined`` and
+    ``pair_infinite`` count each pair's undefined and infinite values (of 2,000);
+    ``undefined_resamples`` and ``infinite_resamples`` are the largest of them.
 
     Raises:
         ValueError: fewer than two conditions, conditions of unequal length or
@@ -889,8 +894,10 @@ def average_dependent_akp(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
-        undefined_resamples=undefined,
-        infinite_resamples=infinite,
+        undefined_resamples=max(undefined),
+        infinite_resamples=max(infinite),
+        pair_undefined=undefined,
+        pair_infinite=infinite,
     )
 
 

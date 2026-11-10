@@ -54,6 +54,7 @@ from inferplot import _validate as v
 from inferplot.render import theme
 from inferplot.render.brackets import Bracket, VerticalLayout, stack, vertical_layout
 from inferplot.render.figure import (
+    CenterLabel,
     DrawnPaths,
     DrawnView,
     StatsFigure,
@@ -63,11 +64,13 @@ from inferplot.render.figure import (
     figure_background,
     plain_text,
     remember,
+    reported_glyphs,
     root_figure,
     shows_all,
 )
+from inferplot.render.labels import ambiguities, covered
 from inferplot.result import StatsResult
-from inferplot.text import FigureTexts, figure_texts
+from inferplot.text import FigureTexts, drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -101,6 +104,8 @@ VIOLIN_HALF_WIDTH: Final = 0.4
 BOX_HALF_WIDTH: Final = 0.15
 JITTER_HALF_WIDTH: Final = 0.12
 LABEL_OFFSET: Final = 0.22  # centrality label starts this far right of its level
+# Pixels of the paths a centrality label may cover and still count as clear of them.
+_PATH_SLACK: Final = 1.0
 
 # Geometry in points.
 MARGIN_PT: Final = 10.0
@@ -162,7 +167,8 @@ def label_candidates(first: LabelPlace) -> list[LabelPlace]:
     """Where a centrality label may go, in order of preference: ``first`` (the
     drawing's own choice), then on the same side above and below the point's
     height (the link line, at the point's height, leads to the label's corner),
-    then the same three on the other side."""
+    then the same three on the other side, which a label takes only where it
+    still reads as its own (:func:`inferplot.render.labels.ambiguities`)."""
     other: Literal["right", "left"] = "left" if first.side == "right" else "right"
     rises: list[Literal["center", "above", "below"]] = [
         first.rise,
@@ -175,7 +181,7 @@ def label_candidates(first: LabelPlace) -> list[LabelPlace]:
 
 
 @dataclasses.dataclass(slots=True)
-class _Label:
+class LabelEntry:
     """A drawn centrality label with its link line and point, and where it is."""
 
     i: int
@@ -321,7 +327,7 @@ def draw(
     """Resolve the palette, check the artist dicts and user texts, then draw."""
     colors, palette_warning = theme.resolve_palette(palette, len(result.levels))
     fallbacks = theme.user_fallbacks()  # before context() resets the rcParams
-    with theme.context(), theme.fallback_fonts(fallbacks):
+    with reported_glyphs(), theme.context(), theme.fallback_fonts(fallbacks):
         invisible = _check_artist_args(options)
         _check_mathtext(options)
         made = drawing(result, options, colors, palette_warning, ax)
@@ -342,11 +348,15 @@ def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
     for key in args:
         if not callable(getattr(artist, f"set_{key}", None)):
             close = v.closest_name(key, ArtistInspector(artist).get_setters())
-            hint = (
-                f" Did you mean {close!r}?"
-                if close is not None
-                else f" matplotlib's documentation of {kind} lists its properties."
+            shorthand = (
+                _SCATTER_SHORTHANDS.get(key) if kind == "PathCollection" else None
             )
+            if shorthand is not None:
+                hint = f" {shorthand}"
+            elif close is not None:
+                hint = f" Did you mean {close!r}?"
+            else:
+                hint = f" matplotlib's documentation of {kind} lists its properties."
             raise TypeError(
                 f"{name} has a property matplotlib's {kind} does not have: "
                 f"{key!r}.{hint}"
@@ -356,6 +366,20 @@ def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
     except Exception as error:
         raise ValueError(f"{name} has a value matplotlib rejects: {error}") from error
 
+
+# scatter()'s argument names, which the points' PathCollection spells otherwise.
+_SCATTER_SHORTHANDS: Final = {
+    "s": (
+        "That is scatter()'s name for the marker size; the points' property is "
+        "'sizes', a list of areas in points squared, for example "
+        "point_args={'sizes': [30]}."
+    ),
+    "c": (
+        "That is scatter()'s name for the colour; the points' property is "
+        "'color' (one colour for every level, for example "
+        "point_args={'color': 'black'}), and palette= colours them by level."
+    ),
+}
 
 # The layer each artist dict styles (SPEC.md section 2).
 _ARTIST_LAYERS: Final = (
@@ -886,7 +910,12 @@ class Drawing:
         self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
         self.outlier_marks: list[PathCollection] = []
         self.tick_texts: list[str] | None = None
-        self.label_entries: list[_Label] = []
+        self.label_entries: list[LabelEntry] = []
+        # Own figure: the least level spacing (px) the labels asked for, and
+        # whether the last placement left a label covering a point or another
+        # label, or where it reads as another level's.
+        self.min_spacing = 0.0
+        self.unresolved = False
         # The y layout's inputs: bracket levels used, room above and below (px).
         self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
         self.levels_of_brackets: list[int] = []
@@ -992,10 +1021,26 @@ class Drawing:
         """Hook: the paths drawn, for ``fig.check()``."""
         return None
 
+    def path_pieces(self) -> tuple[FloatArray | None, FloatArray | None]:
+        """Hook: the centrality path's pieces, (k - 1, 2, 2), piece ``j`` from
+        level ``j`` to ``j + 1``, and the subject paths' pieces, (m, 2, 2), in
+        pixels on the current layout; None for a path not drawn."""
+        return None, None
+
+    def style_link(self, entry: LabelEntry) -> None:
+        """Hook: restyle a label's link line after the label moved."""
+        del entry
+
     def finish_result(self, result: StatsResult) -> StatsResult:
-        """Hook: the result the figure returns, told what was drawn (the alt
-        text of a within-subjects figure names the paths it draws)."""
-        return result
+        """Hook: the result the figure returns, told what was drawn: without
+        centrality points the alt text does not give their values (the alt
+        text of a within-subjects figure also names the paths it draws)."""
+        if self.options.centrality:
+            return result
+        alt = figure_alt_text(result, centrality=False)
+        return dataclasses.replace(
+            result, text=dataclasses.replace(result.text, alt_text=alt)
+        )
 
     # -- main ------------------------------------------------------------------
 
@@ -1004,12 +1049,19 @@ class Drawing:
         self.draw_ticks_and_labels()
         self.draw_text_blocks()
         self.layout()
-        for last in (False, False, True):
-            if not self.choose_label_places():
-                break
-            self.layout()  # the labels moved: room above, below or left
-            if last:
-                break
+        self.settle_labels()
+        if self.own and self.unresolved and self.label_entries:
+            # Some label has no place beside its point where it covers nothing
+            # and reads as its own: widen the levels so that every label fits
+            # between its point and the next one, and place them again.
+            needed = self.room_for_labels()
+            at = self.ax.transData.transform([(0.0, 0.0), (1.0, 0.0)])
+            if needed > float(at[1][0] - at[0][0]) + 0.5:
+                self.min_spacing = needed
+                for entry in self.label_entries:
+                    self.place_label(entry, self.label_place(entry.i))
+                self.layout()
+                self.settle_labels()
         if not self.own:
             self.finish_ink()
         self.finish_fonts()
@@ -1040,6 +1092,16 @@ class Drawing:
             colors=tuple(self.colors),
             centers=tuple(
                 (self.result.levels[e.i], e.point) for e in self.label_entries
+            ),
+            labels=tuple(
+                CenterLabel(
+                    index=e.i,
+                    level=self.result.levels[e.i],
+                    text=e.text,
+                    point=e.point,
+                    usual=self.label_place(e.i).side,
+                )
+                for e in self.label_entries
             ),
         )
 
@@ -1177,11 +1239,11 @@ class Drawing:
                 gid=f"centrality-label-{i}",
                 **where,
             )
-            self.label_entries.append(
-                _Label(
-                    i=i, value=d.value, link=link, point=point, text=text, place=place
-                )
+            entry = LabelEntry(
+                i=i, value=d.value, link=link, point=point, text=text, place=place
             )
+            self.label_entries.append(entry)
+            self.style_link(entry)
             if place.side == "left":
                 self.left_labels.append(text)
             if place.rise != "center":
@@ -1205,7 +1267,7 @@ class Drawing:
         else:
             self.layout_in_axes()
 
-    def place_label(self, entry: _Label, place: LabelPlace) -> None:
+    def place_label(self, entry: LabelEntry, place: LabelPlace) -> None:
         """Move a drawn centrality label (and its link line) to ``place``."""
         ax, i = self.ax, entry.i
         end = i + LABEL_OFFSET if place.side == "right" else i - LABEL_OFFSET
@@ -1227,6 +1289,7 @@ class Drawing:
             )  # fmt: skip
             text.set_verticalalignment("bottom" if up else "top")
         entry.place = place
+        self.style_link(entry)
         self.left_labels = [
             e.text for e in self.label_entries if e.place.side == "left"
         ]
@@ -1244,38 +1307,79 @@ class Drawing:
             boxes.append(Bbox.from_extents(x - half, y - half, x + half, y + half))
         return boxes
 
+    def settle_labels(self) -> None:
+        """Place the centrality labels and lay the figure out again until the
+        places hold (a moved label changes the room above, below or left)."""
+        for last in (False, False, True):
+            if not self.choose_label_places():
+                break
+            self.layout()
+            if last:
+                break
+
+    def room_for_labels(self) -> float:
+        """The level spacing (px) at which every centrality label fits between
+        its point and the next level's, clear of that point's marker."""
+        half = px(np.sqrt(CENTRALITY_SIZE) / 2, self.dpi)
+        widths = [self.extent(t).width for t in self.centrality_labels]
+        widest = max(widths, default=0.0)
+        return (widest + half + px(GAP_PT, self.dpi)) / (1.0 - LABEL_OFFSET)
+
     def choose_label_places(self) -> bool:
         """Put each centrality label where it covers no centrality point and no
-        other centrality label: the first free place of :func:`label_candidates`
-        (the drawing's own choice first, so a figure where nothing collides is
-        unchanged), else the one that covers least. Whether a label moved.
+        other centrality label, reads as its own level's label
+        (:func:`inferplot.render.labels.ambiguities`) and, where it can, lies
+        clear of the paths: the first such place of :func:`label_candidates` (the
+        drawing's own choice first, so a figure where nothing collides is
+        unchanged), else the first that only covers a path, else the least bad
+        (reading as its own first, then on its usual side, then covering least).
+        Whether a label moved; ``self.unresolved`` says whether a label covers a
+        point or a label or reads as another's.
 
         Measured in pixels on the current layout; ``fig.check()`` reports a point
-        still half covered (``centrality_label_overlap``).
+        still half covered (``centrality_label_overlap``) and a label that reads
+        as another level's (``centrality_label_ambiguous``).
         """
         entries = self.label_entries
+        self.unresolved = False
         if len(entries) < 2:
             return False
         points = self.point_boxes()
         area = max(points[0].width * points[0].height, 1.0)
+        xs = {e.i: (p.x0 + p.x1) / 2 for e, p in zip(entries, points, strict=True)}
+        path, subjects = self.path_pieces()
+        drawn = [p for p in (path, subjects) if p is not None and p.shape[0] > 0]
         moved = False
         for entry in entries:
             others = [self.extent(e.text) for e in entries if e is not entry]
             start = entry.place
-            best: tuple[float, LabelPlace] | None = None
-            for place in label_candidates(self.label_place(entry.i)):
+            usual = self.label_place(entry.i)
+            tried: list[tuple[int, float, float, LabelPlace]] = []
+            for place in label_candidates(usual):
                 self.place_label(entry, place)
                 box = self.extent(entry.text)
                 bad = sum(_overlap(box, p) / area for p in points) + sum(
                     _overlap(box, o) / max(o.width * o.height, 1.0) for o in others
                 )
-                if best is None or bad < best[0]:
-                    best = (bad, place)
-                if bad == 0.0:
+                wrong = len(ambiguities(entry.i, box, usual.side, xs, path))
+                over = sum(float(covered(p, [box]).sum()) for p in drawn)
+                tried.append((wrong, bad, over, place))
+                if wrong == 0 and bad == 0.0 and over <= _PATH_SLACK:
                     break
-            assert best is not None
-            self.place_label(entry, best[1])
-            moved |= best[1] != start
+            free = [t for t in tried if t[0] == 0 and t[1] == 0.0]
+            clear = [t for t in free if t[2] <= _PATH_SLACK]
+            if clear or free:
+                chosen = (clear or free)[0]
+            else:
+                # Reading as its own first; among equally wrong places the usual
+                # side, which keeps the figure's convention, then the least cover.
+                chosen = min(
+                    tried,
+                    key=lambda t: (t[0] > 0, t[3].side != usual.side, t[1], t[2]),
+                )
+                self.unresolved = True
+            self.place_label(entry, chosen[3])
+            moved |= chosen[3] != start
         return moved
 
     def make_bracket_labels(self) -> None:
@@ -1319,12 +1423,12 @@ class Drawing:
         ax.tick_params(axis="x", length=0.0, pad=6.0)
         ax.tick_params(axis="y", labelsize=theme.SIZE_TICK)
         ax.set_xlabel(
-            result.x if options.xlab is None else options.xlab,
+            drawable(result.x) if options.xlab is None else options.xlab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.xlab is not None,
         )
         ax.set_ylabel(
-            result.y if options.ylab is None else options.ylab,
+            drawable(result.y) if options.ylab is None else options.ylab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.ylab is not None,
         )
@@ -1446,7 +1550,9 @@ class Drawing:
                     span = max(span, both / (1.0 - share - left_share))
             spacing = width / span
         else:
-            spacing = max(spacing, label_w + 2 * gap, tick_w + 2 * gap)
+            spacing = max(
+                spacing, self.min_spacing, label_w + 2 * gap, tick_w + 2 * gap
+            )
             if self.left_labels:
                 spacing = max(spacing, left_w + 2 * gap)
         left, right = -0.5, k - 0.5

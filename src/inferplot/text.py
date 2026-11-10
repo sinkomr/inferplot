@@ -40,9 +40,11 @@ particular it never imports matplotlib.
 
 from __future__ import annotations
 
+import itertools
 import math
 import re
 import sys
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, TypeAlias
@@ -725,13 +727,29 @@ def centrality_expression(
     )
 
 
+def drawable(name: str) -> str:
+    """A level name as the figure draws it: a tab as a space, and any other
+    control character but the line break (which wraps the tick label) as U+FFFD,
+    the replacement character, so that every file format can hold it (XML, and
+    so SVG, cannot hold most control characters)."""
+    return "".join(
+        " "
+        if char == "\t"
+        else "\ufffd"
+        if char != "\n" and unicodedata.category(char) == "Cc"
+        else char
+        for char in name
+    )
+
+
 def tick_label(level: str, n: int) -> str:
     """x tick label ``"<level>\\n(n = <n>)"``: plain text, never mathtext.
 
     ggstatsplot passes these as character labels (no parse); draw them with
-    ``parse_math=False`` so a level such as "$5" or "a_b" shows literally.
+    ``parse_math=False`` so a level such as "$5" or "a_b" shows literally. A
+    control character in the name is drawn as :func:`drawable` says.
     """
-    return f"{level}\n(n = {format_n(n)})"
+    return f"{drawable(level)}\n(n = {format_n(n)})"
 
 
 def subtitle_expression(
@@ -1129,7 +1147,8 @@ def _direction(alternative: str, levels: Sequence[str], limit: int) -> str:
             f"a one-sided test ({alternative!r}) compares two levels; got "
             f"{len(levels)} level names, so its direction cannot be named"
         )
-    first, second = (_short(level, limit) for level in levels)
+    short = _shortened(levels, limit)
+    first, second = (short[level] for level in levels)
     if alternative == "greater":
         return f"{first} greater than {second}"
     if alternative == "less":
@@ -1281,6 +1300,60 @@ def _short(name: str, limit: int) -> str:
     return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
 
+def _elided(name: str, start: int, head: int, limit: int) -> str:
+    """``name`` kept from ``start`` (a word start) to its end, after its first
+    ``head`` characters and an ellipsis; the end cut with an ellipsis when it is
+    longer than ``limit`` allows."""
+    tail = name[start:]
+    lead = name[:head]
+    if head < len(name) and not name[head].isspace() and " " in lead:
+        lead = lead[: lead.rfind(" ")]  # end the start at a word's end
+    lead = lead.rstrip()
+    joined = f"{lead} \u2026 {tail}" if lead else f"\u2026{tail}"
+    if len(joined) <= limit:
+        return joined
+    room = limit - 2  # the leading and the trailing ellipsis
+    return f"\u2026{tail[:room].rstrip()}\u2026"
+
+
+def _shortened(names: Sequence[str], limit: int) -> dict[str, str]:
+    """Each of ``names`` shortened to ``limit`` characters, every one still told
+    apart from the others.
+
+    A name is cut at the end with an ellipsis (:func:`_short`), unless that gives
+    the same text as another name's: then the names that would look alike keep
+    what they do not share (from the word where they first differ to the end)
+    after the start they share, with an ellipsis between ("Mean reaction …
+    congruent trials", "Mean reaction … incongruent trials"). A name that would
+    still look like another's is not shortened.
+    """
+    unique = list(dict.fromkeys(names))
+    out = {name: _short(name, limit) for name in unique}
+    groups: dict[str, list[str]] = {}
+    for name in unique:
+        groups.setdefault(out[name], []).append(name)
+    for alike in groups.values():
+        if len(alike) < 2:
+            continue
+        shared = 0
+        while all(
+            len(name) > shared and name[shared] == alike[0][shared] for name in alike
+        ):
+            shared += 1
+        tails: dict[str, int] = {}
+        for name in alike:
+            # Back to the start of the word where the names part.
+            tails[name] = name.rfind(" ", 0, shared) + 1
+        longest = max(len(name) - tails[name] for name in alike)
+        head = max(0, limit - 3 - longest)
+        for name in alike:
+            out[name] = _elided(name, tails[name], head, limit)
+    seen: dict[str, int] = {}
+    for text in out.values():
+        seen[text] = seen.get(text, 0) + 1
+    return {name: (name if seen[text] > 1 else text) for name, text in out.items()}
+
+
 def _centrality_word(centrality: str, tr: float) -> str:
     """The centrality in words: "mean", "median", "20% trimmed mean", "MAP
     estimate"."""
@@ -1291,8 +1364,17 @@ def _centrality_word(centrality: str, tr: float) -> str:
 
 
 def _alt_groups_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
+    short = _shortened([d.level for d in descriptives], limit)
+    if not centrality:
+        return ", ".join(
+            f"{short[d.level]} (n = {format_n(d.n)})" for d in descriptives
+        )
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1302,12 +1384,16 @@ def _alt_groups_detailed(
             if d.value is None or math.isnan(d.value)
             else f"{word} {format_value(d.value, digits)}"
         )
-        parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {center})")
+        parts.append(f"{short[d.level]} (n = {format_n(d.n)}, {center})")
     return ", ".join(parts)
 
 
 def _alt_groups_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
     ns = [d.n for d in descriptives]
     n_text = (
@@ -1320,15 +1406,16 @@ def _alt_groups_summary(
         for d in descriptives
         if d.value is not None and math.isfinite(d.value)
     ]
-    if not finite:
+    if not finite or not centrality:
         return n_text
+    short = _shortened([d.level for d in descriptives], limit)
     low, low_value = min(finite, key=lambda item: item[1])
     high, high_value = max(finite, key=lambda item: item[1])
     word = _centrality_word(low.centrality, tr)
     return (
         f"{n_text}; {word}s from {format_value(low_value, digits)} "
-        f"({_short(low.level, limit)}) to {format_value(high_value, digits)} "
-        f"({_short(high.level, limit)})"
+        f"({short[low.level]}) to {format_value(high_value, digits)} "
+        f"({short[high.level]})"
     )
 
 
@@ -1347,6 +1434,9 @@ def _alt_bayes_pairs(
     double, so the strongest pair is found even when several BF10 are inf."""
     first = pairwise[0].bayes
     assert first is not None
+    short = _shortened(
+        [name for pair in pairwise for name in (pair.group1, pair.group2)], limit
+    )
 
     def strength(pair: PairwiseComparison) -> float:
         assert pair.bayes is not None
@@ -1354,10 +1444,7 @@ def _alt_bayes_pairs(
 
     def described(pair: PairwiseComparison) -> str:
         assert pair.bayes is not None
-        return (
-            f"{_apa_bf(pair.bayes)} ({_short(pair.group1, limit)} vs "
-            f"{_short(pair.group2, limit)})"
-        )
+        return f"{_apa_bf(pair.bayes)} ({short[pair.group1]} vs {short[pair.group2]})"
 
     low, high = min(pairwise, key=strength), max(pairwise, key=strength)
     brackets = (
@@ -1376,10 +1463,17 @@ def _alt_bayes_pairs(
 
 
 def _alt_conditions_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
-    """Each condition with its centrality value; n is the same for all and is
-    named once, in the head."""
+    """Each condition with its centrality value (only the names without
+    centrality points); n is the same for all and is named once, in the head."""
+    short = _shortened([d.level for d in descriptives], limit)
+    if not centrality:
+        return ", ".join(short[d.level] for d in descriptives)
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1388,15 +1482,19 @@ def _alt_conditions_detailed(
             if d.value is None or math.isnan(d.value)
             else f"{word} {format_value(d.value, digits)}"
         )
-        parts.append(f"{_short(d.level, limit)} ({center})")
+        parts.append(f"{short[d.level]} ({center})")
     return ", ".join(parts)
 
 
 def _alt_conditions_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
     """The range of the conditions' centrality values, or "" without any."""
-    summary = _alt_groups_summary(descriptives, digits, limit, tr)
+    summary = _alt_groups_summary(descriptives, digits, limit, tr, centrality)
     _, _, values = summary.partition("; ")
     return values
 
@@ -1414,6 +1512,12 @@ def _alt_paths(
     the number of subjects whose paths are drawn (fewer than all when a large
     figure draws a random sample of whole subjects)."""
     word = _centrality_word(descriptives[0].centrality, tr) + "s"
+    # A centrality path is a line only where two neighbouring levels have a
+    # value (a level without a MAP estimate breaks it, D55).
+    centrality_path = centrality_path and any(
+        a.value is not None and b.value is not None
+        for a, b in itertools.pairwise(descriptives)
+    )
     if subject_paths >= n_subjects:
         whose = "each subject's values"
     else:
@@ -1444,6 +1548,7 @@ def alt_text(
     design: str = "between",
     subject_paths: int | None = None,
     centrality_path: bool | None = None,
+    centrality: bool = True,
 ) -> str:
     """Alt text for the figure: 2 to 4 sentences, at most 400 characters.
 
@@ -1461,7 +1566,10 @@ def alt_text(
     carries its own alt text (:func:`figure_alt_text`). Its result sentence says
     what n counts ("n = 10 pairs", "n = 88 subjects").
 
-    It describes only what the figure shows. With ``results_subtitle=False`` the
+    It describes only what the figure shows. Without centrality points
+    (``centrality``, a figure drawn with ``centrality_plotting=False``) it names
+    the levels without their centrality values, and a centrality path is named
+    only where one is drawn. With ``results_subtitle=False`` the
     figure shows no test, so the result sentence reads "No test result is shown
     (results_subtitle=False), n = <n>." (type "bayes" with two groups computes
     none: "No test was computed ..."), while the APA sentence still reports a
@@ -1546,8 +1654,12 @@ def alt_text(
                 f"Plot comparing {_short(y, limit)} across the {k} conditions of "
                 f"{_short(x, limit)}, measured on the same {format_n(n_obs)} subjects"
             )
-            detailed = _alt_conditions_detailed(descriptives, digits, limit, tr)
-            summary = _alt_conditions_summary(descriptives, digits, limit, tr)
+            detailed = _alt_conditions_detailed(
+                descriptives, digits, limit, tr, centrality
+            )
+            summary = _alt_conditions_summary(
+                descriptives, digits, limit, tr, centrality
+            )
             candidates = [f"{head}: {detailed}{paths}. {result}{pairs}"]
             if summary:
                 candidates.append(f"{head} ({summary}){paths}. {result}{pairs}")
@@ -1556,8 +1668,8 @@ def alt_text(
                 f"Plot comparing {_short(y, limit)} across the {k} groups of "
                 f"{_short(x, limit)}"
             )
-            detailed = _alt_groups_detailed(descriptives, digits, limit, tr)
-            summary = _alt_groups_summary(descriptives, digits, limit, tr)
+            detailed = _alt_groups_detailed(descriptives, digits, limit, tr, centrality)
+            summary = _alt_groups_summary(descriptives, digits, limit, tr, centrality)
             candidates = [
                 f"{head}: {detailed}. {result}{pairs}",
                 f"{head} ({summary}). {result}{pairs}",
@@ -1574,10 +1686,15 @@ def alt_text(
 
 
 def figure_alt_text(
-    result: StatsResult, *, subject_paths: int, centrality_path: bool
+    result: StatsResult,
+    *,
+    subject_paths: int | None = None,
+    centrality_path: bool | None = None,
+    centrality: bool = True,
 ) -> str:
-    """The alt text of a within-subjects figure that draws ``subject_paths``
-    subjects' paths (0 for none) and the centrality path or not
+    """The alt text of a figure that draws ``subject_paths`` subjects' paths (0
+    for none) and the centrality path or not (within subjects; None for
+    independent groups), with or without the ``centrality`` points and labels
     (:func:`alt_text`); the renderer gives it to the result it returns."""
     return alt_text(
         x=result.x,
@@ -1592,6 +1709,7 @@ def figure_alt_text(
         design=result.design,
         subject_paths=subject_paths,
         centrality_path=centrality_path,
+        centrality=centrality,
     )
 
 
@@ -1757,7 +1875,12 @@ def build_texts(
             bayes=bayes,
             design=design,
         ),
-        centrality_labels=tuple(to_plain(node) for node in ex.centrality),
+        # A level without a centrality value (a MAP without a density, D55)
+        # draws no label: its text is empty.
+        centrality_labels=tuple(
+            "" if d.value is None else to_plain(node)
+            for d, node in zip(descriptives, ex.centrality, strict=True)
+        ),
         tick_labels=tuple(tick_label(d.level, d.n) for d in descriptives),
         pairwise_labels=tuple(to_plain(node) for node in ex.pairwise),
     )

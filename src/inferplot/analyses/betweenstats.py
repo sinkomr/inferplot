@@ -1409,11 +1409,13 @@ def _bayes_no_effect_warnings(
 
 
 def _check_type_arguments(
-    type_name: str, *, tr: object, trim: float, side: str, show_bf: bool | None
+    type_name: str, *, tr: object, trim: float, show_bf: bool | None
 ) -> None:
     """Arguments that cannot apply to ``type_name`` whatever the data (SPEC.md
     section 2): they would change what the reported numbers mean, so they raise
-    instead of being ignored as ggstatsplot ignores them."""
+    instead of being ignored as ggstatsplot ignores them. ``alternative`` is
+    checked once the number of groups is known, so its message can point to a
+    call that works."""
     if trim != _DEFAULT_TR and type_name != "robust":
         # ggstatsplot silently ignores tr outside the robust type; inferplot never
         # drops an argument (CLAUDE.md rule 3), as for alternative (SPEC section 2).
@@ -1421,18 +1423,6 @@ def _check_type_arguments(
             f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
             f"type={type_name!r} trims nothing, so it would have no effect. Remove "
             "tr=, or pass type='robust' to compare trimmed means."
-        )
-    if side != "two-sided" and type_name in ("robust", "bayes"):
-        why = (
-            "Yuen's trimmed-means test and its AKP interval are always two-sided"
-            if type_name == "robust"
-            else "the Bayes factor is always two-sided"
-        )
-        raise ValueError(
-            f"alternative={side!r} applies to type='parametric' and "
-            f"type='nonparametric' only: with type={type_name!r} {why} (ggstatsplot "
-            "silently ignores alternative there). Remove alternative=, or use "
-            "type='nonparametric' for a one-sided rank test."
         )
     if show_bf is True and type_name != "parametric":
         raise ValueError(
@@ -1545,13 +1535,7 @@ def betweenstats(
     subtitle_on = check_bool(results_subtitle, "results_subtitle")
     side = _alternative(check_alternative(alternative))
     rng_seed = check_seed(seed)
-    if show_bf is True and not subtitle_on:
-        raise ValueError(
-            "bf_message=True asks for the Bayes factor caption, which is drawn only "
-            "together with the results subtitle; results_subtitle=False turns both "
-            "off. Pass results_subtitle=True, or drop bf_message=True."
-        )
-    _check_type_arguments(type_name, tr=tr, trim=trim, side=side, show_bf=show_bf)
+    _check_type_arguments(type_name, tr=tr, trim=trim, show_bf=show_bf)
 
     between = read_between(data, x, y, order=order)
     levels, values = between.levels, between.values
@@ -1568,6 +1552,19 @@ def betweenstats(
             f"groups, where {omnibus} and the pairwise comparisons are always "
             "two-sided. Remove alternative= or compare two groups."
         )
+    if side != "two-sided" and type_name in ("robust", "bayes"):
+        why = (
+            "Yuen's trimmed-means test and its AKP interval are always two-sided"
+            if type_name == "robust"
+            else "the Bayes factor is always two-sided"
+        )
+        raise ValueError(
+            f"alternative={side!r} applies to type='parametric' and "
+            f"type='nonparametric' only: with type={type_name!r} {why} (ggstatsplot "
+            "silently ignores alternative there). Remove alternative=, or use "
+            "type='parametric' (Welch's t-test) or type='nonparametric' (the "
+            "Mann-Whitney test) for a one-sided test."
+        )
     if type_name == "parametric":
         if k >= 3 and show_bf is True:
             raise NotImplementedError(
@@ -1575,6 +1572,13 @@ def betweenstats(
                 "(a Bayesian ANOVA) arrives in inferplot 0.2. Remove "
                 "bf_message=True; the default (None) leaves the caption out and "
                 "says so in result.warnings."
+            )
+        if show_bf is True and not subtitle_on:
+            raise ValueError(
+                "bf_message=True asks for the Bayes factor caption, which is drawn "
+                "only together with the results subtitle; results_subtitle=False "
+                "turns both off. Pass results_subtitle=True, or drop "
+                "bf_message=True."
             )
         _check_groups(
             x, levels, values, bayes=k == 2 and subtitle_on and show_bf is not False

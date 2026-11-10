@@ -239,8 +239,14 @@ class EffectSize(_Plain):
     interval comes from ``bootstrap_resamples - undefined_resamples`` values; and
     in ``infinite_resamples`` how many resamples gave an infinite effect size (the
     AKP and explanatory effect sizes when a resample's winsorized variance is 0;
-    kept, so a bound can be infinite). All four are None for a CI without
-    resampling, and a bootstrap CI must give the two counts. With unequal group
+    kept, so a bound can be infinite). The average AKP over pairs of conditions
+    (``akp_delta_avg``) computes every pair's AKP on the same resamples and
+    averages the pairs' bounds: its two counts are the largest of any one pair,
+    in resamples, so every pair's bounds come from at least
+    ``bootstrap_resamples - undefined_resamples`` values (the ``warnings`` entry
+    gives the totals over all pairs, in values). All four are None for a CI
+    without resampling, and a bootstrap CI must give the two counts. With unequal
+    group
     sizes the explanatory effect size's estimate is itself the median of the
     bootstrap values, so it depends on the seed too.
     """
@@ -748,7 +754,11 @@ class StatsResult(_Plain):
                 {
                     **dict.fromkeys(name for name, _ in _FRAME_COLUMNS),
                     "test": bayes.test,
-                    "label": "Bayesian t-test",
+                    "label": (
+                        "Bayesian paired t-test"
+                        if self.design == "within"
+                        else "Bayesian t-test"
+                    ),
                     "alternative": "two-sided",
                     "bf10": bayes.bf10,
                     "log_bf01": bayes.log_bf01,

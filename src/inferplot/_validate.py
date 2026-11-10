@@ -378,19 +378,30 @@ def _wrong_kind_of_function(
 
 
 def _targeted(
-    arg: str, key: str, value: object, fn: str, valid: frozenset[str]
+    arg: str,
+    key: str,
+    value: object,
+    fn: str,
+    valid: frozenset[str],
+    filled: frozenset[str] = frozenset(),
 ) -> TypeError | NotImplementedError | None:
     """SPEC.md section 2's message for a removed or borrowed keyword, if ``key`` (the
-    snake_case spelling of ``arg``) is one of them."""
+    snake_case spelling of ``arg``) is one of them. ``filled`` names the arguments
+    the call already gives."""
     if key == "var_equal":
-        return TypeError(
-            _removed(
-                arg,
-                "1.0.0",
-                "Welch's test is always used (it does not assume equal variances), "
-                "so there is nothing to set.",
+        if fn in _SUBJECT_FUNCTIONS:
+            why = (
+                f"{fn}() compares each subject's paired values (the paired t-test, "
+                "or the repeated-measures ANOVA with the Greenhouse-Geisser "
+                "correction), which has no equal-variance option, so there is "
+                "nothing to set."
             )
-        )
+        else:
+            why = (
+                "Welch's test is always used (it does not assume equal variances), "
+                "so there is nothing to set."
+            )
+        return TypeError(_removed(arg, "1.0.0", why))
     if key == "nboot":
         return TypeError(
             f"{arg}= was removed in ggstatsplot 1.0.0; inferplot uses 2,000 seeded "
@@ -450,11 +461,20 @@ def _targeted(
             )
         return TypeError(_removed(arg, "0.12.0", rest))
     if key == "pairwise_comparisons":
+        levels = "conditions" if fn in _SUBJECT_FUNCTIONS else "groups"
         if "pairwise_display" in valid:
             rest = (
                 "pairwise comparisons are computed whenever there are three or more "
-                "groups; use pairwise_display='none' to hide them or "
+                f"{levels}; use pairwise_display='none' to hide them or "
                 "pairwise_display='all' to show every pair."
+            )
+        elif "result" in valid and fn in _PAIRWISE_FUNCTIONS:
+            rest = (
+                f"the pairwise comparisons are part of the result (result.pairwise), "
+                f"computed whenever there are three or more {levels}; which pairs "
+                f"render.{fn}() draws is set by the analysis' pairwise_display=: "
+                f"pass pairwise_display='none' or 'all' to ip.analyze.{fn}() or "
+                f"ip.{fn}() and draw that result."
             )
         else:
             rest = f"{fn}() has no pairwise comparisons."
@@ -499,6 +519,11 @@ def _targeted(
             "to change the level, for example conf_level=0.90."
         )
     if key in {"subject", "id", "subject_id"}:
+        if "subject_id" in valid and "subject_id" in filled:
+            return TypeError(
+                f"{arg}= is not an argument of {fn}(), and subject_id= (the column "
+                f"that identifies each subject) is already given. Remove {arg}=."
+            )
         if "subject_id" in valid:
             example = _show(value) if isinstance(value, str) else "'subject'"
             return TypeError(
@@ -711,6 +736,8 @@ _NO_EQUIVALENT_WITHIN: Mapping[str, str] = {
 }
 # Functions whose analysis takes subject_id (their drawing functions share the name).
 _SUBJECT_FUNCTIONS: Final = frozenset({"withinstats"})
+# Functions whose analysis computes pairwise comparisons.
+_PAIRWISE_FUNCTIONS: Final = frozenset({"betweenstats", "withinstats"})
 
 
 def subject_id_required(fn: str, *, given: str | None = None) -> TypeError:
@@ -752,7 +779,7 @@ def _keyword_problem(
             f"{fn}() has no argument {arg!r}: inferplot spells every argument in "
             f"lowercase snake_case. Write {key}={_show(value)}."
         )
-    targeted = _targeted(arg, key, value, fn, valid)
+    targeted = _targeted(arg, key, value, fn, valid, filled)
     if targeted is not None:
         return targeted
     elsewhere = _wrong_kind_of_function(arg, key, fn, valid)

@@ -125,6 +125,13 @@ class BootstrapEffectSizeCI:
     ``infinite_resamples`` counts the resamples where it is +/-inf (the AKP and
     explanatory effect sizes when a resample's winsorized variance is 0 and its
     numerator is not); they are kept, so a bound can be infinite.
+
+    An effect size averaged over pairs (the average AKP) draws its ``resamples``
+    once for all pairs and computes every pair's value on each: ``pair_undefined``
+    and ``pair_infinite`` count each pair's undefined and infinite values, and
+    ``undefined_resamples`` and ``infinite_resamples`` are the largest of those
+    counts, so that every pair's bounds come from at least ``resamples -
+    undefined_resamples`` values. Empty for an effect size of one comparison.
     """
 
     estimate: float
@@ -136,6 +143,8 @@ class BootstrapEffectSizeCI:
     resamples: int
     undefined_resamples: int = 0
     infinite_resamples: int = 0
+    pair_undefined: tuple[int, ...] = ()
+    pair_infinite: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
