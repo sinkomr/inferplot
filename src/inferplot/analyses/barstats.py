@@ -375,7 +375,7 @@ def _alternative_note(args: _Args) -> str:
         )
     bound = "[low, 1]" if side == "greater" else "[0, high]"
     effect = {
-        "two-way": f"Cramér's V interval one-sided, {bound}, also for each pair",
+        "two-way": f"Cramér's V interval one-sided, {bound}, also for each pair,",
         "paired": "Cohen's g interval one-sided",
         "one-way": f"Pearson's C interval one-sided, {bound}",
     }[args.design]

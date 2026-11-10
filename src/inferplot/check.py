@@ -596,14 +596,15 @@ def _small_expected(result: StatsResult) -> Issue | None:
     if _fails_cochran(main):
         small = sum(e < SMALL_EXPECTED for e in main)
         tiny = sum(e < MIN_EXPECTED for e in main)
-        what = (
-            "discordant counts McNemar's test compares"
-            if result.settings.paired
-            else "expected counts"
-        )
+        if result.settings.paired:
+            test = "McNemar's test (half the pairs that change between two levels)"
+        elif result.y_levels:
+            test = "the chi-square test of independence"
+        else:
+            test = "the goodness-of-fit test"
         below_one = f", {tiny} below 1" if tiny else ""
         parts.append(
-            f"{small} of the {len(main)} {what} of the main test are below 5 (the "
+            f"{small} of the {len(main)} expected counts of {test} are below 5 (the "
             f"smallest is {min(main):.2f}{below_one}), so its p-value, a chi-square "
             "approximation, may be inaccurate"
         )

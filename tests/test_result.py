@@ -266,14 +266,15 @@ def test_from_dict_rejects_bad_input(anova: StatsResult) -> None:
 
 
 def test_schema_version_is_the_first_key(anova: StatsResult) -> None:
-    # 3 since histostats and scatterstats (point_labels, label_var, test_value).
-    assert SCHEMA_VERSION == 3
+    # 4 since barstats (design "contingency": y_levels, counts, cells, bars,
+    # counts_var and its settings; a pair's statistic optional).
+    assert SCHEMA_VERSION == 4
     for text in (anova.to_json(), anova.to_json(indent=None, include_values=False)):
         data = _strict_loads(text)
         assert next(iter(data)) == "schema_version"
-        assert data["schema_version"] == 3
+        assert data["schema_version"] == 4
     assert next(iter(anova.to_dict())) == "schema_version"
-    assert anova.to_dict()["schema_version"] == 3
+    assert anova.to_dict()["schema_version"] == 4
     # Not a field of the result: it describes the JSON, not the analysis.
     assert "schema_version" not in {f.name for f in dataclasses.fields(anova)}
 
@@ -288,18 +289,18 @@ def test_from_json_refuses_another_schema_version(anova: StatsResult) -> None:
     assert type(info.value) is ValueError
     message = str(info.value)
     assert "schema version 1" in message
-    assert "schema version 3 only" in message
+    assert "schema version 4 only" in message
     assert rerun in message
     # JSON from a newer (or older, versioned) inferplot: version 2 is the field
-    # set before histostats and scatterstats.
-    for other in (1, 2, 4, "3", 3.0, None):
+    # set before histostats and scatterstats, 3 the one before barstats.
+    for other in (1, 2, 3, 5, "4", 4.0, None):
         data = json.loads(anova.to_json())
         data["schema_version"] = other
         with pytest.raises(ValueError, match="has schema_version") as info:
             StatsResult.from_json(json.dumps(data))
         assert type(info.value) is ValueError
         assert f"schema_version {other!r}" in str(info.value)
-        assert "schema version 3 only" in str(info.value)
+        assert "schema version 4 only" in str(info.value)
         assert rerun in str(info.value)
 
 
@@ -1012,3 +1013,267 @@ def test_sentences_name_direction_and_bayes(
 
 def _anova_pairs() -> Any:
     return _no_nan(result_from_fixture(_case("PlantGrowth-parametric"))).pairwise
+
+
+# --------------------------------------------------------------------------- #
+# design "contingency" (barstats; schema version 4)
+# --------------------------------------------------------------------------- #
+
+
+def _bar_result(name: str) -> StatsResult:
+    from tests import bar_cases
+
+    return bar_cases.assembled(bar_cases.BY_NAME[f"ggbarstats-{name}"])
+
+
+@pytest.fixture
+def two_way() -> StatsResult:
+    return _bar_result("mtcars-cyl-am-parametric")
+
+
+@pytest.fixture
+def paired() -> StatsResult:
+    return _bar_result("edge_bar_paired-parametric")
+
+
+@pytest.fixture
+def one_way() -> StatsResult:
+    return _bar_result("mtcars-cyl-parametric")
+
+
+def test_contingency_results_round_trip_with_special_values(
+    two_way: StatsResult, paired: StatsResult, one_way: StatsResult
+) -> None:
+    for result in (two_way, paired, one_way):
+        assert StatsResult.from_json(result.to_json()) == result
+        assert StatsResult.from_dict(result.to_dict()) == result
+    assert two_way.effect_size is not None
+    edge = dataclasses.replace(
+        two_way,
+        effect_size=dataclasses.replace(
+            two_way.effect_size, conf_low=-math.inf, conf_high=math.inf
+        ),
+    )
+    text = edge.to_json()
+    _strict_loads(text)
+    assert StatsResult.from_json(text) == edge
+    # A Fisher pair has no statistic: null in JSON, None when read back.
+    data = json.loads(two_way.to_json())
+    assert data["pairwise"][0]["statistic"] is None
+    assert data["pairwise"][0]["statistic_name"] == ""
+    assert StatsResult.from_json(two_way.to_json()).pairwise[0].statistic is None
+
+
+def test_contingency_fields(
+    two_way: StatsResult, paired: StatsResult, one_way: StatsResult
+) -> None:
+    assert (two_way.design, two_way.analysis) == ("contingency", "barstats")
+    assert two_way.levels == ("4", "6", "8")
+    assert two_way.y_levels == ("0", "1")
+    assert two_way.counts == ((3, 8), (4, 3), (12, 2))
+    assert [(b.level, b.n) for b in two_way.bars] == [("0", 19), ("1", 13)]
+    assert [(c.bar, c.level, c.count) for c in two_way.cells][:3] == [
+        ("0", "4", 3),
+        ("0", "6", 4),
+        ("0", "8", 12),
+    ]
+    assert two_way.cells[0].percent == 3 / 19 * 100
+    assert (two_way.values, two_way.subjects, two_way.descriptives) == ((), (), ())
+    assert (two_way.n_obs, two_way.n_tied, two_way.counts_var) == (32, 0, None)
+    settings = two_way.settings
+    assert (settings.paired, settings.ratio, settings.label) == (
+        False,
+        None,
+        "percentage",
+    )
+    assert (settings.digits_perc, settings.proportion_test) == (0, True)
+    assert settings.pairwise_display == "none"
+    assert all(not pair.displayed for pair in two_way.pairwise)
+    assert paired.settings.paired is True
+    assert paired.levels == paired.y_levels == ("no", "yes")
+    assert one_way.y is None
+    assert one_way.y_levels == ()
+    assert one_way.counts == ((11,), (7,), (14,))
+    (bar,) = one_way.bars
+    assert (bar.level, bar.n, bar.test) == (None, 32, None)
+    assert bar.no_test_reason is not None
+    assert one_way.settings.proportion_test is False
+
+
+def test_the_embedded_copy_keeps_the_counts(two_way: StatsResult) -> None:
+    copy = StatsResult.from_json(two_way.to_json(include_values=False))
+    assert copy == two_way  # a contingency result has no observations to leave out
+    assert copy.counts == two_way.counts
+    assert copy.check() == two_way.check()
+
+
+@pytest.mark.parametrize(
+    ("changes", "problem"),
+    [
+        ({"analysis": "betweenstats"}, "comes from barstats, not betweenstats"),
+        ({"values": ((1.0,),)}, "values must be empty"),
+        ({"subject_id": "s"}, "subject_id must be None"),
+        ({"n_tied": 1}, "n_tied must be 0"),
+        ({"levels": ("4",)}, "levels must hold two or more distinct levels of x"),
+        ({"y_levels": ()}, "y_levels name the levels of y"),
+        ({"y": None}, "y_levels name the levels of y"),
+        ({"counts": ((3, 8), (4, 3))}, "counts must hold 3 rows"),
+        ({"counts": ((3, 8), (4, 3), (12, -2))}, "whole numbers >= 0"),
+        ({"n_obs": 31}, "counts must add up to n_obs = 31"),
+        ({"bars": ()}, "bars must be the bars with observations"),
+        ({"cells": ()}, "cells must hold every bar's count"),
+        ({"label_var": "m"}, "belong to design 'correlation'"),
+    ],
+)
+def test_wrong_contingency_shapes_are_refused(
+    two_way: StatsResult, changes: dict[str, Any], problem: str
+) -> None:
+    with pytest.raises(ValueError, match=re.escape(problem)):
+        dataclasses.replace(two_way, **changes)
+
+
+def test_contingency_settings_and_pairs_are_checked(
+    two_way: StatsResult, anova: StatsResult
+) -> None:
+    settings = two_way.settings
+    for change, problem in (
+        ({"label": None}, "settings.label must be set"),
+        ({"label": "share"}, "settings.label must be one of"),
+        ({"ratio": (0.5, 0.5)}, "one positive share per level of x (3)"),
+        ({"paired": True}, "same levels, in the same order, in x and y"),
+        ({"pairwise_display": "all"}, "pairs are never drawn"),
+    ):
+        with pytest.raises(ValueError, match=re.escape(problem)):
+            dataclasses.replace(
+                two_way, settings=dataclasses.replace(settings, **change)
+            )
+    shown = dataclasses.replace(two_way.pairwise[0], displayed=True)
+    with pytest.raises(ValueError, match="displayed must be False"):
+        dataclasses.replace(two_way, pairwise=(shown, *two_way.pairwise[1:]))
+    cell = dataclasses.replace(two_way.cells[0], percent=15.0)
+    with pytest.raises(ValueError, match="its share of the bar"):
+        dataclasses.replace(two_way, cells=(cell, *two_way.cells[1:]))
+    # The other designs refuse the fields of design "contingency".
+    with pytest.raises(ValueError, match="counts belong to design 'contingency'"):
+        dataclasses.replace(anova, counts=((1,),))
+    with pytest.raises(
+        ValueError, match=r"settings\.paired belong to design 'contingency'"
+    ):
+        dataclasses.replace(
+            anova, settings=dataclasses.replace(anova.settings, paired=False)
+        )
+
+
+def test_contingency_frame_rows(two_way: StatsResult) -> None:
+    frame = two_way.to_frame()
+    assert list(frame["test"]) == [
+        "pearson_chi_square",
+        "chi_square_gof",
+        "chi_square_gof",
+        "fisher_exact",
+        "fisher_exact",
+        "fisher_exact",
+    ]
+    assert list(frame["group1"][1:3]) == ["0", "1"]
+    assert frame["group2"][1] is None
+    assert list(frame["displayed"][1:]) == [True, True, False, False, False]
+    assert frame["statistic_name"][3] is None
+    assert math.isnan(frame["statistic"][3])
+    assert list(frame["ci_sidedness"]) == ["two-sided"] * 6
+    assert two_way.to_frame("polars").height == 6
+    no_labels = dataclasses.replace(
+        two_way, settings=dataclasses.replace(two_way.settings, proportion_test=False)
+    )
+    assert list(no_labels.to_frame()["displayed"][1:3]) == [False, False]
+
+
+def test_a_fisher_pair_is_one_sided_only_on_a_2_by_2_table() -> None:
+    greater = _bar_result("mtcars-cyl-am-greater-parametric")
+    rows = greater.frame_rows()
+    pairs = [row for row in rows if row["test"] == "fisher_exact"]
+    assert [row["alternative"] for row in pairs] == ["greater"] * 3
+    assert [row["ci_sidedness"] for row in pairs] == ["greater"] * 3
+    assert rows[0]["alternative"] == "two-sided"  # the chi-square test
+    assert rows[0]["ci_sidedness"] == "greater"
+    # Pairs that hold three or more levels of y: two-sided.
+    wide = _bar_result("edge_bar_rounding-parametric")
+    rebuilt = dataclasses.replace(
+        wide, settings=dataclasses.replace(wide.settings, alternative="less")
+    )
+    assert {r["alternative"] for r in rebuilt.frame_rows() if r["group2"]} == {
+        "two-sided"
+    }
+
+
+def test_str_of_fisher_pairs_has_no_statistic_column(two_way: StatsResult) -> None:
+    lines = str(two_way).splitlines()
+    assert lines[2] == "Pairwise comparisons (Fisher's exact test):"
+    assert lines[3].split() == [
+        "group1",
+        "group2",
+        "p",
+        "p",
+        "(Holm)",
+        "significant",
+        "shown",
+    ]
+
+
+def test_expected_counts_by_design(
+    two_way: StatsResult, paired: StatsResult, one_way: StatsResult
+) -> None:
+    from inferplot.check import expected_counts
+
+    assert expected_counts(two_way) == [
+        11 * 19 / 32,
+        11 * 13 / 32,
+        7 * 19 / 32,
+        7 * 13 / 32,
+        14 * 19 / 32,
+        14 * 13 / 32,
+    ]
+    assert expected_counts(one_way) == [32 / 3] * 3
+    ratio = dataclasses.replace(
+        one_way,
+        settings=dataclasses.replace(one_way.settings, ratio=(0.5, 0.25, 0.25)),
+    )
+    assert expected_counts(ratio) == [16.0, 8.0, 8.0]
+    assert expected_counts(paired) == [8.0, 8.0]  # (4 + 12) / 2, for each cell
+    declared = _bar_result("edge_bar_zero_cell-declared-parametric")
+    # The empty row and column are left out, as chisq.test leaves them out.
+    assert len(expected_counts(declared)) == 2 * 3
+
+
+def test_contingency_checks() -> None:
+    small = _bar_result("edge_bar_small_expected-parametric")
+    issues = small.check()
+    assert _codes(issues) == ["small_expected"]
+    assert issues[0].message.startswith(
+        "9 of the 9 expected counts of the chi-square test of independence are below "
+        "5 (the smallest is 0.75, 1 below 1), so its p-value, a chi-square "
+        "approximation, may be inaccurate; the proportion tests of the bars 'p', "
+        "'q', 'r' have expected counts below 5, too."
+    )
+    assert _codes(_bar_result("Titanic_counts-class-parametric").check()) == []
+    paired3 = _bar_result("edge_bar_paired3-parametric").check()
+    assert paired3[0].message.startswith(
+        "6 of the 6 expected counts of McNemar's test (half the pairs that change "
+        "between two levels) are below 5"
+    )
+    # Without the subtitle only the labelled bars count.
+    quiet = _bar_result("mtcars-cyl-am-nosubtitle-proptest-parametric")
+    assert quiet.test is None
+    assert quiet.check()[0].message.startswith(
+        "The proportion test of the bar '1' has expected counts below 5, so its "
+        "p-value may be inaccurate."
+    )
+    assert _codes(_bar_result("mtcars-cyl-am-nosubtitle-parametric").check()) == []
+    missing = _bar_result("edge_bar_missing-counts-parametric").check()
+    rows = [i for i in missing if i.code == "rows_dropped"]
+    assert rows[0].message == "4 rows were left out because 'x', 'y' or 'w' is missing."
+    assert rows[0].severity == "info"  # a table's rows are not observations
+    # Ranks and group sizes do not apply.
+    nonparametric = _bar_result("mtcars-cyl-am-nonparametric")
+    assert "heavy_ties" not in _codes(nonparametric.check())
+    small_n = _bar_result("edge_bar_paired_small-parametric").check()
+    assert "small_n" not in _codes(small_n)

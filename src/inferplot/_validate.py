@@ -1134,7 +1134,7 @@ def _bar_targeted(
             "continuity correction, as ggbarstats does (chisq.test(correct = "
             "FALSE)), so there is nothing to set."
         )
-    if key in {"simulate_p_value", "b"}:
+    if key == "simulate_p_value":
         return no(
             "barstats computes the chi-square p-value from its distribution, as "
             "ggbarstats does; there is no simulated p-value."

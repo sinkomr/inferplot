@@ -357,13 +357,16 @@ def is_close(
 
 def assert_close(
     kind: str,
-    actual: float,
+    actual: float | None,
     expected: float,
     *,
     what: str,
     atol_scale: float = 1.0,
 ) -> None:
-    """Assert closeness under the registered tolerance ``kind``."""
+    """Assert closeness under the registered tolerance ``kind``. A missing
+    ``actual`` (None, such as the statistic of a pair that has none) fails."""
+    if actual is None:
+        raise AssertionError(f"{what}: got None, oracle {expected!r}")
     if is_close(kind, actual, expected, atol_scale=atol_scale):
         return
     tol = TOLERANCES[kind]

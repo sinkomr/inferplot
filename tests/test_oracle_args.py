@@ -131,3 +131,33 @@ def test_split_handles_the_arguments_without_a_keyword() -> None:
     # translate() itself still refuses them, so a call cannot drop them silently.
     with pytest.raises(KeyError, match=r"label\.expression"):
         translate("ggscatterstats", {"x": "a", "y": "b", "label.expression": "a"})
+
+
+def test_every_bar_fixture_splits_into_barstats_keywords() -> None:
+    import inspect
+
+    import inferplot as ip
+    from tests.oracle_fixtures import cases_for
+
+    analysis = set(inspect.signature(ip.analyze.barstats).parameters)
+    drawing = set(inspect.signature(ip.render.barstats).parameters)
+    cases = [
+        *cases_for("ggbarstats"),
+        *cases_for("ggpiestats"),
+        *cases_for("ggbarstats", failed=True),
+    ]
+    assert len(cases) == 90
+    for case in cases:
+        call = split(case.function, case.args)
+        assert call.function == "barstats"
+        assert call.args == tuple(
+            case.args[name] for name in ("x", "y") if name in case.args
+        )
+        assert set(call.analysis) <= analysis, case.name
+        assert set(call.drawing) <= drawing, case.name
+        assert not call.drawing  # every recorded argument is the analysis'
+    call = split(
+        "ggbarstats",
+        {"x": "cyl", "y": "am", "label": "both", "digits.perc": 1, "counts": "n"},
+    )
+    assert call.analysis == {"label": "both", "digits_perc": 1, "counts": "n"}

@@ -52,6 +52,7 @@ def test_public_api() -> None:
         "StatsResult",
         "__version__",
         "analyze",
+        "barstats",
         "betweenstats",
         "histostats",
         "render",
@@ -60,7 +61,13 @@ def test_public_api() -> None:
     ]
     for name in inferplot.__all__:
         assert hasattr(inferplot, name)
-    functions = ["betweenstats", "histostats", "scatterstats", "withinstats"]
+    functions = [
+        "barstats",
+        "betweenstats",
+        "histostats",
+        "scatterstats",
+        "withinstats",
+    ]
     assert inferplot.analyze.__all__ == functions
     for name in functions:
         assert callable(getattr(inferplot.analyze, name))
