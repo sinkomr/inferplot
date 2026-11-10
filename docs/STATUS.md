@@ -338,7 +338,13 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   (D99) exercised; exact Fisher test for 2 x c tables with cost limits that raise
   rather than approximate (D107). Lead's check: 300 random tables against SciPy and
   221 brute-force enumerations, 1e-11 or better
-- [ ] barstats: analyses, texts and figure in progress
+- [x] barstats texts: ggbarstats' subtitle for the three designs, the bar p, n and
+  cell labels, pair labels, APA sentence and alt text (D108). Rebuilt from the
+  fixtures' numbers they equal ggstatsplot's on all 89 fixtures with output (71
+  subtitles, 158 bar p labels, 175 n labels, 485 cell labels, 152 pair labels); on
+  results, 69 of 70 subtitles (one pinned: D99 at three digits). To do when the
+  analysis lands: run the text tests on real results
+- [ ] barstats: analyses and figure in progress
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under

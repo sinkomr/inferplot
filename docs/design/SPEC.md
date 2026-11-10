@@ -538,7 +538,7 @@ them) and **never adjusted**: `p_adjust_method` does not reach them (the seven
 Titanic padj fixtures have identical per-bar tables). They are computed whenever
 `y` is given, even with `results_subtitle=False` (they give the n under each bar);
 a bar where the test fails (one level of x) becomes a row of NA, which ggstatsplot
-prints as "NA" (declared `proportion_test` errors: edge_bar_degenerate one-row,
+prints as an empty p (`format_value(NA)` is "") (declared `proportion_test` errors: edge_bar_degenerate one-row,
 one-cell). The label above each bar is `p = <p>` (`list(~italic(p)=='0.09')`,
 `format_value(p, digits)`), not significance stars, with no threshold; ggpiestats
 draws the whole result beside each pie (`chi_gof^2(df) = <statistic>, p = <p>, n =
@@ -1014,6 +1014,39 @@ Designs without levels (histostats, scatterstats; D91, D92):
   `figure_alt_text` what it drew: `centrality`, `test_value_line`, `bins`
   (histostats); `smooth`, `marginal`, `labelled_points`, `points_shown`
   (scatterstats).
+
+barstats (D108):
+
+- **Subtitle and labels:** the subtitle of each design as ggbarstats prints it
+  (`chi_Pearson^2(df)`, `chi_McNemar^2(df)`, `chi_gof^2(df)` with Cramér's V, Cohen's g
+  or Pearson's C, the interval and n_obs or n_pairs); above each bar `p = <p>` with
+  `digits` (an exact 0 prints 2.23e-308, as in ggstatsplot; a bar without a test has
+  an empty label); under each bar `(n = <n>)`; in each cell the percentage, count or
+  both (`digits_perc`; R's `round()` of the double (count / bar n) x 100, printed
+  without trailing zeros; no label for a zero cell). `result.text` holds them plain in
+  `bar_labels`, `n_labels` (one per bar) and `cell_labels` (one per cell), empty in the
+  other designs; `pairwise_labels` holds the Fisher pairs' labels, never drawn. No
+  caption in v0.1. Compared with ggstatsplot on all 89 fixtures with output: 71 of 71
+  subtitles, 158 of 158 bar p labels, 175 of 175 n labels, 485 of 485 cell labels and
+  152 of 152 pair labels are rebuilt from the fixtures' numbers; on results, one
+  subtitle differs (mtcars-cyl-digits3: 0.498 for R's 0.499, D99). The percent formula
+  is pinned on probe-contingency's 927 labels (100 x count / n would differ in 3).
+- **APA sentence:** "Pearson's chi-square test (shares of cyl across the levels of am):
+  chi2(2, N = 32) = 8.74, p = .013, Cramer's V = .46, 95% CI [.00, .82]. Goodness-of-fit
+  tests within each level of am (shares of cyl against equal shares, unadjusted): p <
+  .05 in 1 of 2 bars; Fisher's exact tests between the levels of cyl (Holm adjusted):
+  adjusted p < .05 in 1 of 3 pairs."; "McNemar's test (before and after, the same
+  units measured twice): chi2(1, N = 40) = 4.00, ..., Cohen's g = .25, ..."; "Chi-square
+  goodness-of-fit test (shares of cyl against equal shares): chi2(2, N = 32) = 2.31,
+  ..., Pearson's C = .26, ..." (with `ratio`: "against expected shares 0.5, 0.25 and
+  0.25"). A one-sided `alternative` shows as "95% one-sided CI".
+- **Alt text:** "Stacked bar chart of cyl within each level of am, each bar summing to
+  100%: 0 (n = 19): 4 16%, 6 21%, 8 63%; 1 (n = 13): ... Labels show percentages; the
+  p-value above each bar tests its shares against equal shares (0: p = 0.02, 1: p =
+  0.09); a legend names the 3 levels of cyl. <result>". Shortening, at each name length:
+  the legend clause, the list of bar p-values, all but each bar's largest share, the
+  second sentence, the shares, each bar's n. The figure tells `figure_alt_text` what
+  it drew: `cell_labels`, `bar_tests`, `legend`.
 
 ## 8. `check()`
 
