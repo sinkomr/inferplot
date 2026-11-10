@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Final, Literal
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
@@ -65,14 +66,7 @@ from inferplot.render.figure import (
     axes_background,
 )
 from inferplot.result import StatsResult
-from inferplot.text import (
-    drawable,
-    format_conf_level,
-    format_n,
-    format_p_subtitle,
-    format_value,
-    tick_label,
-)
+from inferplot.text import drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -287,141 +281,6 @@ _BAR_ARGS: Final = LayerArgs(
 
 
 # --------------------------------------------------------------------------- #
-# PROVISIONAL texts (the lead deletes this block when the barstats texts land)
-# --------------------------------------------------------------------------- #
-#
-# ``inferplot.text.figure_texts`` does not know design "contingency" yet. Until
-# the texts package adds the barstats texts (subtitle, cell labels, bar labels,
-# tick labels), the renderer builds them here from the result's numbers, in the
-# forms SPEC.md section 4 "Labels and texts" reads from the fixtures. Replace
-# ``_texts`` by ``figure_texts`` (and its fields) when that lands.
-
-
-@dataclass(frozen=True, slots=True)
-class _BarTexts:
-    """What the renderer draws: ``subtitle`` mathtext or None (with its plain
-    wording), ``caption_lines`` (mathtext lines whole between dollar signs),
-    ``cell_labels`` plain text per cell of ``result.cells`` ("" for a zero
-    cell), ``bar_labels`` mathtext per bar (None: no label above that bar),
-    ``tick_labels`` plain text per bar."""
-
-    subtitle: str | None
-    plain_subtitle: str | None
-    caption_lines: tuple[str, ...]
-    cell_labels: tuple[str, ...]
-    bar_labels: tuple[str | None, ...]
-    tick_labels: tuple[str, ...]
-
-
-def _percent_text(percent: float, digits: int) -> str:
-    """A cell's percentage as ggstatsplot prints it: R's ``round()`` (Python's
-    on the same double), without trailing zeros."""
-    rounded = round(percent, digits)
-    text = f"{rounded:.{digits}f}"
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text
-
-
-def _cell_text(count: int, percent: float, label: str, digits: int) -> str:
-    if count == 0:
-        return ""
-    share = f"{_percent_text(percent, digits)}%"
-    if label == "counts":
-        return format_n(count)
-    if label == "both":
-        return f"{format_n(count)}\n({share})"
-    return share
-
-
-_SYMBOLS: Final = {
-    "pearson_chi_square": (r"\chi", "Pearson"),
-    "mcnemar": (r"\chi", "McNemar"),
-    "chi_square_gof": (r"\chi", "gof"),
-}
-_EFFECTS: Final = {
-    "cramers_v": ("V", "Cramer"),
-    "pearsons_c": ("C", "Pearson"),
-    "cohens_g": ("g", "Cohen"),
-}
-
-
-def _t(text: str) -> str:
-    return rf"\text{{{text}}}"
-
-
-def _subtitle(result: StatsResult) -> tuple[str | None, str | None]:
-    """A stand-in for ggstatsplot's subtitle, in the form of the other figures'
-    (the texts package builds the real one)."""
-    test, effect = result.test, result.effect_size
-    if result.text.subtitle is not None or test is None:
-        return None, None
-    digits = result.settings.digits
-    symbol, sub = _SYMBOLS.get(test.name, (r"\chi", "Pearson"))
-    df = format_value(test.df_error, 0)
-    parts = [
-        rf"{{{symbol}}}^{{2}}_{{{_t(sub)}}}{_t('(')}{_t(df)}{_t(')')} = "
-        rf"{_t(format_value(test.statistic, digits))}",
-        rf"\mathit{{p}} = {_t(format_p_subtitle(test.p_value, digits))}",
-    ]
-    plain = [
-        f"χ²{sub}({df}) = {format_value(test.statistic, digits)}",
-        f"p = {format_p_subtitle(test.p_value, digits)}",
-    ]
-    if effect is not None:
-        letter, name = _EFFECTS.get(effect.name, ("V", "Cramer"))
-        level = format_conf_level(effect.conf_level)
-        low = format_value(effect.conf_low, digits)
-        high = format_value(effect.conf_high, digits)
-        parts += [
-            rf"{{\widehat{{\mathit{{{letter}}}}}}}_{{{_t(name)}}} = "
-            rf"{_t(format_value(effect.estimate, digits))}",
-            rf"{{\mathrm{{CI}}}}_{{{_t(level)}}}\ {_t('[')}{_t(low)},\ {_t(high)}"
-            rf"{_t(']')}",
-        ]
-        plain += [
-            f"{letter}{name} = {format_value(effect.estimate, digits)}",
-            f"CI{level} [{low}, {high}]",
-        ]
-    which = "pairs" if result.settings.paired else "obs"
-    parts.append(rf"{{\mathit{{n}}}}_{{{_t(which)}}} = {_t(format_n(result.n_obs))}")
-    plain.append(f"n{which} = {format_n(result.n_obs)}")
-    return "$" + r",\ ".join(parts) + "$", ", ".join(plain)
-
-
-def _texts(result: StatsResult) -> _BarTexts:
-    settings = result.settings
-    label = settings.label or "percentage"
-    digits_perc = settings.digits_perc or 0
-    cells = tuple(
-        _cell_text(c.count, c.percent, label, digits_perc) for c in result.cells
-    )
-    show = bool(settings.proportion_test) and result.y is not None
-    show = show and len(result.bars) > 1 and len(result.levels) > 1
-    bar_labels = tuple(
-        rf"$\mathit{{p}}$ = {format_value(bar.test.p_value, settings.digits)}"
-        if show and bar.test is not None
-        else None
-        for bar in result.bars
-    )
-    ticks = tuple(
-        f"(n = {format_n(bar.n)})"
-        if bar.level is None
-        else tick_label(bar.level, bar.n)
-        for bar in result.bars
-    )
-    subtitle, plain = _subtitle(result)
-    return _BarTexts(
-        subtitle=subtitle,
-        plain_subtitle=plain,
-        caption_lines=(),
-        cell_labels=cells,
-        bar_labels=bar_labels,
-        tick_labels=ticks,
-    )
-
-
-# --------------------------------------------------------------------------- #
 # the drawing
 # --------------------------------------------------------------------------- #
 
@@ -459,7 +318,7 @@ class _BarDrawing(base.BaseDrawing):
     ) -> None:
         super().__init__(result, options, colors, palette_warning, ax)
         self.options = options
-        self.texts = _texts(result)
+        self.texts = figure_texts(result)
         self.k = len(result.levels)
         self.n_bars = len(result.bars)
         self.cells: list[_Cell] = []
@@ -475,7 +334,7 @@ class _BarDrawing(base.BaseDrawing):
         self.extra_px = 0.0  # ax=: room right of the last slot for its labels
         self.top_px = 0.0
         self.bottom_px = 0.0
-        self.tick_texts: list[str] = list(self.texts.tick_labels)
+        self.tick_texts: list[str] = self.unwrapped_ticks()
         self.edge = "white"
 
     # -- drawing -----------------------------------------------------------------
@@ -587,8 +446,9 @@ class _BarDrawing(base.BaseDrawing):
 
     def draw_bar_labels(self) -> None:
         ax = self.ax
+        shown = bool(self.result.settings.proportion_test)
         for j, words in enumerate(self.texts.bar_labels):
-            if words is None:
+            if not shown or not words:
                 self.bar_labels.append(None)
                 continue
             text = ax.text(
@@ -604,22 +464,21 @@ class _BarDrawing(base.BaseDrawing):
                 zorder=5.0,
                 gid=f"bar-label-{j}",
             )
-            self.role(text, "proportion test label")
+            self.role(text, "proportion test label", self.result.text.bar_labels[j])
             self.bar_labels.append(text)
 
     def draw_axes_texts(self) -> None:
-        ax, result, options = self.ax, self.result, self.options
+        ax, options = self.ax, self.options
         ax.grid(False)
         ax.yaxis.set_major_locator(FixedLocator(list(PERCENT_TICKS)))
-        ax.yaxis.set_major_formatter(
-            FixedFormatter([f"{int(t)}%" for t in PERCENT_TICKS])
-        )
+        ax.yaxis.set_major_formatter(FixedFormatter(list(self.texts.y_tick_labels)))
         ax.yaxis.set_minor_locator(NullLocator())
         ax.xaxis.set_minor_locator(NullLocator())
         ax.tick_params(axis="y", labelsize=theme.SIZE_TICK)
         ax.tick_params(axis="x", length=0.0, pad=6.0)
         self.set_ticks()
-        name = "" if result.y is None else drawable(result.y)
+        title = self.texts.x_title
+        name = "" if title is None else drawable(title)
         ax.set_xlabel(
             name if options.xlab is None else options.xlab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
@@ -653,7 +512,9 @@ class _BarDrawing(base.BaseDrawing):
         names = self.legend_names()
         room = LEGEND_LINE_IN * self.dpi
         title = (
-            self.wrapped([drawable(result.x)], room, bold=True)[0]
+            self.wrapped(
+                [drawable(self.texts.legend_title or result.x)], room, bold=True
+            )[0]
             if options.legend_title is None
             else options.legend_title
         )
@@ -711,6 +572,14 @@ class _BarDrawing(base.BaseDrawing):
         finally:
             probe.remove()
 
+    def unwrapped_ticks(self) -> list[str]:
+        """Each bar's tick label: its level of y over its n label (the n label
+        alone for the single bar without y), as betweenstats writes its levels."""
+        return [
+            f"{name}\n{n}" if name else n
+            for name, n in zip(self.texts.tick_labels, self.texts.n_labels, strict=True)
+        ]
+
     def wrap_ticks(self, room: float) -> None:
         """The tick labels with the level names wrapped into lines ``room``
         pixels wide (the n line is kept whole)."""
@@ -725,9 +594,9 @@ class _BarDrawing(base.BaseDrawing):
 
         try:
             self.tick_texts = [
-                label if bar.level is None else wrap_tick_label(label, fits)
-                for label, bar in zip(
-                    self.texts.tick_labels, self.result.bars, strict=True
+                wrap_tick_label(label, fits) if name else label
+                for label, name in zip(
+                    self.unwrapped_ticks(), self.texts.tick_labels, strict=True
                 )
             ]
         finally:
@@ -737,7 +606,7 @@ class _BarDrawing(base.BaseDrawing):
     # -- layout ----------------------------------------------------------------
 
     def generated_texts(self) -> tuple[str | None, str | None, Sequence[str]]:
-        return self.texts.subtitle, self.texts.plain_subtitle, self.texts.caption_lines
+        return self.texts.subtitle, self.result.text.subtitle, self.texts.caption_lines
 
     def decoration_texts(self) -> list[Text]:
         texts = [c.text for c in self.cells if c.text is not None]
@@ -1112,18 +981,27 @@ class _BarDrawing(base.BaseDrawing):
         )
 
     def finish_result(self, result: StatsResult) -> StatsResult:
-        """The result the figure returns.
-
-        PROVISIONAL (until the barstats texts land): ``figure_alt_text`` does not
-        know design "contingency" yet, so the result keeps the analysis' alt
-        text. The facts this figure can give it: the cell labels drawn on their
-        segment, beside their bar or left out (``self.cells``' ``place``), the
-        bars with a test label (``self.bar_labels``), and the legend (always).
-        """
-        return result
+        """The result with the alt text of what this figure draws: whether cell
+        labels are drawn (all of them in inferplot's own figure; with ``ax=``
+        some may be left out, which ``fig.check()`` reports), whether the bars'
+        test labels are drawn, and the legend (always)."""
+        drawn = any(c.place != "omitted" for c in self.cells if c.text is not None)
+        alt = figure_alt_text(
+            result,
+            cell_labels=drawn,
+            bar_tests=(
+                None
+                if result.y is None
+                else any(t is not None for t in self.bar_labels)
+            ),
+            legend=True,
+        )
+        if alt == result.text.alt_text:
+            return result
+        return dataclasses.replace(
+            result, text=dataclasses.replace(result.text, alt_text=alt)
+        )
 
 
 def _hex(rgb: tuple[float, float, float]) -> str:
-    from matplotlib.colors import to_hex
-
     return to_hex(rgb)

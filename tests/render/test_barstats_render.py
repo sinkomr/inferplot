@@ -33,6 +33,7 @@ from matplotlib.text import Text
 import inferplot as ip
 from inferplot.render import StatsFigure, theme
 from inferplot.result import StatsResult
+from inferplot.text import figure_alt_text, figure_texts
 from tests import bar_cases as bc
 from tests.oracle_fixtures import OracleCase
 from tests.render._bars import table_result
@@ -227,12 +228,14 @@ def test_fixture_labels_equal_ggstatsplots(name: str) -> None:
             assert drawn is not None, (j, i)
             assert drawn.get_text() == label
     above, under = built_texts(case)
+    drawn_texts = figure_texts(result)
     for j, tick in enumerate(tick_texts(fig)):
         assert tick.split("\n")[-1] == under[j]
         text = by_gid(fig, f"bar-label-{j}")
         if j in above:
             assert isinstance(text, Text)
-            assert text.get_text() == rf"$\mathit{{p}}$ = {above[j]}"
+            assert text.get_text() == drawn_texts.bar_labels[j]
+            assert result.text.bar_labels[j] == f"p = {above[j]}"
         else:
             assert text is None
     texts = case.plot_texts
@@ -692,3 +695,29 @@ def test_three_forms() -> None:
     assert a.getvalue() == b.getvalue()
     assert one.result == two.result
     assert figure_codes(one) == []
+
+
+def test_alt_text_describes_the_figure() -> None:
+    """The alt text is ``figure_alt_text`` told what the figure draws: the
+    default figure gives the analysis' own alt text; without the bars' tests
+    it does not mention them; with every cell label left out it says none are
+    drawn."""
+    result = mtcars()
+    assert ip.render.barstats(result).result.text.alt_text == result.text.alt_text
+    quiet = result_of("ggbarstats-mtcars-cyl-am-noproptest-parametric")
+    fig = ip.render.barstats(quiet)
+    assert by_gid(fig, "bar-label-0") is None
+    assert fig.result.text.alt_text == figure_alt_text(
+        quiet, cell_labels=True, bar_tests=False, legend=True
+    )
+    one_way = result_of("ggbarstats-mtcars-cyl-parametric")
+    assert ip.render.barstats(one_way).result.text.alt_text == (one_way.text.alt_text)
+    figure_ = Figure(figsize=(1.6, 1.2), dpi=72)
+    FigureCanvasAgg(figure_)
+    tiny = table_result([[1, 1], [500, 600], [1, 2]], ["a", "b", "c"])
+    fig = ip.render.barstats(tiny, ax=figure_.add_subplot())
+    assert {c.place for c in fig.cell_labels} == {"omitted"}
+    assert fig.result.text.alt_text == figure_alt_text(
+        tiny, cell_labels=False, bar_tests=True, legend=True
+    )
+    assert "Labels show" not in fig.result.text.alt_text
