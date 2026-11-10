@@ -812,8 +812,10 @@ def _complete_subjects(case: OracleCase, frame: Any) -> dict[str, Any]:
         row = cells.setdefault(sid, {})
         key = r_level_label(level)
         assert key not in row, f"subject {sid!r} repeated in level {key!r}"
-        missing = value is None or (isinstance(value, float) and math.isnan(value))
-        row[key] = None if missing else float(value)
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            row[key] = None
+        else:
+            row[key] = float(value)
     complete = [
         sid
         for sid, row in cells.items()
@@ -867,8 +869,15 @@ def test_declared_within_level_order_is_kept(case: OracleCase) -> None:
         )
 
 
+# A message R prints once per process, when afex first loads lme4: the first
+# parametric case with three or more conditions in each oracle shard carries it in
+# `suppressed`, whichever dataset that case reads.
+PACKAGE_LOAD_MESSAGE = "Registered S3 method overwritten by 'lme4'"
+
+
 def _comparable(case: OracleCase) -> dict[str, Any]:
-    """A fixture's outputs, without the fields that name its dataset."""
+    """A fixture's outputs, without the fields that name its dataset, and without
+    the one-time package-load message in what ggstatsplot muted."""
     keep = (
         "analysis_levels",
         "n_per_level",
@@ -878,9 +887,18 @@ def _comparable(case: OracleCase) -> dict[str, Any]:
         "stats",
         "plot_layers",
         "bootstrap_reference",
-        "suppressed",
     )
-    return {key: case.raw[key] for key in keep}
+    out = {key: case.raw[key] for key in keep}
+    out["suppressed"] = [
+        {
+            **entry,
+            "messages": [
+                m for m in entry["messages"] if not m.startswith(PACKAGE_LOAD_MESSAGE)
+            ],
+        }
+        for entry in case.suppressed
+    ]
+    return out
 
 
 @pytest.mark.parametrize(

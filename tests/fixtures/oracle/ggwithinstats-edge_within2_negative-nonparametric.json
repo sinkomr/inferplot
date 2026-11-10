@@ -1,0 +1,343 @@
+{
+  "schema_version": 2,
+  "name": "ggwithinstats-edge_within2_negative-nonparametric",
+  "function": "ggwithinstats",
+  "call": "ggstatsplot::ggwithinstats(data = data, x = condition, y = value, subject.id = subject, type = \"nonparametric\")",
+  "dataset": {
+    "file": "edge_within2_negative.csv",
+    "sha256": "f8ddcab4e6489cd32e732af884c7e51e5eec4b6c3a46bfe7b7fee901f02c2ec6",
+    "rows": 28,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "condition",
+    "y": "value",
+    "subject.id": "subject",
+    "type": "nonparametric"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "post",
+    "pre"
+  ],
+  "n_per_level": {
+    "post": 14,
+    "pre": 14
+  },
+  "within_data": {
+    "subject_id": "subject",
+    "levels": [
+      "post",
+      "pre"
+    ],
+    "subjects": [
+      "s01",
+      "s02",
+      "s03",
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s09",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14"
+    ],
+    "subject_order": "sorted by subject as complete_subjects() sorts (numbers numerically, text in the C locale); the analysis holds the rows subject by subject, levels in order",
+    "values": [
+      [
+        -28.71,
+        -27.11
+      ],
+      [
+        -34.41,
+        -31.7
+      ],
+      [
+        -33.06,
+        -32.26
+      ],
+      [
+        -27.91,
+        -25.39
+      ],
+      [
+        -39.57,
+        -37.44
+      ],
+      [
+        -23.8,
+        -23.52
+      ],
+      [
+        -30.1,
+        -28.53
+      ],
+      [
+        -25.73,
+        -22.47
+      ],
+      [
+        -38.17,
+        -35.08
+      ],
+      [
+        -37.22,
+        -33.92
+      ],
+      [
+        -26.29,
+        -25.89
+      ],
+      [
+        -37.78,
+        -36.46
+      ],
+      [
+        -27.74,
+        -27.2
+      ],
+      [
+        -35.52,
+        -34.26
+      ]
+    ],
+    "dropped_subjects": [],
+    "rows_without_x_or_subject": 0
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"0.00\", italic(p) == \"1.10e-03\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"-1.00\", CI[\"95%\"] ~ \"[\" * \"-1.00\", \"-1.00\" * \"]\", italic(\"n\")[\"pairs\"] == \"14\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "parameter1": "value",
+        "parameter2": "condition",
+        "statistic": 0,
+        "p.value": 0.0010970505857231,
+        "method": "Wilcoxon signed rank test",
+        "alternative": "two.sided",
+        "effectsize": "r (rank biserial)",
+        "estimate": -1,
+        "conf.level": 0.95,
+        "conf.low": -1,
+        "conf.high": -1,
+        "conf.method": "normal",
+        "n.obs": 14,
+        "expression": "list(italic(\"V\")[\"Wilcoxon\"] == \"0.00\", italic(p) == \"1.10e-03\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"-1.00\", CI[\"95%\"] ~ \"[\" * \"-1.00\", \"-1.00\" * \"]\", italic(\"n\")[\"pairs\"] == \"14\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_path",
+      "geom": "GeomPath",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_path...5",
+      "geom": "GeomPath",
+      "data": [
+        {
+          "condition": "post",
+          "value": -31.58,
+          "mad": 6.842199,
+          "iqr": 9.9825,
+          "conf.low": -36.239375,
+          "conf.high": -27.825,
+          "min": -39.57,
+          "max": -23.8,
+          "skewness": -0.0277094008765133,
+          "kurtosis": -1.55124240071661,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-31.58\")",
+          "n.expression": "post\n(n = 14)"
+        },
+        {
+          "condition": "pre",
+          "value": -30.115,
+          "mad": 6.204681,
+          "iqr": 8.7,
+          "conf.low": -34.26,
+          "conf.high": -26.521375,
+          "min": -37.44,
+          "max": -22.47,
+          "skewness": 0.0246193945975388,
+          "kurtosis": -1.4257410602058,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-30.12\")",
+          "n.expression": "pre\n(n = 14)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...6",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "condition": "post",
+          "value": -31.58,
+          "mad": 6.842199,
+          "iqr": 9.9825,
+          "conf.low": -36.239375,
+          "conf.high": -27.825,
+          "min": -39.57,
+          "max": -23.8,
+          "skewness": -0.0277094008765133,
+          "kurtosis": -1.55124240071661,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-31.58\")",
+          "n.expression": "post\n(n = 14)"
+        },
+        {
+          "condition": "pre",
+          "value": -30.115,
+          "mad": 6.204681,
+          "iqr": 8.7,
+          "conf.low": -34.26,
+          "conf.high": -26.521375,
+          "min": -37.44,
+          "max": -22.47,
+          "skewness": 0.0246193945975388,
+          "kurtosis": -1.4257410602058,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-30.12\")",
+          "n.expression": "pre\n(n = 14)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "condition": "post",
+          "value": -31.58,
+          "mad": 6.842199,
+          "iqr": 9.9825,
+          "conf.low": -36.239375,
+          "conf.high": -27.825,
+          "min": -39.57,
+          "max": -23.8,
+          "skewness": -0.0277094008765133,
+          "kurtosis": -1.55124240071661,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-31.58\")",
+          "n.expression": "post\n(n = 14)"
+        },
+        {
+          "condition": "pre",
+          "value": -30.115,
+          "mad": 6.204681,
+          "iqr": 8.7,
+          "conf.low": -34.26,
+          "conf.high": -26.521375,
+          "min": -37.44,
+          "max": -22.47,
+          "skewness": 0.0246193945975388,
+          "kurtosis": -1.4257410602058,
+          "n.obs": 14,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"-30.12\")",
+          "n.expression": "pre\n(n = 14)"
+        }
+      ],
+      "params": null,
+      "built": null
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

@@ -1,0 +1,824 @@
+{
+  "schema_version": 2,
+  "name": "ggwithinstats-edge_within_k5-robust",
+  "function": "ggwithinstats",
+  "call": "ggstatsplot::ggwithinstats(data = data, x = condition, y = value, subject.id = subject, type = \"robust\")",
+  "dataset": {
+    "file": "edge_within_k5.csv",
+    "sha256": "978a12045eddc3a31d104e2cc526b9f0a0c9ab0f9ae1ce2bc09b5fbff5adb391",
+    "rows": 75,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "condition",
+    "y": "value",
+    "subject.id": "subject",
+    "type": "robust"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5"
+  ],
+  "n_per_level": {
+    "c1": 15,
+    "c2": 15,
+    "c3": 15,
+    "c4": 15,
+    "c5": 15
+  },
+  "within_data": {
+    "subject_id": "subject",
+    "levels": [
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+    ],
+    "subjects": [
+      "s01",
+      "s02",
+      "s03",
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s09",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15"
+    ],
+    "subject_order": "sorted by subject as complete_subjects() sorts (numbers numerically, text in the C locale); the analysis holds the rows subject by subject, levels in order",
+    "values": [
+      [
+        31.12,
+        33.89,
+        33.63,
+        30.9,
+        35.7
+      ],
+      [
+        31.18,
+        31.62,
+        33.58,
+        37.33,
+        38.79
+      ],
+      [
+        29.27,
+        25.66,
+        28.07,
+        29.39,
+        41.9
+      ],
+      [
+        30.19,
+        28.03,
+        30.76,
+        32.98,
+        31.11
+      ],
+      [
+        27.53,
+        29.04,
+        28.88,
+        32.35,
+        27.58
+      ],
+      [
+        33.53,
+        33.86,
+        35.18,
+        30.72,
+        39.88
+      ],
+      [
+        26.11,
+        26.53,
+        27.16,
+        29.21,
+        23.55
+      ],
+      [
+        24.94,
+        25.59,
+        26.86,
+        24.02,
+        28.86
+      ],
+      [
+        34.09,
+        35.83,
+        38.63,
+        36.79,
+        37.52
+      ],
+      [
+        33.5,
+        33.66,
+        30.76,
+        33.5,
+        33.37
+      ],
+      [
+        29.96,
+        32.29,
+        29.98,
+        31.8,
+        30
+      ],
+      [
+        24.02,
+        26.89,
+        25.34,
+        24.72,
+        28.62
+      ],
+      [
+        30.32,
+        30.47,
+        31.08,
+        32.35,
+        32.13
+      ],
+      [
+        34.28,
+        34.87,
+        37.9,
+        37.14,
+        41.74
+      ],
+      [
+        29.05,
+        29.07,
+        31.6,
+        30.05,
+        29.58
+      ]
+    ],
+    "dropped_subjects": [],
+    "rows_without_x_or_subject": 0
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(italic(\"F\")[\"trimmed-means\"](2.21, 17.7) == \"1.93\", italic(p) == \"0.17\", widehat(delta)[\"R-avg\"]^\"AKP\" == \"-0.58\", CI[\"95%\"] ~ \"[\" * \"-1.62\", \"-0.02\" * \"]\", italic(\"n\")[\"pairs\"] == \"15\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 1.93296839812999,
+        "df": 2.21271702844732,
+        "df.error": 17.7017362275786,
+        "p.value": 0.171314746588743,
+        "method": "A heteroscedastic one-way repeated measures ANOVA for trimmed means",
+        "effectsize": "Algina-Keselman-Penfield robust standardized difference average",
+        "estimate": -0.578347405799984,
+        "conf.level": 0.95,
+        "conf.low": -1.6196218520916,
+        "conf.high": -0.0195122649493528,
+        "n.obs": 15,
+        "expression": "list(italic(\"F\")[\"trimmed-means\"](2.21, 17.7) == \"1.93\", italic(p) == \"0.17\", widehat(delta)[\"R-avg\"]^\"AKP\" == \"-0.58\", CI[\"95%\"] ~ \"[\" * \"-1.62\", \"-0.02\" * \"]\", italic(\"n\")[\"pairs\"] == \"15\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": [
+      {
+        "group1": "c1",
+        "group2": "c2",
+        "estimate": -0.665555555555554,
+        "conf.level": 0.95,
+        "conf.low": -1.80579979825487,
+        "conf.high": 0.474688687143762,
+        "p.value": 0.38978366151068,
+        "p.crit": 0.0073,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.39\")"
+      },
+      {
+        "group1": "c1",
+        "group2": "c3",
+        "estimate": -1.50333333333333,
+        "conf.level": 0.95,
+        "conf.low": -2.85107573531083,
+        "conf.high": -0.155590931355837,
+        "p.value": 0.0270589985413139,
+        "p.crit": 0.00511,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")"
+      },
+      {
+        "group1": "c1",
+        "group2": "c4",
+        "estimate": -1.56,
+        "conf.level": 0.95,
+        "conf.low": -3.65973255181778,
+        "conf.high": 0.539732551817784,
+        "p.value": 0.194092972927489,
+        "p.crit": 0.00568,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.19\")"
+      },
+      {
+        "group1": "c1",
+        "group2": "c5",
+        "estimate": -2.91,
+        "conf.level": 0.95,
+        "conf.low": -7.26506779735086,
+        "conf.high": 1.44506779735086,
+        "p.value": 0.268824423874763,
+        "p.crit": 0.00639,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.27\")"
+      },
+      {
+        "group1": "c2",
+        "group2": "c3",
+        "estimate": -1.14555555555556,
+        "conf.level": 0.95,
+        "conf.low": -3.12338176499378,
+        "conf.high": 0.832270653882674,
+        "p.value": 0.38978366151068,
+        "p.crit": 0.00851,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.39\")"
+      },
+      {
+        "group1": "c2",
+        "group2": "c4",
+        "estimate": -1.09555555555556,
+        "conf.level": 0.95,
+        "conf.low": -4.40995634242691,
+        "conf.high": 2.21884523131579,
+        "p.value": 0.722567987352944,
+        "p.crit": 0.0169,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.72\")"
+      },
+      {
+        "group1": "c2",
+        "group2": "c5",
+        "estimate": -2.16444444444445,
+        "conf.level": 0.95,
+        "conf.low": -6.29868786389898,
+        "conf.high": 1.96979897501009,
+        "p.value": 0.39855976502293,
+        "p.crit": 0.0102,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.40\")"
+      },
+      {
+        "group1": "c3",
+        "group2": "c4",
+        "estimate": -0.434444444444444,
+        "conf.level": 0.95,
+        "conf.low": -3.41715584454293,
+        "conf.high": 2.54826695565404,
+        "p.value": 0.722567987352944,
+        "p.crit": 0.05,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.72\")"
+      },
+      {
+        "group1": "c3",
+        "group2": "c5",
+        "estimate": -1.56777777777778,
+        "conf.level": 0.95,
+        "conf.low": -4.92000555739616,
+        "conf.high": 1.78445000184061,
+        "p.value": 0.443329258506363,
+        "p.crit": 0.0127,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.44\")"
+      },
+      {
+        "group1": "c4",
+        "group2": "c5",
+        "estimate": -1.43,
+        "conf.level": 0.95,
+        "conf.low": -6.10632097839593,
+        "conf.high": 3.24632097839593,
+        "p.value": 0.722567987352944,
+        "p.crit": 0.025,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"0.72\")"
+      }
+    ],
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_path",
+      "geom": "GeomPath",
+      "data": [
+        {
+          "condition": "c1",
+          "value": 30.2355555555556,
+          "std.dev": 3.23509210879396,
+          "iqr": 5.97,
+          "conf.low": 28.5852692307692,
+          "conf.high": 31.2335576923077,
+          "min": 24.02,
+          "max": 34.28,
+          "skewness": -0.377646067773609,
+          "kurtosis": -0.67416324321739,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.24\")",
+          "n.expression": "c1\n(n = 15)"
+        },
+        {
+          "condition": "c2",
+          "value": 30.5477777777778,
+          "std.dev": 3.49830503176011,
+          "iqr": 6.97,
+          "conf.low": 28.5235961538462,
+          "conf.high": 32.2533076923077,
+          "min": 25.59,
+          "max": 35.83,
+          "skewness": -0.00993452571885945,
+          "kurtosis": -1.46791500577913,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.55\")",
+          "n.expression": "c2\n(n = 15)"
+        },
+        {
+          "condition": "c3",
+          "value": 30.9266666666667,
+          "std.dev": 3.91059147882845,
+          "iqr": 5.56,
+          "conf.low": 29.261,
+          "conf.high": 32.9671923076923,
+          "min": 25.34,
+          "max": 38.63,
+          "skewness": 0.47880766586748,
+          "kurtosis": -0.401949719394219,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.93\")",
+          "n.expression": "c3\n(n = 15)"
+        },
+        {
+          "condition": "c4",
+          "value": 31.56,
+          "std.dev": 3.92934382017441,
+          "iqr": 4.11,
+          "conf.low": 29.7813846153846,
+          "conf.high": 33.7418076923077,
+          "min": 24.02,
+          "max": 37.33,
+          "skewness": -0.339146659752944,
+          "kurtosis": 0.0635676420920572,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"31.56\")",
+          "n.expression": "c4\n(n = 15)"
+        },
+        {
+          "condition": "c5",
+          "value": 33.0066666666667,
+          "std.dev": 5.62169123849331,
+          "iqr": 9.93,
+          "conf.low": 30.1476538461538,
+          "conf.high": 35.8480769230769,
+          "min": 23.55,
+          "max": 41.9,
+          "skewness": 0.138979352360496,
+          "kurtosis": -1.02808641398472,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"33.01\")",
+          "n.expression": "c5\n(n = 15)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...5",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "condition": "c1",
+          "value": 30.2355555555556,
+          "std.dev": 3.23509210879396,
+          "iqr": 5.97,
+          "conf.low": 28.5852692307692,
+          "conf.high": 31.2335576923077,
+          "min": 24.02,
+          "max": 34.28,
+          "skewness": -0.377646067773609,
+          "kurtosis": -0.67416324321739,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.24\")",
+          "n.expression": "c1\n(n = 15)"
+        },
+        {
+          "condition": "c2",
+          "value": 30.5477777777778,
+          "std.dev": 3.49830503176011,
+          "iqr": 6.97,
+          "conf.low": 28.5235961538462,
+          "conf.high": 32.2533076923077,
+          "min": 25.59,
+          "max": 35.83,
+          "skewness": -0.00993452571885945,
+          "kurtosis": -1.46791500577913,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.55\")",
+          "n.expression": "c2\n(n = 15)"
+        },
+        {
+          "condition": "c3",
+          "value": 30.9266666666667,
+          "std.dev": 3.91059147882845,
+          "iqr": 5.56,
+          "conf.low": 29.261,
+          "conf.high": 32.9671923076923,
+          "min": 25.34,
+          "max": 38.63,
+          "skewness": 0.47880766586748,
+          "kurtosis": -0.401949719394219,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.93\")",
+          "n.expression": "c3\n(n = 15)"
+        },
+        {
+          "condition": "c4",
+          "value": 31.56,
+          "std.dev": 3.92934382017441,
+          "iqr": 4.11,
+          "conf.low": 29.7813846153846,
+          "conf.high": 33.7418076923077,
+          "min": 24.02,
+          "max": 37.33,
+          "skewness": -0.339146659752944,
+          "kurtosis": 0.0635676420920572,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"31.56\")",
+          "n.expression": "c4\n(n = 15)"
+        },
+        {
+          "condition": "c5",
+          "value": 33.0066666666667,
+          "std.dev": 5.62169123849331,
+          "iqr": 9.93,
+          "conf.low": 30.1476538461538,
+          "conf.high": 35.8480769230769,
+          "min": 23.55,
+          "max": 41.9,
+          "skewness": 0.138979352360496,
+          "kurtosis": -1.02808641398472,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"33.01\")",
+          "n.expression": "c5\n(n = 15)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "condition": "c1",
+          "value": 30.2355555555556,
+          "std.dev": 3.23509210879396,
+          "iqr": 5.97,
+          "conf.low": 28.5852692307692,
+          "conf.high": 31.2335576923077,
+          "min": 24.02,
+          "max": 34.28,
+          "skewness": -0.377646067773609,
+          "kurtosis": -0.67416324321739,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.24\")",
+          "n.expression": "c1\n(n = 15)"
+        },
+        {
+          "condition": "c2",
+          "value": 30.5477777777778,
+          "std.dev": 3.49830503176011,
+          "iqr": 6.97,
+          "conf.low": 28.5235961538462,
+          "conf.high": 32.2533076923077,
+          "min": 25.59,
+          "max": 35.83,
+          "skewness": -0.00993452571885945,
+          "kurtosis": -1.46791500577913,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.55\")",
+          "n.expression": "c2\n(n = 15)"
+        },
+        {
+          "condition": "c3",
+          "value": 30.9266666666667,
+          "std.dev": 3.91059147882845,
+          "iqr": 5.56,
+          "conf.low": 29.261,
+          "conf.high": 32.9671923076923,
+          "min": 25.34,
+          "max": 38.63,
+          "skewness": 0.47880766586748,
+          "kurtosis": -0.401949719394219,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"30.93\")",
+          "n.expression": "c3\n(n = 15)"
+        },
+        {
+          "condition": "c4",
+          "value": 31.56,
+          "std.dev": 3.92934382017441,
+          "iqr": 4.11,
+          "conf.low": 29.7813846153846,
+          "conf.high": 33.7418076923077,
+          "min": 24.02,
+          "max": 37.33,
+          "skewness": -0.339146659752944,
+          "kurtosis": 0.0635676420920572,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"31.56\")",
+          "n.expression": "c4\n(n = 15)"
+        },
+        {
+          "condition": "c5",
+          "value": 33.0066666666667,
+          "std.dev": 5.62169123849331,
+          "iqr": 9.93,
+          "conf.low": 30.1476538461538,
+          "conf.high": 35.8480769230769,
+          "min": 23.55,
+          "max": 41.9,
+          "skewness": 0.138979352360496,
+          "kurtosis": -1.02808641398472,
+          "n.obs": 15,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"33.01\")",
+          "n.expression": "c5\n(n = 15)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_signif",
+      "geom": "GeomSignif",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true,
+          "comparisons": [
+            ["c1", "c3"]
+          ],
+          "test": null,
+          "test.args": null,
+          "annotations": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "map_signif_level": true,
+          "y_position": null,
+          "xmin": null,
+          "xmax": null,
+          "margin_top": 0.10708446866485,
+          "step_increase": 0.0555555555555556,
+          "tip_length": 0.01,
+          "manual": false,
+          "orientation": null
+        },
+        "geom": {
+          "na.rm": true,
+          "extend_line": 0,
+          "parse": true,
+          "orientation": null
+        },
+        "aes": {
+          "size": 0.5,
+          "textsize": 3,
+          "family": "",
+          "vjust": 0
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "xend": 1,
+          "y": 43.6815,
+          "yend": 43.865,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "c1-c3-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 1,
+          "xend": 3,
+          "y": 43.865,
+          "yend": 43.865,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "c1-c3-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        },
+        {
+          "x": 3,
+          "xend": 3,
+          "y": 43.865,
+          "yend": 43.6815,
+          "annotation": "list(italic(p)[\"Holm\" - adj.] == \"0.03\")",
+          "group": "c1-c3-1",
+          "flipped_aes": false,
+          "PANEL": "1",
+          "shape": 19,
+          "colour": "black",
+          "textsize": 3,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0,
+          "alpha": null,
+          "family": "",
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linetype": 1,
+          "size": 0.5
+        }
+      ]
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "effect size confidence interval",
+    "call": "WRS2::wmcpAKP(wide, tr = 0.2, nboot = R)",
+    "data_order": "complete subjects sorted by subject, then by condition, as statsExpressions passes them (dep.effect and wmcpAKP: one column per condition)",
+    "conf_level": 0.95,
+    "requested_conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": -0.578347405799984,
+      "conf_low": -1.6196218520916,
+      "conf_high": -0.0195122649493528,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::wmcpAKP(wide, tr = 0.2, nboot = R)",
+          "values": [
+            -0.578347405799984,
+            -1.6196218520916,
+            -0.0195122649493528
+          ],
+          "matches": true
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": -0.578347405799984,
+    "conf_low": -1.70489581055962,
+    "conf_high": 0.0269989847281948,
+    "raw": [-0.578347405799984, -1.70489581055962, 0.0269989847281948],
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": -0.578347405799984,
+      "estimate_sd": 0,
+      "conf_low_mean": -1.71021211109442,
+      "conf_low_sd": 0.0356525592542301,
+      "conf_high_mean": 0.0237248073650642,
+      "conf_high_sd": 0.00710212587333759
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

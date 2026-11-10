@@ -1,0 +1,3405 @@
+{
+  "schema_version": 2,
+  "name": "probe-rmanova",
+  "kind": "probe",
+  "description": "afex::aov_ez with no, GG and HF corrections, sphericity epsilons, error strata, omega squared",
+  "datasets": [
+    {
+      "file": "bugs_long.csv",
+      "sha256": "f74c7422716886221713af60942c1e66bcd6c1bd5afbe40c46194e3f3714eb4e"
+    },
+    {
+      "file": "edge_within_missing.csv",
+      "sha256": "b8df2b910b3b062e457caab7c054b6e3bc5a968221dd2879c070387113a5621b"
+    },
+    {
+      "file": "edge_within_small.csv",
+      "sha256": "3e734fbb776ae70b214a5c5fe2b5de53059bf9b88e75e49175f18aa7eb0aa3cc"
+    },
+    {
+      "file": "edge_within_ties.csv",
+      "sha256": "81d9138372286c26b57c2cfe55e4633b1ece89781f3edf987b74828acf775d49"
+    },
+    {
+      "file": "edge_within_negative.csv",
+      "sha256": "26f3db83cdbf9a586c9aa11173ba8ea200e3bb4a2e613b2bf408718d7a9bdd34"
+    },
+    {
+      "file": "edge_within_outliers.csv",
+      "sha256": "005d2bf35a1227435177b92cff69b47e28f8cece7e36ce7f77531f4c8b42c3f8"
+    },
+    {
+      "file": "edge_within_null.csv",
+      "sha256": "48f90e17f13f17b880ecbfbd6ab7ea1664139028aa0116ce5d52aa14022ca19e"
+    },
+    {
+      "file": "edge_within_k5.csv",
+      "sha256": "978a12045eddc3a31d104e2cc526b9f0a0c9ab0f9ae1ce2bc09b5fbff5adb391"
+    },
+    {
+      "file": "edge_within_nonspherical.csv",
+      "sha256": "3f56ffe3fbaf11c4d571e4d9e41287d6d5077dd793ca5a9307545dfe93337726"
+    }
+  ],
+  "designs": [
+    {
+      "name": "bugs_long",
+      "levels": [
+        "HDHF",
+        "HDLF",
+        "LDHF",
+        "LDLF"
+      ],
+      "subjects": [
+        "1",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "29",
+        "30",
+        "31",
+        "32",
+        "33",
+        "34",
+        "35",
+        "36",
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "43",
+        "45",
+        "46",
+        "47",
+        "48",
+        "49",
+        "50",
+        "51",
+        "52",
+        "53",
+        "54",
+        "56",
+        "57",
+        "58",
+        "59",
+        "60",
+        "61",
+        "62",
+        "65",
+        "66",
+        "67",
+        "68",
+        "69",
+        "70",
+        "71",
+        "72",
+        "73",
+        "74",
+        "76",
+        "77",
+        "78",
+        "79",
+        "81",
+        "82",
+        "83",
+        "84",
+        "85",
+        "86",
+        "87",
+        "88",
+        "89",
+        "90",
+        "91",
+        "92",
+        "93",
+        "95",
+        "96",
+        "97",
+        "98",
+        "99",
+        "100"
+      ],
+      "values_hex": {
+        "HDHF": [
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.2p+3",
+          "0x1.1p+3",
+          "0x1.8p+1",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x0p+0",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1.1p+3",
+          "0x1.cp+2",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x1.3p+3",
+          "0x1.ep+2",
+          "0x1.4p+3",
+          "0x1.8p+0",
+          "0x1.6p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1.8p+2",
+          "0x1.4p+3",
+          "0x1p+2",
+          "0x1.8p+2",
+          "0x1p+2",
+          "0x1.2p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.2p+3",
+          "0x1.3p+3",
+          "0x1.ep+2",
+          "0x1.6p+2",
+          "0x1p+3",
+          "0x1.4p+3",
+          "0x1.4p+1",
+          "0x1.6p+2",
+          "0x1.3p+3",
+          "0x1.cp+1",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.8p+2",
+          "0x1.1p+3",
+          "0x1p+3",
+          "0x1.ep+2",
+          "0x1p+3",
+          "0x1.4p+1",
+          "0x1.1p+3",
+          "0x1.3p+3",
+          "0x1.cp+2",
+          "0x1.8p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.6p+2",
+          "0x1.2p+3",
+          "0x1.2p+3",
+          "0x1.8p+2",
+          "0x1.6p+2",
+          "0x1.cp+2",
+          "0x1.6p+2",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1.4p+2",
+          "0x1.cp+2",
+          "0x1.ep+2",
+          "0x1.6p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.ap+2",
+          "0x1p+3",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1p+1",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.8p+1"
+        ],
+        "HDLF": [
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.8p+2",
+          "0x1.6p+2",
+          "0x1.ep+2",
+          "0x1.4p+3",
+          "0x1.2p+3",
+          "0x1.8p+2",
+          "0x0p+0",
+          "0x1.1p+3",
+          "0x1.ap+2",
+          "0x1p+2",
+          "0x1.8p+2",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1.ep+2",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1.4p+2",
+          "0x1.2p+2",
+          "0x1.2p+3",
+          "0x1p+2",
+          "0x1.2p+2",
+          "0x1.cp+1",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1.ep+2",
+          "0x1.ap+2",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1p+3",
+          "0x1p+1",
+          "0x1.cp+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1.ep+2",
+          "0x0p+0",
+          "0x1.ap+2",
+          "0x1p+0",
+          "0x1p-1",
+          "0x1.3p+3",
+          "0x1.8p+0",
+          "0x1.2p+2",
+          "0x1p+3",
+          "0x1.4p+3",
+          "0x1p+2",
+          "0x1.8p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.ep+2",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1.4p+2",
+          "0x1.cp+1",
+          "0x1.4p+3",
+          "0x1.8p+1",
+          "0x1.2p+2",
+          "0x1.4p+3",
+          "0x1p+2",
+          "0x1.4p+1",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1p+0",
+          "0x1.1p+3",
+          "0x1.2p+3",
+          "0x1.ep+2",
+          "0x1p-1",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x1.1p+3",
+          "0x0p+0",
+          "0x1p-1",
+          "0x1.1p+3",
+          "0x1.cp+1",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x1.2p+2",
+          "0x1.1p+3",
+          "0x1p+2",
+          "0x1.4p+3",
+          "0x1p+1",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1p+1"
+        ],
+        "LDHF": [
+          "0x1.8p+2",
+          "0x1.4p+3",
+          "0x1.2p+3",
+          "0x1.ap+2",
+          "0x1p-1",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x1.4p+1",
+          "0x1.ep+2",
+          "0x1.1p+3",
+          "0x1p+3",
+          "0x1.4p+2",
+          "0x1.1p+3",
+          "0x1.8p+2",
+          "0x1.8p+2",
+          "0x1.8p+2",
+          "0x1.2p+3",
+          "0x1.2p+2",
+          "0x1.3p+3",
+          "0x1.4p+3",
+          "0x1.8p+0",
+          "0x1p-1",
+          "0x1.ep+2",
+          "0x1.4p+2",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.cp+2",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1p+1",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.cp+2",
+          "0x1.cp+2",
+          "0x1.1p+3",
+          "0x1.ep+2",
+          "0x1p+1",
+          "0x1.cp+2",
+          "0x1p+2",
+          "0x1.ep+2",
+          "0x1.cp+1",
+          "0x1p+3",
+          "0x1.8p+2",
+          "0x1.4p+1",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.2p+2",
+          "0x1.ap+2",
+          "0x1.ep+2",
+          "0x1.ep+2",
+          "0x1.3p+3",
+          "0x1.1p+3",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1p+3",
+          "0x1.1p+3",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.8p+2",
+          "0x1.1p+3",
+          "0x1.2p+3",
+          "0x1.8p+2",
+          "0x1.ap+2",
+          "0x1p+3",
+          "0x1p+2",
+          "0x1.3p+3",
+          "0x1p+3",
+          "0x1.4p+2",
+          "0x1.8p+1",
+          "0x1.cp+2",
+          "0x1p+2",
+          "0x1.4p+3",
+          "0x1p+3",
+          "0x1p+3",
+          "0x1.ep+2",
+          "0x1.3p+3",
+          "0x1.4p+3",
+          "0x1p+2",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.6p+2"
+        ],
+        "LDLF": [
+          "0x1.8p+2",
+          "0x1.4p+2",
+          "0x1.8p+2",
+          "0x1.8p+1",
+          "0x1p+1",
+          "0x1.4p+3",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x0p+0",
+          "0x1.3p+3",
+          "0x1.cp+2",
+          "0x1.8p+1",
+          "0x1p+2",
+          "0x1.cp+2",
+          "0x1p+1",
+          "0x1.ep+2",
+          "0x1.ap+2",
+          "0x1.cp+2",
+          "0x1.8p+1",
+          "0x1.4p+1",
+          "0x1.4p+3",
+          "0x0p+0",
+          "0x1p-1",
+          "0x1.4p+2",
+          "0x1.ap+2",
+          "0x1p+3",
+          "0x1.8p+1",
+          "0x1.ep+2",
+          "0x1.ap+2",
+          "0x1.2p+2",
+          "0x1.8p+1",
+          "0x1.8p+2",
+          "0x1p+2",
+          "0x1.2p+2",
+          "0x1.cp+2",
+          "0x1p+3",
+          "0x1.4p+2",
+          "0x1p+1",
+          "0x1.ep+2",
+          "0x1.cp+1",
+          "0x1.4p+2",
+          "0x1p+1",
+          "0x1p+2",
+          "0x1.4p+2",
+          "0x1.6p+2",
+          "0x1.4p+3",
+          "0x1.cp+2",
+          "0x1.6p+2",
+          "0x1.4p+3",
+          "0x1.3p+3",
+          "0x1.8p+2",
+          "0x1.ep+2",
+          "0x1.cp+1",
+          "0x1.4p+1",
+          "0x1.cp+1",
+          "0x1.8p+1",
+          "0x1.8p+2",
+          "0x1.6p+2",
+          "0x1.8p+1",
+          "0x1p+1",
+          "0x1p+2",
+          "0x1.2p+3",
+          "0x1.4p+3",
+          "0x1.6p+2",
+          "0x1.8p+2",
+          "0x1.2p+3",
+          "0x1.8p+2",
+          "0x1.4p+2",
+          "0x1.8p+2",
+          "0x1.6p+2",
+          "0x1.3p+3",
+          "0x1p+3",
+          "0x0p+0",
+          "0x1.8p+1",
+          "0x1.cp+2",
+          "0x1.4p+2",
+          "0x1.4p+3",
+          "0x1.ep+2",
+          "0x1.8p+2",
+          "0x1.cp+2",
+          "0x1.ap+2",
+          "0x1.ap+2",
+          "0x1.8p+1",
+          "0x1.4p+3",
+          "0x1.1p+3",
+          "0x1.8p+0",
+          "0x1.2p+3",
+          "0x1.6p+2"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [
+        "Registered S3 method overwritten by 'lme4':\n  method           from\n  na.action.merMod car \n"
+      ],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 3,
+              "den Df": 261,
+              "MSE": 3.77019113549286,
+              "F": 20.587383616023,
+              "Pr(>F)": 5.2680499740506e-12,
+              "num Df_hex": "0x1.8p+1",
+              "den Df_hex": "0x1.05p+8",
+              "MSE_hex": "0x1.e2959f854e334p+1",
+              "F_hex": "0x1.4965ec5cd0672p+4",
+              "Pr(>F)_hex": "0x1.72b4c068e27cbp-38"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 2.63165883746128,
+              "den Df": 228.954318859131,
+              "MSE": 4.29788741818438,
+              "F": 20.587383616023,
+              "Pr(>F)": 8.2702235026494e-11,
+              "num Df_hex": "0x1.50da326090132p+1",
+              "den Df_hex": "0x1.c9e89c7b43dap+7",
+              "MSE_hex": "0x1.13109663bf79ap+2",
+              "F_hex": "0x1.4965ec5cd0672p+4",
+              "Pr(>F)_hex": "0x1.6bba704f6e17fp-34"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 2.72123375347972,
+              "den Df": 236.747336552736,
+              "MSE": 4.1564137560823,
+              "F": 20.587383616023,
+              "Pr(>F)": 4.23129405181983e-11,
+              "num Df_hex": "0x1.5c51633bfbbd9p+1",
+              "den Df_hex": "0x1.d97ea2e58a35bp+7",
+              "MSE_hex": "0x1.0a02aed7c127p+2",
+              "F_hex": "0x1.4965ec5cd0672p+4",
+              "Pr(>F)_hex": "0x1.74304585f65f5p-35"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.825862553872684,
+          "p-value": 0.00579122966698157
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.877219612487094,
+          "Pr(>F[GG])": 8.2702235026494e-11,
+          "HF eps": 0.907077917826573,
+          "Pr(>F[HF])": 4.23129405181983e-11
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 87,
+            "Sum Sq": 1594.87215909091,
+            "Mean Sq": 18.3318638975967,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.5cp+6",
+            "Sum Sq_hex": "0x1.8eb7d1745d175p+10",
+            "Mean Sq_hex": "0x1.254f5084ae697p+4",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 3,
+            "Sum Sq": 232.855113636364,
+            "Mean Sq": 77.6183712121212,
+            "F value": 20.5873836160231,
+            "Pr(>F)": 5.26804997405026e-12,
+            "Df_hex": "0x1.8p+1",
+            "Sum Sq_hex": "0x1.d1b5d1745d174p+7",
+            "Mean Sq_hex": "0x1.3679364d9364dp+6",
+            "F value_hex": "0x1.4965ec5cd0681p+4",
+            "Pr(>F)_hex": "0x1.72b4c068e262ap-38"
+          },
+          {
+            "term": "Residuals",
+            "Df": 261,
+            "Sum Sq": 984.019886363636,
+            "Mean Sq": 3.77019113549286,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.05p+8",
+            "Sum Sq_hex": "0x1.ec028ba2e8ba3p+9",
+            "Mean Sq_hex": "0x1.e2959f854e333p+1",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 232.855113636363,
+          "sum.squares.error": 984.019886363636,
+          "df": 2.63165883746128,
+          "df.error": 228.954318859131,
+          "meansq": 4.29788741818438,
+          "statistic": 20.587383616023,
+          "p.value": 8.2702235026494e-11,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.d1b5d1745d15ep+7",
+          "sum.squares.error_hex": "0x1.ec028ba2e8ba4p+9",
+          "df_hex": "0x1.50da326090132p+1",
+          "df.error_hex": "0x1.c9e89c7b43dap+7",
+          "meansq_hex": "0x1.13109663bf79ap+2",
+          "statistic_hex": "0x1.4965ec5cd0672p+4",
+          "p.value_hex": "0x1.6bba704f6e17fp-34"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.0782821039378391,
+              "CI": 0.95,
+              "CI_low": 0.0280343890103807,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.40a4bc4466c6dp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.cb50bffda098ep-6",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.0782821039378391,
+              "CI": 0.9,
+              "CI_low": 0.0362222096999934,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.40a4bc4466c6dp-4",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.28bb7ac19c44ep-5",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.181497901141768,
+              "CI": 0.95,
+              "CI_low": 0.111165979812749,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.73b52bed92816p-3",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.c755fa7b93aaep-4",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.181497901141768,
+              "CI": 0.9,
+              "CI_low": 0.124822651947547,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.73b52bed92816p-3",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.ff46097ea2a1dp-4",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.181419471814737,
+              "CI": 0.95,
+              "CI_low": 0.10734430529615,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.738c0d526a455p-3",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.b7aea98a8a77ap-4",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.181419471814737,
+              "CI": 0.9,
+              "CI_low": 0.121784544106991,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.738c0d526a455p-3",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.f2d459a190924p-4",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_missing",
+      "levels": [
+        "mid",
+        "post",
+        "pre"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "values_hex": {
+        "mid": [
+          "0x1.e828f5c28f5c3p+4",
+          "0x1.55eb851eb851fp+4",
+          "0x1.267ae147ae148p+5",
+          "0x1.d547ae147ae14p+4",
+          "0x1.4cccccccccccdp+5",
+          "0x1.0f47ae147ae14p+5",
+          "0x1.09c28f5c28f5cp+5",
+          "0x1.f5c28f5c28f5cp+4",
+          "0x1.4666666666666p+5",
+          "0x1.ca147ae147ae1p+4",
+          "0x1.c2b851eb851ecp+4"
+        ],
+        "post": [
+          "0x1.11eb851eb851fp+5",
+          "0x1.7cccccccccccdp+4",
+          "0x1.11ae147ae147bp+5",
+          "0x1.ebd70a3d70a3dp+4",
+          "0x1.488f5c28f5c29p+5",
+          "0x1.14ccccccccccdp+5",
+          "0x1.08ccccccccccdp+5",
+          "0x1.10147ae147ae1p+5",
+          "0x1.39d70a3d70a3dp+5",
+          "0x1.dc28f5c28f5c3p+4",
+          "0x1.a2e147ae147aep+4"
+        ],
+        "pre": [
+          "0x1.087ae147ae148p+5",
+          "0x1.3ae147ae147aep+4",
+          "0x1.0eb851eb851ecp+5",
+          "0x1.ab33333333333p+4",
+          "0x1.2933333333333p+5",
+          "0x1.ebae147ae147bp+4",
+          "0x1.083d70a3d70a4p+5",
+          "0x1.b266666666666p+4",
+          "0x1.2ee147ae147aep+5",
+          "0x1.acccccccccccdp+4",
+          "0x1.2dc28f5c28f5cp+4"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 20,
+              "MSE": 3.07677575757576,
+              "F": 11.2319557269712,
+              "Pr(>F)": 0.000537155467648018,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.4p+4",
+              "MSE_hex": "0x1.89d3c9bbf4eddp+1",
+              "F_hex": "0x1.676c2e6aaec31p+3",
+              "Pr(>F)_hex": "0x1.199fc954d1d19p-11"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.71162120104805,
+              "den Df": 17.1162120104805,
+              "MSE": 3.59515967165143,
+              "F": 11.2319557269712,
+              "Pr(>F)": 0.00113344861109661,
+              "num Df_hex": "0x1.b62cce99a43fbp+0",
+              "den Df_hex": "0x1.11dc012006a7dp+4",
+              "MSE_hex": "0x1.cc2e312ed20bep+1",
+              "F_hex": "0x1.676c2e6aaec31p+3",
+              "Pr(>F)_hex": "0x1.292072dd8c93ap-10"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 20,
+              "MSE": 3.07677575757576,
+              "F": 11.2319557269712,
+              "Pr(>F)": 0.000537155467648018,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.4p+4",
+              "MSE_hex": "0x1.89d3c9bbf4eddp+1",
+              "F_hex": "0x1.676c2e6aaec31p+3",
+              "Pr(>F)_hex": "0x1.199fc954d1d19p-11"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.831517161171305,
+          "p-value": 0.435933732056779
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.855810600524023,
+          "Pr(>F[GG])": 0.00113344861109661,
+          "HF eps": 1.01514624389853,
+          "Pr(>F[HF])": 0.000537155467648018
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 10,
+            "Sum Sq": 944.946339393939,
+            "Mean Sq": 94.4946339393939,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.4p+3",
+            "Sum Sq_hex": "0x1.d87921a635f16p+9",
+            "Mean Sq_hex": "0x1.79fa8151c4c12p+6",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 69.1164181818182,
+            "Mean Sq": 34.5582090909091,
+            "F value": 11.2319557269712,
+            "Pr(>F)": 0.000537155467648015,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.14773653ee46cp+6",
+            "Mean Sq_hex": "0x1.14773653ee46cp+5",
+            "F value_hex": "0x1.676c2e6aaec35p+3",
+            "Pr(>F)_hex": "0x1.199fc954d1d02p-11"
+          },
+          {
+            "term": "Residuals",
+            "Df": 20,
+            "Sum Sq": 61.5355151515149,
+            "Mean Sq": 3.07677575757574,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.4p+4",
+            "Sum Sq_hex": "0x1.ec48bc2af2269p+5",
+            "Mean Sq_hex": "0x1.89d3c9bbf4ebap+1",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 69.1164181818185,
+          "sum.squares.error": 61.5355151515152,
+          "df": 1.71162120104805,
+          "df.error": 17.1162120104805,
+          "meansq": 3.59515967165143,
+          "statistic": 11.2319557269712,
+          "p.value": 0.00113344861109661,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.14773653ee481p+6",
+          "sum.squares.error_hex": "0x1.ec48bc2af2294p+5",
+          "df_hex": "0x1.b62cce99a43fbp+0",
+          "df.error_hex": "0x1.11dc012006a7dp+4",
+          "meansq_hex": "0x1.cc2e312ed20bep+1",
+          "statistic_hex": "0x1.676c2e6aaec31p+3",
+          "p.value_hex": "0x1.292072dd8c93ap-10"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.053810143030466,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.b8d00c90492f5p-5",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.053810143030466,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.b8d00c90492f5p-5",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.470825353020229,
+              "CI": 0.95,
+              "CI_low": 0.16839976793085,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e2200a9565edfp-2",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.58e1fa3f55fe4p-3",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.470825353020229,
+              "CI": 0.9,
+              "CI_low": 0.232757125702005,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e2200a9565edfp-2",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.dcafc4966898cp-3",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.469007300324402,
+              "CI": 0.95,
+              "CI_low": 0.146952309173888,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e0437321ea0bp-2",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.2cf5550fc9c9dp-3",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.469007300324402,
+              "CI": 0.9,
+              "CI_low": 0.215029490564237,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e0437321ea0bp-2",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.b86161ad31066p-3",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_small",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "values_hex": {
+        "a": [
+          "0x1.9e66666666666p+4",
+          "0x1.42b851eb851ecp+4",
+          "0x1.72e147ae147aep+4",
+          "0x1.82147ae147ae1p+4"
+        ],
+        "b": [
+          "0x1.aca3d70a3d70ap+4",
+          "0x1.4deb851eb851fp+4",
+          "0x1.8d70a3d70a3d7p+4",
+          "0x1.8f0a3d70a3d71p+4"
+        ],
+        "c": [
+          "0x1.ae8f5c28f5c29p+4",
+          "0x1.8p+4",
+          "0x1.8deb851eb851fp+4",
+          "0x1.9ae147ae147aep+4"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 6,
+              "MSE": 0.639922222222221,
+              "F": 6.37645199937498,
+              "Pr(>F)": 0.0327527793980089,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.8p+2",
+              "MSE_hex": "0x1.47a3e2b0db2dep-1",
+              "F_hex": "0x1.9817ca207513cp+2",
+              "Pr(>F)_hex": "0x1.0c4f8e8bc2f9dp-5"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.11812744524123,
+              "den Df": 3.3543823357237,
+              "MSE": 1.14463199154218,
+              "F": 6.37645199937498,
+              "Pr(>F)": 0.0762539935834982,
+              "num Df_hex": "0x1.1e3d99aa1235p+0",
+              "den Df_hex": "0x1.ad5c667f1b4f8p+1",
+              "MSE_hex": "0x1.25069a29a1074p+0",
+              "F_hex": "0x1.9817ca207513cp+2",
+              "Pr(>F)_hex": "0x1.38561b8a169aep-4"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 1.31385612416345,
+              "den Df": 3.94156837249035,
+              "MSE": 0.974113086590311,
+              "F": 6.37645199937498,
+              "Pr(>F)": 0.0629101129194618,
+              "num Df_hex": "0x1.5058dffcee6c2p+0",
+              "den Df_hex": "0x1.f8854ffb65a23p+1",
+              "MSE_hex": "0x1.f2bef35305a22p-1",
+              "F_hex": "0x1.9817ca207513cp+2",
+              "Pr(>F)_hex": "0x1.01ae08d93a642p-4"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.211295135888103,
+          "p-value": 0.211295135888103
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.559063722620616,
+          "Pr(>F[GG])": 0.0762539935834982,
+          "HF eps": 0.656928062081725,
+          "Pr(>F[HF])": 0.0629101129194618
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 3,
+            "Sum Sq": 36.6588666666667,
+            "Mean Sq": 12.2196222222222,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.8p+1",
+            "Sum Sq_hex": "0x1.25455be30e10cp+5",
+            "Mean Sq_hex": "0x1.8707252ebd6bbp+3",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 8.16086666666662,
+            "Mean Sq": 4.08043333333331,
+            "F value": 6.37645199937487,
+            "Pr(>F)": 0.03275277939801,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.0525d1da0b306p+3",
+            "Mean Sq_hex": "0x1.0525d1da0b306p+2",
+            "F value_hex": "0x1.9817ca20750c4p+2",
+            "Pr(>F)_hex": "0x1.0c4f8e8bc3041p-5"
+          },
+          {
+            "term": "Residuals",
+            "Df": 6,
+            "Sum Sq": 3.83953333333334,
+            "Mean Sq": 0.639922222222224,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.8p+2",
+            "Sum Sq_hex": "0x1.eb75d40948c72p+1",
+            "Mean Sq_hex": "0x1.47a3e2b0db2f7p-1",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 8.16086666666672,
+          "sum.squares.error": 3.83953333333333,
+          "df": 1.11812744524123,
+          "df.error": 3.3543823357237,
+          "meansq": 1.14463199154218,
+          "statistic": 6.37645199937498,
+          "p.value": 0.0762539935834982,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.0525d1da0b33fp+3",
+          "sum.squares.error_hex": "0x1.eb75d40948c4dp+1",
+          "df_hex": "0x1.1e3d99aa1235p+0",
+          "df.error_hex": "0x1.ad5c667f1b4f8p+1",
+          "meansq_hex": "0x1.25069a29a1074p+0",
+          "statistic_hex": "0x1.9817ca207513cp+2",
+          "p.value_hex": "0x1.38561b8a169aep-4"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.113028052052345,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.cef680b186cb5p-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.113028052052345,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.cef680b186cb5p-4",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.544370792235432,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.16b7c4bb18fb6p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.544370792235432,
+              "CI": 0.9,
+              "CI_low": 0.0115270340227589,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.16b7c4bb18fb6p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.79b7c512e5819p-7",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.523469416175606,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.0c042eeddc62fp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.523469416175606,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.0c042eeddc62fp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_ties",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ],
+      "values_hex": {
+        "a": [
+          "0x1p+0",
+          "0x1p+1",
+          "0x1.4p+2",
+          "0x1.8p+1",
+          "0x1p+0",
+          "0x1.4p+2",
+          "0x1p+0",
+          "0x1p+0",
+          "0x1p+0",
+          "0x1p+2",
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1p+0",
+          "0x1.8p+1",
+          "0x1p+2"
+        ],
+        "b": [
+          "0x1p+1",
+          "0x1.4p+2",
+          "0x1p+0",
+          "0x1.8p+1",
+          "0x1.4p+2",
+          "0x1p+1",
+          "0x1p+2",
+          "0x1p+0",
+          "0x1p+0",
+          "0x1p+0",
+          "0x1.4p+2",
+          "0x1.4p+2",
+          "0x1p+2",
+          "0x1.8p+1",
+          "0x1p+0"
+        ],
+        "c": [
+          "0x1.4p+2",
+          "0x1p+1",
+          "0x1.8p+1",
+          "0x1p+0",
+          "0x1.8p+1",
+          "0x1p+2",
+          "0x1p+2",
+          "0x1.8p+1",
+          "0x1p+0",
+          "0x1.4p+2",
+          "0x1.8p+1",
+          "0x1p+1",
+          "0x1.4p+2",
+          "0x1.4p+2",
+          "0x1p+2"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 28,
+              "MSE": 2.72698412698413,
+              "F": 1.034924330617,
+              "Pr(>F)": 0.368447018051582,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.cp+4",
+              "MSE_hex": "0x1.5d0dd0dd0dd0dp+1",
+              "F_hex": "0x1.08f0cd09d5ae1p+0",
+              "Pr(>F)_hex": "0x1.794a2cd35c6eap-2"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.80124300929328,
+              "den Df": 25.2174021301059,
+              "MSE": 3.0278914204409,
+              "F": 1.034924330617,
+              "Pr(>F)": 0.36292592424745,
+              "num Df_hex": "0x1.cd1e43091030fp+0",
+              "den Df_hex": "0x1.937a7aa7ee2adp+4",
+              "MSE_hex": "0x1.8391f23150fa2p+1",
+              "F_hex": "0x1.08f0cd09d5ae1p+0",
+              "Pr(>F)_hex": "0x1.73a2da7e0db0cp-2"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 28,
+              "MSE": 2.72698412698413,
+              "F": 1.034924330617,
+              "Pr(>F)": 0.368447018051582,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.cp+4",
+              "MSE_hex": "0x1.5d0dd0dd0dd0dp+1",
+              "F_hex": "0x1.08f0cd09d5ae1p+0",
+              "Pr(>F)_hex": "0x1.794a2cd35c6eap-2"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.889655649081627,
+          "p-value": 0.467673341624883
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.900621504646638,
+          "Pr(>F[GG])": 0.36292592424745,
+          "HF eps": 1.02545878889377,
+          "Pr(>F[HF])": 0.368447018051582
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 14,
+            "Sum Sq": 22.4444444444444,
+            "Mean Sq": 1.6031746031746,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.cp+3",
+            "Sum Sq_hex": "0x1.671c71c71c71cp+4",
+            "Mean Sq_hex": "0x1.9a69a69a69a69p+0",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 5.64444444444444,
+            "Mean Sq": 2.82222222222222,
+            "F value": 1.034924330617,
+            "Pr(>F)": 0.368447018051581,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.693e93e93e93cp+2",
+            "Mean Sq_hex": "0x1.693e93e93e93cp+1",
+            "F value_hex": "0x1.08f0cd09d5ae7p+0",
+            "Pr(>F)_hex": "0x1.794a2cd35c6dcp-2"
+          },
+          {
+            "term": "Residuals",
+            "Df": 28,
+            "Sum Sq": 76.3555555555555,
+            "Mean Sq": 2.72698412698412,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.cp+4",
+            "Sum Sq_hex": "0x1.316c16c16c168p+6",
+            "Mean Sq_hex": "0x1.5d0dd0dd0dd09p+1",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 5.64444444444444,
+          "sum.squares.error": 76.3555555555555,
+          "df": 1.80124300929328,
+          "df.error": 25.2174021301059,
+          "meansq": 3.0278914204409,
+          "statistic": 1.034924330617,
+          "p.value": 0.36292592424745,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.693e93e93e938p+2",
+          "sum.squares.error_hex": "0x1.316c16c16c16bp+6",
+          "df_hex": "0x1.cd1e43091030fp+0",
+          "df.error_hex": "0x1.937a7aa7ee2adp+4",
+          "meansq_hex": "0x1.8391f23150fa2p+1",
+          "statistic_hex": "0x1.08f0cd09d5ae1p+0",
+          "p.value_hex": "0x1.73a2da7e0db0cp-2"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.00179613830264926,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.d6d8cd136d443p-10",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.00179613830264926,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.d6d8cd136d443p-10",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.00224811720184339,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.26aa4bb80f635p-9",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.00224811720184339,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.26aa4bb80f635p-9",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.00224016128465811,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.259f56e926824p-9",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.00224016128465811,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.259f56e926824p-9",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_negative",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "values_hex": {
+        "a": [
+          "-0x1.cc66666666666p+5",
+          "-0x1.b07ae147ae148p+5",
+          "-0x1.4b1eb851eb852p+5",
+          "-0x1.e0b851eb851ecp+5",
+          "-0x1.a333333333333p+5",
+          "-0x1.7cccccccccccdp+5",
+          "-0x1.9d9999999999ap+5",
+          "-0x1.a4ccccccccccdp+5",
+          "-0x1.75851eb851eb8p+5",
+          "-0x1.b30a3d70a3d71p+5",
+          "-0x1.1eb851eb851ecp+5",
+          "-0x1.8e3d70a3d70a4p+5"
+        ],
+        "b": [
+          "-0x1.cce147ae147aep+5",
+          "-0x1.c8b851eb851ecp+5",
+          "-0x1.6ca3d70a3d70ap+5",
+          "-0x1.db1eb851eb852p+5",
+          "-0x1.b55c28f5c28f6p+5",
+          "-0x1.7f9999999999ap+5",
+          "-0x1.a1eb851eb851fp+5",
+          "-0x1.a1d70a3d70a3dp+5",
+          "-0x1.8d1eb851eb852p+5",
+          "-0x1.c55c28f5c28f6p+5",
+          "-0x1.1ee147ae147aep+5",
+          "-0x1.b028f5c28f5c3p+5"
+        ],
+        "c": [
+          "-0x1.f2ccccccccccdp+5",
+          "-0x1.d1851eb851eb8p+5",
+          "-0x1.810a3d70a3d71p+5",
+          "-0x1.f68f5c28f5c29p+5",
+          "-0x1.bdeb851eb851fp+5",
+          "-0x1.84a3d70a3d70ap+5",
+          "-0x1.b4ccccccccccdp+5",
+          "-0x1.ae28f5c28f5c3p+5",
+          "-0x1.987ae147ae148p+5",
+          "-0x1.d8147ae147ae1p+5",
+          "-0x1.2c66666666666p+5",
+          "-0x1.c47ae147ae148p+5"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 22,
+              "MSE": 1.37141590909091,
+              "F": 30.0020764869752,
+              "Pr(>F)": 5.18149604235302e-07,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.6p+4",
+              "MSE_hex": "0x1.5f151ceec2736p+0",
+              "F_hex": "0x1.e008815aba624p+4",
+              "Pr(>F)_hex": "0x1.162df0791ccffp-21"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.55708091231129,
+              "den Df": 17.1278900354242,
+              "MSE": 1.76152170159894,
+              "F": 30.0020764869752,
+              "Pr(>F)": 7.02745219870877e-06,
+              "num Df_hex": "0x1.8e9cdacb9a53cp+0",
+              "den Df_hex": "0x1.120bd66bfa199p+4",
+              "MSE_hex": "0x1.c2f316138fcdfp+0",
+              "F_hex": "0x1.e008815aba624p+4",
+              "Pr(>F)_hex": "0x1.d79ab59fde00bp-18"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 1.76692935656821,
+              "den Df": 19.4362229222503,
+              "MSE": 1.55231549466643,
+              "F": 30.0020764869752,
+              "Pr(>F)": 2.03869813506553e-06,
+              "num Df_hex": "0x1.c4557b78cd83ep+0",
+              "den Df_hex": "0x1.36fac4e30d4abp+4",
+              "MSE_hex": "0x1.8d648c5aaa981p+0",
+              "F_hex": "0x1.e008815aba624p+4",
+              "Pr(>F)_hex": "0x1.11a12270b3765p-19"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.715545233271629,
+          "p-value": 0.187579539214226
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.778540456155646,
+          "Pr(>F[GG])": 7.02745219870877e-06,
+          "HF eps": 0.883464678284106,
+          "Pr(>F[HF])": 2.03869813506553e-06
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 11,
+            "Sum Sq": 1481.683475,
+            "Mean Sq": 134.698497727273,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.6p+3",
+            "Sum Sq_hex": "0x1.726bbe0ded288p+10",
+            "Mean Sq_hex": "0x1.0d65a17e7deefp+7",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 82.29065,
+            "Mean Sq": 41.145325,
+            "F value": 30.0020764869751,
+            "Pr(>F)": 5.18149604235309e-07,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.4929a02752545p+6",
+            "Mean Sq_hex": "0x1.4929a02752545p+5",
+            "F value_hex": "0x1.e008815aba615p+4",
+            "Pr(>F)_hex": "0x1.162df0791cd44p-21"
+          },
+          {
+            "term": "Residuals",
+            "Df": 22,
+            "Sum Sq": 30.17115,
+            "Mean Sq": 1.37141590909091,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.6p+4",
+            "Sum Sq_hex": "0x1.e2bd07c84b5dep+4",
+            "Mean Sq_hex": "0x1.5f151ceec272dp+0",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 82.2906500000003,
+          "sum.squares.error": 30.17115,
+          "df": 1.55708091231129,
+          "df.error": 17.1278900354242,
+          "meansq": 1.76152170159894,
+          "statistic": 30.0020764869752,
+          "p.value": 7.02745219870877e-06,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.4929a02752558p+6",
+          "sum.squares.error_hex": "0x1.e2bd07c84b5eap+4",
+          "df_hex": "0x1.8e9cdacb9a53cp+0",
+          "df.error_hex": "0x1.120bd66bfa199p+4",
+          "meansq_hex": "0x1.c2f316138fcdfp+0",
+          "statistic_hex": "0x1.e008815aba624p+4",
+          "p.value_hex": "0x1.d79ab59fde00bp-18"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.046012149528312,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.78ee78ae2b1aap-5",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.046012149528312,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.78ee78ae2b1aap-5",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.698810251002189,
+              "CI": 0.95,
+              "CI_low": 0.488271240050106,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.65ca750c53f1cp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.f3fd603e5eca8p-2",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.698810251002189,
+              "CI": 0.9,
+              "CI_low": 0.542235753621707,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.65ca750c53f1cp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.159fecb90de5dp-1",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.696423611192395,
+              "CI": 0.95,
+              "CI_low": 0.449582375099517,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.6491a2b47794cp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.cc5f5277a4477p-2",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.696423611192395,
+              "CI": 0.9,
+              "CI_low": 0.51420381902559,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.6491a2b47794cp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.0745b91462ec9p-1",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_outliers",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+        "s20"
+      ],
+      "values_hex": {
+        "a": [
+          "0x1.c1851eb851eb8p+5",
+          "0x1.77d70a3d70a3dp+5",
+          "0x1.7ap+5",
+          "0x1.9c8f5c28f5c29p+5",
+          "0x1.c747ae147ae14p+5",
+          "0x1.a3851eb851eb8p+5",
+          "0x1.8accccccccccdp+5",
+          "0x1.ace147ae147aep+5",
+          "0x1.7a3d70a3d70a4p+5",
+          "0x1.c8ccccccccccdp+5",
+          "0x1.8cb851eb851ecp+5",
+          "0x1.78147ae147ae1p+5",
+          "0x1.94f5c28f5c28fp+5",
+          "0x1.9266666666666p+5",
+          "0x1.b4p+5",
+          "0x1.a147ae147ae14p+5",
+          "0x1.e2b851eb851ecp+5",
+          "0x1.dc3d70a3d70a4p+5",
+          "0x1.b1c28f5c28f5cp+5",
+          "0x1.46a3d70a3d70ap+5"
+        ],
+        "b": [
+          "0x1.cb851eb851eb8p+5",
+          "0x1.587ae147ae148p+5",
+          "0x1.2f8f5c28f5c29p+6",
+          "0x1.9f0a3d70a3d71p+5",
+          "0x1.9d33333333333p+5",
+          "0x1.9228f5c28f5c3p+5",
+          "0x1.6cb851eb851ecp+5",
+          "0x1.a7c28f5c28f5cp+5",
+          "0x1.7a66666666666p+5",
+          "0x1.c59999999999ap+5",
+          "0x1.939999999999ap+5",
+          "0x1.9b0a3d70a3d71p+5",
+          "0x1.a7ae147ae147bp+5",
+          "0x1.c23d70a3d70a4p+5",
+          "0x1.ad70a3d70a3d7p+5",
+          "0x1.8eb851eb851ecp+5",
+          "0x1.c333333333333p+5",
+          "0x1.d851eb851eb85p+5",
+          "0x1.8dae147ae147bp+5",
+          "0x1.4466666666666p+5"
+        ],
+        "c": [
+          "0x1.9e147ae147ae1p+5",
+          "0x1.67eb851eb851fp+5",
+          "0x1.6228f5c28f5c3p+5",
+          "0x1.ae66666666666p+5",
+          "0x1.c8e147ae147aep+5",
+          "0x1.990a3d70a3d71p+5",
+          "0x1.9f70a3d70a3d7p+5",
+          "0x1.c2e147ae147aep+5",
+          "0x1.9d1eb851eb852p+5",
+          "0x1.cfc28f5c28f5cp+5",
+          "0x1.a947ae147ae14p+4",
+          "0x1.abae147ae147bp+5",
+          "0x1.c9c28f5c28f5cp+5",
+          "0x1.a651eb851eb85p+5",
+          "0x1.9428f5c28f5c3p+5",
+          "0x1.9d70a3d70a3d7p+5",
+          "0x1.d91eb851eb852p+5",
+          "0x1.ed47ae147ae14p+5",
+          "0x1.9e28f5c28f5c3p+5",
+          "0x1.5947ae147ae14p+5"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 38,
+              "MSE": 30.315561754386,
+              "F": 0.245150001184618,
+              "Pr(>F)": 0.783815251638383,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.3p+5",
+              "MSE_hex": "0x1.e50c8a7b6f4c2p+4",
+              "F_hex": "0x1.f611342d9e4c9p-3",
+              "Pr(>F)_hex": "0x1.91503b8fc925ep-1"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.54887770080495,
+              "den Df": 29.4286763152941,
+              "MSE": 39.145197504788,
+              "F": 0.245150001184618,
+              "Pr(>F)": 0.727366214263418,
+              "num Df_hex": "0x1.8c833fbe7600fp+0",
+              "den Df_hex": "0x1.d6dbdbb22c212p+4",
+              "MSE_hex": "0x1.39295d4f3434p+5",
+              "F_hex": "0x1.f611342d9e4c9p-3",
+              "Pr(>F)_hex": "0x1.7469582cf4133p-1"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 1.66049801951338,
+              "den Df": 31.5494623707541,
+              "MSE": 36.5138186232468,
+              "F": 0.245150001184618,
+              "Pr(>F)": 0.743031141249906,
+              "num Df_hex": "0x1.a91665f0e1f9fp+0",
+              "den Df_hex": "0x1.f8ca990e0c58dp+4",
+              "MSE_hex": "0x1.241c4cf0375d9p+5",
+              "F_hex": "0x1.f611342d9e4c9p-3",
+              "Pr(>F)_hex": "0x1.7c6e93e727e32p-1"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.708742466264059,
+          "p-value": 0.0451228060700105
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.774438850402477,
+          "Pr(>F[GG])": 0.727366214263418,
+          "HF eps": 0.830249009756688,
+          "Pr(>F[HF])": 0.743031141249906
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 19,
+            "Sum Sq": 1377.76737333333,
+            "Mean Sq": 72.5140722807017,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.3p+4",
+            "Sum Sq_hex": "0x1.58711ca50a9f2p+10",
+            "Mean Sq_hex": "0x1.220e68f6c5938p+6",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 14.86372,
+            "Mean Sq": 7.43186000000001,
+            "F value": 0.245150001184616,
+            "Pr(>F)": 0.783815251638385,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.dba398201cd68p+3",
+            "Mean Sq_hex": "0x1.dba398201cd68p+2",
+            "F value_hex": "0x1.f611342d9e48p-3",
+            "Pr(>F)_hex": "0x1.91503b8fc926dp-1"
+          },
+          {
+            "term": "Residuals",
+            "Df": 38,
+            "Sum Sq": 1151.99134666667,
+            "Mean Sq": 30.315561754386,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.3p+5",
+            "Sum Sq_hex": "0x1.1fff72394a152p+10",
+            "Mean Sq_hex": "0x1.e50c8a7b6f4cp+4",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 14.8637200000001,
+          "sum.squares.error": 1151.99134666667,
+          "df": 1.54887770080495,
+          "df.error": 29.4286763152941,
+          "meansq": 39.145197504788,
+          "statistic": 0.245150001184618,
+          "p.value": 0.727366214263418,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.dba398201cdafp+3",
+          "sum.squares.error_hex": "0x1.1fff72394a153p+10",
+          "df_hex": "0x1.8c833fbe7600fp+0",
+          "df.error_hex": "0x1.d6dbdbb22c212p+4",
+          "meansq_hex": "0x1.39295d4f3434p+5",
+          "statistic_hex": "0x1.f611342d9e4c9p-3",
+          "p.value_hex": "0x1.7469582cf4133p-1"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_null",
+      "levels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+        "s20"
+      ],
+      "values_hex": {
+        "a": [
+          "0x1.d333333333333p+2",
+          "0x1.428f5c28f5c29p+3",
+          "0x1.cb33333333333p+3",
+          "0x1.f333333333333p+2",
+          "0x1.3cccccccccccdp+2",
+          "0x1.ed70a3d70a3d7p+2",
+          "0x1.50a3d70a3d70ap+3",
+          "0x1.f9eb851eb851fp+3",
+          "0x1.12e147ae147aep+3",
+          "0x1.828f5c28f5c29p+3",
+          "0x1.7a3d70a3d70a4p+3",
+          "0x1.2666666666666p+2",
+          "0x1.86147ae147ae1p+3",
+          "0x1.c5c28f5c28f5cp+2",
+          "0x1.f333333333333p+3",
+          "0x1.4d1eb851eb852p+3",
+          "0x1.bae147ae147aep+2",
+          "0x1.299999999999ap+3",
+          "0x1.619999999999ap+3",
+          "0x1.6333333333333p+3"
+        ],
+        "b": [
+          "0x1.9b851eb851eb8p+2",
+          "0x1.8f5c28f5c28f6p+3",
+          "0x1.875c28f5c28f6p+3",
+          "0x1.deb851eb851ecp+2",
+          "0x1.b7ae147ae147bp+2",
+          "0x1.1c28f5c28f5c3p+2",
+          "0x1.599999999999ap+3",
+          "0x1.c75c28f5c28f6p+3",
+          "0x1.40a3d70a3d70ap+3",
+          "0x1.a428f5c28f5c3p+3",
+          "0x1.4b33333333333p+3",
+          "0x1.ca3d70a3d70a4p+2",
+          "0x1.bbd70a3d70a3dp+3",
+          "0x1.6147ae147ae14p+2",
+          "0x1.d70a3d70a3d71p+3",
+          "0x1.375c28f5c28f6p+3",
+          "0x1.3a8f5c28f5c29p+3",
+          "0x1.1dc28f5c28f5cp+3",
+          "0x1.6851eb851eb85p+3",
+          "0x1.38f5c28f5c28fp+3"
+        ],
+        "c": [
+          "0x1.c28f5c28f5c29p+2",
+          "0x1.ac28f5c28f5c3p+2",
+          "0x1.ae147ae147ae1p+3",
+          "0x1.4e66666666666p+3",
+          "0x1.0c7ae147ae148p+3",
+          "0x1.4c28f5c28f5c3p+2",
+          "0x1.43d70a3d70a3dp+3",
+          "0x1.5p+3",
+          "0x1.2fae147ae147bp+3",
+          "0x1.a99999999999ap+3",
+          "0x1.4428f5c28f5c3p+3",
+          "0x1.21eb851eb851fp+2",
+          "0x1.619999999999ap+3",
+          "0x1.151eb851eb852p+3",
+          "0x1.0028f5c28f5c3p+4",
+          "0x1.18a3d70a3d70ap+3",
+          "0x1.4666666666666p+3",
+          "0x1.6147ae147ae14p+3",
+          "0x1.7d1eb851eb852p+3",
+          "0x1.8b851eb851eb8p+3"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 2,
+              "den Df": 38,
+              "MSE": 2.20579464912281,
+              "F": 7.55585596925703e-07,
+              "Pr(>F)": 0.999999244414704,
+              "num Df_hex": "0x1p+1",
+              "den Df_hex": "0x1.3p+5",
+              "MSE_hex": "0x1.1a577aa3d64dep+1",
+              "F_hex": "0x1.95a6e4c985affp-21",
+              "Pr(>F)_hex": "0x1.ffffe6a5925c9p-1"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.80857601877917,
+              "den Df": 34.3629443568043,
+              "MSE": 2.43926119357898,
+              "F": 7.55585596925703e-07,
+              "Pr(>F)": 0.999997246574837,
+              "num Df_hex": "0x1.cefed684fc87p+0",
+              "den Df_hex": "0x1.12e74f5ef5f02p+5",
+              "MSE_hex": "0x1.3839b5f6696dbp+1",
+              "F_hex": "0x1.95a6e4c985affp-21",
+              "Pr(>F)_hex": "0x1.ffffa39c4208dp-1"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 1.98770738322265,
+              "den Df": 37.7664402812303,
+              "MSE": 2.21943598714875,
+              "F": 7.55585596925703e-07,
+              "Pr(>F)": 0.999999179077839,
+              "num Df_hex": "0x1.fcda641cf5812p+0",
+              "den Df_hex": "0x1.2e21ab7131c4bp+5",
+              "MSE_hex": "0x1.1c167a7a2f475p+1",
+              "F_hex": "0x1.95a6e4c985affp-21",
+              "Pr(>F)_hex": "0x1.ffffe47455137p-1"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.894157624986071,
+          "p-value": 0.365364846412983
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.904288009389587,
+          "Pr(>F[GG])": 0.999997246574837,
+          "HF eps": 0.993853691611323,
+          "Pr(>F[HF])": 0.999999179077839
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 19,
+            "Sum Sq": 425.159733333334,
+            "Mean Sq": 22.3768280701754,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.3p+4",
+            "Sum Sq_hex": "0x1.a928e448a2bfap+8",
+            "Mean Sq_hex": "0x1.66077cded9e4cp+4",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 2,
+            "Sum Sq": 3.33333333332938e-06,
+            "Mean Sq": 1.66666666666469e-06,
+            "F value": 7.55585596931014e-07,
+            "Pr(>F)": 0.999999244414704,
+            "Df_hex": "0x1p+1",
+            "Sum Sq_hex": "0x1.bf647612f1225p-19",
+            "Mean Sq_hex": "0x1.bf647612f1225p-20",
+            "F value_hex": "0x1.95a6e4c991efp-21",
+            "Pr(>F)_hex": "0x1.ffffe6a5925c9p-1"
+          },
+          {
+            "term": "Residuals",
+            "Df": 38,
+            "Sum Sq": 83.8201966666666,
+            "Mean Sq": 2.20579464912281,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.3p+5",
+            "Sum Sq_hex": "0x1.4f47e1a28e7c5p+6",
+            "Mean Sq_hex": "0x1.1a577aa3d64dcp+1",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 3.33333333330595e-06,
+          "sum.squares.error": 83.8201966666667,
+          "df": 1.80857601877917,
+          "df.error": 34.3629443568043,
+          "meansq": 2.43926119357898,
+          "statistic": 7.55585596925703e-07,
+          "p.value": 0.999997246574837,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.bf647612e3a0ep-19",
+          "sum.squares.error_hex": "0x1.4f47e1a28e7c8p+6",
+          "df_hex": "0x1.cefed684fc87p+0",
+          "df.error_hex": "0x1.12e74f5ef5f02p+5",
+          "meansq_hex": "0x1.3839b5f6696dbp+1",
+          "statistic_hex": "0x1.95a6e4c985affp-21",
+          "p.value_hex": "0x1.ffffa39c4208dp-1"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_k5",
+      "levels": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ],
+      "values_hex": {
+        "c1": [
+          "0x1.f1eb851eb851fp+4",
+          "0x1.f2e147ae147aep+4",
+          "0x1.d451eb851eb85p+4",
+          "0x1.e30a3d70a3d71p+4",
+          "0x1.b87ae147ae148p+4",
+          "0x1.0c3d70a3d70a4p+5",
+          "0x1.a1c28f5c28f5cp+4",
+          "0x1.8f0a3d70a3d71p+4",
+          "0x1.10b851eb851ecp+5",
+          "0x1.0cp+5",
+          "0x1.df5c28f5c28f6p+4",
+          "0x1.8051eb851eb85p+4",
+          "0x1.e51eb851eb852p+4",
+          "0x1.123d70a3d70a4p+5",
+          "0x1.d0ccccccccccdp+4"
+        ],
+        "c2": [
+          "0x1.0f1eb851eb852p+5",
+          "0x1.f9eb851eb851fp+4",
+          "0x1.9a8f5c28f5c29p+4",
+          "0x1.c07ae147ae148p+4",
+          "0x1.d0a3d70a3d70ap+4",
+          "0x1.0ee147ae147aep+5",
+          "0x1.a87ae147ae148p+4",
+          "0x1.9970a3d70a3d7p+4",
+          "0x1.1ea3d70a3d70ap+5",
+          "0x1.0d47ae147ae14p+5",
+          "0x1.0251eb851eb85p+5",
+          "0x1.ae3d70a3d70a4p+4",
+          "0x1.e7851eb851eb8p+4",
+          "0x1.16f5c28f5c28fp+5",
+          "0x1.d11eb851eb852p+4"
+        ],
+        "c3": [
+          "0x1.0d0a3d70a3d71p+5",
+          "0x1.0ca3d70a3d70ap+5",
+          "0x1.c11eb851eb852p+4",
+          "0x1.ec28f5c28f5c3p+4",
+          "0x1.ce147ae147ae1p+4",
+          "0x1.1970a3d70a3d7p+5",
+          "0x1.b28f5c28f5c29p+4",
+          "0x1.adc28f5c28f5cp+4",
+          "0x1.350a3d70a3d71p+5",
+          "0x1.ec28f5c28f5c3p+4",
+          "0x1.dfae147ae147bp+4",
+          "0x1.9570a3d70a3d7p+4",
+          "0x1.f147ae147ae14p+4",
+          "0x1.2f33333333333p+5",
+          "0x1.f99999999999ap+4"
+        ],
+        "c4": [
+          "0x1.ee66666666666p+4",
+          "0x1.2aa3d70a3d70ap+5",
+          "0x1.d63d70a3d70a4p+4",
+          "0x1.07d70a3d70a3dp+5",
+          "0x1.02ccccccccccdp+5",
+          "0x1.eb851eb851eb8p+4",
+          "0x1.d35c28f5c28f6p+4",
+          "0x1.8051eb851eb85p+4",
+          "0x1.2651eb851eb85p+5",
+          "0x1.0cp+5",
+          "0x1.fcccccccccccdp+4",
+          "0x1.8b851eb851eb8p+4",
+          "0x1.02ccccccccccdp+5",
+          "0x1.291eb851eb852p+5",
+          "0x1.e0ccccccccccdp+4"
+        ],
+        "c5": [
+          "0x1.1d9999999999ap+5",
+          "0x1.3651eb851eb85p+5",
+          "0x1.4f33333333333p+5",
+          "0x1.f1c28f5c28f5cp+4",
+          "0x1.b947ae147ae14p+4",
+          "0x1.3f0a3d70a3d71p+5",
+          "0x1.78ccccccccccdp+4",
+          "0x1.cdc28f5c28f5cp+4",
+          "0x1.2c28f5c28f5c3p+5",
+          "0x1.0af5c28f5c28fp+5",
+          "0x1.ep+4",
+          "0x1.c9eb851eb851fp+4",
+          "0x1.010a3d70a3d71p+5",
+          "0x1.4deb851eb851fp+5",
+          "0x1.d947ae147ae14p+4"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 4,
+              "den Df": 56,
+              "MSE": 5.4650550952381,
+              "F": 4.66375511728597,
+              "Pr(>F)": 0.00254990696029291,
+              "num Df_hex": "0x1p+2",
+              "den Df_hex": "0x1.cp+5",
+              "MSE_hex": "0x1.5dc3767238b0bp+2",
+              "F_hex": "0x1.2a7af6be52efcp+2",
+              "Pr(>F)_hex": "0x1.4e38ae012d92p-9"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.91341092236207,
+              "den Df": 26.787752913069,
+              "MSE": 11.4247389964547,
+              "F": 4.66375511728597,
+              "Pr(>F)": 0.0194643722894446,
+              "num Df_hex": "0x1.e9d54c575ab38p+0",
+              "den Df_hex": "0x1.ac9aa2cc6f5d1p+4",
+              "MSE_hex": "0x1.6d97763c637c1p+3",
+              "F_hex": "0x1.2a7af6be52efcp+2",
+              "Pr(>F)_hex": "0x1.3ee77e9ae6bd6p-6"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 2.2091562527622,
+              "den Df": 30.9281875386708,
+              "MSE": 9.89528031510658,
+              "F": 4.66375511728597,
+              "Pr(>F)": 0.0145110131750476,
+              "num Df_hex": "0x1.1ac5a1d0af0bcp+1",
+              "den Df_hex": "0x1.eed9db2d32549p+4",
+              "MSE_hex": "0x1.3ca622e74454ap+3",
+              "F_hex": "0x1.2a7af6be52efcp+2",
+              "Pr(>F)_hex": "0x1.db7f338263444p-7"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.100096651852023,
+          "p-value": 0.000845456593482799
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.478352730590518,
+          "Pr(>F[GG])": 0.0194643722894446,
+          "HF eps": 0.552289063190549,
+          "Pr(>F[HF])": 0.0145110131750476
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 14,
+            "Sum Sq": 884.514674666666,
+            "Mean Sq": 63.1796196190476,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.cp+3",
+            "Sum Sq_hex": "0x1.ba41e0dc06b4cp+9",
+            "Mean Sq_hex": "0x1.f96fdc692c3c5p+5",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 4,
+            "Sum Sq": 101.950714666667,
+            "Mean Sq": 25.4876786666667,
+            "F value": 4.66375511728602,
+            "Pr(>F)": 0.00254990696029273,
+            "Df_hex": "0x1p+2",
+            "Sum Sq_hex": "0x1.97cd882544a5ap+6",
+            "Mean Sq_hex": "0x1.97cd882544a5ap+4",
+            "F value_hex": "0x1.2a7af6be52f35p+2",
+            "Pr(>F)_hex": "0x1.4e38ae012d796p-9"
+          },
+          {
+            "term": "Residuals",
+            "Df": 56,
+            "Sum Sq": 306.043085333333,
+            "Mean Sq": 5.4650550952381,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.cp+5",
+            "Sum Sq_hex": "0x1.320b07a3f19acp+8",
+            "Mean Sq_hex": "0x1.5dc3767238b0ep+2",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 101.950714666666,
+          "sum.squares.error": 306.043085333333,
+          "df": 1.91341092236207,
+          "df.error": 26.787752913069,
+          "meansq": 11.4247389964547,
+          "statistic": 4.66375511728597,
+          "p.value": 0.0194643722894446,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.97cd882544a08p+6",
+          "sum.squares.error_hex": "0x1.320b07a3f19aap+8",
+          "df_hex": "0x1.e9d54c575ab38p+0",
+          "df.error_hex": "0x1.ac9aa2cc6f5d1p+4",
+          "meansq_hex": "0x1.6d97763c637c1p+3",
+          "statistic_hex": "0x1.2a7af6be52efcp+2",
+          "p.value_hex": "0x1.3ee77e9ae6bd6p-6"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.059077375263011,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e3f63c560556cp-5",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0.059077375263011,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.e3f63c560556cp-5",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.193708499161942,
+              "CI": 0.95,
+              "CI_low": 0.0246436017610081,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.8cb70aa6dcbe8p-3",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.93c2c1e7a09c7p-6",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.193708499161942,
+              "CI": 0.9,
+              "CI_low": 0.0478092971306027,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.8cb70aa6dcbe8p-3",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.87a75cf3dca71p-5",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0.190956018485369,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.8713f2f2f3c6fp-3",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0.190956018485369,
+              "CI": 0.9,
+              "CI_low": 0.0217854342429078,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x1.8713f2f2f3c6fp-3",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.64eebbe68e807p-6",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "edge_within_nonspherical",
+      "levels": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "subjects": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "values_hex": {
+        "a": [
+          "0x1.30147ae147ae1p+5",
+          "0x1.14f5c28f5c28fp+4",
+          "0x1.f428f5c28f5c3p+4",
+          "0x1.3970a3d70a3d7p+5",
+          "0x1.ed9999999999ap+4",
+          "0x1.8f33333333333p+4",
+          "0x1.9333333333333p+4",
+          "0x1.d828f5c28f5c3p+4",
+          "0x1.290a3d70a3d71p+5",
+          "0x1.04ccccccccccdp+5",
+          "0x1.2a51eb851eb85p+5",
+          "0x1.548f5c28f5c29p+5"
+        ],
+        "b": [
+          "0x1.31eb851eb851fp+5",
+          "0x1.19c28f5c28f5cp+4",
+          "0x1.f266666666666p+4",
+          "0x1.3a7ae147ae148p+5",
+          "0x1.f11eb851eb852p+4",
+          "0x1.94a3d70a3d70ap+4",
+          "0x1.ab33333333333p+4",
+          "0x1.e0a3d70a3d70ap+4",
+          "0x1.2866666666666p+5",
+          "0x1.0ab851eb851ecp+5",
+          "0x1.2c3d70a3d70a4p+5",
+          "0x1.5ce147ae147aep+5"
+        ],
+        "c": [
+          "0x1.331eb851eb852p+5",
+          "0x1.2266666666666p+4",
+          "0x1.fd70a3d70a3d7p+4",
+          "0x1.427ae147ae148p+5",
+          "0x1.f07ae147ae148p+4",
+          "0x1.a147ae147ae14p+4",
+          "0x1.adc28f5c28f5cp+4",
+          "0x1.f4p+4",
+          "0x1.303d70a3d70a4p+5",
+          "0x1.0a7ae147ae148p+5",
+          "0x1.33c28f5c28f5cp+5",
+          "0x1.5d9999999999ap+5"
+        ],
+        "d": [
+          "0x1.630a3d70a3d71p+5",
+          "0x1.4f5c28f5c28f6p+3",
+          "0x1.47851eb851eb8p+5",
+          "0x1.7a8f5c28f5c29p+5",
+          "0x1.383d70a3d70a4p+5",
+          "0x1.8828f5c28f5c3p+4",
+          "0x1.58a3d70a3d70ap+4",
+          "0x1.5fae147ae147bp+5",
+          "0x1.2bae147ae147bp+5",
+          "0x1.4cccccccccccdp+4",
+          "0x1.38a3d70a3d70ap+5",
+          "0x1.4e7ae147ae148p+5"
+        ]
+      },
+      "aov_ez_warnings": [],
+      "aov_ez_messages": [],
+      "anova": [
+        {
+          "correction": "none",
+          "table": [
+            {
+              "num Df": 3,
+              "den Df": 33,
+              "MSE": 14.5588490530303,
+              "F": 0.69497724120534,
+              "Pr(>F)": 0.561722700037836,
+              "num Df_hex": "0x1.8p+1",
+              "den Df_hex": "0x1.08p+5",
+              "MSE_hex": "0x1.d1e21768c54d5p+3",
+              "F_hex": "0x1.63d40e94e1ea1p-1",
+              "Pr(>F)_hex": "0x1.1f9a1e242aa98p-1"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "GG",
+          "table": [
+            {
+              "num Df": 1.00853751094317,
+              "den Df": 11.0939126203749,
+              "MSE": 43.3068147542129,
+              "F": 0.69497724120534,
+              "Pr(>F)": 0.423277265120188,
+              "num Df_hex": "0x1.022f83aa4a487p+0",
+              "den Df_hex": "0x1.6301550a2623ap+3",
+              "MSE_hex": "0x1.5a745b4b3a322p+5",
+              "F_hex": "0x1.63d40e94e1ea1p-1",
+              "Pr(>F)_hex": "0x1.b16f986b537c4p-2"
+            }
+          ],
+          "error": null
+        },
+        {
+          "correction": "HF",
+          "table": [
+            {
+              "num Df": 1.01110824790493,
+              "den Df": 11.1221907269542,
+              "MSE": 43.1967074243446,
+              "F": 0.69497724120534,
+              "Pr(>F)": 0.423596870208204,
+              "num Df_hex": "0x1.02d7fd7977b01p+0",
+              "den Df_hex": "0x1.63e8fc8704921p+3",
+              "MSE_hex": "0x1.5992db579385fp+5",
+              "F_hex": "0x1.63d40e94e1ea1p-1",
+              "Pr(>F)_hex": "0x1.b1c360c0edc3cp-2"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "sphericity_tests": [
+        {
+          "row": "condition",
+          "Test statistic": 0.000117306074976007,
+          "p-value": 3.8115391314098e-17
+        }
+      ],
+      "pval_adjustments": [
+        {
+          "row": "condition",
+          "GG eps": 0.336179170314391,
+          "Pr(>F[GG])": 0.423277265120188,
+          "HF eps": 0.337036082634976,
+          "Pr(>F[HF])": 0.423596870208204
+        }
+      ],
+      "summary_error": null,
+      "strata": {
+        "Error: .rowid": [
+          {
+            "term": "Residuals",
+            "Df": 11,
+            "Sum Sq": 2754.74490625,
+            "Mean Sq": 250.431355113636,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.6p+3",
+            "Sum Sq_hex": "0x1.5857d645a1cafp+11",
+            "Mean Sq_hex": "0x1.f4dcda93d40ffp+7",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ],
+        "Error: .rowid:condition": [
+          {
+            "term": "condition",
+            "Df": 3,
+            "Sum Sq": 30.3542062499999,
+            "Mean Sq": 10.11806875,
+            "F value": 0.69497724120534,
+            "Pr(>F)": 0.561722700037836,
+            "Df_hex": "0x1.8p+1",
+            "Sum Sq_hex": "0x1.e5aad42c3c9ddp+4",
+            "Mean Sq_hex": "0x1.43c7381d7dbe9p+3",
+            "F value_hex": "0x1.63d40e94e1ea4p-1",
+            "Pr(>F)_hex": "0x1.1f9a1e242aa98p-1"
+          },
+          {
+            "term": "Residuals",
+            "Df": 33,
+            "Sum Sq": 480.44201875,
+            "Mean Sq": 14.5588490530303,
+            "F value": null,
+            "Pr(>F)": null,
+            "Df_hex": "0x1.08p+5",
+            "Sum Sq_hex": "0x1.e07128240b77fp+8",
+            "Mean Sq_hex": "0x1.d1e21768c54d8p+3",
+            "F value_hex": "NA",
+            "Pr(>F)_hex": "NA"
+          }
+        ]
+      },
+      "strata_error": null,
+      "tidy_model_parameters": [
+        {
+          "term": "condition",
+          "sumsq": 30.3542062499999,
+          "sum.squares.error": 480.44201875,
+          "df": 1.00853751094317,
+          "df.error": 11.0939126203749,
+          "meansq": 43.3068147542129,
+          "statistic": 0.69497724120534,
+          "p.value": 0.423277265120188,
+          "method": "ANOVA estimation for factorial designs using 'afex'",
+          "sumsq_hex": "0x1.e5aad42c3c9d6p+4",
+          "sum.squares.error_hex": "0x1.e07128240b77cp+8",
+          "df_hex": "0x1.022f83aa4a487p+0",
+          "df.error_hex": "0x1.6301550a2623ap+3",
+          "meansq_hex": "0x1.5a745b4b3a322p+5",
+          "statistic_hex": "0x1.63d40e94e1ea1p-1",
+          "p.value_hex": "0x1.b16f986b537c4p-2"
+        }
+      ],
+      "tidy_error": null,
+      "omega_squared": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Parameter": "condition",
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "f_to_omega2_uncorrected": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "f_to_omega2_gg": [
+        {
+          "ci": 0.95,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.95,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        },
+        {
+          "ci": 0.9,
+          "value": [
+            {
+              "Omega2_partial": 0,
+              "CI": 0.9,
+              "CI_low": 0,
+              "CI_high": 1,
+              "Omega2_partial_hex": "0x0p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x0p+0",
+              "CI_high_hex": "0x1p+0"
+            }
+          ],
+          "error": null
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
