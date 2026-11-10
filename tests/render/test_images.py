@@ -101,7 +101,8 @@ def _many_values() -> pd.DataFrame:
 
 @image
 def test_subsampled_points() -> Figure:
-    """6,600 values: violins and boxes use all of them, the points a 2,000 subsample."""
+    """6,600 values: violins and boxes use all of them, the points a stratified
+    subsample of about 2,000 (667 per level, each level's extremes among them)."""
     data = _many_values()
     assert len(data) > MAX_POINTS
     fig = ip.betweenstats(data, "arm", "score", order=["a", "b", "c"])
@@ -111,7 +112,8 @@ def test_subsampled_points() -> Figure:
         for points in fig.figure.findobj(PathCollection)
         if str(points.get_gid()).startswith("points-")
     )
-    assert drawn == SUBSAMPLE_SIZE
+    # Stratified by level: round(SUBSAMPLE_SIZE x 2,200 / 6,600) of each level.
+    assert drawn == 3 * round(SUBSAMPLE_SIZE * 2_200 / 6_600)
     return _clean(fig)
 
 

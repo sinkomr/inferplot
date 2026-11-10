@@ -37,6 +37,7 @@ __all__ = [
     "plain_text",
     "remember",
     "root_figure",
+    "shows_all",
 ]
 
 
@@ -50,6 +51,21 @@ class Subsample:
     density: str  # the layer that shows all values: "violins" or "density outlines"
     # withinstats: (subjects drawn, subjects in all); whole subjects are sampled.
     subjects: tuple[int, int] | None = None
+    # Levels whose violin or density outline is not drawn.
+    undrawn: tuple[str, ...] = ()
+
+
+def shows_all(sub: Subsample, verb: str) -> str:
+    """What shows all values beside the subsampled points, in words: "the violins
+    and boxes show all values", naming the levels without a violin."""
+    if not sub.undrawn:
+        return f"the {sub.density} and boxes {verb} all values"
+    names = ", ".join(repr(level) for level in sub.undrawn)
+    has = "has" if len(sub.undrawn) == 1 else "have"
+    return (
+        f"the boxes {verb} all values, and the {sub.density} those of every level "
+        f"but {names}, which {has} none"
+    )
 
 
 @dataclass(frozen=True, slots=True)

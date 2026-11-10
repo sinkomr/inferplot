@@ -47,6 +47,7 @@ from matplotlib.path import Path
 from matplotlib.text import Text
 from matplotlib.transforms import Bbox, offset_copy
 from numpy.typing import NDArray
+from scipy.special import ndtr
 
 from inferplot import _validate as v
 from inferplot.render import theme
@@ -62,6 +63,7 @@ from inferplot.render.figure import (
     plain_text,
     remember,
     root_figure,
+    shows_all,
 )
 from inferplot.result import StatsResult
 from inferplot.text import FigureTexts, figure_texts
@@ -72,6 +74,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MAX_POINTS",
+    "MIN_PER_LEVEL",
     "SUBSAMPLE_SIZE",
     "Drawing",
     "LabelPlace",
@@ -88,6 +91,7 @@ FloatArray = NDArray[np.float64]
 # A panel with more values than this draws a subsample of SUBSAMPLE_SIZE points.
 MAX_POINTS: Final = 5_000
 SUBSAMPLE_SIZE: Final = 2_000
+MIN_PER_LEVEL: Final = 50  # points drawn of each level (all of a smaller one)
 
 # Geometry in x data units (one level per unit).
 VIOLIN_HALF_WIDTH: Final = 0.4
@@ -544,7 +548,12 @@ def _check_mathtext(options: Options) -> None:
 
 def _bandwidth(x: FloatArray) -> float:
     """Silverman's rule of thumb (1986, eq. 3.31), as R's ``bw.nrd0``."""
-    sd = float(np.std(x, ddof=1))
+    with np.errstate(over="ignore", invalid="ignore"):
+        sd = float(np.std(x, ddof=1))
+    if not np.isfinite(sd):
+        # Squares of values near the largest double overflow; scale them first.
+        scale = float(np.abs(x).max())
+        sd = scale * float(np.std(x / scale, ddof=1))
     q75, q25 = (float(q) for q in np.percentile(x, [75.0, 25.0]))
     lo = min(sd, (q75 - q25) / 1.34)
     if lo <= 0.0:
@@ -552,25 +561,55 @@ def _bandwidth(x: FloatArray) -> float:
     return 0.9 * lo * x.size ** (-0.2)
 
 
-def _density_outline(x: FloatArray) -> tuple[FloatArray, FloatArray] | None:
+def _ndtr(z: FloatArray) -> FloatArray:
+    """The standard normal CDF, elementwise."""
+    return np.asarray(ndtr(z), dtype=np.float64)
+
+
+def _density_outline(x: FloatArray) -> tuple[FloatArray, FloatArray] | str | None:
     """Gaussian kernel density on [min, max], scaled to the violin's half width.
 
-    None when the values do not span a range (fewer than two different values).
-    Large samples are binned first so drawing stays fast.
+    None when the values do not span a range (fewer than two different values);
+    the reason in words when the density cannot be computed. Large samples are
+    binned first so drawing stays fast.
+
+    The density is evaluated at KDE_GRID points. When the bandwidth is narrower
+    than the spacing of those points (heavy tails, or one value far from the
+    rest), the density at the points would miss most of the values between them
+    (and with binning be 0 everywhere: 0/0), so each point gets the density
+    averaged over its cell instead: the kernel's mass that falls in the cell,
+    divided by its width (Gaussian CDF differences). Elsewhere the two agree to
+    drawing precision, and the point values are kept.
     """
     if x.size < 2 or float(x.min()) == float(x.max()):
         return None
+    lo, hi = float(x.min()), float(x.max())
+    if not np.isfinite(hi - lo):
+        return "its values span a range wider than the largest double"
     bw = _bandwidth(x)
-    grid = np.linspace(float(x.min()), float(x.max()), KDE_GRID)
+    grid = np.linspace(lo, hi, KDE_GRID)
+    cell = (hi - lo) / (KDE_GRID - 1)
     if x.size > KDE_BINS:
         counts, edges = np.histogram(x, bins=KDE_BINS)
-        centers = (edges[:-1] + edges[1:]) / 2
-        z = (grid[:, None] - centers[None, :]) / bw
-        density = (np.exp(-0.5 * z * z) * counts[None, :]).sum(axis=1)
+        points = (edges[:-1] + edges[1:]) / 2
+        weights = counts.astype(np.float64)
     else:
-        z = (grid[:, None] - x[None, :]) / bw
-        density = np.exp(-0.5 * z * z).sum(axis=1)
+        points, weights = x, np.ones(x.size)
+    if bw >= cell:
+        z = (grid[:, None] - points[None, :]) / bw
+        if x.size > KDE_BINS:
+            # Integer counts as doubles: the same products as before.
+            density = (np.exp(-0.5 * z * z) * weights[None, :]).sum(axis=1)
+        else:
+            density = np.exp(-0.5 * z * z).sum(axis=1)
+    else:
+        width = max(bw, cell * 1e-12)
+        upper = _ndtr((grid[:, None] + cell / 2 - points[None, :]) / width)
+        lower = _ndtr((grid[:, None] - cell / 2 - points[None, :]) / width)
+        density = ((upper - lower) * weights[None, :]).sum(axis=1) / cell
     peak = float(density.max())
+    if not (np.isfinite(peak) and peak > 0.0):
+        return "its density could not be computed"
     half = np.asarray(VIOLIN_HALF_WIDTH * density / peak, dtype=np.float64)
     return np.asarray(grid, dtype=np.float64), half
 
@@ -597,18 +636,38 @@ def _box_path(x: FloatArray, center: float) -> Path:
     return Path(vertices, codes)
 
 
+def with_extremes(
+    n: int, size: int, forced: NDArray[np.intp], rng: np.random.Generator
+) -> NDArray[np.intp]:
+    """Sorted indices of ``size`` of ``n`` items: every one of ``forced`` and a
+    seeded uniform random choice of the others."""
+    forced = np.unique(forced)
+    rest = np.setdiff1d(np.arange(n), forced)
+    pick = rng.choice(rest, size=max(0, size - forced.size), replace=False)
+    return np.sort(np.concatenate([forced, pick]))
+
+
 def _split_subsample(
     values: Sequence[FloatArray], rng: np.random.Generator
 ) -> list[FloatArray]:
-    """A uniform random subsample of SUBSAMPLE_SIZE values, split by level."""
-    sizes = [x.size for x in values]
-    total = sum(sizes)
-    keep = np.sort(rng.choice(total, size=SUBSAMPLE_SIZE, replace=False))
-    bounds = np.cumsum([0, *sizes])
+    """A seeded subsample of about SUBSAMPLE_SIZE values, stratified by level.
+
+    Level g of n_g values (N in all) gets max(round(SUBSAMPLE_SIZE n_g / N),
+    min(n_g, MIN_PER_LEVEL)) of them, its smallest and largest value always
+    among them and the rest drawn uniformly at random, so every level has marks
+    and every level's extremes are drawn.
+    """
+    total = sum(x.size for x in values)
     out: list[FloatArray] = []
-    for i, x in enumerate(values):
-        mask = (keep >= bounds[i]) & (keep < bounds[i + 1])
-        out.append(x[keep[mask] - bounds[i]])
+    for x in values:
+        n = x.size
+        share = int(SUBSAMPLE_SIZE * n / total + 0.5)
+        size = min(n, max(share, min(n, MIN_PER_LEVEL)))
+        if size >= n:
+            out.append(x)
+            continue
+        extremes = np.array([np.argmin(x), np.argmax(x)], dtype=np.intp)
+        out.append(x[with_extremes(n, size, extremes, rng)])
     return out
 
 
@@ -671,6 +730,7 @@ class Drawing:
         self.header: list[Text] = []  # title, subtitle (own figure)
         self.captions: list[Text] = []
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
+        self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
         # The y layout's inputs: bracket levels used, room above and below (px).
         self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
         self.levels_of_brackets: list[int] = []
@@ -704,8 +764,9 @@ class Drawing:
     def place_points(self, rng: np.random.Generator) -> list[tuple[FloatArray, ...]]:
         """Hook: each level's drawn points as (x, y), subsampling large panels.
 
-        Between groups: a uniform subsample of all values when there are more than
-        MAX_POINTS, and independent seeded jitter for every point.
+        Between groups: a subsample stratified by level (:func:`_split_subsample`)
+        when there are more than MAX_POINTS values, and independent seeded jitter
+        for every point.
         """
         layers = self.options.layers
         seed = self.result.settings.seed
@@ -715,12 +776,10 @@ class Drawing:
             shown = _split_subsample(self.values, rng)
             density = "violins" if "violin" in layers else "density outlines"
             self.subsample = Subsample(
-                shown=SUBSAMPLE_SIZE, total=total, seed=seed, density=density
-            )
-            self.warnings.append(
-                f"The plot has {total:,} values, more than {MAX_POINTS:,}, so the "
-                f"points show a random subsample of {SUBSAMPLE_SIZE:,} (seed {seed}); "
-                f"the {density} and boxes show all values."
+                shown=sum(y.size for y in shown),
+                total=total,
+                seed=seed,
+                density=density,
             )
         out: list[tuple[FloatArray, ...]] = []
         for i, y in enumerate(shown):
@@ -730,6 +789,17 @@ class Drawing:
             else:
                 out.append((_EMPTY, _EMPTY))
         return out
+
+    def subsample_warning(self, sub: Subsample) -> str:
+        """Hook: the ``warnings`` entry for a subsample of the points."""
+        return (
+            f"The plot has {sub.total:,} values, more than {MAX_POINTS:,}, so the "
+            f"points show a random subsample of {sub.shown:,} (seed {sub.seed}): "
+            f"about {SUBSAMPLE_SIZE:,} shared among the levels by their size, at "
+            f"least {MIN_PER_LEVEL} of each level (all of a smaller one), always "
+            "with each level's smallest and largest value; "
+            f"{shows_all(sub, 'show')}."
+        )
 
     def draw_paths(self, points: list[tuple[FloatArray, ...]]) -> None:
         """Hook: lines joining the drawn points (none between groups)."""
@@ -800,6 +870,12 @@ class Drawing:
             if "points" in layers and py_.size > 0:
                 drawn = points_artist(ax, px_, py_, color, i)
                 apply_args(drawn, options.point_args, "point_args")
+        if self.subsample is not None:
+            # Said after the densities, which may leave a level without one.
+            self.subsample = dataclasses.replace(
+                self.subsample, undrawn=tuple(self.undrawn)
+            )
+            self.warnings.append(self.subsample_warning(self.subsample))
         self.draw_paths(points)
         if options.centrality:
             self.draw_centrality()
@@ -810,11 +886,10 @@ class Drawing:
     ) -> None:
         drawn = _density_outline(x)
         what = "violin" if "violin" in self.options.layers else "density outline"
-        if drawn is None:
-            self.warnings.append(
-                f"The {what} of level {level!r} is not drawn: it needs at least two "
-                "different values."
-            )
+        if drawn is None or isinstance(drawn, str):
+            why = "it needs at least two different values" if drawn is None else drawn
+            self.warnings.append(f"The {what} of level {level!r} is not drawn: {why}.")
+            self.undrawn.append(level)
             return
         grid, half = drawn
         xs = np.concatenate([i - half, (i + half)[::-1]])

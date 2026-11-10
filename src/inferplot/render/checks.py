@@ -35,7 +35,12 @@ from matplotlib.transforms import Bbox, BboxBase
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
-from inferplot.render.figure import describe_text, plain_text, root_figure
+from inferplot.render.figure import (
+    describe_text,
+    plain_text,
+    root_figure,
+    shows_all,
+)
 from inferplot.render.view_checks import view_issues
 
 if TYPE_CHECKING:
@@ -560,11 +565,12 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     sub = fig.subsample
     if sub is not None:
         whole = (
-            ""
+            ", with each level's smallest and largest value"
             if sub.subjects is None
             else (
                 f": every value of {sub.subjects[0]:,} of the {sub.subjects[1]:,} "
-                "subjects"
+                "subjects, with those that hold each condition's smallest and "
+                "largest value"
             )
         )
         issues.append(
@@ -573,8 +579,8 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
                 severity="info",
                 message=(
                     f"The points show a random subsample of {sub.shown:,} of the "
-                    f"{sub.total:,} values{whole} (seed {sub.seed}); the "
-                    f"{sub.density} and boxes are drawn from all values."
+                    f"{sub.total:,} values{whole} (seed {sub.seed}); "
+                    f"{shows_all(sub, 'are drawn from')}."
                 ),
                 fix=(
                     "Nothing needs fixing. Pass another seed to the analysis to draw "

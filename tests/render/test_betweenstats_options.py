@@ -142,16 +142,18 @@ def test_many_points_are_subsampled_with_density() -> None:
     assert total > MAX_POINTS
     fig = betweenstats(result)
     shown = [np.asarray(_points(fig, i).get_offsets()).shape[0] for i in range(3)]
-    assert sum(shown) == SUBSAMPLE_SIZE
+    # Stratified by level: round(2,000 x 2,200 / 6,600) = 667 of each.
+    assert shown == [667, 667, 667]
     present = gids(fig)
     assert {"violin-0", "violin-1", "violin-2"} <= present
     (warning,) = fig.result.warnings[len(result.warnings) :]
     assert f"{total:,}" in warning
-    assert "2,000" in warning
+    assert f"subsample of {sum(shown):,}" in warning
+    assert f"about {SUBSAMPLE_SIZE:,}" in warning
     assert "seed 0" in warning
     issues = {i.code: i for i in fig.check()}
     assert issues["points_subsampled"].severity == "info"
-    assert "2,000 of the 6,600" in issues["points_subsampled"].message
+    assert "2,001 of the 6,600" in issues["points_subsampled"].message
     assert "label_overlap" not in issues
     assert "text_clipped" not in issues
     # Every point drawn is one of the values of its level.

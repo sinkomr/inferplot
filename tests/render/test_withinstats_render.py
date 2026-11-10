@@ -385,13 +385,15 @@ def test_many_values_draw_whole_subjects(n: int, k: int) -> None:
     assert _new_warnings(fig, result) == (
         f"The plot has {total:,} values, more than 5,000, so the {what} show every "
         f"value of a random subsample of {m:,} of the {n:,} subjects ({m * k:,} "
-        "values, seed 0); the violins and boxes show all values.",
+        "values, seed 0), always with the subjects that hold each condition's "
+        "smallest and largest value; the violins and boxes show all values.",
     )
     issues = {issue.code: issue for issue in fig.check()}
     assert issues["points_subsampled"].message == (
         f"The points show a random subsample of {m * k:,} of the {total:,} values: "
-        f"every value of {m:,} of the {n:,} subjects (seed 0); the violins and "
-        "boxes are drawn from all values."
+        f"every value of {m:,} of the {n:,} subjects, with those that hold each "
+        "condition's smallest and largest value (seed 0); the violins and boxes "
+        "are drawn from all values."
     )
     assert {"label_overlap", "text_clipped", "path_hidden"}.isdisjoint(issues)
 
