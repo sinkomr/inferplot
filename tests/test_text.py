@@ -5,9 +5,13 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
 
+import inferplot as ip
 from inferplot import text as tx
 from inferplot.result import (
     Descriptive,
@@ -16,7 +20,7 @@ from inferplot.result import (
     Settings,
     TestResult,
 )
-from tests.oracle_fixtures import OracleCase, load_cases
+from tests.oracle_fixtures import OracleCase, load_cases, read_csv
 from tests.plotmath import parse
 from tests.test_text_expressions import ADJUSTED, result_from_fixture
 
@@ -315,12 +319,12 @@ def test_tick_label_is_plain_text() -> None:
         ),
         (
             "ToothGrowth-greater-parametric",
-            "Welch's t-test (one-sided, greater): t(55.31) = 1.92, p = .030, "
-            "Hedges' g = 0.49, 95% CI [0.06, Inf], n = 60.",
+            "Welch's t-test (one-sided: OJ greater than VC): t(55.31) = 1.92, "
+            "p = .030, Hedges' g = 0.49, 95% CI [0.06, Inf], n = 60.",
         ),
         (
             "ToothGrowth-less-parametric",
-            "Welch's t-test (one-sided, less): t(55.31) = 1.92, p = .970, "
+            "Welch's t-test (one-sided: OJ less than VC): t(55.31) = 1.92, p = .970, "
             "Hedges' g = 0.49, 95% CI [-Inf, 0.91], n = 60.",
         ),
         (
@@ -418,6 +422,76 @@ def _g(**changes: object) -> EffectSize:
 def test_apa_p_values(p: float, text: str) -> None:
     sentence = tx.apa_sentence(_welch(p_value=p), _g(), n_obs=12)
     assert f", {text}, " in sentence
+
+
+def _control_treatment() -> pd.DataFrame:
+    rng = np.random.default_rng(2)
+    y = np.r_[rng.normal(1.0, 1, 15), rng.normal(0, 1, 15)]
+    return pd.DataFrame({"g": np.repeat(["treatment", "control"], 15), "y": y})
+
+
+@pytest.mark.parametrize("kind", ["parametric", "nonparametric"])
+def test_one_sided_direction_names_the_levels(kind: str) -> None:
+    """U2: "greater" tests whether the first level (here "control", first in sorted
+    order) is greater than the second; the sentence says so with the names."""
+    data = _control_treatment()
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(data, "g", "y", type=kind, alternative="greater")
+    assert result.levels == ("control", "treatment")
+    label = "Welch's t-test" if kind == "parametric" else "Mann-Whitney U test"
+    heading = f"{label} (one-sided: control greater than treatment): "
+    assert result.text.apa.startswith(heading)
+    assert heading in result.text.alt_text
+    # The subtitle keeps ggstatsplot's text, which names no direction.
+    assert "control" not in (result.text.subtitle or "")
+    # A program reads the direction from test.alternative and levels.
+    assert result.test is not None
+    assert (result.test.alternative, *result.levels) == (
+        "greater",
+        "control",
+        "treatment",
+    )
+    flipped = analyze(
+        data, "g", "y", type=kind, alternative="greater", order=["treatment", "control"]
+    )
+    assert flipped.text.apa.startswith(
+        f"{label} (one-sided: treatment greater than control): "
+    )
+    less = analyze(data, "g", "y", type=kind, alternative="less")
+    assert less.text.apa.startswith(
+        f"{label} (one-sided: control less than treatment): "
+    )
+
+
+def test_one_sided_direction_shortens_long_names() -> None:
+    data = _control_treatment()
+    data["g"] = data["g"].replace({"control": "c" * 60, "treatment": "t" * 60})
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(data, "g", "y", alternative="less")
+    first, second = "c" * 39 + "…", "t" * 39 + "…"
+    assert result.text.apa.startswith(
+        f"Welch's t-test (one-sided: {first} less than {second}): "
+    )
+    assert len(result.text.alt_text) <= tx.ALT_TEXT_MAX_CHARS
+    assert "(one-sided: " in result.text.alt_text
+    assert " less than " in result.text.alt_text
+
+
+def test_one_sided_direction_within_subjects() -> None:
+    # The paired t-test (sleep: group 1 against group 2), one direction each.
+    sleep = read_csv("sleep.csv")
+    analyze: Any = ip.analyze.withinstats
+    result = analyze(sleep, "group", "extra", subject_id="ID", alternative="less")
+    assert result.text.apa.startswith("Paired t-test (one-sided: 1 less than 2): ")
+    assert "(one-sided: 1 less than 2)" in result.text.alt_text
+
+
+def test_one_sided_needs_the_level_names() -> None:
+    with pytest.raises(ValueError, match="cannot be named"):
+        tx.apa_sentence(_welch(alternative="greater"), _g(), n_obs=12)
+    assert tx.apa_sentence(
+        _welch(alternative="greater"), _g(), n_obs=12, levels=("a", "b")
+    ).startswith("Welch's t-test (one-sided: a greater than b): ")
 
 
 def test_apa_numbers() -> None:

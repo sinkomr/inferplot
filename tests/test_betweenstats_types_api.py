@@ -84,7 +84,9 @@ def test_nonparametric_one_sided(teeth: pd.DataFrame) -> None:
     assert result.test.alternative == "greater"
     assert result.effect_size.sidedness == "greater"
     assert result.effect_size.conf_high == 1.0
-    assert result.text.apa.startswith("Mann-Whitney U test (one-sided, greater): ")
+    assert result.text.apa.startswith(
+        "Mann-Whitney U test (one-sided: OJ greater than VC): "
+    )
 
 
 def test_nonparametric_three_groups(plants: pd.DataFrame) -> None:

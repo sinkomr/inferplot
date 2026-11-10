@@ -863,7 +863,15 @@ def withinstats(
         results_subtitle: whether the statistical results are reported as a
             subtitle.
         alternative: "two-sided", "less" or "greater"; one-sided only with two
-            conditions and type "parametric" or "nonparametric".
+            conditions and type "parametric" or "nonparametric" (the paired
+            t-test, the Wilcoxon signed-rank test). "greater" tests whether the
+            first level of x is greater than the second (the differences first
+            minus second are positive), and "less" whether it is less. The first
+            level is the first in ``order`` when given, else the first declared
+            category, else the first in sorted order: pass ``order`` to fix the
+            direction. The APA sentence and the alt text name it ("Paired t-test
+            (one-sided: pre less than post)"); a program reads it from
+            ``result.test.alternative`` and ``result.levels``.
         seed: random seed of the bootstrap intervals, recorded in the result.
         order: the level order, a permutation of the levels present.
 

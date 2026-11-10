@@ -177,7 +177,13 @@ class TestResult(_Plain):
 
     ``df_error`` is statsExpressions' ``df.error`` (Welch's t df; the denominator df
     of an F test) and ``df`` its ``df`` (numerator df), None where absent.
-    ``alternative`` is "two-sided", "less" or "greater".
+
+    ``alternative`` is "two-sided", "less" or "greater". A one-sided test compares
+    the two entries of ``StatsResult.levels`` in that order: "greater" tests
+    whether ``levels[0]`` is greater than ``levels[1]`` (for paired tests: whether
+    the differences ``levels[0]`` minus ``levels[1]`` are positive), "less"
+    whether it is less. ``alternative`` and ``levels`` together say the direction;
+    the APA sentence names it in words.
     """
 
     # Not a pytest test class, although its name starts with "Test".

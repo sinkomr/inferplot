@@ -60,6 +60,7 @@ from inferplot.result import (
 
 __all__ = [
     "ALT_TEXT_MAX_CHARS",
+    "APA_NAME_LIMIT",
     "DOUBLE_XMIN",
     "EFFECT_SIZE_SYMBOLS",
     "N_BIG_MARK",
@@ -1084,23 +1085,59 @@ def _apa_effect_size(effect_size: EffectSize) -> str:
     return f"{effect_size.label} = {estimate}, {level} CI [{low}, {high}]"
 
 
-def _test_heading(test: TestResult) -> str:
+# The longest level name the APA sentence prints whole; alt_text() shortens further.
+APA_NAME_LIMIT: Final = 40
+
+
+def _direction(alternative: str, levels: Sequence[str], limit: int) -> str:
+    """A one-sided hypothesis in words: "OJ greater than VC". ``alternative``
+    "greater" tests whether the first level is greater than the second, "less"
+    whether it is less (the definition of the argument messages, D59)."""
+    if len(levels) != 2:
+        raise ValueError(
+            f"a one-sided test ({alternative!r}) compares two levels; got "
+            f"{len(levels)} level names, so its direction cannot be named"
+        )
+    first, second = (_short(level, limit) for level in levels)
+    if alternative == "greater":
+        return f"{first} greater than {second}"
+    if alternative == "less":
+        return f"{first} less than {second}"
+    raise ValueError(f"unknown alternative {alternative!r}")
+
+
+def _test_heading(test: TestResult, levels: Sequence[str], limit: int) -> str:
+    """The test's name, followed for a one-sided test by its direction with the
+    level names: "Welch's t-test (one-sided: OJ greater than VC)"."""
     if test.alternative == "two-sided":
         return test.label
-    return f"{test.label} (one-sided, {test.alternative})"
+    return f"{test.label} (one-sided: {_direction(test.alternative, levels, limit)})"
 
 
-def apa_sentence(test: TestResult, effect_size: EffectSize, *, n_obs: int) -> str:
-    """The APA 7 results sentence (SPEC section 7), ASCII only.
+def apa_sentence(
+    test: TestResult,
+    effect_size: EffectSize,
+    *,
+    n_obs: int,
+    levels: Sequence[str] = (),
+    name_limit: int = APA_NAME_LIMIT,
+) -> str:
+    """The APA 7 results sentence (SPEC section 7).
 
     "Welch's t-test: t(55.31) = 1.92, p = .061, Hedges' g = 0.49, 95% CI [-0.02,
     0.99], n = 60." Statistics and estimates to two decimals; p to three decimals
     without a leading zero ("p < .001" below .001); no leading zero for quantities
-    bounded by 1; non-integer df to two decimals, integer df bare; one-sided tests say
-    so after the test name.
+    bounded by 1; non-integer df to two decimals, integer df bare. A one-sided test
+    names its direction after the test name with the two ``levels`` (the analyzed
+    order: "greater" tests whether the first is greater than the second), each
+    shortened to ``name_limit`` characters with an ellipsis: "Welch's t-test
+    (one-sided: OJ greater than VC): ..."; ``levels`` is required then. The
+    sentence is ASCII except where a level name is not (level names are the
+    user's data and are printed as they are, apart from that shortening).
     """
+    heading = _test_heading(test, levels, name_limit)
     return (
-        f"{_test_heading(test)}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, "
+        f"{heading}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, "
         f"n = {format_n(n_obs)}."
     )
 
@@ -1157,12 +1194,17 @@ def results_sentence(
     pairwise: Sequence[PairwiseComparison],
     *,
     n_obs: int,
+    levels: Sequence[str] = (),
+    name_limit: int = APA_NAME_LIMIT,
 ) -> str:
     """The result's APA-style sentence: :func:`apa_sentence` for a frequentist
-    test, :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type
-    "bayes", or a note that nothing was tested."""
+    test (``levels`` and ``name_limit`` name a one-sided test's direction),
+    :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type "bayes", or
+    a note that nothing was tested."""
     if test is not None and effect_size is not None:
-        return apa_sentence(test, effect_size, n_obs=n_obs)
+        return apa_sentence(
+            test, effect_size, n_obs=n_obs, levels=levels, name_limit=name_limit
+        )
     if bayes is not None:
         return bayes_sentence(bayes, n_obs=n_obs)
     if pairwise and pairwise[0].bayes is not None:
@@ -1293,7 +1335,15 @@ def alt_text(
             return _alt_bayes_pairs(
                 pairwise, limit=limit, display=settings.pairwise_display
             )
-        return results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs)
+        return results_sentence(
+            test,
+            effect_size,
+            bayes,
+            pairwise,
+            n_obs=n_obs,
+            levels=[d.level for d in descriptives],
+            name_limit=limit,
+        )
 
     if pairwise and not bayes_pairs:
         significant = sum(1 for pair in pairwise if pair.significant)
@@ -1456,7 +1506,14 @@ def build_texts(
     return Texts(
         subtitle=None if ex.subtitle is None else to_plain(ex.subtitle),
         caption="\n".join(lines) if lines else None,
-        apa=results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs),
+        apa=results_sentence(
+            test,
+            effect_size,
+            bayes,
+            pairwise,
+            n_obs=n_obs,
+            levels=[d.level for d in descriptives],
+        ),
         alt_text=alt_text(
             x=x,
             y=y,

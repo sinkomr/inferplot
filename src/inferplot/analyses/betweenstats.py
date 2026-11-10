@@ -1431,7 +1431,14 @@ def betweenstats(
         results_subtitle: whether the statistical results are reported as a
             subtitle (False also drops the Bayes factor caption).
         alternative: "two-sided", "less" or "greater"; one-sided only with two
-            groups.
+            groups and types "parametric" and "nonparametric" (Welch's t-test,
+            the Mann-Whitney U test). "greater" tests whether the first level of
+            x is greater than the second, and "less" whether it is less. The
+            first level is the first in ``order`` when given, else the first
+            declared category, else the first in sorted order: pass ``order`` to
+            fix the direction. The APA sentence and the alt text name it ("Welch's
+            t-test (one-sided: control greater than treatment)"); a program reads
+            it from ``result.test.alternative`` and ``result.levels``.
         seed: random seed of the bootstrap intervals (type "robust"; type
             "nonparametric" with three or more groups), recorded in the result.
         order: the level order, a permutation of the levels present.
