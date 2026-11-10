@@ -1129,7 +1129,8 @@ def _direction(alternative: str, levels: Sequence[str], limit: int) -> str:
             f"a one-sided test ({alternative!r}) compares two levels; got "
             f"{len(levels)} level names, so its direction cannot be named"
         )
-    first, second = (_short(level, limit) for level in levels)
+    short = _shortened(levels, limit)
+    first, second = (short[level] for level in levels)
     if alternative == "greater":
         return f"{first} greater than {second}"
     if alternative == "less":
@@ -1281,6 +1282,57 @@ def _short(name: str, limit: int) -> str:
     return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
 
+def _elided(name: str, start: int, head: int, limit: int) -> str:
+    """``name`` kept from ``start`` (a word start) to its end, after its first
+    ``head`` characters and an ellipsis; the end cut with an ellipsis when it is
+    longer than ``limit`` allows."""
+    tail = name[start:]
+    lead = name[:head].rstrip()
+    joined = f"{lead} \u2026 {tail}" if lead else f"\u2026{tail}"
+    if len(joined) <= limit:
+        return joined
+    room = limit - 2  # the leading and the trailing ellipsis
+    return f"\u2026{tail[:room].rstrip()}\u2026"
+
+
+def _shortened(names: Sequence[str], limit: int) -> dict[str, str]:
+    """Each of ``names`` shortened to ``limit`` characters, every one still told
+    apart from the others.
+
+    A name is cut at the end with an ellipsis (:func:`_short`), unless that gives
+    the same text as another name's: then the names that would look alike keep
+    what they do not share (from the word where they first differ to the end)
+    after the start they share, with an ellipsis between ("Mean reaction …
+    congruent trials", "Mean reaction … incongruent trials"). A name that would
+    still look like another's is not shortened.
+    """
+    unique = list(dict.fromkeys(names))
+    out = {name: _short(name, limit) for name in unique}
+    groups: dict[str, list[str]] = {}
+    for name in unique:
+        groups.setdefault(out[name], []).append(name)
+    for alike in groups.values():
+        if len(alike) < 2:
+            continue
+        shared = 0
+        while all(
+            len(name) > shared and name[shared] == alike[0][shared] for name in alike
+        ):
+            shared += 1
+        tails: dict[str, int] = {}
+        for name in alike:
+            # Back to the start of the word where the names part.
+            tails[name] = name.rfind(" ", 0, shared) + 1
+        longest = max(len(name) - tails[name] for name in alike)
+        head = max(0, limit - 3 - longest)
+        for name in alike:
+            out[name] = _elided(name, tails[name], head, limit)
+    seen: dict[str, int] = {}
+    for text in out.values():
+        seen[text] = seen.get(text, 0) + 1
+    return {name: (name if seen[text] > 1 else text) for name, text in out.items()}
+
+
 def _centrality_word(centrality: str, tr: float) -> str:
     """The centrality in words: "mean", "median", "20% trimmed mean", "MAP
     estimate"."""
@@ -1293,6 +1345,7 @@ def _centrality_word(centrality: str, tr: float) -> str:
 def _alt_groups_detailed(
     descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
 ) -> str:
+    short = _shortened([d.level for d in descriptives], limit)
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1302,7 +1355,7 @@ def _alt_groups_detailed(
             if d.value is None or math.isnan(d.value)
             else f"{word} {format_value(d.value, digits)}"
         )
-        parts.append(f"{_short(d.level, limit)} (n = {format_n(d.n)}, {center})")
+        parts.append(f"{short[d.level]} (n = {format_n(d.n)}, {center})")
     return ", ".join(parts)
 
 
@@ -1322,13 +1375,14 @@ def _alt_groups_summary(
     ]
     if not finite:
         return n_text
+    short = _shortened([d.level for d in descriptives], limit)
     low, low_value = min(finite, key=lambda item: item[1])
     high, high_value = max(finite, key=lambda item: item[1])
     word = _centrality_word(low.centrality, tr)
     return (
         f"{n_text}; {word}s from {format_value(low_value, digits)} "
-        f"({_short(low.level, limit)}) to {format_value(high_value, digits)} "
-        f"({_short(high.level, limit)})"
+        f"({short[low.level]}) to {format_value(high_value, digits)} "
+        f"({short[high.level]})"
     )
 
 
@@ -1347,6 +1401,9 @@ def _alt_bayes_pairs(
     double, so the strongest pair is found even when several BF10 are inf."""
     first = pairwise[0].bayes
     assert first is not None
+    short = _shortened(
+        [name for pair in pairwise for name in (pair.group1, pair.group2)], limit
+    )
 
     def strength(pair: PairwiseComparison) -> float:
         assert pair.bayes is not None
@@ -1354,10 +1411,7 @@ def _alt_bayes_pairs(
 
     def described(pair: PairwiseComparison) -> str:
         assert pair.bayes is not None
-        return (
-            f"{_apa_bf(pair.bayes)} ({_short(pair.group1, limit)} vs "
-            f"{_short(pair.group2, limit)})"
-        )
+        return f"{_apa_bf(pair.bayes)} ({short[pair.group1]} vs {short[pair.group2]})"
 
     low, high = min(pairwise, key=strength), max(pairwise, key=strength)
     brackets = (
@@ -1380,6 +1434,7 @@ def _alt_conditions_detailed(
 ) -> str:
     """Each condition with its centrality value; n is the same for all and is
     named once, in the head."""
+    short = _shortened([d.level for d in descriptives], limit)
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1388,7 +1443,7 @@ def _alt_conditions_detailed(
             if d.value is None or math.isnan(d.value)
             else f"{word} {format_value(d.value, digits)}"
         )
-        parts.append(f"{_short(d.level, limit)} ({center})")
+        parts.append(f"{short[d.level]} ({center})")
     return ", ".join(parts)
 
 
