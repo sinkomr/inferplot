@@ -53,6 +53,8 @@ from inferplot.stats.descriptive import FloatArray, rounding_tolerance
 
 __all__ = [
     "READ_ULPS",
+    "all_equal_as_written",
+    "equal_as_written",
     "written_trim",
     "written_value",
     "written_values",
@@ -141,3 +143,15 @@ def written_trim(values: Sequence[Fraction], g: int) -> tuple[Fraction, Fraction
     winsorized = [ordered[g]] * g + middle + [ordered[m - g - 1]] * g
     centre = sum(winsorized, Fraction(0)) / m
     return tmean, sum(((v - centre) ** 2 for v in winsorized), Fraction(0))
+
+
+def equal_as_written(values: FloatArray, value: float) -> NDArray[np.bool_]:
+    """Which of ``values`` equal ``value`` as written (``written_values``): 0.1 +
+    0.2 equals 0.3, as 3 x 0.3 equals 0.9."""
+    target = written_value(value)
+    return np.array([r == target for r in written_values(values)], dtype=bool)
+
+
+def all_equal_as_written(values: FloatArray, value: float) -> bool:
+    """Whether every one of ``values`` equals ``value`` as written."""
+    return bool(equal_as_written(values, value).all())

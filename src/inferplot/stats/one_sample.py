@@ -66,7 +66,12 @@ from inferplot.stats.within_nonparametric import (
     _signed_ranks,  # pyright: ignore[reportPrivateUsage]
     signed_rank,
 )
-from inferplot.stats.written import written_trim, written_value, written_values
+from inferplot.stats.written import (
+    equal_as_written,
+    written_trim,
+    written_value,
+    written_values,
+)
 
 __all__ = [
     "BootstrapTrimmedMeanTest",
@@ -159,6 +164,18 @@ def _all_mu_error(n: int, mu: float) -> ValueError:
     )
 
 
+def _zeros_as_written(arr: FloatArray, mu: float) -> FloatArray:
+    """x with every value that equals mu as written replaced by mu itself, so its
+    difference is an exact 0 and the signed-rank test drops it (D74: 0.1 + 0.2
+    against 0.3, whose rounded difference 5.6e-17 R's ``wilcox.test`` would rank);
+    every other difference is R's rounded x - mu (D88). Raises when every value
+    equals mu as written."""
+    same = equal_as_written(arr, mu)
+    if bool(same.all()):
+        raise _all_mu_error(arr.size, mu)
+    return np.where(same, mu, arr)
+
+
 def _one_sample_t_value(arr: FloatArray, mu: float) -> float:
     """t = (mean - mu) / (sd / sqrt(n)) on x times its common scale: the exact mean
     minus mu rounded once, the corrected two-pass variance (``scaled_variance``)."""
@@ -176,8 +193,12 @@ def _one_sample_t_value(arr: FloatArray, mu: float) -> float:
             "data for entry or unit errors; rescaling does not help, since it keeps "
             "their ratio"
         )
-    # scale is a power of two, so the product is exact before the one rounding.
-    difference = float((exact_mean(arr) - Fraction(mu)) * Fraction(scale))
+    # scale is a power of two, so the product is exact before the one rounding;
+    # a difference beyond the largest double means a t beyond it too.
+    try:
+        difference = float((exact_mean(arr) - Fraction(mu)) * Fraction(scale))
+    except OverflowError:
+        difference = math.inf
     t = difference / math.sqrt(term)
     if not math.isfinite(t):
         raise ValueError(
@@ -316,9 +337,12 @@ def one_sample_signed_rank(
     approximation: ``signed_rank`` of x and mu, i.e. of the differences x - mu.
 
     The differences are R's: x - mu rounded to the nearest double, as
-    ``stats::wilcox.test(x, mu = mu)`` forms them; those that are 0 (x equal to
-    mu) are dropped, the others ranked by |x - mu| with mid-ranks, and V is the
-    sum of the ranks of the positive ones. Ties are ties of these rounded
+    ``stats::wilcox.test(x, mu = mu)`` forms them; those that are 0 are dropped,
+    and so are values that equal mu as written (``equal_as_written``: 0.1 + 0.2
+    against 0.3, whose rounded difference 5.6e-17 R's exact comparison with 0
+    would keep and rank; no fixture has such a value, D74), the others ranked
+    by |x - mu| with mid-ranks, and V is the sum of the ranks of the positive
+    ones. Ties are ties of these rounded
     differences (D64's rule for the paired test): two values equally far from mu
     as written can get different ranks (iris Sepal.Length against 5.8: |5.7 - 5.8|
     is 0.09999999999999964 and |5.9 - 5.8| is 0.10000000000000053; six such pairs
@@ -332,11 +356,11 @@ def one_sample_signed_rank(
 
     Raises:
         ValueError: x is empty or has a non-finite value, mu is not finite, every
-            value equals mu (R: V = 0 and p = NaN), or ``alternative`` is unknown.
+            value equals mu as written (R: V = 0 and p = NaN), or ``alternative``
+            is unknown.
     """
     arr, value = _sample(x, mu, 1)
-    if bool((arr == value).all()):
-        raise _all_mu_error(arr.size, value)
+    arr = _zeros_as_written(arr, value)
     return signed_rank(arr, np.full(arr.size, value), alternative=alternative)
 
 
@@ -371,8 +395,7 @@ def one_sample_rank_biserial(
     side = check_alternative(alternative)
     level = check_conf_level(conf_level)
     arr, value = _sample(x, mu, 1)
-    if bool((arr == value).all()):
-        raise _all_mu_error(arr.size, value)
+    arr = _zeros_as_written(arr, value)
     ranks = _signed_ranks(arr, np.full(arr.size, value))
     r = float(Fraction(ranks.plus2 - ranks.minus2, ranks.plus2 + ranks.minus2))
     m = ranks.n_nonzero
@@ -432,7 +455,9 @@ def bootstrap_t_critical_value(
     return float(ordered[k - 1])
 
 
-def _trimmed_t(winsorized: FloatArray, tmean: Fraction, mu: float, tr: float) -> float:
+def _trimmed_t(
+    winsorized: FloatArray, tmean: Fraction, mu: Fraction, tr: float
+) -> float:
     """t = (trimmed mean - mu) / (s_w / ((1 - 2 tr) sqrt(n))) from exact
     quantities, rounded once: t^2 = (trimmed mean - mu)^2 (1 - 2 tr)^2 n (n - 1)
     / SS_w with SS_w the winsorized sum of squares of the (scaled) doubles, the
@@ -446,12 +471,12 @@ def _trimmed_t(winsorized: FloatArray, tmean: Fraction, mu: float, tr: float) ->
     total = sum((c * v for c, v in zip(weights, exact, strict=True)), Fraction(0))
     squares = sum((c * v * v for c, v in zip(weights, exact, strict=True)), Fraction(0))
     ss = squares - total * total / n
-    difference = tmean - Fraction(mu)
+    difference = tmean - mu
     shrink = 1 - 2 * Fraction(tr)
     magnitude = sqrt_rounded(
         difference * difference * shrink * shrink * n * (n - 1) / ss
     )
-    return math.copysign(magnitude, float(difference)) + 0.0
+    return math.copysign(magnitude, 1.0 if difference > 0 else -1.0) + 0.0
 
 
 def trimmed_mean_bootstrap_t(
@@ -555,7 +580,11 @@ def trimmed_mean_bootstrap_t(
     # whether t is 0, the order of the draw, which resamples are 0 / 0 and which
     # T* equal |t|.
     mu_w = written_value(value)
-    t = 0.0 if tm_w == mu_w else _trimmed_t(winsorized, tmean, value * scale, t_trim)
+    t = (
+        0.0
+        if tm_w == mu_w
+        else _trimmed_t(winsorized, tmean, Fraction(value) * Fraction(scale), t_trim)
+    )
     if not math.isfinite(t):
         raise ValueError(
             "the bootstrap-t statistic exceeds the largest double (about 1.8e308): "
