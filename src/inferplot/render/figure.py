@@ -271,8 +271,10 @@ class StatsFigure:
         can draw (``glyph_missing``), and, whatever changed the figure after drawing, an
         inverted axis or a non-linear scale (``axis_changed``), values or
         brackets outside the axis limits (``data_outside_view``) and values
-        drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
-        panels' texts and a figure title count as ``label_overlap``.
+        drawn as a flat line (``flat_data``); for barstats, a cell label left out
+        or drawn where it does not read as its cell's (``cell_labels_hidden``).
+        With ``ax=``, overlaps with other panels' texts and a figure title count
+        as ``label_overlap``.
         """
         from inferplot.render.checks import figure_issues
 
