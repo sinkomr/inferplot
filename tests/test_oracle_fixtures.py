@@ -3,7 +3,7 @@
 These tests check the fixtures themselves, not inferplot: hashes against the manifest,
 datasets and generator files, the ggstatsplot version, the case list, what
 ggstatsplot hid, and that every supported dataframe backend sees the same groups and
-counts that R analyzed.
+counts that R analyzed, and, within subjects, the same complete subjects and values.
 """
 
 import math
@@ -18,6 +18,7 @@ from tests.oracle_fixtures import (
     PARITY_VERSION,
     Backend,
     OracleCase,
+    cases_for,
     integrity_problems,
     load_cases,
     load_probes,
@@ -27,6 +28,7 @@ from tests.oracle_fixtures import (
     r_double,
     r_level_label,
     read_dataset,
+    require_cases,
 )
 from tests.tolerances import assert_within_monte_carlo
 
@@ -115,6 +117,65 @@ PHASE2_LABELS: dict[str, tuple[str, ...]] = {
     "ToothGrowth-prior08": ("bayes",),
     "PlantGrowth-prior08": ("bayes",),
 }
+# Phase 3: robust ggbetweenstats cases whose bootstrap resamples include infinite
+# effect sizes (heavy ties in small groups).
+PHASE3_BETWEEN_LABELS = ("edge_heavy_ties2", "edge_heavy_ties3")
+# Phase 3 (withinstats): ggwithinstats cases, label -> types (see generate.R).
+WITHIN_EDGE_LABELS = (
+    "sleep",
+    "edge_within2_small",
+    "edge_within2_small-declared",
+    "edge_within2_ties",
+    "edge_within2_negative",
+    "edge_within2_outliers",
+    "edge_within2_shuffled",
+    "edge_within2_null",
+    "edge_within2_large_n",
+    "edge_within2_missing",
+    "bugs_long",
+    "edge_within_missing",
+    "edge_within_missing-declared",
+    "edge_within_small",
+    "edge_within_ties",
+    "edge_within_negative",
+    "edge_within_outliers",
+    "edge_within_shuffled",
+    "edge_within_null",
+    "edge_within_large_n",
+    "edge_within_k5",
+    "edge_within_nonspherical",
+)
+WITHIN_LABELS: dict[str, tuple[str, ...]] = {
+    **dict.fromkeys(WITHIN_EDGE_LABELS, TYPES),
+    **{
+        f"bugs_long-padj-{method}": ("parametric", "nonparametric", "robust")
+        for method in P_ADJUST_METHODS
+    },
+    "sleep-cl90": TYPES,
+    "bugs_long-cl90": TYPES,
+    "sleep-tr01": ("robust",),
+    "bugs_long-tr01": ("robust",),
+    "bugs_long-display-all": TYPES,
+    "bugs_long-display-ns": TYPES,
+    "bugs_long-display-none": TYPES,
+    "sleep-digits3": TYPES,
+    "bugs_long-digits3": TYPES,
+    "sleep-nosubtitle": TYPES,
+    "bugs_long-nosubtitle": TYPES,
+    "sleep-greater": TYPES,
+    "sleep-less": ("parametric", "nonparametric"),
+    "sleep-prior08": ("parametric", "bayes"),
+    "bugs_long-prior08": ("bayes",),
+    "sleep-nobf": ("parametric",),
+    "sleep-nopaths": ("parametric",),
+    "bugs_long-nopaths": ("parametric",),
+}
+# Within-subject datasets whose rows are another dataset's in a random order: the
+# results must be the same (pairing is by subject, not by row order).
+SHUFFLED_TWINS = {
+    "edge_within2_shuffled": "edge_within2_outliers",
+    "edge_within_shuffled": "edge_within_outliers",
+}
 EXPECTED_CASES = frozenset(
     {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
     | {"ggbetweenstats-mtcars-am-drat-parametric"}
@@ -127,6 +188,12 @@ EXPECTED_CASES = frozenset(
     | {
         f"ggbetweenstats-{label}-{t}"
         for label, types in PHASE2_LABELS.items()
+        for t in types
+    }
+    | {f"ggbetweenstats-{label}-robust" for label in PHASE3_BETWEEN_LABELS}
+    | {
+        f"ggwithinstats-{label}-{t}"
+        for label, types in WITHIN_LABELS.items()
         for t in types
     }
 )
@@ -149,6 +216,11 @@ EXPECTED_PROBES = frozenset(
         "probe-akp",
         "probe-map",
         "probe-ranks",
+        "probe-signrank",
+        "probe-pairedbf",
+        "probe-friedman",
+        "probe-rmanova",
+        "probe-wrs2within",
     }
 )
 
@@ -165,11 +237,35 @@ def test_case_list_is_what_the_generator_writes() -> None:
     )
     assert len(PARAMETRIC_LABELS) == 28
     assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
+    assert sum(len(types) for types in WITHIN_LABELS.values()) == 159
 
 
 ALL_CASES = [
     *oracle_params("ggbetweenstats"),
     *oracle_params("ggbetweenstats", failed=True),
+]
+FUNCTIONS = ("ggbetweenstats", "ggwithinstats")
+
+
+def _completed_params() -> list[Any]:
+    """Every completed case of the functions whose fixtures share one layout."""
+    return [param for function in FUNCTIONS for param in oracle_params(function)]
+
+
+def _failed_params() -> list[Any]:
+    """Every case where ggstatsplot failed as declared, for either function."""
+    cases = require_cases(
+        [c for function in FUNCTIONS for c in cases_for(function, failed=True)],
+        "failed ggbetweenstats or ggwithinstats cases",
+    )
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+COMPLETED = _completed_params()
+WITHIN_ALL = [
+    pytest.param(case, id=case.name)
+    for case in load_cases()
+    if case.function == "ggwithinstats"
 ]
 
 
@@ -181,7 +277,7 @@ def test_failures_are_the_declared_ones() -> None:
         assert (case.raw["partial"] is not None) == (case.name in EXPECTED_FAILURES)
 
 
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats", failed=True))
+@pytest.mark.parametrize("case", _failed_params())
 def test_failed_case_fails_where_declared(case: OracleCase) -> None:
     # ggstatsplot stopped inside the declared hidden call, with the declared message,
     # after every hidden call before it ran; what those calls returned is kept.
@@ -433,8 +529,8 @@ def test_probe_ranks_covers_its_grid() -> None:
     assert [entry["name"] for entry in k] == ["edge_ties", "InsectSprays", "mtcars_cyl"]
 
 
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
-def test_between_fixture_contents(case: OracleCase) -> None:
+@pytest.mark.parametrize("case", COMPLETED)
+def test_fixture_contents(case: OracleCase) -> None:
     versions = case.raw["versions"]
     assert versions["packages"]["ggstatsplot"] == PARITY_VERSION
     assert versions["R"].startswith("4.5.")
@@ -498,9 +594,15 @@ def test_between_fixture_contents(case: OracleCase) -> None:
             )
         assert 0.0 <= number(row["p.value"]) <= 1.0
     call = translate(case.function, case.args)
-    assert call.function == "betweenstats"
+    assert call.function == case.function.removeprefix("gg")
     assert call.args == (case.args["x"], case.args["y"])
     assert call.kwargs["type"] == case.type
+    if case.function == "ggwithinstats":
+        assert call.kwargs["subject_id"] == case.subject_id
+        if case.type != "bayes" or len(case.analysis_levels) == 2:
+            # n in the subtitle counts subjects (pairs), not observations.
+            n_obs = {int(number(r["n.obs"])) for r in rows}
+            assert n_obs == {len(case.within_data["subjects"])}, n_obs
 
 
 def test_lookups_of_unknown_names_fail_loudly() -> None:
@@ -562,7 +664,7 @@ def test_declared_level_order_is_kept(case: OracleCase) -> None:
     }
 
 
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
+@pytest.mark.parametrize("case", COMPLETED)
 def test_centrality_labels_are_recorded(case: OracleCase) -> None:
     # extract_stats() in ggstatsplot 1.1.4 leaves descriptive_data empty, so the
     # centrality labels come from the plot layer that draws them: one row per group.
@@ -576,7 +678,7 @@ def test_centrality_labels_are_recorded(case: OracleCase) -> None:
     assert {str(r[case.args["x"]]): int(r["n.obs"]) for r in rows} == case.n_per_level
 
 
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
+@pytest.mark.parametrize("case", COMPLETED)
 def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
     # SPEC.md section 4: brackets exist only for three or more groups and never with
     # pairwise.display "none"; they mark the pairs whose adjusted p is strictly below
@@ -619,7 +721,7 @@ def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
     assert drawn == expected
 
 
-@pytest.mark.parametrize("case", oracle_params("ggbetweenstats"))
+@pytest.mark.parametrize("case", COMPLETED)
 def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     ref = case.bootstrap_reference
     k = len(case.analysis_levels)
@@ -632,8 +734,17 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
         return
     assert ref is not None
     assert ref["resamples"] >= 20000
-    # The reference runs at the case's own confidence level and trimming.
-    assert ref["conf_level"] == case.args.get("conf.level", 0.95)
+    # The reference runs at the case's own confidence level and trimming. Within
+    # subjects, the robust effect sizes (dep.effect, wmcpAKP) take no confidence
+    # level: statsExpressions passes none, and ggstatsplot reports 95% whatever the
+    # case asks (requested_conf_level).
+    requested = case.args.get("conf.level", 0.95)
+    if case.function == "ggwithinstats" and case.type == "robust":
+        assert ref["requested_conf_level"] == requested
+        assert ref["conf_level"] == 0.95
+        assert number(case.subtitle_data["conf.level"]) == 0.95
+    else:
+        assert ref["conf_level"] == requested
     tr = case.args.get("tr", 0.2)
     if case.type == "robust":
         assert f"tr = {tr:g}," in ref["call"], ref["call"]
@@ -661,3 +772,178 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
             number(reps[f"{key}_sd"]),
             what=f"{case.name} reference {key}",
         )
+
+
+# Within subjects (ggwithinstats) ----------------------------------------------------
+
+
+def _r_order_key(value: object) -> tuple[int, float, str]:
+    """R's sort order of subject ids: numbers numerically, text in the C locale."""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return (0, float(value), "")
+    return (1, 0.0, str(value))
+
+
+def _complete_subjects(case: OracleCase, frame: Any) -> dict[str, Any]:
+    """statsExpressions::complete_subjects() as SPEC.md section 3 describes it, on any
+    backend: rows without x or subject are dropped; the levels are those left
+    (declared order, else sorted); a subject is kept only with a non-missing y in
+    every level; subjects sort as R sorts them."""
+    df = nw.from_native(frame, eager_only=True)
+    x, y, subject = case.args["x"], case.args["y"], case.subject_id
+    usable = df.filter(~nw.col(x).is_null() & ~nw.col(subject).is_null())
+    raw_levels = set(usable[x].to_list())
+    present = {r_level_label(v) for v in raw_levels}
+    dtype = df.schema[x]
+    if isinstance(dtype, nw.Enum | nw.Categorical):
+        order = [str(v) for v in df[x].cat.get_categories().to_list()]
+        levels = [v for v in order if v in present]
+    else:
+        levels = [r_level_label(v) for v in sorted(raw_levels, key=_r_order_key)]
+    cells: dict[Any, dict[str, float | None]] = {}
+    for sid, level, value in zip(
+        usable[subject].to_list(), usable[x].to_list(), usable[y].to_list(), strict=True
+    ):
+        row = cells.setdefault(sid, {})
+        key = r_level_label(level)
+        assert key not in row, f"subject {sid!r} repeated in level {key!r}"
+        missing = value is None or (isinstance(value, float) and math.isnan(value))
+        row[key] = None if missing else float(value)
+    complete = [
+        sid for sid, row in cells.items() if all(row.get(lv) is not None for lv in levels)
+    ]
+    kept = sorted(complete, key=_r_order_key)
+    dropped = sorted(set(cells) - set(complete), key=_r_order_key)
+    return {
+        "levels": levels,
+        "subjects": [r_level_label(s) for s in kept],
+        "values": [[cells[s][level] for level in levels] for s in kept],
+        "dropped_subjects": [r_level_label(s) for s in dropped],
+        "rows_without_x_or_subject": len(df) - len(usable),
+    }
+
+
+def _within_values(case: OracleCase) -> list[list[float]]:
+    return [[number(v) for v in row] for row in case.within_data["values"]]
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("case", WITHIN_ALL)
+def test_backends_see_the_subjects_r_analyzed(case: OracleCase, backend: Backend) -> None:
+    # The subjects-by-conditions table ggstatsplot analyzed (within_data), rebuilt
+    # from the CSV by subject id on every backend: the same levels, the subjects in
+    # R's order, the same values and the same dropped subjects.
+    data = case.within_data
+    assert data["subject_id"] == case.subject_id
+    mine = _complete_subjects(case, read_dataset(case, backend))
+    assert mine["levels"] == list(case.analysis_levels) == list(data["levels"])
+    assert mine["subjects"] == list(data["subjects"])
+    assert mine["values"] == _within_values(case)
+    assert mine["dropped_subjects"] == list(data["dropped_subjects"])
+    assert mine["rows_without_x_or_subject"] == data["rows_without_x_or_subject"]
+    # Every level counts each complete subject once.
+    assert case.n_per_level == dict.fromkeys(case.analysis_levels, len(mine["subjects"]))
+
+
+@pytest.mark.parametrize("case", WITHIN_ALL)
+def test_declared_within_level_order_is_kept(case: OracleCase) -> None:
+    declared = case.factor_levels.get(case.args["x"])
+    if declared is None:
+        assert list(case.analysis_levels) == sorted(case.analysis_levels)
+    else:
+        assert case.analysis_levels == tuple(
+            level for level in declared if level in case.n_per_level
+        )
+
+
+def _comparable(case: OracleCase) -> dict[str, Any]:
+    """A fixture's outputs, without the fields that name its dataset."""
+    keep = (
+        "analysis_levels",
+        "n_per_level",
+        "within_data",
+        "subtitle",
+        "caption",
+        "stats",
+        "plot_layers",
+        "bootstrap_reference",
+        "suppressed",
+    )
+    return {key: case.raw[key] for key in keep}
+
+
+@pytest.mark.parametrize(
+    ("shuffled", "twin"),
+    [
+        pytest.param(f"{a}-{t}", f"{b}-{t}", id=f"{a}-{t}")
+        for a, b in SHUFFLED_TWINS.items()
+        for t in TYPES
+    ],
+)
+def test_shuffled_rows_give_the_same_results(shuffled: str, twin: str) -> None:
+    # ggwithinstats pairs by subject.id and sorts by it, so a random row order changes
+    # nothing: every output, bootstrap included, equals the sorted twin's.
+    by_name = {case.name: case for case in load_cases()}
+    a = by_name[f"ggwithinstats-{shuffled}"]
+    b = by_name[f"ggwithinstats-{twin}"]
+    assert _comparable(a) == _comparable(b)
+
+
+def test_probe_map_pins_the_anchor_threshold() -> None:
+    # The base vector shifted by c: 1e5 and 1e8 bin widths, then just below and just
+    # above 2^31 bin widths (STATUS, "MAP binning").
+    rows = {row["name"]: row for row in probe("probe-map").rows("rows")}
+    base = [0, 1, 2, 2, 3, 3, 3, 4, 5, 7, 9, 12]
+    for shift in (1200, 1211988, 26027440, 26027507):
+        row = rows[f"anchor_{shift}"]
+        assert [r_double(v) for v in row["x_hex"]] == [v + shift for v in base]
+        assert row["bw_sj"]["error"] is None
+        assert row["map_estimate_hex"] == row["density_data_range"]["x_at_max_hex"]
+
+
+def test_probe_signrank_covers_its_grid() -> None:
+    pairs = probe("probe-signrank").rows("pairs")
+    assert len(pairs) == 12
+    for entry in pairs:
+        assert len(entry["a_hex"]) == len(entry["b_hex"])
+        # exact NULL, TRUE, FALSE x correct TRUE, FALSE x three alternatives.
+        assert len(entry["wilcox"]) == 18
+        assert len(entry["rank_biserial"]) == 6
+
+
+def test_probe_pairedbf_covers_its_grid() -> None:
+    rows = probe("probe-pairedbf").rows("rows")
+    assert len(rows) == 4 * 19 * 2
+    assert {row["n"] for row in rows} == {5, 10, 30, 200}
+    assert all(row["call_error"] is None for row in rows)
+
+
+def test_probe_friedman_covers_its_designs() -> None:
+    designs = probe("probe-friedman").rows("designs")
+    assert [d["name"] for d in designs][-2:] == ["tied_rows", "untied"]
+    for design in designs:
+        k = len(design["levels"])
+        assert design["friedman_error"] is None, design["name"]
+        assert design["durbin_error"] is None, design["name"]
+        assert design["kendalls_w_error"] is None, design["name"]
+        assert len(design["durbin_pairs"]) == k * (k - 1) // 2
+
+
+def test_probe_rmanova_covers_its_designs() -> None:
+    designs = probe("probe-rmanova").rows("designs")
+    assert len(designs) == 9
+    for design in designs:
+        assert [t["correction"] for t in design["anova"]] == ["none", "GG", "HF"]
+        assert all(t["error"] is None for t in design["anova"]), design["name"]
+        assert design["tidy_model_parameters"], design["name"]
+
+
+def test_probe_wrs2within_covers_its_grid() -> None:
+    wrs2 = probe("probe-wrs2within")
+    shifts = 28
+    assert len(wrs2.rows("yuend")) == 3 * shifts
+    rm = wrs2.rows("rmanova")
+    assert len(rm) == 3 * shifts
+    assert all(len(row["pairs"]) == 3 and len(row["rmmcp"]) == 3 for row in rm)
+    assert len(wrs2.rows("dep_effect")) == 4 * 2
+    assert len(wrs2.rows("wmcp_akp")) == 4 * 2

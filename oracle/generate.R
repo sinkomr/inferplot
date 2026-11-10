@@ -1217,6 +1217,41 @@ run_or_stop <- function(case, what, expr) {
   out
 }
 
+# Bootstrap references already computed in this run, by call and data.
+BOOT_CACHE <- new.env()
+
+# The 20,000-resample reference and the 2,000-resample replicates of one call.
+bootstrap_runs <- function(case, chosen) {
+  reference <- run_or_stop(case, "bootstrap reference", {
+    set.seed(BOOT_SEED)
+    chosen$run(BOOT_REFERENCE_RESAMPLES)
+  })
+  # Each replicate sets its own seed, so running them in parallel processes gives the
+  # same values as running them in turn; warnings are collected in replicate order.
+  runs <- parallel::mclapply(
+    seq_len(BOOT_REPLICATES),
+    function(i) {
+      out <- capture({
+        set.seed(BOOT_SEED + i)
+        unname(chosen$run(BOOT_REPLICATE_RESAMPLES)$values)
+      })
+      list(
+        values = if (inherits(out$value, "error")) NULL else out$value,
+        error = if (inherits(out$value, "error")) conditionMessage(out$value) else NULL,
+        warnings = out$warnings
+      )
+    },
+    mc.cores = BOOT_CORES
+  )
+  for (run in runs) {
+    if (!is.list(run)) stop("bootstrap replicates failed for ", case$name, ": ", run)
+    if (!is.null(run$error)) {
+      stop("bootstrap replicates failed for ", case$name, ": ", run$error)
+    }
+  }
+  list(reference = reference, runs = runs)
+}
+
 bootstrap_reference <- function(case, analysis, stats) {
   subtitle_row <- stats$subtitle_data
   within <- case$fun == "ggwithinstats"
@@ -1248,33 +1283,18 @@ bootstrap_reference <- function(case, analysis, stats) {
   replayed <- !is.null(chosen)
   if (!replayed) chosen <- candidates[[1L]]
 
-  reference <- run_or_stop(case, "bootstrap reference", {
-    set.seed(BOOT_SEED)
-    chosen$run(BOOT_REFERENCE_RESAMPLES)
-  })
-  # Each replicate sets its own seed, so running them in parallel processes gives the
-  # same values as running them in turn; warnings are collected in replicate order.
-  runs <- parallel::mclapply(
-    seq_len(BOOT_REPLICATES),
-    function(i) {
-      out <- capture({
-        set.seed(BOOT_SEED + i)
-        unname(chosen$run(BOOT_REPLICATE_RESAMPLES)$values)
-      })
-      list(
-        values = if (inherits(out$value, "error")) NULL else out$value,
-        error = if (inherits(out$value, "error")) conditionMessage(out$value) else NULL,
-        warnings = out$warnings
-      )
-    },
-    mc.cores = BOOT_CORES
-  )
-  for (run in runs) {
-    if (!is.list(run)) stop("bootstrap replicates failed for ", case$name, ": ", run)
-    if (!is.null(run$error)) {
-      stop("bootstrap replicates failed for ", case$name, ": ", run$error)
-    }
+  # The reference and the replicates depend only on the call and its data (each run
+  # sets its own seed), so cases that share both (the p.adjust, display and digits
+  # variants of one dataset) share one computation; the values are the same either
+  # way.
+  key <- digest::digest(list(chosen$call, ordered), algo = "sha256")
+  cached <- BOOT_CACHE[[key]]
+  if (is.null(cached)) {
+    cached <- bootstrap_runs(case, chosen)
+    assign(key, cached, envir = BOOT_CACHE)
   }
+  reference <- cached$reference
+  runs <- cached$runs
   replicates <- list(
     value = t(vapply(runs, function(run) run$values, numeric(3L))),
     warnings = unlist(lapply(runs, function(run) run$warnings))
