@@ -130,8 +130,9 @@ class Options:
     point_args: dict[str, object]
     boxplot_args: dict[str, object]
     violin_args: dict[str, object]
-    point_path: bool = False  # withinstats only
-    centrality_path: bool = False  # withinstats only
+    # withinstats only: None draws the path where ggwithinstats does.
+    point_path: bool | None = None
+    centrality_path: bool | None = None
 
 
 CENTRALITY_SIZE: Final = 40.0  # centrality point marker area, points squared
@@ -991,6 +992,11 @@ class Drawing:
         """Hook: the paths drawn, for ``fig.check()``."""
         return None
 
+    def finish_result(self, result: StatsResult) -> StatsResult:
+        """Hook: the result the figure returns, told what was drawn (the alt
+        text of a within-subjects figure names the paths it draws)."""
+        return result
+
     # -- main ------------------------------------------------------------------
 
     def run(self) -> StatsFigure:
@@ -1012,6 +1018,7 @@ class Drawing:
             result = dataclasses.replace(
                 result, warnings=result.warnings + tuple(self.warnings)
             )
+        result = self.finish_result(result)
         return StatsFigure(
             figure=self.figure,
             axes={"main": self.ax},

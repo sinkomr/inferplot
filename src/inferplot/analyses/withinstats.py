@@ -8,11 +8,36 @@ argument with :mod:`inferplot._validate`, and returns a
 :class:`~inferplot.result.StatsResult` with ``design="within"``. It never imports
 matplotlib.
 
-Each type's analysis (SPEC.md section 4, "withinstats") is a function
-``(data, args) -> _Parts`` in ``_ANALYSES``, run after every argument has been
-validated and the data read; ``_assemble`` builds the result from its parts. Only
-the Bayesian repeated-measures ANOVA (type bayes with three or more conditions and
-the subtitle on) raises ``NotImplementedError``: it arrives in inferplot 0.2.
+What it reproduces is ggstatsplot 1.1.4's ``ggwithinstats()`` (SPEC.md section 4,
+"withinstats"), on the complete subjects only; n is their number, printed as
+``n["pairs"]``:
+
+* type parametric, two conditions: the paired t-test (first level minus second),
+  Hedges' g of the differences with a noncentral-t CI that follows
+  ``alternative``, and the two-sided paired JZS Bayes factor caption;
+* type parametric, three or more: the repeated-measures ANOVA with the
+  Greenhouse-Geisser correction (corrected df), partial omega squared with a
+  one-sided noncentral-F CI at the uncorrected df, and paired t-tests of every
+  pair adjusted with ``p_adjust_method``; means as centrality;
+* type nonparametric: the Wilcoxon signed-rank test (normal approximation with
+  tie and continuity corrections) with the matched-pairs rank-biserial r, or
+  Friedman's test with Kendall's W (seeded percentile bootstrap CI over whole
+  subjects) and Durbin-Conover's pairwise t; medians as centrality;
+* type robust: Yuen's test for dependent trimmed means with the AKP effect size of
+  the paired differences, or WRS2's repeated-measures trimmed-means ANOVA (Huynh-
+  Feldt df) with the average AKP over the pairs and rmmcp's pairwise comparisons,
+  all at trimming ``tr``; the bootstrap intervals are always 95%, as in
+  ggstatsplot (D66); trimmed means as centrality. p-values are the accurate
+  tails, not WRS2's 1 - cdf (D43);
+* type bayes: the paired JZS Bayes factor (two conditions); with three or more,
+  only with ``results_subtitle=False``, a paired Bayes factor for every pair at
+  prior 0.707; MAP estimates as centrality.
+
+Each type's analysis is a function ``(data, args) -> _Parts`` in ``_ANALYSES``,
+run after every argument has been validated and the data read; ``_assemble``
+builds the result from its parts. Only the Bayesian repeated-measures ANOVA (type
+bayes with three or more conditions and the subtitle on) raises
+``NotImplementedError``: it arrives in inferplot 0.2.
 """
 
 from __future__ import annotations
@@ -20,8 +45,8 @@ from __future__ import annotations
 import itertools
 import math
 import re
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Final
 
 import numpy as np
@@ -55,7 +80,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
-    tied_count,
+    paired_tied_count,
 )
 from inferplot.text import build_texts, format_value, r_number_text
 
@@ -84,6 +109,13 @@ class _Args:
     results_subtitle: bool
     tr: float
     seed: int
+    # The arguments as the caller gave them, for the warnings that name them
+    # (betweenstats' rule: "pairwise_display='ns' has no effect").
+    passed: Mapping[str, object] = field(default_factory=dict[str, object])
+
+    def shown(self, name: str, value: object) -> str:
+        """``name``'s value as given (else ``value``), as a warning names it."""
+        return repr(self.passed.get(name, value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,14 +436,17 @@ def _within_no_effect_warnings(
         ):
             if value != default:
                 out.append(
-                    f"{name}={value!r} has no effect: " + reason.format(what=what)
+                    f"{name}={args.shown(name, value)} has no effect: "
+                    + reason.format(what=what)
                 )
+    out += _bf_message_no_effect(args)
     if bayes_computed or args.prior_scale == _DEFAULT_BF_PRIOR:
         return out
+    prior = args.shown("bf_prior", args.prior_scale)
     if args.type == "bayes" and k >= 3:
         # Bayes factors are computed, for every pair, at the fixed scale.
         out.append(
-            f"bf_prior={args.prior_scale!r} has no effect: the pairwise Bayes "
+            f"bf_prior={prior} has no effect: the pairwise Bayes "
             f"factors always use the prior scale {r_number_text(_PAIRWISE_BF_PRIOR)}"
             ", as in ggstatsplot; the Bayesian repeated-measures ANOVA arrives in "
             "inferplot 0.2."
@@ -428,11 +463,35 @@ def _within_no_effect_warnings(
         why = "results_subtitle=False leaves the Bayes factor out"
     else:
         why = f"bf_message={args.bf_message!r} leaves the Bayes factor out"
-    out.append(
-        f"bf_prior={args.prior_scale!r} has no effect: no Bayes factor is computed "
-        f"({why})."
-    )
+    out.append(f"bf_prior={prior} has no effect: no Bayes factor is computed ({why}).")
     return out
+
+
+def _bf_message_no_effect(args: _Args) -> list[str]:
+    """``bf_message=False`` where no Bayes factor caption could be drawn: types
+    other than parametric (ggstatsplot draws the caption for type parametric
+    only) and ``results_subtitle=False``. With type parametric and the subtitle it
+    acts: two conditions lose the caption, three or more the note that their
+    caption arrives in 0.2. ``True`` there raises instead (``withinstats``)."""
+    if args.bf_message is not False:
+        return []
+    if args.type != "parametric":
+        where = (
+            "; type='bayes' reports its Bayes factor in the subtitle"
+            if args.type == "bayes"
+            else ""
+        )
+        return [
+            "bf_message=False has no effect: the Bayes factor caption is drawn only "
+            f"for type='parametric' (as in ggstatsplot), and type={args.type!r} "
+            f"draws none{where}."
+        ]
+    if not args.results_subtitle:
+        return [
+            "bf_message=False has no effect: results_subtitle=False leaves the Bayes "
+            "factor caption out."
+        ]
+    return []
 
 
 def _nonparametric(data: WithinData, args: _Args) -> _Parts:
@@ -762,7 +821,11 @@ def _robust(data: WithinData, args: _Args) -> _Parts:
     )
     warnings = _robust_resample_warnings(akp, effect_size, k=len(levels))
     if args.conf_level != _ROBUST_CONF_LEVEL:
-        warnings.append(_robust_level_warning(args.conf_level, k=len(levels)))
+        warnings.append(
+            _robust_level_warning(
+                args.shown("conf_level", args.conf_level), k=len(levels)
+            )
+        )
     warnings += _within_no_effect_warnings(data, args, bayes_computed=False)
     return _Parts(
         test=test,
@@ -896,7 +959,7 @@ def _rmmcp_pairs(
     return _sorted_pairs(rows)
 
 
-def _robust_level_warning(conf_level: float, *, k: int) -> str:
+def _robust_level_warning(conf_level: str, *, k: int) -> str:
     """D53's rule for the within methods: conf_level reaches no interval."""
     what = (
         "the AKP effect size's bootstrap interval is always a 95% interval"
@@ -905,7 +968,7 @@ def _robust_level_warning(conf_level: float, *, k: int) -> str:
         "intervals are always 95% intervals"
     )
     return (
-        f"conf_level={conf_level!r} has no effect: {what}, as in "
+        f"conf_level={conf_level} has no effect: {what}, as in "
         "ggstatsplot, which does not pass conf.level to WRS2 here; the effect size "
         "records conf_level 0.95."
     )
@@ -1073,26 +1136,30 @@ def _within_bayes_no_effect_warnings(k: int, args: _Args) -> list[str]:
     out: list[str] = []
     if args.conf_level != 0.95:
         out.append(
-            f"conf_level={args.conf_level!r} has no effect: type='bayes' shows no "
+            f"conf_level={args.shown('conf_level', args.conf_level)} has no "
+            "effect: type='bayes' shows no "
             "interval in this version (the posterior credible interval arrives in "
             "inferplot 0.2)."
         )
     if k >= 3:
         if args.p_adjust_method != _DEFAULT_P_ADJUST:
             out.append(
-                f"p_adjust_method={args.p_adjust_method!r} has no effect: Bayes "
+                f"p_adjust_method={args.shown('p_adjust_method', args.p_adjust_method)}"
+                " has no effect: Bayes "
                 "factors are not adjusted for multiple comparisons (as in "
                 "ggstatsplot)."
             )
         if args.pairwise_alpha != _DEFAULT_ALPHA:
             out.append(
-                f"pairwise_alpha={args.pairwise_alpha!r} has no effect: Bayes factors "
+                f"pairwise_alpha={args.shown('pairwise_alpha', args.pairwise_alpha)}"
+                " has no effect: Bayes factors "
                 "are not compared with a significance level, and every pair is "
                 "drawn."
             )
         if args.pairwise_display == "non-significant":
+            display = args.shown("pairwise_display", args.pairwise_display)
             out.append(
-                f"pairwise_display={args.pairwise_display!r} has no effect: Bayes "
+                f"pairwise_display={display} has no effect: Bayes "
                 "factors have no significance, so every pair is drawn (as in "
                 "ggstatsplot); pass pairwise_display='none' to draw none."
             )
@@ -1179,6 +1246,7 @@ def _assemble(
         pairwise=parts.pairwise,
         n_obs=n_subjects,
         settings=settings,
+        design="within",
     )
     observations = tuple(tuple(float(v) for v in col.tolist()) for col in columns)
     return StatsResult(
@@ -1200,7 +1268,7 @@ def _assemble(
         n_dropped=data.n_dropped,
         dropped_subjects=len(data.dropped_subjects),
         dropped_subject_rows=data.n_rows_of_dropped_subjects,
-        n_tied=tied_count(observations),
+        n_tied=paired_tied_count(observations),
         warnings=(*_data_warnings(data), *parts.warnings),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
@@ -1310,7 +1378,32 @@ def withinstats(
     format: one row per subject and level of ``x``, with ``subject_id`` naming the
     column that identifies the subject. Measurements are paired by that column,
     never by row order. Subjects without a value at every level are left out (and
-    counted in ``dropped_subjects``), as ggstatsplot does.
+    counted in ``dropped_subjects``), as ggstatsplot does; n is the number of
+    complete subjects.
+
+    The methods follow ggstatsplot 1.1.4's ``ggwithinstats()`` for each ``type``
+    (SPEC.md section 4):
+
+    * "parametric" ("p"): the paired t-test with Hedges' g of the differences and
+      the paired JZS Bayes factor caption (two conditions); the repeated-measures
+      ANOVA with the Greenhouse-Geisser correction, partial omega squared and
+      paired t-tests of every pair (three or more). Centrality: means.
+    * "nonparametric" ("np"): the Wilcoxon signed-rank test with the matched-pairs
+      rank-biserial r (two conditions); Friedman's test with Kendall's W
+      (bootstrap CI) and Durbin-Conover comparisons (three or more). Centrality:
+      medians.
+    * "robust" ("r"): Yuen's test for dependent ``tr``-trimmed means with the AKP
+      robust standardized difference of the paired differences (two
+      conditions); the repeated-measures trimmed-means ANOVA with the average AKP
+      over the pairs and rmmcp's comparisons (three or more). The bootstrap and
+      pairwise intervals are always 95%, as in ggstatsplot. Centrality: trimmed
+      means.
+    * "bayes" ("bf"): the paired JZS Bayes factor, reported as log_e(BF01) with
+      the prior scale ``bf_prior`` (two conditions); with three or more
+      conditions only with ``results_subtitle=False`` (the Bayesian
+      repeated-measures ANOVA arrives in 0.2): a paired Bayes factor for every
+      pair, prior 0.707, unadjusted. Centrality: MAP estimates. Posterior
+      estimates arrive in 0.2.
 
     Args:
         data: a pandas, polars or pyarrow data frame in long format.
@@ -1395,6 +1488,13 @@ def withinstats(
         results_subtitle=subtitle_on,
         tr=trim,
         seed=rng_seed,
+        passed={
+            "p_adjust_method": p_adjust_method,
+            "pairwise_display": pairwise_display,
+            "pairwise_alpha": pairwise_alpha,
+            "conf_level": conf_level,
+            "bf_prior": bf_prior,
+        },
     )
     _check_design(within, args)
     parts = _ANALYSES[type_name](within, args)

@@ -1362,8 +1362,21 @@ def test_targeted_keyword_messages_point_to_the_right_function() -> None:
         "ip.analyze.betweenstats() or ip.betweenstats() and draw that result. "
         "Remove alpha=."
     )
+    # The drawing function names itself and points to both within functions;
+    # paired= is no argument of any betweenstats or withinstats form.
     text = message(TypeError, lambda: PUBLIC["ip.render.betweenstats"](paired=True))
-    assert text.startswith("betweenstats() compares independent groups")
+    assert text == (
+        "render.betweenstats() draws independent groups and takes no paired=. For "
+        "repeated measures of the same subjects use "
+        "withinstats(data, x, y, subject_id=...), or ip.analyze.withinstats() and "
+        "ip.render.withinstats(); otherwise remove paired=."
+    )
+    assert "argument of the analysis" not in text
+    text = message(TypeError, lambda: PUBLIC["ip.render.withinstats"](paired=True))
+    assert text == (
+        "paired= is not needed: render.withinstats() draws a result whose "
+        "measurements are already paired by subject_id. Remove paired=."
+    )
     text = message(TypeError, lambda: PUBLIC["ip.analyze.withinstats"](alpha=0.5))
     assert "For transparency" not in text  # the analysis draws nothing
     assert "pairwise_alpha= sets the threshold" in text

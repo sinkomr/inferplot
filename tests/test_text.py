@@ -736,7 +736,7 @@ def _sentences(text: str) -> int:
 
 
 def test_alt_text_on_every_parametric_fixture() -> None:
-    # ggbetweenstats only; ggwithinstats joins with the withinstats text layer.
+    # ggbetweenstats; tests/test_text_within.py covers every ggwithinstats fixture.
     for case in load_cases():
         if case.function != "ggbetweenstats":
             continue
@@ -811,7 +811,7 @@ def test_alt_text_without_subtitle_two_groups_and_within() -> None:
     within: Any = ip.analyze.withinstats
     result = within(sleep, "group", "extra", subject_id="ID", results_subtitle=False)
     assert result.text.alt_text.endswith(
-        "No test result is shown (results_subtitle=False), n = 10."
+        "No test result is shown (results_subtitle=False), n = 10 pairs."
     )
     assert result.text.apa.startswith("Paired t-test: ")
 

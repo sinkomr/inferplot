@@ -630,6 +630,20 @@ def _check_ranks(x: str, values: Sequence[FloatArray]) -> None:
         )
 
 
+def _rank_biserial_bound_warning(x: str, levels: Sequence[str], r: float) -> str:
+    """|r| = 1 collapses the Fisher-z interval to the point r (review S9; the
+    paired case is D64's)."""
+    first, second = levels
+    side, bound = ("above", "1") if r > 0 else ("below", "-1")
+    return (
+        f"Every value of {first!r} is {side} every value of {second!r} (x={x!r}), "
+        f"so the rank-biserial r is at its bound ({bound}) and its confidence "
+        f"interval has no width: [{bound}, {bound}]. The interval is built on the "
+        "Fisher z scale, where r = 1 or -1 lies infinitely far out; it does not "
+        "mean the effect is known exactly. ggstatsplot prints the same interval."
+    )
+
+
 def _nonparametric(
     levels: Sequence[str], values: Sequence[FloatArray], args: _Args
 ) -> _Parts:
@@ -664,6 +678,8 @@ def _nonparametric(
             ci_method="normal approximation (Fisher z)",
             sidedness=r.sidedness,
         )
+        if abs(r.estimate) == 1.0 and r.conf_low == r.conf_high:
+            warnings.append(_rank_biserial_bound_warning(args.x, levels, r.estimate))
         citations = [_MANN_WHITNEY_1947, _KERBY_2014]
     else:
         kw = stats.kruskal_wallis(values)

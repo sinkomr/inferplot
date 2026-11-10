@@ -62,9 +62,11 @@ from tests.test_text_format import (
     centrality_rows,
     centrality_value,
     df_digits,
+    paired,
     subtitle_rows,
     text_cases,
 )
+from tests.within_np_cases import HIDDEN
 
 Row = Mapping[str, Any]
 
@@ -188,6 +190,7 @@ def rebuild_row(case: OracleCase, row: Row) -> tx.Node:
         digits=digits,
         digits_df=d_df,
         digits_df_error=d_dfe,
+        paired=paired(case),
     )
 
 
@@ -330,9 +333,11 @@ def test_expressions_equal_ggstatsplot(case: OracleCase) -> None:
     checked = checked_expressions(case)
     assert checked
     where = {w.split("[")[0] for w, _, _ in checked}
-    # Each fixture holds the texts its own arguments ask for.
+    # Each fixture holds the texts its own arguments ask for, except where
+    # ggstatsplot swallowed an error and dropped one (tests/within_np_cases.py).
     has_subtitle = "subtitle_data" in where
-    assert has_subtitle == results_subtitle(case)
+    dropped = HIDDEN.get(case.name) == "subtitle"
+    assert has_subtitle == (results_subtitle(case) and not dropped)
     assert ("subtitle" in where) == (has_subtitle and case.error is None)
     if case.type == "parametric":
         assert ("caption_data" in where) == bayes_caption_drawn(case)
@@ -683,7 +688,14 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
 
 
 def parametric_params() -> list[Any]:
-    cases = [c for c in text_cases() if c.type == "parametric" and c.error is None]
+    # ggbetweenstats only: these results are built by hand with Welch's tests.
+    # The ggwithinstats texts are compared on inferplot's own analyses in
+    # tests/test_withinstats_texts.py.
+    cases = [
+        c
+        for c in text_cases()
+        if c.function == "ggbetweenstats" and c.type == "parametric" and c.error is None
+    ]
     assert cases
     return [pytest.param(c, id=c.name) for c in cases]
 

@@ -86,6 +86,7 @@ __all__ = [
     "build_texts",
     "caption_lines",
     "centrality_expression",
+    "figure_alt_text",
     "figure_texts",
     "format_bf01_log",
     "format_bf10",
@@ -734,9 +735,18 @@ def tick_label(level: str, n: int) -> str:
 
 
 def subtitle_expression(
-    test: TestResult, effect_size: EffectSize, *, n_obs: int, digits: int
+    test: TestResult,
+    effect_size: EffectSize,
+    *,
+    n_obs: int,
+    digits: int,
+    paired: bool = False,
 ) -> Call:
-    """The frequentist subtitle of a result's main test, as ggstatsplot builds it."""
+    """The frequentist subtitle of a result's main test, as ggstatsplot builds it.
+
+    ``paired`` (a within-subjects result) prints n as ``italic("n")["pairs"]``, the
+    number of complete subjects, as ggwithinstats does; otherwise ``["obs"]``.
+    """
     try:
         statistic, frac_df, frac_df_error = _TEST_TEMPLATES[test.name]
     except KeyError:
@@ -758,6 +768,7 @@ def subtitle_expression(
         digits=digits,
         digits_df=digits if frac_df else 0,
         digits_df_error=digits if frac_df_error else 0,
+        paired=paired,
     )
 
 
@@ -1134,6 +1145,20 @@ def _test_heading(test: TestResult, levels: Sequence[str], limit: int) -> str:
     return f"{test.label} (one-sided: {_direction(test.alternative, levels, limit)})"
 
 
+def _n_phrase(n_obs: int, design: str, k: int) -> str:
+    """What n counts: "n = 60" (observations), or in a within-subjects design
+    "n = 10 pairs" (two conditions) and "n = 88 subjects" (three or more)."""
+    n = f"n = {format_n(n_obs)}"
+    if not _paired(design):
+        return n
+    if k < 2:
+        raise ValueError(
+            f"a within-subjects sentence needs the level names to say what n counts; "
+            f"got {k}"
+        )
+    return f"{n} pairs" if k == 2 else f"{n} subjects"
+
+
 def apa_sentence(
     test: TestResult,
     effect_size: EffectSize,
@@ -1141,6 +1166,7 @@ def apa_sentence(
     n_obs: int,
     levels: Sequence[str] = (),
     name_limit: int = APA_NAME_LIMIT,
+    design: str = "between",
 ) -> str:
     """The APA 7 results sentence (SPEC section 7).
 
@@ -1154,12 +1180,14 @@ def apa_sentence(
     (one-sided: OJ greater than VC): ..."; ``levels`` is required then. The
     sentence is ASCII except for the level names of a one-sided test, which are
     the user's data and printed as they are, and the ellipsis (U+2026) that
-    shortens a long one.
+    shortens a long one. A within-subjects ``design`` says what n counts: "n = 10
+    pairs" with two ``levels``, "n = 88 subjects" with more ("Paired t-test: t(9) =
+    -4.06, p = .003, Hedges' g = -1.17, 95% CI [-1.94, -0.38], n = 10 pairs.").
     """
     heading = _test_heading(test, levels, name_limit)
     return (
         f"{heading}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, "
-        f"n = {format_n(n_obs)}."
+        f"{_n_phrase(n_obs, design, len(levels))}."
     )
 
 
@@ -1173,29 +1201,33 @@ def _prior_text(bayes: BayesFactor) -> str:
     return f"JZS prior, r = {r_number_text(bayes.prior_scale)}"
 
 
-def bayes_sentence(bayes: BayesFactor, *, n_obs: int) -> str:
+def bayes_sentence(bayes: BayesFactor, *, n_obs: int, design: str = "between") -> str:
     """The results sentence of a two-group Bayes factor (type "bayes"), ASCII
     (it names no level).
 
     "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18,
     n = 60." BF10 to two decimals (scientific from 1e5 and below 0.01, as
-    ``format_value``), log(BF01) to two decimals.
+    ``format_value``), log(BF01) to two decimals. Two conditions of a
+    within-subjects ``design``: "Bayesian paired t-test (...): ..., n = 10 pairs."
     """
+    name = "Bayesian paired t-test" if _paired(design) else "Bayesian t-test"
     return (
-        f"Bayesian t-test ({_prior_text(bayes)}): BF10 = {_apa_bf(bayes)}, "
-        f"log(BF01) = {_apa_number(bayes.log_bf01)}, n = {format_n(n_obs)}."
+        f"{name} ({_prior_text(bayes)}): BF10 = {_apa_bf(bayes)}, "
+        f"log(BF01) = {_apa_number(bayes.log_bf01)}, {_n_phrase(n_obs, design, 2)}."
     )
 
 
 def pairwise_bayes_sentence(
-    pairwise: Sequence[PairwiseComparison], *, n_obs: int
+    pairwise: Sequence[PairwiseComparison], *, n_obs: int, design: str = "between"
 ) -> str:
     """The results sentence of type "bayes" with three or more groups, which has no
     omnibus test in v0.1 (D41): each pair's Bayes factor. The level names are
     printed as they are, so the sentence is ASCII only when they are.
 
     "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 =
-    0.65; ctrl vs trt2, BF10 = 1.77; trt1 vs trt2, BF10 = 6.36; n = 30."
+    0.65; ctrl vs trt2, BF10 = 1.77; trt1 vs trt2, BF10 = 6.36; n = 30." A
+    within-subjects ``design``: "Bayesian paired t-tests of each pair (...): ...;
+    n = 88 subjects."
     """
     first = pairwise[0].bayes
     assert first is not None
@@ -1203,10 +1235,11 @@ def pairwise_bayes_sentence(
     for pair in pairwise:
         assert pair.bayes is not None
         parts.append(f"{pair.group1} vs {pair.group2}, BF10 = {_apa_bf(pair.bayes)}")
+    name = "Bayesian paired t-tests" if _paired(design) else "Bayesian t-tests"
     return (
-        f"Bayesian t-tests of each pair ({_prior_text(first)}): "
+        f"{name} of each pair ({_prior_text(first)}): "
         + "; ".join(parts)
-        + f"; n = {format_n(n_obs)}."
+        + f"; {_n_phrase(n_obs, design, 3)}."
     )
 
 
@@ -1219,20 +1252,28 @@ def results_sentence(
     n_obs: int,
     levels: Sequence[str] = (),
     name_limit: int = APA_NAME_LIMIT,
+    design: str = "between",
 ) -> str:
     """The result's APA-style sentence: :func:`apa_sentence` for a frequentist
     test (``levels`` and ``name_limit`` name a one-sided test's direction),
     :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type "bayes", or
-    a note that nothing was tested."""
+    a note that nothing was tested. A within-subjects ``design`` says what n counts
+    (``levels``: pairs with two, subjects with more)."""
     if test is not None and effect_size is not None:
         return apa_sentence(
-            test, effect_size, n_obs=n_obs, levels=levels, name_limit=name_limit
+            test,
+            effect_size,
+            n_obs=n_obs,
+            levels=levels,
+            name_limit=name_limit,
+            design=design,
         )
     if bayes is not None:
-        return bayes_sentence(bayes, n_obs=n_obs)
+        return bayes_sentence(bayes, n_obs=n_obs, design=design)
     if pairwise and pairwise[0].bayes is not None:
-        return pairwise_bayes_sentence(pairwise, n_obs=n_obs)
-    return f"No test was computed (results_subtitle=False), n = {format_n(n_obs)}."
+        return pairwise_bayes_sentence(pairwise, n_obs=n_obs, design=design)
+    n = _n_phrase(n_obs, design, len(levels))
+    return f"No test was computed (results_subtitle=False), {n}."
 
 
 def _short(name: str, limit: int) -> str:
@@ -1292,10 +1333,15 @@ def _alt_groups_summary(
 
 
 def _alt_bayes_pairs(
-    pairwise: Sequence[PairwiseComparison], *, limit: int, display: str
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    limit: int,
+    display: str,
+    paired: bool = False,
 ) -> str:
     """Type "bayes" with three or more groups: the range of the pairs' BF10, the
     level names shortened to ``limit`` characters, and what the brackets show.
+    ``paired`` (conditions of a within-subjects design) names paired t-tests.
 
     Pairs are ranked by -log(BF01), which stays finite where BF10 overflows a
     double, so the strongest pair is found even when several BF10 are inf."""
@@ -1319,10 +1365,69 @@ def _alt_bayes_pairs(
         if display == "none"
         else "brackets show log(BF01) for every pair."
     )
-    return (
-        f"Bayesian t-tests of each of the {len(pairwise)} pairs ({_prior_text(first)}, "
-        f"Student's t): BF10 from {described(low)} to {described(high)}; {brackets}"
+    tests = (
+        f"Bayesian paired t-tests of each of the {len(pairwise)} pairs "
+        f"({_prior_text(first)})"
+        if paired
+        else f"Bayesian t-tests of each of the {len(pairwise)} pairs "
+        f"({_prior_text(first)}, Student's t)"
     )
+    return f"{tests}: BF10 from {described(low)} to {described(high)}; {brackets}"
+
+
+def _alt_conditions_detailed(
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+) -> str:
+    """Each condition with its centrality value; n is the same for all and is
+    named once, in the head."""
+    parts: list[str] = []
+    for d in descriptives:
+        word = _centrality_word(d.centrality, tr)
+        center = (
+            f"no {word}"
+            if d.value is None or math.isnan(d.value)
+            else f"{word} {format_value(d.value, digits)}"
+        )
+        parts.append(f"{_short(d.level, limit)} ({center})")
+    return ", ".join(parts)
+
+
+def _alt_conditions_summary(
+    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+) -> str:
+    """The range of the conditions' centrality values, or "" without any."""
+    summary = _alt_groups_summary(descriptives, digits, limit, tr)
+    _, _, values = summary.partition("; ")
+    return values
+
+
+def _alt_paths(
+    descriptives: Sequence[Descriptive],
+    *,
+    n_subjects: int,
+    subject_paths: int,
+    centrality_path: bool,
+    tr: float,
+) -> str:
+    """The paths drawn, as a clause: "; lines join each subject's values and the
+    means", "; a line joins the medians", "" without paths. ``subject_paths`` is
+    the number of subjects whose paths are drawn (fewer than all when a large
+    figure draws a random sample of whole subjects)."""
+    word = _centrality_word(descriptives[0].centrality, tr) + "s"
+    if subject_paths >= n_subjects:
+        whose = "each subject's values"
+    else:
+        whose = (
+            f"the values of a random sample of {subject_paths:,} of the "
+            f"{n_subjects:,} subjects"
+        )
+    if subject_paths and centrality_path:
+        return f"; lines join {whose} and the {word}"
+    if subject_paths:
+        return f"; lines join {whose}"
+    if centrality_path:
+        return f"; a line joins the {word}"
+    return ""
 
 
 def alt_text(
@@ -1336,6 +1441,9 @@ def alt_text(
     n_obs: int,
     settings: Settings,
     bayes: BayesFactor | None = None,
+    design: str = "between",
+    subject_paths: int | None = None,
+    centrality_path: bool | None = None,
 ) -> str:
     """Alt text for the figure: 2 to 4 sentences, at most 400 characters.
 
@@ -1343,6 +1451,15 @@ def alt_text(
     ranges when listing every group would not fit), the omnibus result, and the
     count of significant pairs. Type "bayes" with three or more groups gives the
     range of the pairs' Bayes factors instead.
+
+    A within-subjects ``design`` says "conditions" and that they were "measured on
+    the same <n> subjects", lists each condition's centrality value without
+    repeating n, and names the paths drawn: ``subject_paths`` subjects' paths (all
+    of them, a random sample, or 0) and the ``centrality_path``. Left as None, they
+    are what ``ip.withinstats`` draws by default: every subject's path with two
+    conditions, none with more, and the centrality path; a figure drawn otherwise
+    carries its own alt text (:func:`figure_alt_text`). Its result sentence says
+    what n counts ("n = 10 pairs", "n = 88 subjects").
 
     It describes only what the figure shows. With ``results_subtitle=False`` the
     figure shows no test, so the result sentence reads "No test result is shown
@@ -1354,24 +1471,43 @@ def alt_text(
     as the APA sentence does, shortened with them.
 
     Level names, x and y are shortened (40, 20, then 12 characters) until the text
-    fits. If it still does not, the group description is left out; the result
-    sentence is never cut, so a result sentence too long by itself (a statistic
-    printed with hundreds of digits) gives a text above the limit.
+    fits. If it still does not, the group description is left out, then the paths;
+    the result sentence is never cut, so a result sentence too long by itself (a
+    statistic printed with hundreds of digits) gives a text above the limit.
     """
     k = len(descriptives)
+    paired = _paired(design)
+    levels = [d.level for d in descriptives]
     pairs = ""
     bayes_pairs = bool(pairwise) and pairwise[0].bayes is not None
+    paths = ""
+    if paired:
+        drawn_subjects = (
+            (n_obs if k == 2 else 0) if subject_paths is None else subject_paths
+        )
+        paths = _alt_paths(
+            descriptives,
+            n_subjects=n_obs,
+            subject_paths=drawn_subjects,
+            centrality_path=True if centrality_path is None else centrality_path,
+            tr=settings.tr,
+        )
+    elif subject_paths is not None or centrality_path is not None:
+        raise ValueError("independent groups have no subject or centrality paths")
 
     def result_at(limit: int) -> str:
         if bayes_pairs:
             return _alt_bayes_pairs(
-                pairwise, limit=limit, display=settings.pairwise_display
+                pairwise,
+                limit=limit,
+                display=settings.pairwise_display,
+                paired=paired,
             )
         if not settings.results_subtitle and (test is not None or bayes is not None):
             # Computed, but the figure does not show it (U12).
             return (
                 "No test result is shown (results_subtitle=False), "
-                f"n = {format_n(n_obs)}."
+                f"{_n_phrase(n_obs, design, k)}."
             )
         return results_sentence(
             test,
@@ -1379,8 +1515,9 @@ def alt_text(
             bayes,
             pairwise,
             n_obs=n_obs,
-            levels=[d.level for d in descriptives],
+            levels=levels,
             name_limit=limit,
+            design=design,
         )
 
     if pairwise and not bayes_pairs and settings.pairwise_display != "none":
@@ -1401,24 +1538,61 @@ def alt_text(
         )
     head = ""
     result = ""
+    digits, tr = settings.digits, settings.tr
     for limit in (40, 20, 12):
-        head = (
-            f"Plot comparing {_short(y, limit)} across the {k} groups of "
-            f"{_short(x, limit)}"
-        )
         result = result_at(limit)
-        detailed = _alt_groups_detailed(
-            descriptives, settings.digits, limit, settings.tr
-        )
-        summary = _alt_groups_summary(descriptives, settings.digits, limit, settings.tr)
-        for text in (
-            f"{head}: {detailed}. {result}{pairs}",
-            f"{head} ({summary}). {result}{pairs}",
-        ):
+        if paired:
+            head = (
+                f"Plot comparing {_short(y, limit)} across the {k} conditions of "
+                f"{_short(x, limit)}, measured on the same {format_n(n_obs)} subjects"
+            )
+            detailed = _alt_conditions_detailed(descriptives, digits, limit, tr)
+            summary = _alt_conditions_summary(descriptives, digits, limit, tr)
+            candidates = [f"{head}: {detailed}{paths}. {result}{pairs}"]
+            if summary:
+                candidates.append(f"{head} ({summary}){paths}. {result}{pairs}")
+        else:
+            head = (
+                f"Plot comparing {_short(y, limit)} across the {k} groups of "
+                f"{_short(x, limit)}"
+            )
+            detailed = _alt_groups_detailed(descriptives, digits, limit, tr)
+            summary = _alt_groups_summary(descriptives, digits, limit, tr)
+            candidates = [
+                f"{head}: {detailed}. {result}{pairs}",
+                f"{head} ({summary}). {result}{pairs}",
+            ]
+        for text in candidates:
             if len(text) <= ALT_TEXT_MAX_CHARS:
                 return text
-    # Extremely long labels: keep the start and the whole result, drop the groups.
+    # Extremely long labels or results: keep the start and the whole result, drop
+    # the groups, then the paths.
+    with_paths = f"{head}{paths}. {result}{pairs}"
+    if len(with_paths) <= ALT_TEXT_MAX_CHARS:
+        return with_paths
     return f"{head}. {result}{pairs}"
+
+
+def figure_alt_text(
+    result: StatsResult, *, subject_paths: int, centrality_path: bool
+) -> str:
+    """The alt text of a within-subjects figure that draws ``subject_paths``
+    subjects' paths (0 for none) and the centrality path or not
+    (:func:`alt_text`); the renderer gives it to the result it returns."""
+    return alt_text(
+        x=result.x,
+        y=result.y,
+        descriptives=result.descriptives,
+        test=result.test,
+        effect_size=result.effect_size,
+        pairwise=result.pairwise,
+        n_obs=result.n_obs,
+        settings=result.settings,
+        bayes=result.bayes,
+        design=result.design,
+        subject_paths=subject_paths,
+        centrality_path=centrality_path,
+    )
 
 
 # =========================================================================== #
@@ -1444,6 +1618,7 @@ def _expressions(
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
+    paired: bool,
 ) -> _Expressions:
     digits = settings.digits
     subtitle = None
@@ -1461,7 +1636,9 @@ def _expressions(
     elif settings.results_subtitle:
         assert test is not None
         assert effect_size is not None
-        subtitle = subtitle_expression(test, effect_size, n_obs=n_obs, digits=digits)
+        subtitle = subtitle_expression(
+            test, effect_size, n_obs=n_obs, digits=digits, paired=paired
+        )
         # bf_message=False never draws the caption, even when a Bayes factor exists.
         if bayes is not None and settings.bf_message is not False:
             bayes_caption = bayes_factor_expression(
@@ -1482,6 +1659,14 @@ def _expressions(
         alpha=settings.pairwise_alpha,
     )
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
+
+
+def _paired(design: str) -> bool:
+    """Whether a result's design pairs its measurements: "within" (withinstats)
+    does, "between" (betweenstats) does not."""
+    if design not in ("between", "within"):
+        raise ValueError(f"unknown design {design!r}; known: 'between', 'within'")
+    return design == "within"
 
 
 def _pair_label(pair: PairwiseComparison, digits: int) -> Call:
@@ -1524,9 +1709,12 @@ def build_texts(
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
+    design: str = "between",
 ) -> Texts:
     """Every plain text of a result, from the parts the analysis computed.
 
+    ``design`` is the result's: "within" (withinstats) prints n as the number of
+    complete subjects, ``n["pairs"]`` in the subtitle, as ggwithinstats does.
     The subtitle is None when ``settings.results_subtitle`` is false. The caption
     holds the Bayes line (when ``bayes`` is given, the subtitle is drawn and
     ``settings.bf_message`` is not False, as ggstatsplot's ``bf.message``) and the
@@ -1542,6 +1730,7 @@ def build_texts(
         pairwise=pairwise,
         n_obs=n_obs,
         settings=settings,
+        paired=_paired(design),
     )
     lines = caption_lines(ex.bayes_caption, ex.pairwise_line, mathtext=False)
     return Texts(
@@ -1554,6 +1743,7 @@ def build_texts(
             pairwise,
             n_obs=n_obs,
             levels=[d.level for d in descriptives],
+            design=design,
         ),
         alt_text=alt_text(
             x=x,
@@ -1565,6 +1755,7 @@ def build_texts(
             n_obs=n_obs,
             settings=settings,
             bayes=bayes,
+            design=design,
         ),
         centrality_labels=tuple(to_plain(node) for node in ex.centrality),
         tick_labels=tuple(tick_label(d.level, d.n) for d in descriptives),
@@ -1600,6 +1791,7 @@ def figure_texts(result: StatsResult) -> FigureTexts:
         pairwise=result.pairwise,
         n_obs=result.n_obs,
         settings=result.settings,
+        paired=_paired(result.design),
     )
     return FigureTexts(
         subtitle=None if ex.subtitle is None else to_mathtext(ex.subtitle),

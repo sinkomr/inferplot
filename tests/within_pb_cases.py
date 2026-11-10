@@ -1,14 +1,17 @@
-"""The parametric and bayes ggwithinstats fixtures, and how inferplot replays each.
+"""The ggwithinstats fixtures, and how inferplot replays each.
 
-Every fixture of these types is replayed as the inferplot call
-``tests/oracle_args.translate`` builds from its R arguments, without the drawing
-keywords (``point_path``, ``centrality_path``), which belong to ``ip.withinstats``
-and ``ip.render.withinstats``, not to the analysis. Where inferplot refuses a call
+The parity tests of types parametric and bayes, and the text and drawing tests of
+every type (``tests/test_withinstats_texts.py``), read them from here. Every
+fixture is replayed as the inferplot call ``tests/oracle_args.translate`` builds
+from its R arguments, without the drawing keywords (``point_path``,
+``centrality_path``), which belong to ``ip.withinstats`` and
+``ip.render.withinstats``, not to the analysis. Where inferplot refuses a call
 ggstatsplot answers, by design (SPEC.md sections 2 and 5), :func:`refusal` says how
 it refuses and which changed call reproduces ggstatsplot's output:
 
-* a one-sided ``alternative`` with type bayes raises ``ValueError`` (ggstatsplot
-  ignores it), so the replay leaves it out and must give ggstatsplot's output;
+* a one-sided ``alternative`` with type bayes or robust raises ``ValueError``
+  (ggstatsplot ignores it), so the replay leaves it out and must give
+  ggstatsplot's output;
 * type bayes with three or more conditions raises ``NotImplementedError`` unless
   ``results_subtitle=False`` (the Bayesian repeated-measures ANOVA arrives in 0.2,
   D41); the replay passes it and must give ggstatsplot's output without its
@@ -71,10 +74,13 @@ def call_arguments(case: OracleCase) -> tuple[tuple[Any, ...], dict[str, Any]]:
 
 
 def refusal(case: OracleCase) -> Refusal | None:
-    """SPEC.md's refusals (module docstring), decided from the case's arguments."""
+    """SPEC.md's refusals (module docstring), decided from the case's arguments.
+    A one-sided ``alternative`` with type robust is refused like type bayes's
+    (sleep-greater-robust; ``tests/test_withinstats_parity_robust.py``)."""
     _, kwargs = call_arguments(case)
     k = len(case.analysis_levels)
-    if case.type == "bayes" and kwargs.get("alternative", "two-sided") != "two-sided":
+    one_sided = kwargs.get("alternative", "two-sided") != "two-sided"
+    if case.type in ("bayes", "robust") and one_sided:
         return Refusal(ValueError, "alternative=", {"alternative": None})
     if case.type == "bayes" and k >= 3 and kwargs.get("results_subtitle", True):
         return Refusal(
@@ -96,9 +102,10 @@ def replay_arguments(case: OracleCase) -> tuple[tuple[Any, ...], dict[str, Any]]
     return args, kwargs
 
 
-BY_NAME: dict[str, OracleCase] = {
-    c.name: c for t in ("parametric", "bayes") for c in cases_of(t)
-}
+TYPES: tuple[str, ...] = ("parametric", "nonparametric", "robust", "bayes")
+# Every ggwithinstats fixture, of every type (the text tests replay them all).
+BY_NAME: dict[str, OracleCase] = {c.name: c for t in TYPES for c in cases_of(t)}
+ALL_CASES: list[OracleCase] = list(BY_NAME.values())
 
 
 @functools.cache
