@@ -429,7 +429,9 @@ def test_crowded_subject_paths_are_reported() -> None:
 
 
 def test_a_text_over_the_paths_is_reported() -> None:
-    _, ax = _user_axes(7.5, 6.0)
+    # Wide enough for the hand-built subtitle (a Welch t with n_pairs, 85
+    # characters), so that the only issue is the user's note.
+    _, ax = _user_axes(8.0, 6.0)
     fig = withinstats(two_conditions(), ax=ax)
     assert _codes(fig) == []
     # A boxed note of the user's, in the middle of the plot between the conditions.

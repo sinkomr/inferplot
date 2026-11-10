@@ -537,7 +537,9 @@ def test_result_contract(four: pd.DataFrame) -> None:
         "value of 'desire' at some level of 'condition'; 88 complete subjects remain.",
         "A note from the type's analysis.",
     )
-    assert result.text.apa == "No test was computed (results_subtitle=False), n = 88."
+    assert result.text.apa == (
+        "No test was computed (results_subtitle=False), n = 88 subjects."
+    )
 
 
 def test_result_json_round_trip_and_embedded_copy(four: pd.DataFrame) -> None:

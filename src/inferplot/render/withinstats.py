@@ -31,6 +31,7 @@ nothing.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Final
 
@@ -39,6 +40,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 
 from inferplot import _validate as v
+from inferplot import text
 from inferplot.render import comparison, theme
 from inferplot.render.comparison import (
     JITTER_HALF_WIDTH,
@@ -189,6 +191,8 @@ class _WithinDrawing(comparison.Drawing):
         self.with_centrality_path = options.centrality and options.centrality_path
         self.subject_paths: LineCollection | None = None
         self.centrality_line: Line2D | None = None
+        # How many subjects' points (and paths) are drawn: all, or a sample.
+        self.drawn_subjects = len(result.subjects)
 
     def place_points(self, rng: np.random.Generator) -> list[tuple[FloatArray, ...]]:
         """Every subject's points share one offset; large panels draw whole
@@ -216,6 +220,7 @@ class _WithinDrawing(comparison.Drawing):
             self.subsample = Subsample(
                 shown=m * k, total=total, seed=seed, density=density, subjects=(m, n)
             )
+        self.drawn_subjects = int(keep.size)
         offsets = rng.uniform(-JITTER_HALF_WIDTH, JITTER_HALF_WIDTH, size=keep.size)
         return [(j + offsets, self.values[j][keep]) for j in range(k)]
 
@@ -282,6 +287,20 @@ class _WithinDrawing(comparison.Drawing):
         )
         self.ax.add_line(line)
         self.centrality_line = line
+
+    def finish_result(self, result: StatsResult) -> StatsResult:
+        """The result with an alt text that names the paths this figure draws
+        (the analysis describes the default figure: SPEC.md section 7)."""
+        alt = text.figure_alt_text(
+            result,
+            subject_paths=self.drawn_subjects if self.with_subject_paths else 0,
+            centrality_path=self.with_centrality_path,
+        )
+        if alt == result.text.alt_text:
+            return result
+        return dataclasses.replace(
+            result, text=dataclasses.replace(result.text, alt_text=alt)
+        )
 
     def drawn_paths(self) -> DrawnPaths:
         return DrawnPaths(

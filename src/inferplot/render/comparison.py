@@ -991,6 +991,11 @@ class Drawing:
         """Hook: the paths drawn, for ``fig.check()``."""
         return None
 
+    def finish_result(self, result: StatsResult) -> StatsResult:
+        """Hook: the result the figure returns, told what was drawn (the alt
+        text of a within-subjects figure names the paths it draws)."""
+        return result
+
     # -- main ------------------------------------------------------------------
 
     def run(self) -> StatsFigure:
@@ -1012,6 +1017,7 @@ class Drawing:
             result = dataclasses.replace(
                 result, warnings=result.warnings + tuple(self.warnings)
             )
+        result = self.finish_result(result)
         return StatsFigure(
             figure=self.figure,
             axes={"main": self.ax},
