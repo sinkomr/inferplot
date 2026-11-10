@@ -1551,6 +1551,7 @@ def betweenstats(
         subject_id=None,
         levels=levels,
         values=tuple(tuple(float(v) for v in arr.tolist()) for arr in values),
+        subjects=(),
         descriptives=descriptives,
         test=parts.test,
         effect_size=parts.effect_size,

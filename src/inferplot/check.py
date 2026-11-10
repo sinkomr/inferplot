@@ -43,6 +43,20 @@ def _small_n(result: StatsResult) -> Issue | None:
     small = [d for d in result.descriptives if d.n < SMALL_N]
     if not small:
         return None
+    if result.design == "within":
+        # Every level holds the same complete subjects, so name them once.
+        n = small[0].n
+        return Issue(
+            code="small_n",
+            severity="warning",
+            message=(
+                f"Only {n} {'subject has' if n == 1 else 'subjects have'} a value at "
+                f"every level of {result.x!r}, fewer than {SMALL_N}. Tests, "
+                "intervals and plotted distributions are unreliable with so few "
+                "subjects."
+            ),
+            fix="Collect more data, or report the result as exploratory.",
+        )
     groups = ", ".join(f"{d.level!r} (n = {d.n})" for d in small)
     noun = "group has" if len(small) == 1 else "groups have"
     return Issue(
@@ -63,15 +77,18 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
     parts: list[str] = []
     if result.n_dropped > 0:
         rows = "row was" if result.n_dropped == 1 else "rows were"
-        parts.append(
-            f"{result.n_dropped} {rows} left out because {result.x!r} or "
-            f"{result.y!r} is missing"
+        columns = (
+            f"{result.x!r} or {result.y!r}"
+            if result.subject_id is None
+            else f"{result.x!r}, {result.y!r} or {result.subject_id!r}"
         )
+        parts.append(f"{result.n_dropped} {rows} left out because {columns} is missing")
     if result.dropped_subjects > 0:
-        subjects = "subject was" if result.dropped_subjects == 1 else "subjects were"
+        one = result.dropped_subjects == 1
         parts.append(
-            f"{result.dropped_subjects} {subjects} left out because they lack a "
-            "value in some condition"
+            f"{result.dropped_subjects} {'subject was' if one else 'subjects were'} "
+            f"left out because {'it lacks' if one else 'they lack'} a value at some "
+            f"level of {result.x!r}"
         )
     return Issue(
         code="rows_dropped",
