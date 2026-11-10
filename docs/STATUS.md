@@ -173,8 +173,11 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   at the uncorrected df), paired t pairs. 44 of 44 fixtures on three backends and
   probe-rmanova's 9 designs; worst disagreement with R 8e-12 relative (F on
   edge_within_null), CI bounds 7.5e-8 absolute (D62)
-- [ ] nonparametric: Wilcoxon signed-rank, rank-biserial r; Friedman, Kendall's W,
-  Durbin-Conover pairs
+- [x] nonparametric: Wilcoxon signed-rank with the matched-pairs rank-biserial r
+  (analytic CI); Friedman with Kendall's W (seeded bootstrap CI) and Durbin-Conover
+  pairs. 40 of 40 fixtures on three backends, probe-signrank and probe-friedman; worst
+  7.8e-15 relative; W = 1 reported with a warning where ggstatsplot drops the subtitle
+  (D64)
 - [ ] robust: Yuen for dependent samples, dep.effect; rmanova, average AKP, rmmcp pairs
 - [x] bayes: paired JZS Bayes factor (two conditions); three or more conditions only
   with `results_subtitle=False` (MAP estimates and a pair Bayes factor at prior 0.707;
@@ -249,6 +252,9 @@ scheme found; scripts in the session scratch folder `reviewS/`). To fix:
   largest of C signed t variates (one-sided; within -0.4% to +0.9% at alpha 0.05 and
   0.1 on the probe), not a noisy modulus quantile; D52, SPEC §5 and the docstring now
   say so. The decision stands; the owner was told the description changed.
+- [ ] S9 (was a lead): the between-groups rank-biserial r of exactly ±1 gets the
+  interval [±1, ±1] without a warning; the paired one now warns (D64). Add the same
+  entry to betweenstats with the wording the nonparametric package proposed.
 - Leads, not verified: the exact-replay emulator behind the robust percentile rules is
   not committed (the committed tests compare within 4 Monte Carlo SDs, which cannot
   resolve a one-order-statistic difference, about 0.14 SD); rank-biserial r of ±1 gets
@@ -283,7 +289,8 @@ held up; scripts in `reviewT/`). To fix:
   run: record R's sorted replicate values next to the bounds it returns for one case
   of each interval (AKP, xi, rank epsilon squared), so the percentile helpers are
   applied to R's own replicates and must give R's bound exactly.
-- [ ] T7: next oracle run, with T6: a ggwithinstats parametric case with fewer
+- [ ] T7: next oracle run, with T6: a Friedman design where every subject is fully
+  tied, and one with several fully tied subjects inside a bootstrap reference (D64); a ggwithinstats parametric case with fewer
   subjects than conditions (3 subjects, 4 conditions), to show afex's epsilon there
   (D62); a case that decides D54 in R itself (three tiny
   groups sharing a value, more than 5% of resamples tied); tr 0.29 with n = 100 (T3);
