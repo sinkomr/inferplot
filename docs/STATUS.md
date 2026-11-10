@@ -233,7 +233,35 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     different ranks, as in R. D74's rule would tie them and differ from R.
   - Leads: what WRS2 does with 0/0 resamples within subjects and with two subjects;
     seeded intervals depend on NumPy's `Generator.integers` stream across versions.
-  Second half (texts, warnings, checks, drawing) in progress
+  Second half (data, arguments, texts, checks, drawing; 2026-11-10; scripts and images
+  in `reviewX/`): counts, centrality values, paths, brackets, one-sided direction and
+  saved files matched hand computation on 30 hand-built frames and 18 drawn designs;
+  the three forms agree byte for byte (48 cases); no argument value is silently
+  ignored (about 700 calls). Findings, being fixed on `fix/phase3-review-visible`:
+  - [ ] X1 (figure): with four or more conditions and close centres a centrality label
+    is moved beside a neighbouring condition's point and reads as that condition's
+    (6 of 72 figures at 4 conditions, 24 of 58 at 5, 28 of 49 at 6), mostly without a
+    check; inferplot's own default figure gets `path_hidden` or `label_overlap` in 15
+    of 222 random figures. Image checked by the lead.
+  - [ ] X2: conditions named "week 1" to "week 12" are analyzed and drawn in text order
+    (week 1, 10, 11, 12, 2, ...) without a word (as R does); the average AKP is -0.07
+    in that order and -2.49 in time order.
+  - [ ] X3: the alt text shortens long names that share a beginning to the same stub,
+    so the one-sided direction reads "Mean reaction time ... less than Mean reaction
+    time ...".
+  - [ ] X4: wide-format paired data (columns pre and post) is pointed to scatterstats
+    or to converting numbers to text, not to reshaping.
+  - [ ] X5: `pairwise_conf_level` for the within robust type says conf_level applies
+    to the effect size, which is always 95% there (D66).
+  - [ ] X6: for the average AKP, `infinite_resamples` and `undefined_resamples` count
+    pair-resample values ("2,901 of 2,000"), against SPEC §6's arithmetic.
+  - [ ] X7: the alt text names a centrality line that is not drawn (a condition without
+    a MAP estimate) and lists centrality values with `centrality_plotting=False`.
+  - [ ] X8, X9: wrong words for a paired design in five messages; six hints that lead
+    to another error.
+  - [ ] X10: a tab in a condition name is drawn as an empty box, and a control
+    character gives an SVG that is not well-formed XML, both unreported.
+  - [ ] X11: `rows_dropped` stays "info" when most subjects are dropped (26 of 30).
 
 ## Phase 4 — histostats, scatterstats, barstats
 
