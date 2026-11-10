@@ -187,3 +187,21 @@ def test_embedded_json_is_the_full_result(tmp_path: Path) -> None:
     assert data["analysis"] == "betweenstats"
     assert len(data["pairwise"]) == 3
     assert data["text"]["subtitle"] == fig.result.text.subtitle
+
+
+def test_dpi_has_an_upper_limit(tmp_path: Path) -> None:
+    fig = default_figure("ToothGrowth")
+    for suffix in (".png", ".svg", ".pdf"):
+        with pytest.raises(ValueError, match=r"dpi=1000000\.0 is more than 2,400"):
+            fig.save(tmp_path / f"f{suffix}", dpi=1e6)
+        assert not (tmp_path / f"f{suffix}").exists()
+
+
+def test_png_pixel_count_has_an_upper_limit(tmp_path: Path) -> None:
+    fig = default_figure("ToothGrowth")
+    with pytest.raises(ValueError, match=r"million pixels") as info:
+        fig.save(tmp_path / "f.png", dpi=2400)
+    assert "dpi=" in str(info.value)
+    assert ".svg or .pdf" in str(info.value)
+    assert not (tmp_path / "f.png").exists()
+    fig.save(tmp_path / "f.svg", dpi=2400)  # vector formats keep their size

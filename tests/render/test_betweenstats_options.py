@@ -106,7 +106,8 @@ def test_palette_list_and_colormap_names() -> None:
     assert _rgba(_points(fig, 2))[:3] == pytest.approx(set2(2)[:3])
     fig = betweenstats(result, palette="viridis")
     viridis = matplotlib.colormaps["viridis"]
-    assert _rgba(_points(fig, 2))[:3] == pytest.approx(viridis(1.0)[:3])
+    # A continuous colormap is sampled at the centres of k bins, (i + 0.5) / k.
+    assert _rgba(_points(fig, 2))[:3] == pytest.approx(viridis(2.5 / 3)[:3])
     assert fig.result.warnings == result.warnings
 
 
@@ -141,16 +142,18 @@ def test_many_points_are_subsampled_with_density() -> None:
     assert total > MAX_POINTS
     fig = betweenstats(result)
     shown = [np.asarray(_points(fig, i).get_offsets()).shape[0] for i in range(3)]
-    assert sum(shown) == SUBSAMPLE_SIZE
+    # Stratified by level: round(2,000 x 2,200 / 6,600) = 667 of each.
+    assert shown == [667, 667, 667]
     present = gids(fig)
     assert {"violin-0", "violin-1", "violin-2"} <= present
     (warning,) = fig.result.warnings[len(result.warnings) :]
     assert f"{total:,}" in warning
-    assert "2,000" in warning
+    assert f"subsample of {sum(shown):,}" in warning
+    assert f"about {SUBSAMPLE_SIZE:,}" in warning
     assert "seed 0" in warning
     issues = {i.code: i for i in fig.check()}
     assert issues["points_subsampled"].severity == "info"
-    assert "2,000 of the 6,600" in issues["points_subsampled"].message
+    assert "2,001 of the 6,600" in issues["points_subsampled"].message
     assert "label_overlap" not in issues
     assert "text_clipped" not in issues
     # Every point drawn is one of the values of its level.
@@ -483,7 +486,7 @@ def test_every_text_uses_dejavu_sans() -> None:
     texts = [t for t in fig.figure.findobj(Text) if t.get_text()]
     assert len(texts) > 15
     for text in texts:
-        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_fontfamily() == ["DejaVu Sans", "sans-serif"], text.get_text()
         assert text.get_math_fontfamily() == "dejavusans", text.get_text()
 
 
@@ -643,7 +646,7 @@ def test_texts_the_user_drew_before_keep_their_font() -> None:
     own = [t for t in [*own, title] if t.get_text()]
     assert len(own) > 10
     for text in own:
-        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_fontfamily() == ["DejaVu Sans", "sans-serif"], text.get_text()
         assert text.get_math_fontfamily() == "dejavusans", text.get_text()
     assert figure_codes(fig) == []
 

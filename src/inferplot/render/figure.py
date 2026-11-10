@@ -3,26 +3,42 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
+import weakref
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.text import Text
 
 from inferplot.render import theme
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
-    from matplotlib.collections import LineCollection
+    from matplotlib.collections import LineCollection, PathCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
-    from matplotlib.text import Text
 
     from inferplot.check import Issue
     from inferplot.result import StatsResult
 
-__all__ = ["DrawnPaths", "StatsFigure", "Subsample", "describe_text", "root_figure"]
+__all__ = [
+    "DrawnPaths",
+    "DrawnView",
+    "StatsFigure",
+    "Subsample",
+    "axes_background",
+    "describe_text",
+    "drawn_before",
+    "figure_background",
+    "plain_text",
+    "remember",
+    "root_figure",
+    "shows_all",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +51,21 @@ class Subsample:
     density: str  # the layer that shows all values: "violins" or "density outlines"
     # withinstats: (subjects drawn, subjects in all); whole subjects are sampled.
     subjects: tuple[int, int] | None = None
+    # Levels whose violin or density outline is not drawn.
+    undrawn: tuple[str, ...] = ()
+
+
+def shows_all(sub: Subsample, verb: str) -> str:
+    """What shows all values beside the subsampled points, in words: "the violins
+    and boxes show all values", naming the levels without a violin."""
+    if not sub.undrawn:
+        return f"the {sub.density} and boxes {verb} all values"
+    names = ", ".join(repr(level) for level in sub.undrawn)
+    has = "has" if len(sub.undrawn) == 1 else "have"
+    return (
+        f"the boxes {verb} all values, and the {sub.density} those of every level "
+        f"but {names}, which {has} none"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +83,15 @@ class DrawnPaths:
     levels: tuple[str, ...]
 
 
+@dataclass(slots=True)
+class DrawnView:
+    """The axis limits inferplot set for a panel (updated when a later drawing
+    into a panel that shares its y axis widens them), for ``check()``'s advice."""
+
+    xlim: tuple[float, float]
+    ylim: tuple[float, float]
+
+
 class StatsFigure:
     """A figure drawn from a :class:`~inferplot.result.StatsResult`.
 
@@ -65,6 +105,8 @@ class StatsFigure:
     __slots__ = (
         "_axes",
         "_brackets",
+        "_centers",
+        "_colors",
         "_figure",
         "_inside",
         "_own",
@@ -72,6 +114,7 @@ class StatsFigure:
         "_result",
         "_roles",
         "_subsample",
+        "_view",
     )
 
     def __init__(
@@ -86,6 +129,9 @@ class StatsFigure:
         subsample: Subsample | None,
         brackets: tuple[tuple[Text, Line2D, str], ...] = (),
         paths: DrawnPaths | None = None,
+        view: DrawnView | None = None,
+        colors: tuple[theme.Color, ...] = (),
+        centers: tuple[tuple[str, PathCollection], ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -96,6 +142,9 @@ class StatsFigure:
         self._subsample = subsample
         self._brackets = brackets
         self._paths = paths
+        self._view = view
+        self._colors = colors
+        self._centers = centers
 
     @property
     def figure(self) -> Figure:
@@ -126,6 +175,14 @@ class StatsFigure:
         Axes (``text_clipped``), and subsampled points (``points_subsampled``);
         for withinstats also a text drawn over a path (``path_hidden``) and
         subject paths so many that they hide what lies beneath (``paths_crowded``).
+        Also: a centrality point at least half under a text
+        (``centrality_label_overlap``), a level colour or text that can hardly be
+        told from its background (``low_contrast``), characters no font can draw
+        (``glyph_missing``), and, whatever changed the figure after drawing, an
+        inverted axis or a non-linear scale (``axis_changed``), values or
+        brackets outside the axis limits (``data_outside_view``) and values
+        drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
+        panels' texts and a figure title count as ``label_overlap``.
         """
         from inferplot.render.checks import figure_issues
 
@@ -142,7 +199,14 @@ class StatsFigure:
 
         Text stays editable (SVG text elements, PDF TrueType fonts) and the result's
         JSON goes into the file's metadata: the PNG text chunk and SVG metadata
-        "Description", the PDF "Subject".
+        "Description", the PDF "Subject". ``dpi`` is at most 2,400, and a PNG at
+        most 100 million pixels.
+
+        The figure is not pyplot's current figure, so saving with pyplot after an
+        inferplot call writes pyplot's own, empty figure. Save with
+        ``fig.save(path)``; the
+        figure's own ``fig.figure.savefig(path)`` also works, but writes text as
+        paths and embeds no result.
         """
         from inferplot.export import save
 
@@ -168,8 +232,16 @@ class StatsFigure:
         return self._own
 
     def describe(self, text: Text) -> str | None:
-        """What a text inferplot drew is, in words; None for other texts."""
-        return self._roles.get(id(text))
+        """What a text inferplot drew is, in words; None for other texts.
+
+        A text an earlier inferplot drawing left in the same figure is named as
+        such.
+        """
+        own = self._roles.get(id(text))
+        if own is not None:
+            return own
+        before = drawn_before(text)
+        return None if before is None else f"{before} of another inferplot drawing"
 
     @property
     def inside(self) -> tuple[Text, ...]:
@@ -186,6 +258,21 @@ class StatsFigure:
         """The subject and centrality paths (withinstats), or None."""
         return self._paths
 
+    @property
+    def centers(self) -> tuple[tuple[str, PathCollection], ...]:
+        """Each drawn centrality point, with its level."""
+        return self._centers
+
+    @property
+    def colors(self) -> tuple[theme.Color, ...]:
+        """Each level's colour from the palette, in level order."""
+        return self._colors
+
+    @property
+    def view(self) -> DrawnView | None:
+        """The axis limits inferplot set, or None."""
+        return self._view
+
     def draw(self) -> None:
         """Draw the figure so text extents are current."""
         root = root_figure(self._figure)
@@ -196,12 +283,81 @@ class StatsFigure:
             _draw(root)
 
 
+# What each text inferplot drew is, in words, for every drawing: a figure's check
+# names the texts an earlier drawing into the same Axes left there. Weak keys, so
+# a text removed from its figure is forgotten.
+_DRAWN: weakref.WeakKeyDictionary[Text, str] = weakref.WeakKeyDictionary()
+
+
+def remember(text: Text, described: str) -> None:
+    """Record what a text inferplot drew is, for later drawings' checks."""
+    _DRAWN[text] = described
+
+
+def drawn_before(text: Text) -> str | None:
+    """What an inferplot text of any drawing is, in words; None for other texts."""
+    return _DRAWN.get(text)
+
+
+_DOLLAR: Final = re.compile(r"(?<!\\)\$")
+
+
+def plain_text(text: Text) -> str:
+    """A text as it reads on the figure, without mathtext source.
+
+    Math segments (between two unescaped dollar signs) become the characters
+    mathtext draws for them, left to right and without accents
+    (``$\\hat{\\mu}_{a}$`` reads "μa"); the rest is kept, with ``\\$`` read as a
+    dollar sign.
+    """
+    shown = text.get_text()
+    marks = [m.start() for m in _DOLLAR.finditer(shown)]
+    if not text.get_parse_math() or len(marks) < 2:
+        return shown.replace("\\$", "$")
+    from matplotlib.mathtext import MathTextParser
+
+    parser = MathTextParser("path")
+    out: list[str] = []
+    start = 0
+    for a, b in zip(marks[0::2], marks[1::2], strict=False):
+        out.append(shown[start:a].replace("\\$", "$"))
+        try:
+            parsed = parser.parse(shown[a : b + 1], 72, text.get_fontproperties())
+            # (font, size, code point, glyph index, x, y); accents are left out.
+            glyphs = sorted(parsed.glyphs, key=lambda g: (float(g[4]), -float(g[5])))
+            chars = (chr(int(g[2])) for g in glyphs)
+            out.append("".join(c for c in chars if not unicodedata.combining(c)))
+        except ValueError:
+            out.append("(a math expression)")
+        start = b + 1
+    out.append(shown[start:].replace("\\$", "$"))
+    return "".join(out)
+
+
 def describe_text(role: str, shown: str, *, limit: int = 40) -> str:
     """``role 'text'`` with the text on one line, shortened to ``limit`` characters."""
     flat = " ".join(shown.split())
     if len(flat) > limit:
         flat = flat[: limit - 3] + "..."
     return f"{role} {flat!r}"
+
+
+def figure_background(figure: object) -> tuple[float, float, float]:
+    """The colour the figure's patch paints, over white where it is not opaque
+    (or not drawn)."""
+    root = root_figure(figure)
+    if not root.patch.get_visible():
+        return (1.0, 1.0, 1.0)
+    return theme.over(root.get_facecolor(), "white")
+
+
+def axes_background(ax: Axes) -> tuple[float, float, float]:
+    """The colour behind what is drawn inside ``ax``: its patch over the figure's
+    background."""
+    below = figure_background(ax.figure)
+    if not (ax.patch.get_visible() and ax.axison and ax.get_frame_on()):
+        return below
+    return theme.over(ax.get_facecolor(), below)
 
 
 def root_figure(figure: object) -> Figure:

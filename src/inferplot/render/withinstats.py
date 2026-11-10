@@ -9,7 +9,8 @@ The drawing is :class:`inferplot.render.comparison.Drawing` with four changes:
 * points: each subject keeps one seeded horizontal offset at every level, so its
   path is the unjittered path moved sideways and ends exactly on its drawn points;
   more than MAX_POINTS values draw every value of a seeded random subsample of
-  whole subjects (SUBSAMPLE_SIZE // k of them), so every drawn path is complete;
+  whole subjects (SUBSAMPLE_SIZE // k of them), so every drawn path is complete,
+  always with the subjects that hold each condition's smallest and largest value;
 * subject paths (``point_path``): one line per drawn subject, in one collection,
   above the boxes and below the points; only with two conditions and the points
   layer, as ggwithinstats draws them only for two conditions;
@@ -46,7 +47,7 @@ from inferplot.render.comparison import (
     FloatArray,
     LabelPlace,
 )
-from inferplot.render.figure import DrawnPaths, Subsample
+from inferplot.render.figure import DrawnPaths, Subsample, shows_all
 from inferplot.result import StatsResult
 
 if TYPE_CHECKING:
@@ -202,21 +203,32 @@ class _WithinDrawing(comparison.Drawing):
         keep = np.arange(n)
         if total > MAX_POINTS:
             seed = self.result.settings.seed
-            m = SUBSAMPLE_SIZE // k
-            keep = np.sort(rng.choice(n, size=m, replace=False))
+            # The subjects holding each condition's smallest and largest value
+            # are always drawn, the others at random.
+            extremes = np.array(
+                [int(np.argmin(level)) for level in self.values]
+                + [int(np.argmax(level)) for level in self.values],
+                dtype=np.intp,
+            )
+            m = max(SUBSAMPLE_SIZE // k, int(np.unique(extremes).size))
+            keep = comparison.with_extremes(n, m, extremes, rng)
             density = "violins" if "violin" in layers else "density outlines"
             self.subsample = Subsample(
                 shown=m * k, total=total, seed=seed, density=density, subjects=(m, n)
             )
-            what = "points and subject paths" if self.with_subject_paths else "points"
-            self.warnings.append(
-                f"The plot has {total:,} values, more than {MAX_POINTS:,}, so the "
-                f"{what} show every value of a random subsample of {m:,} of the "
-                f"{n:,} subjects ({m * k:,} values, seed {seed}); the {density} and "
-                "boxes show all values."
-            )
         offsets = rng.uniform(-JITTER_HALF_WIDTH, JITTER_HALF_WIDTH, size=keep.size)
         return [(j + offsets, self.values[j][keep]) for j in range(k)]
+
+    def subsample_warning(self, sub: Subsample) -> str:
+        what = "points and subject paths" if self.with_subject_paths else "points"
+        m, n = sub.subjects if sub.subjects is not None else (0, 0)
+        return (
+            f"The plot has {sub.total:,} values, more than {MAX_POINTS:,}, so the "
+            f"{what} show every value of a random subsample of {m:,} of the "
+            f"{n:,} subjects ({sub.shown:,} values, seed {sub.seed}), always with "
+            "the subjects that hold each condition's smallest and largest value; "
+            f"{shows_all(sub, 'show')}."
+        )
 
     def draw_paths(self, points: list[tuple[FloatArray, ...]]) -> None:
         if not self.with_subject_paths:
