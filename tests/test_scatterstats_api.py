@@ -395,7 +395,8 @@ GROUP_WORDS = re.compile(r"\b(groups?|levels?|conditions?|subjects?)\b", re.I)
 @pytest.mark.parametrize("case", oracle_params("ggscatterstats"))
 def test_result_contract_of_each_fixture(case: OracleCase) -> None:
     result = nl.analyzed(case.name)
-    if result is None:  # constant x: refused (tests/test_scatterstats_parity.py)
+    if result is None:  # constant x, or 3 pairs for a type with a Fisher z interval
+        # (edge_corr_n3): refused (tests/test_scatterstats_parity.py)
         assert case.name in nl.REFUSALS
         return
     n = case.analyzed_data["n"]

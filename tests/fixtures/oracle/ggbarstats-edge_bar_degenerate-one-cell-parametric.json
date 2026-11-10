@@ -1,0 +1,308 @@
+{
+  "schema_version": 2,
+  "name": "ggbarstats-edge_bar_degenerate-one-cell-parametric",
+  "function": "ggbarstats",
+  "call": "ggstatsplot::ggbarstats(data = data, x = one, y = single, type = \"parametric\")",
+  "dataset": {
+    "file": "edge_bar_degenerate.csv",
+    "sha256": "9ca541f514ca846ecd9435b50ec6fec5db1e235243950f2b0a09b5c605453099",
+    "rows": 12,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "one",
+    "y": "single",
+    "type": "parametric"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a"
+  ],
+  "n_per_level": {
+    "a": 12
+  },
+  "contingency_data": {
+    "x": "one",
+    "y": "single",
+    "counts": null,
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "rows_dropped": 0,
+    "rule": "rows with x, y and counts present (tidyr::drop_na), each repeated counts times (tidyr::uncount), every column as.factor()",
+    "error": null,
+    "x_levels": [
+      "a"
+    ],
+    "y_levels": [
+      "p"
+    ],
+    "table": [
+      [
+        12
+      ]
+    ],
+    "n": 12
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": "'x' must at least have 2 elements",
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "proportion_test",
+      "error": "'x' must at least have 2 elements",
+      "warnings": [],
+      "messages": [],
+      "level": "p"
+    }
+  ],
+  "expected_hidden_errors": [
+    "subtitle",
+    "proportion_test"
+  ],
+  "expected_na_values": [
+    "one_sample"
+  ],
+  "expected_null_outputs": [],
+  "subtitle": null,
+  "caption": null,
+  "stats": {
+    "subtitle_data": null,
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": [
+      {
+        "single": "p",
+        "one": "a",
+        "counts": 12,
+        "perc": 100,
+        ".label": "100%"
+      }
+    ],
+    "one_sample_data": [
+      {
+        "single": "p",
+        "counts": 12,
+        "perc": 100,
+        "N": "(n = 12)",
+        "statistic": null,
+        "p.value": null,
+        "df": null,
+        "method": "Chi-squared test for given probabilities",
+        ".label": "list(~chi['gof']^2~(NA)==, ~italic(p)=='', ~italic(n)=='12')",
+        ".p.label": "list(~italic(p)=='')"
+      }
+    ],
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_col",
+      "geom": "GeomCol",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "just": 0.5,
+          "lineend": "butt",
+          "linejoin": "mitre"
+        },
+        "aes": {
+          "colour": "black"
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": 1,
+          "fill": "#4285F4FF",
+          "PANEL": "1",
+          "group": 1,
+          "flipped_aes": false,
+          "ymin": 0,
+          "ymax": 1,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_label",
+      "geom": "GeomLabel",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true
+        },
+        "geom": {
+          "parse": false,
+          "label.padding": 0.25,
+          "label.r": 0.15,
+          "size.unit": "mm",
+          "border.colour": null,
+          "text.colour": null,
+          "na.rm": true
+        },
+        "aes": {
+          "alpha": 1,
+          "fill": "white"
+        }
+      },
+      "built": [
+        {
+          "label": "100%",
+          "group": 1,
+          "x": 1,
+          "y": 0.5,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        }
+      ]
+    },
+    {
+      "name": "geom_text",
+      "geom": "GeomText",
+      "data": [
+        {
+          "single": "p",
+          "counts": 12,
+          "perc": 100,
+          "N": "(n = 12)",
+          "statistic": null,
+          "p.value": null,
+          "df": null,
+          "method": "Chi-squared test for given probabilities",
+          ".label": "list(~chi['gof']^2~(NA)==, ~italic(p)=='', ~italic(n)=='12')",
+          ".p.label": "list(~italic(p)=='')"
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "parse": false,
+          "check_overlap": false,
+          "size.unit": "mm"
+        },
+        "aes": {
+          "size": 4
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": -0.05,
+          "label": "(n = 12)",
+          "PANEL": "1",
+          "group": 1,
+          "nudge_x": 0,
+          "nudge_y": 0,
+          "colour": "black",
+          "family": "",
+          "size": 4,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2
+        }
+      ]
+    }
+  ],
+  "plot_texts": {
+    "labels": {
+      "fill": "one",
+      "x.sec": null,
+      "x": "single",
+      "y": null,
+      "y.sec": null,
+      "title": null,
+      "subtitle": null,
+      "caption": null,
+      "label": ".label",
+      "group": "one",
+      "alt": ""
+    },
+    "legend_title": "one"
+  },
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

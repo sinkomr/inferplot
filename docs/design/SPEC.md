@@ -421,7 +421,9 @@ T* (edge_one_small: [-Inf, Inf], as R) and leaves a 0/0 T* out, counted (D65); i
 and critical value are counted over the defined resamples.
 
 Refused before the method runs, with the column named: values that are one number
-(exactly or to within their rounding, D74) for types parametric, robust and bayes;
+(exactly or to within their rounding, D74) for types parametric, robust and bayes
+(ggstatsplot prints no subtitle for parametric and bayes there, and t = Inf with an NA
+interval for robust: edge_one_constant; type nonparametric answers as R does, D102);
 every value equal to `test_value` for the signed-rank test; type robust with fewer
 than 2 values left after trimming, a winsorized SD of 0, or a `conf_level` the
 bootstrap-t rule cannot resolve at 2,000 resamples (above about 0.99975). Every
@@ -432,7 +434,7 @@ The parametric caption is the full one-sample Bayes expression (log BF01, poster
 difference with its 95% ETI, r_Cauchy^JZS), as the bayes subtitle.
 
 Plot. Histogram (`stat_bin`) of the analyzed values: bin width `binwidth`, else
-(max - min) / sqrt(n) (ggstatsplot's .binwidth(); when every value is the same inferplot raises and asks for `binwidth`, since no fixture shows ggstatsplot's rule yet, D89);
+(max - min) / sqrt(n) (ggstatsplot's .binwidth(); when every value is the same the width is 0.1, one bin centred on the value: edge_one_constant, D89);
 bins edge to edge on the grid (k + 1/2) w, every value counted once; the right axis is
 count / n as a percentage. The centrality line (dashed) sits at the type's centrality
 value (mean, median, trimmed mean at tr, MAP) with its label
@@ -472,7 +474,8 @@ products (D85): exactly collinear data give r = +/-1, t = +/-inf, S = 0, p = 0 a
 interval [r, r], and the Bayes factor its limit (+inf from n = 5 at prior 0.707;
 D86). A constant variable, also one constant to within the rounding of its values
 (D74), raises for every type; the types with a Fisher interval need 4 pairs (type
-bayes needs 3); type robust refuses a column that winsorizes to one number. An
+bayes needs 3; at 3 pairs ggstatsplot prints r, t or S and p with the interval NA, or
+[-1, 1] for Spearman: edge_corr_n3; D103); type robust refuses a column that winsorizes to one number. An
 exactly collinear result carries a `warnings` entry that says so and what
 ggstatsplot prints, and is not refused (a monotone y gives Spearman's rho = 1).
 

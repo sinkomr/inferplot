@@ -408,13 +408,16 @@ class _HistDrawing(base.BaseDrawing):
             where = None
         text = ax.text(
             tv if where is not None else 0.0,
-            1.0,
+            1.0 if where is not None else 0.0,
             words,
             fontproperties=theme.font(theme.SIZE_LABEL),
             color=theme.SOFT_INK,
             parse_math=False,
             zorder=6.0,
             gid="test-value-label",
+            # The arrow label starts inside the Axes, not at data (0, 1): the
+            # layout measures it before place_labels moves it to its edge.
+            transform=ax.transData if where is not None else ax.transAxes,
         )
         self.role(text, "test value label")
         label = _StripLabel(text=text, x=where, side="right")

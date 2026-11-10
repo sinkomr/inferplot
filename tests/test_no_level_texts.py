@@ -7,10 +7,12 @@ Two layers of checks, as for the earlier functions:
   row, the drawn subtitle and caption, gghistostats' centrality label) is rebuilt
   from that fixture's own numbers with ``inferplot.text``'s builders and must equal
   ggstatsplot's, parsed (``tests/plotmath.py``), as an AST: every symbol, subscript,
-  df and number string. This covers all 140 fixtures, also the four that inferplot
-  refuses (constant x: ggstatsplot prints "NA") and the exactly collinear ones
-  (an empty log Bayes factor);
-* the results: each fixture inferplot answers (136; the two one-sided robust and
+  df and number string. This covers all 165 fixtures, also the 13 that inferplot
+  refuses (constant x and 3 pairs: ggstatsplot prints "NA"; constant one-sample
+  data: ggstatsplot prints no subtitle, or t = Inf with an NA interval) and the
+  exactly collinear ones (an empty log Bayes factor). One stored number loses the
+  side of a rounding tie R's double lay on (:data:`STORED_TIES`);
+* the results: each fixture inferplot answers (152; the two one-sided robust and
   bayes histostats calls by their two-sided replay, ``tests/no_level_cases.py``)
   is replayed through ``ip.analyze`` and its subtitle, caption and centrality
   label, built from inferplot's own numbers, must equal ggstatsplot's or be a
@@ -125,6 +127,40 @@ DIFFERING_SUBTITLES: Mapping[str, tuple[str, str, str]] = {
         "CI_95% [1.00, 1.00], n_pairs = 10",
         _COLLINEAR,
     ),
+    # n = 2 (barstats oracle run: 3.1 and 4.7 against 3): both t's are rounding
+    # ties for the data as written; open with the lead.
+    "gghistostats-edge_one_n2-parametric": (
+        "t_Student(1) = 1.13, p = 0.46, g_Hedges = 0.00, CI_95% [0.00, 0.00], "
+        "n_obs = 2",
+        "t_Student(1) = 1.12, p = 0.46, g_Hedges = 0.00, CI_95% [0.00, 0.00], "
+        "n_obs = 2",
+        "t = 0.9 / 0.8 = 1.125 exactly for the decimal data, a tie at 2 digits. "
+        "inferplot's t is the correctly rounded double, 1.125, which C's sprintf "
+        "prints 1.12 (ties to even); R's arithmetic gives 1.1250000000000004, "
+        "printed 1.13. The exact t of the stored doubles is 1.125 + 1.04e-16, so "
+        "1.13 is its correct decimal rounding",
+    ),
+    "gghistostats-edge_one_n2-robust": (
+        "t_bootstrapped = 0.68, p = 0.49, μ_trimmed = 3.90, CI_95% [-Inf, Inf], "
+        "n_obs = 2",
+        "t_bootstrapped = 0.67, p = 0.48, μ_trimmed = 3.90, CI_95% [-Inf, Inf], "
+        "n_obs = 2",
+        "the bootstrap t is 0.9 / (1.6 / (0.6 x 2)) = 0.675 exactly for the decimal "
+        "data, a tie at 2 digits, and 0.675 + 3.7e-17 for the stored doubles, whose "
+        "correctly rounded double (0.67500000000000004) prints 0.68 as R's does; "
+        "inferplot's t is one unit in the last place lower (0.6749999999999999: "
+        "its standard error is rounded several times) and prints 0.67. The p "
+        "differs by resampling (2,000 against ggstatsplot's 200; within 4 Monte "
+        "Carlo SDs of the 20,000-resample reference)",
+    ),
+}
+
+# Expressions whose number the fixture stores to 15 significant digits, which
+# loses the side of a rounding tie R's double lay on: case -> (R's string, the
+# string the formatter gives the stored number). edge_one_n2-parametric: R's t is
+# 1.1250000000000004 (printed 1.13), stored as 1.125 (printed 1.12).
+STORED_TIES: Mapping[str, tuple[str, str]] = {
+    "gghistostats-edge_one_n2-parametric": ("1.13", "1.12"),
 }
 
 # Bayes captions that differ from ggstatsplot's first and last items.
@@ -172,13 +208,27 @@ def _v01(node: tx.Node) -> tx.Node:
 
 
 def test_every_fixture_is_covered() -> None:
-    assert (len(nl.HISTO), len(nl.SCATTER)) == (76, 64)
-    refused = [c.name for c in CASES if analyzed(c.name) is None]
-    assert refused == [
-        f"ggscatterstats-edge_corr_constant_x-{t}"
-        for t in ("bayes", "nonparametric", "parametric", "robust")
-    ]
-    assert len(_answered()) == 136
+    # 76 and 64, and 16 and 9 from the barstats oracle run (edge_one_n2,
+    # edge_one_n3, edge_one_constant, edge_one_constant-binwidth1; edge_corr_n3,
+    # edge_corr_n4, edge_corr_label_missing).
+    assert (len(nl.HISTO), len(nl.SCATTER)) == (92, 73)
+    refused = sorted(c.name for c in CASES if analyzed(c.name) is None)
+    assert refused == sorted(
+        [
+            f"gghistostats-edge_one_constant{width}-{t}"
+            for width in ("", "-binwidth1")
+            for t in ("bayes", "parametric", "robust")
+        ]
+        + [
+            f"ggscatterstats-edge_corr_constant_x-{t}"
+            for t in ("bayes", "nonparametric", "parametric", "robust")
+        ]
+        + [
+            f"ggscatterstats-edge_corr_n3-{t}"
+            for t in ("nonparametric", "parametric", "robust")
+        ]
+    )
+    assert len(_answered()) == 152
 
 
 # --------------------------------------------------------------------------- #
@@ -282,7 +332,15 @@ def test_fixture_expressions_rebuild_from_their_numbers(name: str) -> None:
         "centrality.plotting", True
     )
     assert ("centrality" in where) == bool(has_line)
+    tie = STORED_TIES.get(name)
     for location, source, rebuilt in found:
+        if tie is not None and location.startswith("subtitle"):
+            # The one difference is the tie's string (STORED_TIES).
+            theirs, stored = (f'"{s}"' for s in tie)
+            assert source.count(theirs) == 1
+            assert rebuilt != parse(source)
+            assert rebuilt == parse(source.replace(theirs, stored)), source
+            continue
         assert rebuilt == parse(source), f"{location}: {source}"
 
 
@@ -417,11 +475,15 @@ def test_robust_bootstrap_strings_follow_the_formatter() -> None:
     resamples where ggstatsplot uses 200, and the formatter turns ggstatsplot's
     own values into its strings (including a bootstrap p of 0 as 2.23e-308)."""
     robust = [c for c in nl.HISTO if c.bootstrap_reference is not None]
-    assert len(robust) == 17
+    # 17, and 4 from the barstats oracle run: edge_one_n2, edge_one_n3,
+    # edge_one_constant and edge_one_constant-binwidth1 (the last two refused).
+    assert len(robust) == 21
     zero_p = 0
     for case in robust:
         result = analyzed(case.name)
-        assert result is not None
+        if result is None:  # constant data (tests/test_histostats_parity.py)
+            assert nl.REFUSALS[case.name].replay is None
+            continue
         assert result.test is not None
         if case.subtitle is None:
             continue
@@ -430,8 +492,11 @@ def test_robust_bootstrap_strings_follow_the_formatter() -> None:
         assert isinstance(theirs, tx.Call)
         mine = _own_subtitle(result)
         assert isinstance(mine, tx.Call)
-        # the bootstrap t, the trimmed mean and n are exact
-        assert mine.args[0] == theirs.args[0]
+        # the bootstrap t, the trimmed mean and n are exact (edge_one_n2: t is a
+        # rounding tie, DIFFERING_SUBTITLES)
+        assert (mine.args[0] == theirs.args[0]) == (
+            case.name not in DIFFERING_SUBTITLES
+        )
         assert mine.args[2] == theirs.args[2]
         assert mine.args[-1] == theirs.args[-1]
         if number(row["p.value"]) < 1e-300:  # stored as .Machine$double.xmin

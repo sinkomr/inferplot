@@ -55,6 +55,15 @@ REFUSED: Final = frozenset(
     for t in ("parametric", "nonparametric", "robust", "bayes")
 )
 
+# Three pairs (barstats oracle run): the Fisher z interval needs 4 (D85), so
+# inferplot's coefficients raise; R prints r, t (or S) and p with the interval
+# [NA, NA], or [-1, 1] for Spearman's rho. The Bayes factor (type bayes and the
+# parametric caption) is answered and compared.
+THREE_PAIRS: Final = frozenset(
+    f"ggscatterstats-edge_corr_n3-{t}"
+    for t in ("parametric", "nonparametric", "robust")
+)
+
 # Exactly collinear data (y = 2x + 1 and y = 27 - 3x on x = 1..10): inferplot's
 # exact sums give r = +/-1, so t = +/-inf, S = 0 and p = 0, and the Bayes factor is
 # its limit, +inf (n = 10 >= 5 at prior 0.707). R's r is 1 - 2^-53 or so on the
@@ -104,7 +113,10 @@ def _params(type_: str, *, refused: bool = False) -> list[Any]:
     chosen = [
         c
         for c in CASES
-        if c.type == type_ and c.subtitle_rows and ((c.name in REFUSED) == refused)
+        if c.type == type_
+        and c.subtitle_rows
+        and ((c.name in REFUSED) == refused)
+        and c.name not in THREE_PAIRS
     ]
     return [pytest.param(c, id=c.name) for c in require_cases(chosen, type_)]
 
@@ -131,14 +143,16 @@ def _run(case: OracleCase) -> Correlation:
 
 
 def test_case_counts() -> None:
-    assert len(CASES) == 64
+    # 64, and 9 from the barstats oracle run: edge_corr_n3 and edge_corr_n4 in four
+    # types each, edge_corr_label_missing (parametric).
+    assert len(CASES) == 73
     counts = {
         t: sum(c.type == t for c in CASES)
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
-    assert counts == {"parametric": 20, "nonparametric": 14, "robust": 15, "bayes": 15}
+    assert counts == {"parametric": 23, "nonparametric": 16, "robust": 17, "bayes": 17}
     names = {c.name for c in CASES}
-    assert names >= REFUSED
+    assert names >= REFUSED | THREE_PAIRS
     assert names >= {k.removesuffix("-caption") for k in R_DIFFERS}
 
 
@@ -234,6 +248,31 @@ def test_constant_x_is_refused(case: OracleCase) -> None:
     rows = case.subtitle_rows
     if rows:
         assert rows[0]["estimate"] is None
+
+
+@pytest.mark.parametrize(
+    "case", [pytest.param(c, id=c.name) for c in CASES if c.name in THREE_PAIRS]
+)
+def test_three_pairs_are_refused(case: OracleCase) -> None:
+    x, _ = _pairs(case)
+    assert x.size == 3
+    with pytest.raises(ValueError, match="needs at least 4 pairs"):
+        _run(case)
+    # R's side: r (or rho) = 0.5, p = 2/3 and an interval of NA (Pearson,
+    # winsorized: nothing is winsorized at floor(0.2 x 3) = 0) or [-1, 1]
+    # (Spearman: the Fisher z standard error is infinite at n = 3).
+    row = case.subtitle_data
+    assert int(value(row, "n.obs")) == 3
+    assert_close("closed_form", value(row, "estimate"), 0.5, what="r")
+    assert_close("closed_form", value(row, "p.value"), 2 / 3, what="p")
+    if case.type == "nonparametric":
+        assert value(row, "statistic") == 2.0
+        assert (value(row, "conf.low"), value(row, "conf.high")) == (-1.0, 1.0)
+    else:
+        # t = r sqrt(n - 2) / sqrt(1 - r^2) = 1 / sqrt(3) on 1 df.
+        assert_close("closed_form", value(row, "statistic"), 3**-0.5, what="t")
+        assert value(row, "df.error") == 1
+        assert (row["conf.low"], row["conf.high"]) == (None, None)
 
 
 # ------------------------------------------------------------------ probe-corr

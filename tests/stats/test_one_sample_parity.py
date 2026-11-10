@@ -16,7 +16,7 @@ independent high-precision reference (tests/stats/test_one_sample.py).
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 import pytest
@@ -53,7 +53,20 @@ CASES = require_cases(cases_for("gghistostats"), "gghistostats fixtures")
 INFINITE_RESAMPLES = {
     "gghistostats-edge_one_small-robust": 169,
     "gghistostats-edge_one_ties-robust": 34,
+    # n = 2 and 3 (barstats oracle run): resamples repeating one value.
+    "gghistostats-edge_one_n2-robust": 967,
+    "gghistostats-edge_one_n3-robust": 215,
 }
+
+# Ten values of 5 (barstats oracle run): every one-sample t quantity is undefined
+# (R's t.test stops, so ggstatsplot prints no subtitle for parametric and bayes),
+# and the winsorized variance is 0 (R prints t = Inf, p = 2.23e-308, [NA, NA] for
+# robust). inferplot's functions raise; the signed-rank test is answered.
+CONSTANT: Final = frozenset(
+    f"gghistostats-edge_one_constant{width}-{t}"
+    for width in ("", "-binwidth1")
+    for t in ("parametric", "robust", "bayes")
+)
 
 
 def _params(type_: str, *, needs: str = "subtitle") -> list[Any]:
@@ -61,6 +74,7 @@ def _params(type_: str, *, needs: str = "subtitle") -> list[Any]:
         c
         for c in CASES
         if c.type == type_
+        and c.name not in CONSTANT
         and (c.subtitle_rows if needs == "subtitle" else c.caption_data is not None)
     ]
     return [pytest.param(c, id=c.name) for c in require_cases(chosen, type_)]
@@ -92,7 +106,10 @@ def test_case_counts() -> None:
         t: sum(c.type == t for c in CASES)
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
-    assert counts == {"parametric": 22, "nonparametric": 18, "robust": 18, "bayes": 18}
+    # 16 from the barstats oracle run (edge_one_n2, edge_one_n3, edge_one_constant
+    # and edge_one_constant-binwidth1, four types each).
+    assert counts == {"parametric": 26, "nonparametric": 22, "robust": 22, "bayes": 22}
+    assert {c.name for c in CASES} >= CONSTANT
 
 
 @pytest.mark.parametrize("case", _params("parametric"))
@@ -217,6 +234,9 @@ def test_centrality(case: OracleCase) -> None:
     expected = number(row["var"])
     if case.type == "bayes":
         found = map_estimate(x)
+        if found.grid_step == 0.0:  # constant x: the MAP is the value itself
+            assert float(x.min()) == float(x.max()) == found.estimate == expected
+            return
         assert_within_grid(
             found.estimate,
             expected,
@@ -233,13 +253,53 @@ def test_centrality(case: OracleCase) -> None:
     assert_close("closed_form", got, expected, what=f"{case.name} centrality")
 
 
+@pytest.mark.parametrize(
+    "case", [pytest.param(c, id=c.name) for c in CASES if c.name in CONSTANT]
+)
+def test_constant_data_is_refused(case: OracleCase) -> None:
+    x, mu = _x(case), _mu(case)
+    assert float(x.min()) == float(x.max()) == 5.0
+    if case.type == "robust":
+        with pytest.raises(ValueError, match="winsorized variance of 0"):
+            trimmed_mean_bootstrap_t(x, mu=mu, tr=tr(case))
+        # R: t = Inf, p = 2.23e-308, the trimmed mean 5 and the interval [NA, NA].
+        row = case.subtitle_data
+        assert (row["statistic"], value(row, "p.value")) == (
+            "Inf",
+            2.2250738585072e-308,
+        )
+        assert (value(row, "estimate"), row["conf.low"], row["conf.high"]) == (
+            5.0,
+            None,
+            None,
+        )
+        return
+    with pytest.raises(ValueError, match="has no standard deviation"):
+        one_sample_t(x, mu=mu)
+    with pytest.raises(ValueError, match="no standard deviation"):
+        one_sample_hedges_g(x, mu=mu)
+    with pytest.raises(ValueError, match="has no standard deviation"):
+        jzs_bf10_one_sample(x, mu=mu, prior_scale=bf_prior(case))
+    # R: t.test stops ("data are essentially constant"); no subtitle or caption.
+    assert (case.subtitle_rows, case.caption_data) == ([], None)
+    assert "subtitle" in case.expected_hidden_errors
+
+
 def test_every_case_is_compared() -> None:
-    # Each case has its subtitle compared above or, without one, its centrality.
+    # Each case has its subtitle compared above or, without one, its centrality;
+    # the constant-data cases are refused (above) and their centrality compared.
     without = [c.name for c in CASES if not c.subtitle_rows]
-    assert sorted(without) == [
-        f"gghistostats-ToothGrowth-nosubtitle-{t}"
-        for t in ("bayes", "nonparametric", "parametric", "robust")
-    ]
+    assert sorted(without) == sorted(
+        [
+            f"gghistostats-ToothGrowth-nosubtitle-{t}"
+            for t in ("bayes", "nonparametric", "parametric", "robust")
+        ]
+        + [
+            f"gghistostats-edge_one_constant{width}-{t}"
+            for width in ("", "-binwidth1")
+            for t in ("bayes", "parametric")
+        ]
+    )
     assert [c.name for c in CASES if c.centrality is None] == [
         "gghistostats-ToothGrowth-nocentrality-parametric"
     ]
