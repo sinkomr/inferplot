@@ -259,6 +259,121 @@ SCATTER_LABELS: dict[str, tuple[str, ...]] = {
     "mtcars-labels": ("parametric",),
     "mtcars-labelexpr": ("parametric",),
 }
+# The small samples the foundation package asked for, and constant data (lead's
+# request): n = 2 and 3, ten values of 5 with the default bin width and with 1.
+HISTO_LABELS.update(
+    dict.fromkeys(
+        (
+            "edge_one_n2",
+            "edge_one_n3",
+            "edge_one_constant",
+            "edge_one_constant-binwidth1",
+        ),
+        TYPES,
+    )
+)
+SCATTER_LABELS.update(
+    {
+        "edge_corr_n3": TYPES,
+        "edge_corr_n4": TYPES,
+        "edge_corr_label_missing": ("parametric",),
+    }
+)
+# Phase 4 (barstats): ggbarstats cases, label -> types (see generate.R).
+P_ADJUST_LABELS = tuple(f"Titanic_full-class-padj-{m}" for m in P_ADJUST_METHODS)
+BAR_LABELS: dict[str, tuple[str, ...]] = {
+    **dict.fromkeys(
+        (
+            "mtcars-cyl-am",
+            "mtcars-am-cyl",
+            "mtcars-am-vs",
+            "Titanic_full-class",
+            "mtcars-cyl",
+            "edge_bar_paired",
+        ),
+        TYPES,
+    ),
+    **dict.fromkeys(
+        (
+            "Titanic_full-survived",
+            "Titanic_counts-class",
+            *(
+                f"mtcars-cyl-am-{arg}"
+                for arg in (
+                    "cl90",
+                    "digits3",
+                    "nosubtitle",
+                    "nosubtitle-proptest",
+                    "noproptest",
+                    "nobf",
+                    "greater",
+                    "less",
+                    "counts",
+                    "both",
+                    "digitsperc1",
+                    "ratio",
+                )
+            ),
+            *P_ADJUST_LABELS,
+            *(
+                f"mtcars-cyl-{arg}"
+                for arg in (
+                    "cl90",
+                    "digits3",
+                    "nosubtitle",
+                    "nobf",
+                    "greater",
+                    "both",
+                    "digitsperc1",
+                    "ratio",
+                    "ratio-sum4",
+                    "ratio-short",
+                )
+            ),
+            "edge_bar_paired-cl90",
+            "edge_bar_paired-less",
+            "edge_bar_zero_cell",
+            "edge_bar_zero_cell-declared",
+            "edge_bar_zero_cell-oneway-declared",
+            "edge_bar_small_expected",
+            "edge_bar_2x2_one",
+            "edge_bar_large",
+            "edge_bar_missing",
+            "edge_bar_missing-counts",
+            "edge_bar_missing-oneway",
+            "edge_bar_perfect",
+            "edge_bar_independent",
+            "edge_bar_degenerate-oneway-one",
+            "edge_bar_degenerate-one-row",
+            "edge_bar_degenerate-one-column",
+            "edge_bar_degenerate-one-cell",
+            "edge_bar_degenerate-single-x",
+            "edge_bar_rounding",
+            "edge_bar_rounding-digitsperc1",
+            "edge_bar_rounding-digitsperc2",
+            "edge_bar_rounding-both",
+            "edge_bar_rounding-counts",
+            "edge_bar_counts",
+            "edge_bar_counts-frac",
+            "edge_bar_paired3",
+            "edge_bar_paired_agree",
+            "edge_bar_paired_small",
+            "edge_bar_paired_unequal",
+            "edge_bar_paired_unequal-declared",
+        ),
+        ("parametric",),
+    ),
+}
+# ggpiestats: the one-way design, to show it computes what ggbarstats computes.
+PIE_LABELS: dict[str, tuple[str, ...]] = {
+    "mtcars-cyl": TYPES,
+    "mtcars-cyl-ratio": ("parametric",),
+}
+BAR_CASES = frozenset(
+    f"ggbarstats-{label}-{t}" for label, types in BAR_LABELS.items() for t in types
+) | frozenset(
+    f"ggpiestats-{label}-{t}" for label, types in PIE_LABELS.items() for t in types
+)
 HISTO_CASES = frozenset(
     f"gghistostats-{label}-{t}" for label, types in HISTO_LABELS.items() for t in types
 )
@@ -290,6 +405,7 @@ EXPECTED_CASES = frozenset(
     | T7_CASES
     | HISTO_CASES
     | SCATTER_CASES
+    | BAR_CASES
 )
 # Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
 EXPECTED_FAILURES = frozenset(
@@ -322,6 +438,7 @@ EXPECTED_PROBES = frozenset(
         "probe-corr",
         "probe-onesamplebf",
         "probe-heldout",
+        "probe-contingency",
     }
 )
 
@@ -340,8 +457,9 @@ def test_case_list_is_what_the_generator_writes() -> None:
     assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
     assert sum(len(types) for types in WITHIN_LABELS.values()) == 159
     assert len(T7_CASES) == 6
-    assert len(HISTO_CASES) == 76
-    assert len(SCATTER_CASES) == 64
+    assert len(HISTO_CASES) == 76 + 16
+    assert len(SCATTER_CASES) == 64 + 9
+    assert len(BAR_CASES) == 90
 
 
 ALL_CASES = [

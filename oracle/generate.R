@@ -940,13 +940,25 @@ CASES <- c(
   edge_one("edge_one_n2", 3),
   edge_one("edge_one_n3", 3),
   # Ten values of 5 against 3: the default bin width when max = min, and which types
-  # answer on constant data; then a given bin width.
-  edge_one("edge_one_constant", 3),
+  # answer on constant data; then a given bin width. t.test stops ("data are
+  # essentially constant") in the parametric subtitle and caption and in the bayes
+  # subtitle, and ggstatsplot swallows it; trimcibt's interval is NA (robust).
+  edge_one(
+    "edge_one_constant", 3,
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"), bayes = "subtitle"),
+    expect_na_values = list(robust = "subtitle")
+  ),
   histo_cases(
     "edge_one_constant", x = "value", label = "edge_one_constant-binwidth1",
-    extra_args = list(test.value = 3, binwidth = 1)
+    extra_args = list(test.value = 3, binwidth = 1),
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"), bayes = "subtitle"),
+    expect_na_values = list(robust = "subtitle")
   ),
-  edge_corr("edge_corr_n3"),
+  # Three pairs: the Fisher-z interval of r has 1 / sqrt(n - 3) = Inf, and R prints
+  # it as NA (parametric, robust).
+  edge_corr(
+    "edge_corr_n3", expect_na_values = list(parametric = "subtitle", robust = "subtitle")
+  ),
   edge_corr("edge_corr_n4"),
   scatter_cases(
     "edge_corr_label_missing", x = "x", y = "y", types = "parametric",
@@ -1065,11 +1077,17 @@ CASES <- c(
   pie_cases(
     "mtcars", x = "cyl", label = "mtcars-cyl-ratio", extra_args = list(ratio = c(0.5, 0.25, 0.25))
   ),
+  # chisq.test refuses both ("probabilities must sum to 1.", "'x' and 'p' must have
+  # the same number of elements") and ggstatsplot swallows it: no subtitle. The
+  # one-way Bayes factor normalizes c(2, 1, 1) (a caption is drawn) and stops on the
+  # short one.
   bar_cases(
-    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-sum4", extra_args = list(ratio = c(2, 1, 1))
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-sum4", extra_args = list(ratio = c(2, 1, 1)),
+    expect_hidden_errors = list(parametric = "subtitle")
   ),
   bar_cases(
-    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-short", extra_args = list(ratio = c(0.5, 0.5))
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-short", extra_args = list(ratio = c(0.5, 0.5)),
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"))
   ),
   # Paired arguments.
   edge_paired(
@@ -1110,15 +1128,39 @@ CASES <- c(
   edge_bar("edge_bar_independent"),
   # Degenerate designs on twelve rows: `one` and `single` hold one level each; x3 by
   # y2 is a (3, 0), b (4, 0), c (0, 5), so bar q holds only c.
-  bar_cases("edge_bar_degenerate", x = "one", label = "edge_bar_degenerate-oneway-one"),
-  bar_cases("edge_bar_degenerate", x = "one", y = "y2", label = "edge_bar_degenerate-one-row"),
+  # One category: chisq.test stops ("'x' must at least have 2 elements"), and the
+  # one-way Bayes factor returns nothing for a one-cell table.
   bar_cases(
-    "edge_bar_degenerate", x = "x3", y = "single", label = "edge_bar_degenerate-one-column"
+    "edge_bar_degenerate", x = "one", label = "edge_bar_degenerate-oneway-one",
+    expect_hidden_errors = list(parametric = "subtitle"),
+    expect_null_outputs = list(parametric = "caption")
   ),
+  # One row (x has one level): chisq.test turns a 1 x 2 table into a goodness-of-fit
+  # test of y, and cramers_v refuses it ("not supported for goodness-of-fit tests");
+  # contingencyTableBF refuses it too; each bar's test has one category (NA rows).
   bar_cases(
-    "edge_bar_degenerate", x = "one", y = "single", label = "edge_bar_degenerate-one-cell"
+    "edge_bar_degenerate", x = "one", y = "y2", label = "edge_bar_degenerate-one-row",
+    expect_hidden_errors = list(parametric = c("subtitle", "caption", "proportion_test")),
+    expect_na_values = list(parametric = "one_sample")
   ),
-  bar_cases("edge_bar_degenerate", x = "x3", y = "y2", label = "edge_bar_degenerate-single-x"),
+  # One column (y has one level): the same goodness-of-fit turn and refusal; no
+  # caption (bf.condition: y not of exactly one level); the bar's own test runs.
+  bar_cases(
+    "edge_bar_degenerate", x = "x3", y = "single", label = "edge_bar_degenerate-one-column",
+    expect_hidden_errors = list(parametric = "subtitle")
+  ),
+  # One cell.
+  bar_cases(
+    "edge_bar_degenerate", x = "one", y = "single", label = "edge_bar_degenerate-one-cell",
+    expect_hidden_errors = list(parametric = c("subtitle", "proportion_test")),
+    expect_na_values = list(parametric = "one_sample")
+  ),
+  # Pairs a-b: after droplevels the pair's table is 2 x 1 and fisher.test stops; the
+  # whole pairwise table is lost.
+  bar_cases(
+    "edge_bar_degenerate", x = "x3", y = "y2", label = "edge_bar_degenerate-single-x",
+    expect_hidden_errors = list(parametric = "pairwise_comparisons")
+  ),
   # Percent labels: bars of 8 (a 1, b 3, c 4: 12.5%, 37.5%, 50%), 16 (1, 5, 10: 6.25%,
   # 31.25%, 62.5%), 3 (1 each: 33.3%) and 7 (1, 2, 4).
   edge_bar("edge_bar_rounding"),
@@ -1136,18 +1178,30 @@ CASES <- c(
   ),
   # Weights: w holds zeros (every row of c), w_frac a weight of 2.5.
   edge_bar("edge_bar_counts", label = "edge_bar_counts", extra_args = list(counts = "w")),
+  # tidyr::uncount() refuses a weight of 2.5 while ggstatsplot prepares the data.
   edge_bar(
-    "edge_bar_counts", label = "edge_bar_counts-frac", extra_args = list(counts = "w_frac")
+    "edge_bar_counts", label = "edge_bar_counts-frac", extra_args = list(counts = "w_frac"),
+    expect_error = list(parametric = list(
+      component = "data",
+      message = "Can't convert from `weights` <double> to <integer> due to loss of precision",
+      reason = "a weight that is not a whole number: tidyr::uncount() cannot repeat a row 2.5 times"
+    ))
   ),
   # Paired edge data. 3 x 3 (low, mid, high; McNemar-Bowker): before low (6, 5, 2),
   # mid (1, 7, 6), high (1, 3, 8) after low, mid, high.
   edge_paired("edge_bar_paired3"),
-  # Every subject answers the same twice (no discordant pair).
-  edge_paired("edge_bar_paired_agree"),
+  # Every subject answers the same twice (no discordant pair): McNemar's statistic is
+  # 0/0 and cohens_g stops ("not enough data"), which ggstatsplot swallows.
+  edge_paired(
+    "edge_bar_paired_agree", expect_hidden_errors = list(parametric = "subtitle")
+  ),
   # One discordant pair (yes, no) among ten subjects.
   edge_paired("edge_bar_paired_small"),
-  # After has a level (maybe) that before lacks: a 2 x 3 table.
-  edge_paired("edge_bar_paired_unequal"),
+  # After has a level (maybe) that before lacks: a 2 x 3 table, which mcnemar.test
+  # refuses ("'x' must be square").
+  edge_paired(
+    "edge_bar_paired_unequal", expect_hidden_errors = list(parametric = "subtitle")
+  ),
   # The same with both variables declared on maybe, no, yes: a square table.
   edge_paired(
     "edge_bar_paired_unequal", label = "edge_bar_paired_unequal-declared",
