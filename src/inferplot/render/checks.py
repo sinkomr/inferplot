@@ -128,6 +128,92 @@ def text_extents(fig: StatsFigure) -> list[tuple[Text, str, Bbox]]:
     return out
 
 
+def _axes_hidden(axes: Axes) -> set[int]:
+    """ids of an Axes' axis texts that are not drawn."""
+    hidden: set[int] = set()
+    for axis in (axes.xaxis, axes.yaxis):
+        if axis.get_visible():
+            hidden |= _hidden_tick_labels(axis)
+        else:
+            hidden |= {id(t) for t in axis.findobj(Text)}
+    return hidden
+
+
+def _title_roles(axes: Axes) -> dict[int, str]:
+    roles: dict[int, str] = {}
+    for name in ("title", "_left_title", "_right_title"):
+        text = getattr(axes, name, None)
+        if isinstance(text, Text):
+            roles[id(text)] = "title"
+    return roles
+
+
+def _other_extents(fig: StatsFigure) -> list[tuple[str, Bbox]]:
+    """With ``ax=``: the plotting area and drawn texts of every other Axes of the
+    figure, and the figure's own texts (a suptitle), in words, with their boxes.
+
+    An Axes at the main Axes' position (a twin) has no plotting area of its own
+    there; its texts still count.
+    """
+    ax = fig.axes["main"]
+    root = root_figure(fig.figure)
+    renderer = _renderer(fig)
+    out: list[tuple[str, Bbox]] = []
+    in_axes: set[int] = set()
+    main_frame = ax.get_window_extent(renderer)
+    for other in root.get_axes():
+        texts = other.findobj(Text)
+        in_axes |= {id(t) for t in texts}
+        if other is ax or not other.get_visible():
+            continue
+        frame = other.get_window_extent(renderer)
+        if not np.allclose(frame.extents, main_frame.extents, atol=0.5):
+            out.append(("the plotting area of another panel", frame))
+        hidden = _axes_hidden(other)
+        roles = _axis_roles(other) | _title_roles(other)
+        for text in texts:
+            if id(text) in hidden or not text.get_visible():
+                continue
+            if not text.get_text().strip():
+                continue
+            role = roles.get(id(text), "text")
+            out.append(
+                (
+                    describe_text(role, plain_text(text)) + " of another panel",
+                    text.get_window_extent(renderer),
+                )
+            )
+    suptitle = getattr(root, "_suptitle", None)
+    for text in root.findobj(Text):
+        if id(text) in in_axes or not text.get_visible():
+            continue
+        if not text.get_text().strip() or fig.describe(text) is not None:
+            continue
+        role = "figure title" if text is suptitle else "figure text"
+        out.append(
+            (describe_text(role, plain_text(text)), text.get_window_extent(renderer))
+        )
+    return out
+
+
+def _panel_overlaps(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> list[str]:
+    """With ``ax=``: this panel's texts that overlap another panel or its texts,
+    or a figure text."""
+    if fig.own:
+        return []
+    others = _other_extents(fig)
+    found: list[str] = []
+    for _, described, box in extents:
+        for other, frame in others:
+            width = min(box.x1, frame.x1) - max(box.x0, frame.x0)
+            height = min(box.y1, frame.y1) - max(box.y0, frame.y0)
+            if width > _CLIP_TOLERANCE and height > _CLIP_TOLERANCE:
+                found.append(f"{described} and {other}")
+    return found
+
+
 def _listing(items: list[str]) -> str:
     listed = "; ".join(items[:_MAX_LISTED])
     if len(items) > _MAX_LISTED:
@@ -427,6 +513,16 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
         )
         listed = _listing([words for _, words in crossings])
         found.append(f"{labels} {noun}: {listed}")
+    across = _panel_overlaps(fig, extents)
+    if across:
+        noun = (
+            "text of this panel overlaps"
+            if len(across) == 1
+            else "texts of this panel overlap"
+        )
+        found.append(
+            f"{len(across)} {noun} another panel or a figure text: {_listing(across)}"
+        )
     if found:
         issues.append(
             Issue(

@@ -50,7 +50,7 @@ def _two() -> tuple[StatsResult, StatsResult]:
 
 
 def _panels(*, sharex: bool = False, sharey: bool = False) -> tuple[Figure, list[Axes]]:
-    figure = Figure(figsize=(14, 6.5), dpi=100)
+    figure = Figure(figsize=(20, 6.5), dpi=100)
     FigureCanvasAgg(figure)
     axes = figure.subplots(1, 2, sharex=sharex, sharey=sharey, squeeze=False)[0]
     return figure, list(axes)
@@ -142,3 +142,38 @@ def test_a_later_panel_that_cuts_an_earlier_one_is_reported() -> None:
     axes[1].set_ylim(5.0, 6.0)
     (issue,) = [i for i in fig.check() if i.code == "data_outside_view"]
     assert "values" in issue.message
+
+
+def _stacked(hspace: float) -> tuple[Figure, list[Axes]]:
+    figure = Figure(figsize=(7, 9), dpi=100)
+    FigureCanvasAgg(figure)
+    axes = figure.subplots(2, 1, squeeze=False, gridspec_kw={"hspace": hspace})[:, 0]
+    return figure, list(axes)
+
+
+def test_a_text_over_another_panels_title_is_reported() -> None:
+    _, axes = _stacked(0.05)
+    axes[1].set_title("Second experiment")
+    fig = betweenstats(_three(), ax=axes[0], xlab="the first x label")
+    issues = [i for i in fig.check() if i.code == "label_overlap"]
+    assert issues, [i.message for i in fig.check()]
+    message = issues[0].message
+    assert "another panel" in message
+    assert "'Second experiment'" in message
+
+
+def test_a_text_over_a_suptitle_is_reported() -> None:
+    figure, axes = _stacked(0.6)
+    figure.subplots_adjust(top=0.99)
+    figure.suptitle("All experiments", y=0.995)
+    fig = betweenstats(_three(), ax=axes[0], title="First experiment")
+    issues = [i for i in fig.check() if i.code == "label_overlap"]
+    assert issues
+    assert "'All experiments'" in issues[0].message
+
+
+def test_panels_with_room_report_no_overlap() -> None:
+    _, axes = _stacked(0.6)
+    axes[1].set_title("Second experiment")
+    fig = betweenstats(_three(), ax=axes[0])
+    assert not [i for i in fig.check() if i.code == "label_overlap"]
