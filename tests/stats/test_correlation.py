@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 from typing import Final
@@ -331,3 +332,52 @@ def test_degenerate_inputs() -> None:
     # n = 3: the Bayes factor exists (only the Fisher interval needs n > 3).
     bf10, _ = correlation_bf10(x[:3], np.array([1.0, 3.0, 2.0]), prior_scale=0.707)
     assert math.isfinite(bf10)
+
+
+# ------------------------------------------------------------ collinear as written
+
+
+def _celsius() -> NDArray[np.float64]:
+    return np.round(np.random.default_rng(1).normal(20, 5, 20), 1)
+
+
+@pytest.mark.parametrize(
+    ("make_y", "sign"),
+    [
+        (lambda c: c * 1.8 + 32, 1.0),  # Fahrenheit
+        (lambda c: c * 2.54, 1.0),  # inches to centimetres
+        (lambda c: c / 10, 1.0),
+        (lambda c: 100 - c, -1.0),
+    ],
+)
+def test_collinear_as_written_is_collinear(
+    make_y: Callable[[float], float], sign: float
+) -> None:
+    # Review Z2: decimal columns collinear as written printed t of order 1e15 and
+    # BF10 of 1e228 without a warning; as in binary-exact data (D85) they now give
+    # r = +/-1, t = +/-inf, p = 0, [r, r] and the Bayes factor's limit.
+    x = _celsius()
+    y = np.array([make_y(v) for v in x.tolist()])
+    result = pearson(x, y)
+    assert (result.estimate, result.t, result.p_value) == (sign, sign * math.inf, 0.0)
+    assert (result.conf_low, result.conf_high) == (sign, sign)
+    assert winsorized_correlation(x, y).t == sign * math.inf
+    assert correlation_bf10(x, y, prior_scale=1 / 0.707)[0] == math.inf
+
+
+def test_nearly_collinear_data_are_not_swallowed() -> None:
+    # Measured data with real noise far below the printed digits: 1 - r^2 of about
+    # 1e-12, finite t, as computed from the doubles.
+    rng = np.random.default_rng(3)
+    x = rng.normal(0, 1, 50)
+    y = 2 * x + 1 + 1e-6 * rng.normal(0, 1, 50)
+    result = pearson(x, y)
+    om = float(cross_moments(x, y).one_minus_r2)
+    assert 1e-14 < om < 1e-10
+    assert math.isfinite(result.t)
+    assert result.t == pytest.approx(math.sqrt(48 / om), rel=1e-9)
+    # Decimals with real noise in their last written digit: not collinear either.
+    c = _celsius()
+    f = np.round(c * 1.8 + 32 + rng.choice([-0.0001, 0.0, 0.0001], c.size), 4)
+    assert math.isfinite(pearson(c, f).t)
+    assert 0.0 < 1 - abs(pearson(c, f).estimate) < 1e-6

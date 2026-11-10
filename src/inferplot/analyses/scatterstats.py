@@ -433,7 +433,7 @@ def _bayes(data: PairData, args: _Args) -> _Parts:
         )
     bayes = _bayes_factor(data, args)
     warnings = [_POSTERIOR_WARNING]
-    moments = stats.cross_moments(data.x_values, data.y_values)
+    moments = stats.pair_moments(data.x_values, data.y_values)
     if moments.one_minus_r2 == 0:
         warnings.insert(0, _collinear_warning(data, args, moments.r, bayes))
     return _Parts(

@@ -22,6 +22,10 @@ deviations, a rounded r and 1 - r^2 formed from it) does not: exactly collinear
 data give r = +/-1, t = +/-inf and p = 0 (R: 1 - 2^-53 or so, t = 1.34e8 and
 p = 1.06e-62 on edge_corr_perfect). Exact up to products of deviations below about
 2^-1000 times the largest, whose rounding is far below every printed digit.
+
+Pairs that lie on one straight line as written (Fahrenheit against one-decimal
+Celsius) are collinear too, although their doubles are not: ``pair_moments``
+decides it exactly on the values as written (DECISIONS.md D74, D85).
 """
 
 from __future__ import annotations
@@ -49,12 +53,14 @@ from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.parametric import t_p_value
 from inferplot.stats.robust import check_trim, trim_count
 from inferplot.stats.srange import stirlerr
+from inferplot.stats.written import written_values
 
 __all__ = [
     "Correlation",
     "CorrelationMethod",
     "correlation_bf10",
     "correlation_log_bf10",
+    "pair_moments",
     "pearson",
     "spearman",
     "winsorized_correlation",
@@ -189,6 +195,67 @@ def cross_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
     )
 
 
+# Pairs whose exact 1 - r^2 is at most this may lie on one line as written and are
+# checked exactly (``pair_moments``). A reading lies within 2 units in the last
+# place of its double and its decimal unit is at least 2^20 such units, while two
+# different readings differ by at least that unit; so pairs collinear as written
+# leave at most about 2 n 2^-38 (7e-12 n) of 1 - r^2 in the doubles. Checking from
+# 1e-4 on covers that up to n = 1e7 and costs one exact pass, only for |r| above
+# 0.99995.
+_AS_WRITTEN_CHECK: Final = 1e-4
+
+
+def _written_moments(x: FloatArray, y: FloatArray) -> tuple[Fraction, ...]:
+    """S_xx, S_yy and S_xy of the values as written (``written_values``), exact."""
+    wx, wy = written_values(x), written_values(y)
+    n = len(wx)
+    mx = sum(wx, Fraction(0)) / n
+    my = sum(wy, Fraction(0)) / n
+    dx = [v - mx for v in wx]
+    dy = [v - my for v in wy]
+    return (
+        sum((d * d for d in dx), Fraction(0)),
+        sum((d * d for d in dy), Fraction(0)),
+        sum((a * b for a, b in zip(dx, dy, strict=True)), Fraction(0)),
+    )
+
+
+def pair_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
+    """``cross_moments`` of the pairs, except that pairs which lie on one straight
+    line as written get the moments of the values as written (DECISIONS.md D74,
+    D85): S_xx S_yy = S_xy^2 exactly, so r = +/-1, t = +/-inf, p = 0, the interval
+    [r, r] and the Bayes factor's limit, as for data collinear in binary.
+
+    Decimal data that are collinear as written (Fahrenheit and one-decimal
+    Celsius, inches and centimetres, y = x / 10, y = 100 - x) are not collinear
+    in binary: each stored value is off by up to half a unit in its last place,
+    and r computed exactly from the doubles is 1 - 1e-30 or so, which made t
+    about 1e15 and BF10 about 1e228 (Phase 4 review, Z2). Each value is read as
+    the decimal it stands for (``written_values``: within 2 units in its last
+    place, the decimal at least 2^20 units coarse, else the double itself) and
+    collinearity is decided exactly on the readings. Nearly collinear measured
+    data are not swallowed: values measured to many digits are read as their
+    doubles, and decimals with real noise are not collinear as written, however
+    small 1 - r^2 is (1e-12 from noise in the 7th digit stays 1e-12).
+    """
+    moments = cross_moments(x, y)
+    om = moments.one_minus_r2
+    if om == 0 or float(om) > _AS_WRITTEN_CHECK:
+        return moments
+    sxx, syy, sxy = _written_moments(x, y)
+    if sxx == 0 or syy == 0 or sxx * syy != sxy * sxy:
+        return moments
+    kx, ky = Fraction(moments.x_scale), Fraction(moments.y_scale)
+    return CrossMoments(
+        n=moments.n,
+        sxx=sxx * kx * kx,
+        syy=syy * ky * ky,
+        sxy=sxy * kx * ky,
+        x_scale=moments.x_scale,
+        y_scale=moments.y_scale,
+    )
+
+
 def _pairs(x: SampleLike, y: SampleLike) -> tuple[FloatArray, FloatArray]:
     a = as_sample(x, name="x", min_size=3)
     b = as_sample(y, name="y", min_size=3)
@@ -211,7 +278,7 @@ def _moments(x: FloatArray, y: FloatArray, what: str = "") -> CrossMoments:
     for name, values in (("x", x), ("y", y)):
         if differences_same_within_rounding(values, np.zeros_like(values)):
             raise _constant_error(name, what)
-    return cross_moments(x, y)
+    return pair_moments(x, y)
 
 
 # ------------------------------------------------------------------ the tests
