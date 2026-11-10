@@ -390,7 +390,6 @@ def test_arguments_a_type_cannot_use(two: pd.DataFrame, four: pd.DataFrame) -> N
 @pytest.mark.parametrize(
     ("kind", "k", "method", "later"),
     [
-        ("parametric", 2, "the paired t-test", "is not implemented yet"),
         ("nonparametric", 2, "the Wilcoxon signed-rank test", "is not implemented yet"),
         (
             "robust",
@@ -398,20 +397,12 @@ def test_arguments_a_type_cannot_use(two: pd.DataFrame, four: pd.DataFrame) -> N
             "Yuen's test for dependent trimmed means",
             "is not implemented yet",
         ),
-        ("bayes", 2, "the paired Bayes factor", "is not implemented yet"),
-        ("parametric", 4, "the repeated-measures ANOVA", "is not implemented yet"),
         ("nonparametric", 4, "the Friedman test", "is not implemented yet"),
         (
             "robust",
             4,
             "the repeated-measures trimmed-means ANOVA",
             "is not implemented yet",
-        ),
-        (
-            "bayes",
-            4,
-            "the Bayesian repeated-measures ANOVA",
-            "arrives in inferplot 0.2",
         ),
     ],
 )
@@ -437,12 +428,9 @@ def test_each_type_raises_not_implemented(
 
 
 def test_type_aliases_reach_the_same_type(two: pd.DataFrame) -> None:
-    for alias, kind in (
-        ("p", "parametric"),
-        ("np", "nonparametric"),
-        ("r", "robust"),
-        ("bf", "bayes"),
-    ):
+    for alias, kind in (("p", "parametric"), ("bf", "bayes")):
+        assert call(two, type=alias).type == kind
+    for alias, kind in (("np", "nonparametric"), ("r", "robust")):
         text = message(NotImplementedError, lambda alias=alias: call(two, type=alias))
         assert text.startswith(f"withinstats(type={kind!r})")
 
@@ -458,8 +446,7 @@ def test_data_errors_come_before_not_implemented(two: pd.DataFrame) -> None:
 
 
 def test_any_backend(two: pd.DataFrame) -> None:
-    text = message(NotImplementedError, lambda: call(pl.from_pandas(two)))
-    assert "10 subjects" in text
+    assert call(pl.from_pandas(two)).n_obs == 10
 
 
 # --------------------------------------------------------------------------- #

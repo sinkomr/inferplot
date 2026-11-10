@@ -17,9 +17,12 @@ builds the result from its parts.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final
+
+import numpy as np
+import numpy.typing as npt
 
 from inferplot import stats
 from inferplot._data import WithinData, data_notes, read_within
@@ -50,9 +53,11 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
-from inferplot.text import build_texts
+from inferplot.text import build_texts, r_number_text
 
 __all__ = ["withinstats"]
+
+FloatArray = npt.NDArray[np.float64]
 
 # ggstatsplot's default trimming; another value is allowed only where it is used.
 _DEFAULT_TR: Final = 0.2
@@ -127,9 +132,333 @@ class _Parts:
 
 
 def _parametric(data: WithinData, args: _Args) -> _Parts:
-    """Paired t-test with Hedges' g (two conditions); repeated-measures ANOVA with
+    """Paired t-test with Hedges' g and the paired JZS Bayes factor caption (two
+    conditions); repeated-measures ANOVA with the Greenhouse-Geisser correction,
     partial omega squared and paired t pairwise comparisons (three or more)."""
-    raise _not_implemented(args.type, data)
+    x, levels, columns = args.x, data.levels, data.by_level()
+    side, level = args.alternative, args.conf_level
+    warnings: list[str] = []
+    bayes: BayesFactor | None = None
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    if len(levels) == 2:
+        a, b = columns
+        paired = _checked_paired_t(x, levels[0], levels[1], a, b, side=side)
+        g = stats.paired_hedges_g(a, b, conf_level=level, alternative=side)
+        test = TestResult(
+            name="paired_t",
+            label="Paired t-test",
+            method="Paired t-test",
+            statistic_name="t",
+            statistic=paired.t,
+            df=None,
+            df_error=paired.df,
+            p_value=paired.p_value,
+            alternative=side,
+        )
+        effect_size = EffectSize(
+            name="hedges_g",
+            label="Hedges' g",
+            estimate=g.estimate,
+            conf_level=g.conf_level,
+            conf_low=g.conf_low,
+            conf_high=g.conf_high,
+            ci_method="noncentral t",
+            sidedness=g.sidedness,
+        )
+        citations = [_STUDENT_1908, _HEDGES_1981, _STEIGER_2004]
+        if paired.n == 2:
+            warnings.append(_HEDGES_J_ZERO_WARNING)
+        if args.results_subtitle and args.bf_message is not False:
+            bf10, log_bf01 = stats.jzs_bf10_paired(a, b, prior_scale=args.prior_scale)
+            bayes = BayesFactor(
+                bf10=bf10,
+                log_bf01=log_bf01,
+                prior="cauchy",
+                prior_scale=args.prior_scale,
+                test="jzs_paired",
+            )
+            citations.append(_ROUDER_2009)
+            if side != "two-sided":
+                warnings.append(
+                    "The Bayes factor in the caption is two-sided: it weighs any "
+                    f"difference between the conditions, while alternative={side!r} "
+                    "applies to the t-test and the Hedges' g interval only (as in "
+                    "ggstatsplot)."
+                )
+    else:
+        anova = _checked_rm_anova(x, columns)
+        pairs = _paired_t_pairs(x, levels, columns, args)
+        omega = stats.rm_partial_omega_squared(columns, conf_level=level)
+        test = TestResult(
+            name="rm_anova",
+            label="Repeated-measures ANOVA (Greenhouse-Geisser)",
+            method="ANOVA estimation for factorial designs using 'afex'",
+            statistic_name="F",
+            statistic=anova.f,
+            df=anova.df1_corrected,
+            df_error=anova.df2_corrected,
+            p_value=anova.p_value,
+            alternative="two-sided",
+        )
+        effect_size = EffectSize(
+            name="partial_omega_squared",
+            label="partial omega squared",
+            estimate=omega.estimate,
+            conf_level=omega.conf_level,
+            conf_low=omega.conf_low,
+            conf_high=omega.conf_high,
+            ci_method="noncentral F",
+            sidedness=omega.sidedness,
+        )
+        pairwise = pairs
+        citations = [
+            _FISHER_1925,
+            _GREENHOUSE_GEISSER_1959,
+            _OLEJNIK_ALGINA_2003,
+            _STEIGER_2004,
+            _STUDENT_1908,
+            *_within_adjustment_citation(args.p_adjust_method),
+        ]
+        if args.results_subtitle and args.bf_message is None:
+            warnings.append(_BAYES_K3_WARNING)
+    warnings += _within_no_effect_warnings(data, args, bayes_computed=bayes is not None)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=bayes,
+        pairwise=pairwise,
+        centrality="mean",
+        centers=tuple(stats.mean(column) for column in columns),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
+
+
+# Short references for the methods of types parametric and bayes (SPEC.md section 4).
+_STUDENT_1908: Final = "Student (1908). Biometrika 6: 1-25 (the paired t-test)."
+_FISHER_1925: Final = (
+    "Fisher, R. A. (1925). Statistical Methods for Research Workers. Oliver & Boyd "
+    "(analysis of variance)."
+)
+_GREENHOUSE_GEISSER_1959: Final = (
+    "Greenhouse, S. W. & Geisser, S. (1959). Psychometrika 24: 95-112 "
+    "(Greenhouse-Geisser correction)."
+)
+_HEDGES_1981: Final = (
+    "Hedges, L. V. (1981). Journal of Educational Statistics 6: 107-128 (Hedges' g)."
+)
+_STEIGER_2004: Final = (
+    "Steiger, J. H. (2004). Psychological Methods 9: 164-182 (noncentral confidence "
+    "intervals for effect sizes)."
+)
+_OLEJNIK_ALGINA_2003: Final = (
+    "Olejnik, S. & Algina, J. (2003). Psychological Methods 8: 434-447 (partial "
+    "omega squared)."
+)
+_ROUDER_2009: Final = (
+    "Rouder, J. N., Speckman, P. L., Sun, D., Morey, R. D. & Iverson, G. (2009). "
+    "Psychonomic Bulletin & Review 16: 225-237 (JZS Bayes factor)."
+)
+_WITHIN_ADJUSTMENT_CITATIONS: Final[dict[str, str]] = {
+    "holm": "Holm, S. (1979). Scandinavian Journal of Statistics 6: 65-70 "
+    "(Holm adjustment).",
+    "hochberg": "Hochberg, Y. (1988). Biometrika 75: 800-802 (Hochberg adjustment).",
+    "hommel": "Hommel, G. (1988). Biometrika 75: 383-386 (Hommel adjustment).",
+    "bonferroni": "Bonferroni, C. E. (1936). Pubblicazioni del R Istituto Superiore "
+    "di Scienze Economiche e Commerciali di Firenze 8: 3-62 (Bonferroni adjustment).",
+    "BH": "Benjamini, Y. & Hochberg, Y. (1995). Journal of the Royal Statistical "
+    "Society B 57: 289-300 (false discovery rate adjustment).",
+    "fdr": "Benjamini, Y. & Hochberg, Y. (1995). Journal of the Royal Statistical "
+    "Society B 57: 289-300 (false discovery rate adjustment).",
+    "BY": "Benjamini, Y. & Yekutieli, D. (2001). Annals of Statistics 29: 1165-1188 "
+    "(Benjamini-Yekutieli adjustment).",
+}
+
+_HEDGES_J_ZERO_WARNING: Final = (
+    "Hedges' g is 0 by construction with 2 subjects: its small-sample correction "
+    "J(n - 1) is 0 at 1 degree of freedom, so g and its confidence interval carry no "
+    "information about the size of the difference. Collect more subjects."
+)
+_BAYES_K3_WARNING: Final = (
+    "The Bayes factor caption for three or more conditions arrives in inferplot 0.2."
+)
+
+# Defaults of the arguments that can have no effect: a non-default value where it
+# has none gets a warnings entry (D39), as in betweenstats.
+_DEFAULT_P_ADJUST: Final = "holm"
+_DEFAULT_DISPLAY: Final = "significant"
+_DEFAULT_ALPHA: Final = 0.05
+_DEFAULT_BF_PRIOR: Final = 0.707
+# Every pairwise Bayes factor uses this prior scale, whatever bf_prior says
+# (statsExpressions 2.2.1's pairwise_comparisons(); bugs_long-prior08-bayes).
+_PAIRWISE_BF_PRIOR: Final = 0.707
+
+
+def _within_adjustment_citation(method: str) -> list[str]:
+    citation = _WITHIN_ADJUSTMENT_CITATIONS.get(method)
+    return [] if citation is None else [citation]
+
+
+def _pair_names(first: str, second: str, x: str) -> str:
+    return f"{first!r} and {second!r} of x={x!r}"
+
+
+def _checked_paired_t(
+    x: str,
+    first: str,
+    second: str,
+    a: FloatArray,
+    b: FloatArray,
+    *,
+    side: stats.Alternative = "two-sided",
+    method: str = "the paired t-test",
+) -> stats.PairedT:
+    """The paired t-test of ``first`` minus ``second``, or a plain ValueError naming
+    the two levels and ``method`` when the differences have no usable spread."""
+    if stats.paired_differences_constant(a, b):
+        what = (
+            f"Every subject has the same value at {first!r} as at {second!r}"
+            if bool((a == b).all())
+            else f"Every subject's value at {first!r} differs from its value at "
+            f"{second!r} by the same amount"
+        )
+        raise ValueError(
+            f"{what} (x={x!r}), so the paired differences have no variability and "
+            f"{method} has no standard error. Check the data for entry errors, or "
+            "use type='nonparametric'."
+        )
+    try:
+        return stats.paired_t(a, b, alternative=side)
+    except ValueError:
+        raise ValueError(
+            f"The differences between the levels {_pair_names(first, second, x)} "
+            "vary by less than double precision can resolve next to the largest "
+            "|y| (a standard deviation of the differences below roughly 1e-154 "
+            f"times it), so {method} has no accurate standard error. "
+            "Rescaling y does not help, since it multiplies the spread and the "
+            "largest |y| alike; check y for entry or unit errors."
+        ) from None
+
+
+def _checked_rm_anova(
+    x: str, columns: Sequence[FloatArray]
+) -> stats.RepeatedMeasuresAnova:
+    """The repeated-measures ANOVA, or a plain ValueError naming x when it has no
+    error variance."""
+    try:
+        return stats.rm_anova(columns)
+    except ValueError as error:
+        if "differ by the same amounts" in str(error):
+            raise ValueError(
+                f"Every subject's values at the levels of x={x!r} are the condition "
+                "means plus a constant of the subject's own (the conditions differ "
+                "by the same amounts for every subject), so the repeated-measures "
+                "ANOVA has no error variance and its F cannot be computed. Check "
+                "the data for entry errors, or use type='nonparametric'."
+            ) from None
+        raise ValueError(
+            f"The repeated-measures ANOVA of the levels of x={x!r} cannot be "
+            f"computed: {error}."
+        ) from None
+
+
+def _displayed(display: str, significant: bool) -> bool:
+    if display == "all":
+        return True
+    if display == "significant":
+        return significant
+    if display == "non-significant":
+        return not significant
+    return False  # "none": computed and returned, never drawn
+
+
+def _sorted_pairs(rows: list[PairwiseComparison]) -> tuple[PairwiseComparison, ...]:
+    """Rows sorted by group1 and then group2 as text in the C locale (code-point
+    order), as statsExpressions 2.2.1's ``pairwise_comparisons()`` arranges them
+    (``dplyr::arrange(group1, group2)``; the fixtures' rows and brackets)."""
+    return tuple(sorted(rows, key=lambda row: (row.group1, row.group2)))
+
+
+def _paired_t_pairs(
+    x: str, levels: Sequence[str], columns: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """A paired t-test for every pair i < j in level order (t of group1 minus
+    group2, df n - 1), raw p adjusted with ``p_adjust_method`` over all pairs,
+    rows in ggstatsplot's order; R's test label is "Student's t"."""
+    k = len(levels)
+    for i in range(k):
+        for j in range(i + 1, k):
+            _checked_paired_t(x, levels[i], levels[j], columns[i], columns[j])
+    rows: list[PairwiseComparison] = []
+    for pair in stats.paired_t_pairs(columns, p_adjust_method=args.p_adjust_method):
+        significant = pair.p_adjusted < args.pairwise_alpha
+        rows.append(
+            PairwiseComparison(
+                group1=levels[pair.i],
+                group2=levels[pair.j],
+                statistic_name="t",
+                statistic=pair.t,
+                df=pair.df,
+                p_value=pair.p_value,
+                p_adjusted=pair.p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test="paired_t",
+                test_label="Student's t",
+                significant=significant,
+                displayed=_displayed(args.pairwise_display, significant),
+            )
+        )
+    return _sorted_pairs(rows)
+
+
+def _within_no_effect_warnings(
+    data: WithinData, args: _Args, *, bayes_computed: bool
+) -> list[str]:
+    """One plain-English entry per argument changed from its default that has no
+    effect on these data (D39; betweenstats' rules with "conditions")."""
+    x, k = args.x, len(data.levels)
+    out: list[str] = []
+    if k == 2:
+        reason = (
+            f"x={x!r} has 2 conditions, so there are no pairwise comparisons to "
+            "{what}."
+        )
+        for name, value, default, what in (
+            ("p_adjust_method", args.p_adjust_method, _DEFAULT_P_ADJUST, "adjust"),
+            ("pairwise_display", args.pairwise_display, _DEFAULT_DISPLAY, "display"),
+            ("pairwise_alpha", args.pairwise_alpha, _DEFAULT_ALPHA, "call significant"),
+        ):
+            if value != default:
+                out.append(
+                    f"{name}={value!r} has no effect: " + reason.format(what=what)
+                )
+    if bayes_computed or args.prior_scale == _DEFAULT_BF_PRIOR:
+        return out
+    if args.type == "bayes" and k >= 3:
+        # Bayes factors are computed, for every pair, at the fixed scale.
+        out.append(
+            f"bf_prior={args.prior_scale!r} has no effect: the pairwise Bayes "
+            f"factors always use the prior scale {r_number_text(_PAIRWISE_BF_PRIOR)}"
+            ", as in ggstatsplot; the Bayesian repeated-measures ANOVA arrives in "
+            "inferplot 0.2."
+        )
+        return out
+    if args.type in ("nonparametric", "robust"):
+        why = f"type={args.type!r} has no Bayes factor"
+    elif k >= 3:
+        why = (
+            f"x={x!r} has {k} conditions, and the Bayes factor for three or more "
+            "conditions arrives in inferplot 0.2"
+        )
+    elif not args.results_subtitle:
+        why = "results_subtitle=False leaves the Bayes factor out"
+    else:
+        why = f"bf_message={args.bf_message!r} leaves the Bayes factor out"
+    out.append(
+        f"bf_prior={args.prior_scale!r} has no effect: no Bayes factor is computed "
+        f"({why})."
+    )
+    return out
 
 
 def _nonparametric(data: WithinData, args: _Args) -> _Parts:
@@ -145,8 +474,158 @@ def _robust(data: WithinData, args: _Args) -> _Parts:
 
 
 def _bayes(data: WithinData, args: _Args) -> _Parts:
-    """The paired JZS Bayes factor (two conditions); three or more: inferplot 0.2."""
-    raise _not_implemented(args.type, data)
+    """Two conditions: the paired JZS Bayes factor subtitle (log_e BF01 and the
+    prior scale). Three or more conditions, only with results_subtitle=False (the
+    Bayesian repeated-measures ANOVA arrives in 0.2): a paired JZS Bayes factor for
+    every pair, prior 0.707, unadjusted (D41). MAP estimates of the complete
+    subjects' values as centrality."""
+    x, levels, columns = args.x, data.levels, data.by_level()
+    k = len(levels)
+    if k >= 3 and args.results_subtitle:
+        raise NotImplementedError(
+            f"type='bayes' with {k} conditions: the subtitle ggstatsplot draws here "
+            "is a Bayesian repeated-measures ANOVA, which arrives in inferplot 0.2. "
+            "Pass results_subtitle=False for the rest of ggstatsplot's output (MAP "
+            "estimates and a Bayes factor for every pair), or use type='parametric'."
+        )
+    bayes: BayesFactor | None = None
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    warnings: list[str] = []
+    if k == 2:
+        if args.results_subtitle:
+            a, b = columns
+            _checked_paired_t(x, levels[0], levels[1], a, b, method=_BF_METHOD)
+            bf10, log_bf01 = stats.jzs_bf10_paired(a, b, prior_scale=args.prior_scale)
+            bayes = BayesFactor(
+                bf10=bf10,
+                log_bf01=log_bf01,
+                prior="cauchy",
+                prior_scale=args.prior_scale,
+                test="jzs_paired",
+            )
+            warnings.append(_POSTERIOR_WARNING)
+    else:
+        pairwise = _paired_bayes_pairs(x, levels, columns, args)
+    centers, map_warnings = _within_map_estimates(x, levels, columns)
+    warnings += map_warnings
+    warnings += _within_bayes_no_effect_warnings(k, args)
+    warnings += _within_no_effect_warnings(data, args, bayes_computed=bayes is not None)
+    return _Parts(
+        test=None,
+        effect_size=None,
+        bayes=bayes,
+        pairwise=pairwise,
+        centrality="map",
+        centers=centers,
+        warnings=tuple(warnings),
+        citations=(_ROUDER_2009, _SHEATHER_JONES_1991),
+    )
+
+
+_SHEATHER_JONES_1991: Final = (
+    "Sheather, S. J. & Jones, M. C. (1991). Journal of the Royal Statistical "
+    "Society B 53: 683-690 (kernel density bandwidth of the MAP estimate)."
+)
+_BF_METHOD: Final = "the paired t-test behind the Bayes factor"
+_POSTERIOR_WARNING: Final = (
+    "The posterior difference and its credible interval, which ggstatsplot adds to "
+    "the Bayes factor subtitle, arrive in inferplot 0.2."
+)
+
+
+def _within_map_estimates(
+    x: str, levels: Sequence[str], columns: Sequence[FloatArray]
+) -> tuple[tuple[float | None, ...], tuple[str, ...]]:
+    """Each level's MAP estimate of the complete subjects' values (betweenstats'
+    rule, D55): a level without a kernel density has None, no label is drawn for
+    it, and a warning says why."""
+    out: list[float | None] = []
+    warnings: list[str] = []
+    for level, column in zip(levels, columns, strict=True):
+        try:
+            out.append(stats.map_estimate(column).estimate)
+        except ValueError as error:
+            out.append(None)
+            warnings.append(
+                f"The condition {level!r} of x={x!r} (n = {column.size}) has no MAP "
+                f"estimate, so no centrality label is drawn for it: {error}. "
+                "ggstatsplot prints an empty label there. Use type='nonparametric' "
+                "to show medians."
+            )
+    return tuple(out), tuple(warnings)
+
+
+def _paired_bayes_pairs(
+    x: str, levels: Sequence[str], columns: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """A paired JZS Bayes factor for every pair i < j in level order (the paired t
+    of group1 minus group2), prior 0.707 whatever ``bf_prior`` is, not adjusted;
+    every pair drawn unless ``pairwise_display`` is "none"; rows in ggstatsplot's
+    order (``_sorted_pairs``)."""
+    k = len(levels)
+    rows: list[PairwiseComparison] = []
+    for i in range(k):
+        for j in range(i + 1, k):
+            a, b = columns[i], columns[j]
+            paired = _checked_paired_t(x, levels[i], levels[j], a, b, method=_BF_METHOD)
+            bf10, log_bf01 = stats.jzs_bf10_paired(a, b, prior_scale=_PAIRWISE_BF_PRIOR)
+            rows.append(
+                PairwiseComparison(
+                    group1=levels[i],
+                    group2=levels[j],
+                    statistic_name="t",
+                    statistic=paired.t,
+                    df=paired.df,
+                    p_value=None,
+                    p_adjusted=None,
+                    adjust_method="none",
+                    test="jzs_paired",
+                    test_label="Student's t",
+                    significant=None,
+                    displayed=args.pairwise_display != "none",
+                    bayes=BayesFactor(
+                        bf10=bf10,
+                        log_bf01=log_bf01,
+                        prior="cauchy",
+                        prior_scale=_PAIRWISE_BF_PRIOR,
+                        test="jzs_paired",
+                    ),
+                )
+            )
+    return _sorted_pairs(rows)
+
+
+def _within_bayes_no_effect_warnings(k: int, args: _Args) -> list[str]:
+    """Arguments type bayes does not use (D39): conf_level (no interval in v0.1),
+    and with three or more conditions the significance and adjustment arguments
+    (Bayes factors are neither tested nor adjusted; every pair is drawn)."""
+    out: list[str] = []
+    if args.conf_level != 0.95:
+        out.append(
+            f"conf_level={args.conf_level!r} has no effect: type='bayes' shows no "
+            "interval in this version (the posterior credible interval arrives in "
+            "inferplot 0.2)."
+        )
+    if k >= 3:
+        if args.p_adjust_method != _DEFAULT_P_ADJUST:
+            out.append(
+                f"p_adjust_method={args.p_adjust_method!r} has no effect: Bayes "
+                "factors are not adjusted for multiple comparisons (as in "
+                "ggstatsplot)."
+            )
+        if args.pairwise_alpha != _DEFAULT_ALPHA:
+            out.append(
+                f"pairwise_alpha={args.pairwise_alpha!r} has no effect: Bayes factors "
+                "are not compared with a significance level, and every pair is "
+                "drawn."
+            )
+        if args.pairwise_display == "non-significant":
+            out.append(
+                f"pairwise_display={args.pairwise_display!r} has no effect: Bayes "
+                "factors have no significance, so every pair is drawn (as in "
+                "ggstatsplot); pass pairwise_display='none' to draw none."
+            )
+    return out
 
 
 _ANALYSES: Final[dict[str, Callable[[WithinData, _Args], _Parts]]] = {
