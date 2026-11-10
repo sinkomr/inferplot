@@ -139,6 +139,8 @@ HEAVY_TIES_FIXTURES = frozenset(
     {
         "ggwithinstats-edge_within2_large_n-nonparametric",
         "ggwithinstats-edge_within2_ties-nonparametric",
+        # Review T7: five of eight subjects constant across the conditions.
+        "ggwithinstats-edge_rm_some_tied-nonparametric",
     }
 )
 
