@@ -1,0 +1,3655 @@
+{
+  "schema_version": 2,
+  "name": "probe-signrank",
+  "kind": "probe",
+  "description": "wilcox.test(paired = TRUE) by exact, correct and alternative; effectsize::rank_biserial(paired = TRUE)",
+  "datasets": [
+    {
+      "file": "sleep.csv",
+      "sha256": "c45604d3160d61f40535c8773b1762e120e47b824d95521950ea54ca17516fd9"
+    },
+    {
+      "file": "edge_within2_ties.csv",
+      "sha256": "9fe425540a565e28d1b7e5addea351c53f252d4b1e1edf4fe17fcb540edf504b"
+    },
+    {
+      "file": "edge_within2_small.csv",
+      "sha256": "e11ee51ed030219b9f0e37d98e80d2e22df98b08a8a15f70baff22eeeb809a48"
+    }
+  ],
+  "pairs": [
+    {
+      "name": "sleep",
+      "a_hex": [
+        "0x1.6666666666666p-1",
+        "-0x1.999999999999ap+0",
+        "-0x1.999999999999ap-3",
+        "-0x1.3333333333333p+0",
+        "-0x1.999999999999ap-4",
+        "0x1.b333333333333p+1",
+        "0x1.d99999999999ap+1",
+        "0x1.999999999999ap-1",
+        "0x0p+0",
+        "0x1p+1"
+      ],
+      "b_hex": [
+        "0x1.e666666666666p+0",
+        "0x1.999999999999ap-1",
+        "0x1.199999999999ap+0",
+        "0x1.999999999999ap-4",
+        "-0x1.999999999999ap-4",
+        "0x1.199999999999ap+2",
+        "0x1.6p+2",
+        "0x1.999999999999ap+0",
+        "0x1.2666666666666p+2",
+        "0x1.b333333333333p+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-7",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-8",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe5d64180e9cdp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-8",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-9",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe0bcce0bb79fp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-7",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-8",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe5d64180e9cdp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-8",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-9",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe0bcce0bb79fp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-7",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.29e24d568e0e5p-8",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe5d64180e9cdp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-8",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f4331f448616ap-9",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.fe0bcce0bb79fp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "edge_within2_ties",
+      "a_hex": [
+        "0x1.8p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1.8p+2",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.cp+2",
+        "0x1.cp+2",
+        "0x1p+2",
+        "0x1.cp+2",
+        "0x1.2p+3",
+        "0x1p+2",
+        "0x1p+3",
+        "0x1p+0"
+      ],
+      "b_hex": [
+        "0x1.8p+2",
+        "0x1.4p+2",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+2",
+        "0x1.8p+2",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-4",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e51636a6c29e6p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-4",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e34b9e09aa653p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-4",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e51636a6c29e6p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-4",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e34b9e09aa653p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-4",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e51636a6c29e6p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e96b882b7222ep-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-4",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.e34b9e09aa653p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.36p+6",
+          "p_value_hex": "0x1.cb461f6559ac9p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "-0x1.424e59f897148p-5",
+          "conf_high_hex": "0x1.95408a756f68cp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.82dbba9421d38p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "0x1.9b5285b2962f7p-5",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "0x1.9b5285b2962f7p-5",
+          "conf_high_hex": "0x1.82dbba9421d38p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.6a54c58d486bcp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.e79e79e79e79fp-2",
+          "conf_low_hex": "0x1.38126b808c927p-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "edge_within2_small",
+      "a_hex": [
+        "0x1.aa66666666666p+4",
+        "0x1.3d9999999999ap+4",
+        "0x1.c30a3d70a3d71p+4",
+        "0x1.8e3d70a3d70a4p+4",
+        "0x1.675c28f5c28f6p+4"
+      ],
+      "b_hex": [
+        "0x1.89c28f5c28f5cp+4",
+        "0x1.3c7ae147ae148p+4",
+        "0x1.b91eb851eb852p+4",
+        "0x1.670a3d70a3d71p+4",
+        "0x1.60f5c28f5c28fp+4"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-4",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-4",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-4",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-4",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.e3ce15501ced4p-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.f8124199f3066p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.e3ce15501ced4p-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.61318c5d63de9p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.f4f6739d14e11p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.ep+3",
+          "p_value_hex": "0x1.61318c5d63de9p-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "untied_n8",
+      "a_hex": [
+        "0x1.d47ae147ae148p+0",
+        "0x1p-1",
+        "0x1.9eb851eb851ecp+0",
+        "0x1.3d70a3d70a3d7p+1",
+        "0x1.ae147ae147ae1p+0",
+        "0x1.e147ae147ae14p+0",
+        "0x1.8cccccccccccdp+0",
+        "0x1.87ae147ae147bp+1"
+      ],
+      "b_hex": [
+        "0x1.c189374bc6a7fp-1",
+        "0x1.4b4395810624ep-1",
+        "0x1.322d0e5604189p-1",
+        "0x1.0666666666666p+1",
+        "0x1.0f5c28f5c28f6p+0",
+        "0x1.4a3d70a3d70a4p+0",
+        "0x1.0f5c28f5c28f6p+0",
+        "0x1.91eb851eb851fp+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.fap-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.fap-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.fap-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.fap-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.4000000000002p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.5aa5903aebdb4p-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.f853a02bb6ee6p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.5aa5903aebdb4p-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.246356f77b12dp-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.f6dce54844277p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.08p+5",
+          "p_value_hex": "0x1.246356f77b12dp-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "0x1.979ca3e46f1a6p-2",
+          "conf_high_hex": "0x1.ecb6f0d20eb8dp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.e75e3053d0c81p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "0x1.fdbb9da9cd2c2p-2",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "0x1.fdbb9da9cd2c2p-2",
+          "conf_high_hex": "0x1.e75e3053d0c81p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.df6652a62f05dp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.aaaaaaaaaaaaap-1",
+          "conf_low_hex": "0x1.32548bb27c21bp-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "zeros_and_ties",
+      "a_hex": [
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1.cp+2",
+        "0x1p+3",
+        "0x1p+3",
+        "0x1.2p+3",
+        "0x1.4p+3",
+        "0x1p+2",
+        "0x1.8p+2"
+      ],
+      "b_hex": [
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.cp+2",
+        "0x1.8p+2",
+        "0x1.8p+2",
+        "0x1.4p+3",
+        "0x1.cp+2",
+        "0x1.4p+2",
+        "0x1.8p+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f824c2616f40cp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f6e0869adda5ap-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f824c2616f40cp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f6e0869adda5ap-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f824c2616f40cp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.51e8ed0fc73afp-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.f6e0869adda5ap-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+5",
+          "p_value_hex": "0x1.23ef2ca44b4b5p-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "0x1.84445f155194ep-2",
+          "conf_high_hex": "0x1.dda611034c6b5p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.d61cc670ebf91p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "0x1.dae25fff3bdap-2",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "0x1.dae25fff3bdap-2",
+          "conf_high_hex": "0x1.d61cc670ebf91p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.cb75aab52a599p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.8e38e38e38e38p-1",
+          "conf_low_hex": "0x1.1a79653886a8bp-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "all_zero",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2"
+      ],
+      "b_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "NaN",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1p+0",
+          "conf_low_hex": "0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "one_nonzero",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2"
+      ],
+      "b_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.4p+2"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f45a183e9b13dp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.aec4bd120d37dp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f45a183e9b13dp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.aec4bd120d37dp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p+0",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.f45a183e9b13dp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.44ed0bb7cb20bp-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x0p+0",
+          "p_value_hex": "0x1.aec4bd120d37dp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "-0x1p+0",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "n3",
+      "a_hex": [
+        "0x1.199999999999ap+0",
+        "0x1.4p+1",
+        "0x1.999999999999ap+1"
+      ],
+      "b_hex": [
+        "0x1.999999999999ap-2",
+        "0x1p+0",
+        "0x1.cp+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.cp-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-2",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.cp-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-2",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.cp-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-2",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.cp-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.0000000000001p-2",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.b0d2856532523p-2",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.d18c8b72f38e4p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.b0d2856532523p-3",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.23e3fdea2752cp-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.b7070085762b5p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.4p+2",
+          "p_value_hex": "0x1.23e3fdea2752cp-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "-0x1.9453a753d705bp-2",
+          "conf_high_hex": "0x1.ee886621c3e61p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.e6559191c55c2p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "-0x1.bd6f28408a17dp-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "-0x1.bd6f28408a17dp-3",
+          "conf_high_hex": "0x1.e6559191c55c2p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.d831be7309fdfp-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.5555555555556p-1",
+          "conf_low_hex": "0x1.6a7c3a488844cp-8",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "ties_n60",
+      "a_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2"
+      ],
+      "b_hex": [
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3",
+        "-0x1p+0",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1p+3"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-2",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-3",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.908585ec49fep-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.8fc448965834bp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-2",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-3",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.908585ec49fep-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.8fc448965834bp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": [
+            "cannot compute exact p-value with ties",
+            "cannot compute exact p-value with zeroes"
+          ]
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-2",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c3f6d303908e9p-3",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.908585ec49fep-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-2",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.c0eedda69f2d4p-3",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.18p+9",
+          "p_value_hex": "0x1.8fc448965834bp-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1.90876e4def593p-2",
+          "conf_high_hex": "0x1.567571e57e6d1p-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.f154747a85a1ep-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1.673a858257611p-2",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1.673a858257611p-2",
+          "conf_high_hex": "0x1.f154747a85a1ep-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.1672297a9f126p-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "-0x1.f1f1f1f1f1f2p-4",
+          "conf_low_hex": "-0x1.35e90ba428b45p-2",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "untied_n49",
+      "a_hex": [
+        "-0x1.f520ea0a80589p+0",
+        "-0x1.730d4dcbd6c3dp+0",
+        "-0x1.26bfe8ada03bp+0",
+        "-0x1.d736422474662p-1",
+        "-0x1.72625b8559112p-1",
+        "-0x1.183b7a6ba3492p-1",
+        "-0x1.8a9d542cf5c21p-2",
+        "-0x1.de67b94d91ecep-3",
+        "-0x1.6eafe9b923cccp-4",
+        "0x1.8db7253899c98p-5",
+        "0x1.7463b22c73cb2p-3",
+        "0x1.3eb002c55cfdfp-2",
+        "0x1.bfe55edde380fp-2",
+        "0x1.1f2fbd1cc78bep-1",
+        "0x1.5d4826395e1b8p-1",
+        "0x1.9a6ac56dc3bc6p-1",
+        "0x1.d6bee14d21c2cp-1",
+        "0x1.0933003076a3ep+0",
+        "0x1.26bea0bfb6fe6p+0",
+        "0x1.440f2fc455a75p+0",
+        "0x1.61303d23f5cdp+0",
+        "0x1.7e2c5af74b525p+0",
+        "0x1.9b0d5eae087c5p+0",
+        "0x1.b7dc98021b047p+0",
+        "0x1.d4a3010b7e6edp+0",
+        "0x1.f1696a14e1d91p+0",
+        "0x1.071c51b47a309p+1",
+        "0x1.158cd38fd8c59p+1",
+        "0x1.240ae27983884p+1",
+        "0x1.329b6929539b1p+1",
+        "0x1.4143b0aba2ef9p+1",
+        "0x1.500980f3431cdp+1",
+        "0x1.5ef348b835fep+1",
+        "0x1.6e084fb00d7fap+1",
+        "0x1.7d50f77d26e7ep+1",
+        "0x1.8cd711c44c8bcp+1",
+        "0x1.9ca6552fc1feap+1",
+        "0x1.accd00b2d2cfp+1",
+        "0x1.bd5cc5e8b732p+1",
+        "0x1.ce6c24769c07ap+1",
+        "0x1.e0188059478d3p+1",
+        "0x1.f2897ca0578d8p+1",
+        "0x1.02fb55c88e938p+2",
+        "0x1.0d58efd333a08p+2",
+        "0x1.189dcbf66a599p+2",
+        "0x1.253848ca4dc42p+2",
+        "0x1.34017ab127462p+2",
+        "0x1.4714d3f8b4e84p+2",
+        "0x1.6799bb085f4d7p+2"
+      ],
+      "b_hex": [
+        "0x1.f58d0fac687d6p-5",
+        "0x1.f58d0fac687d6p-4",
+        "0x1.7829cbc14e5ep-3",
+        "0x1.f58d0fac687d6p-3",
+        "0x1.397829cbc14e6p-2",
+        "0x1.7829cbc14e5ep-2",
+        "0x1.b6db6db6db6dbp-2",
+        "0x1.f58d0fac687d6p-2",
+        "0x1.1a1f58d0fac69p-1",
+        "0x1.397829cbc14e6p-1",
+        "0x1.58d0fac687d63p-1",
+        "0x1.7829cbc14e5ep-1",
+        "0x1.97829cbc14e5ep-1",
+        "0x1.b6db6db6db6dbp-1",
+        "0x1.d6343eb1a1f59p-1",
+        "0x1.f58d0fac687d6p-1",
+        "0x1.0a72f0539782ap+0",
+        "0x1.1a1f58d0fac69p+0",
+        "0x1.29cbc14e5e0a7p+0",
+        "0x1.397829cbc14e6p+0",
+        "0x1.4924924924924p+0",
+        "0x1.58d0fac687d63p+0",
+        "0x1.687d6343eb1a2p+0",
+        "0x1.7829cbc14e5ep+0",
+        "0x1.87d6343eb1a2p+0",
+        "0x1.97829cbc14e5ep+0",
+        "0x1.a72f05397829cp+0",
+        "0x1.b6db6db6db6dbp+0",
+        "0x1.c687d6343eb1ap+0",
+        "0x1.d6343eb1a1f59p+0",
+        "0x1.e5e0a72f05398p+0",
+        "0x1.f58d0fac687d6p+0",
+        "0x1.029cbc14e5e0ap+1",
+        "0x1.0a72f0539782ap+1",
+        "0x1.1249249249249p+1",
+        "0x1.1a1f58d0fac69p+1",
+        "0x1.21f58d0fac688p+1",
+        "0x1.29cbc14e5e0a7p+1",
+        "0x1.31a1f58d0fac6p+1",
+        "0x1.397829cbc14e6p+1",
+        "0x1.414e5e0a72f06p+1",
+        "0x1.4924924924924p+1",
+        "0x1.50fac687d6344p+1",
+        "0x1.58d0fac687d63p+1",
+        "0x1.60a72f0539783p+1",
+        "0x1.687d6343eb1a2p+1",
+        "0x1.705397829cbc1p+1",
+        "0x1.7829cbc14e5ep+1",
+        "0x1.8p+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3f05cf1a126p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3f05cf1a126p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3f05cf1a126p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3f05cf1a126p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8b5d22a63aa01p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.907e3e3a9dff3p-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3c61a7ab1b26p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.907e3e3a9dff3p-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8bd7a62523172p-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.f3a142ced6e74p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.958p+9",
+          "p_value_hex": "0x1.8bd7a62523172p-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "0x1.db7a43a347599p-7",
+          "conf_high_hex": "0x1.2767079362133p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.1535d9f552d26p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "0x1.0ee278e6c104bp-4",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "0x1.0ee278e6c104bp-4",
+          "conf_high_hex": "0x1.1535d9f552d26p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.fddfe837b4bb9p-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.4bdc0e35eaaf1p-2",
+          "conf_low_hex": "0x1.006867e8cccf5p-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "untied_n50",
+      "a_hex": [
+        "-0x1.f762930390859p+0",
+        "-0x1.75f691e537287p+0",
+        "-0x1.2a33d8e86230fp+0",
+        "-0x1.df20006bd6e98p-1",
+        "-0x1.7b443e6817fdcp-1",
+        "-0x1.220ff947a4a96p-1",
+        "-0x1.a024ff026cb63p-2",
+        "-0x1.06967975e9bbdp-2",
+        "-0x1.d39ef1c9a3b24p-4",
+        "0x1.6a25a87806adp-6",
+        "0x1.3a877f4b56432p-3",
+        "0x1.1fe69c8faade1p-2",
+        "0x1.9f3e14346708dp-2",
+        "0x1.0deb74a4eb56ap-1",
+        "0x1.4b112875345a8p-1",
+        "0x1.873e9f8ec8eefp-1",
+        "0x1.c29abdd625b3p-1",
+        "0x1.fd46a2c58f604p-1",
+        "0x1.1baf7fc439c88p+0",
+        "0x1.387e8c39e5dcp+0",
+        "0x1.551bc5bcb7991p+0",
+        "0x1.71917675ed486p+0",
+        "0x1.8de923522a888p+0",
+        "0x1.aa2bc11af2618p+0",
+        "0x1.c661e24faeb29p+0",
+        "0x1.e293e03fad767p+0",
+        "0x1.feca017469c78p+0",
+        "0x1.0d864f9e98d04p+1",
+        "0x1.1bb2260cb7704p+1",
+        "0x1.29ecfe695247ep+1",
+        "0x1.383b9b2abb267p+1",
+        "0x1.46a3216591304p+1",
+        "0x1.552938964a3c7p+1",
+        "0x1.63d431d224a7cp+1",
+        "0x1.72ab3963fbd8ap+1",
+        "0x1.81b6972a60fddp+1",
+        "0x1.9100041e733ecp+1",
+        "0x1.a0931ec121336p+1",
+        "0x1.b07e0db5b8b8bp+1",
+        "0x1.c0d26952f8b05p+1",
+        "0x1.d1a695f6be072p+1",
+        "0x1.e317d8d5fb32p+1",
+        "0x1.f54db0766b4bfp+1",
+        "0x1.043fc093fdd5ap+2",
+        "0x1.0e7f6fcccb9f7p+2",
+        "0x1.19a5f870da09fp+2",
+        "0x1.262170b151e77p+2",
+        "0x1.34ca66ddef966p+2",
+        "0x1.47bb151d24d45p+2",
+        "0x1.68161564bb2bap+2"
+      ],
+      "b_hex": [
+        "0x1.eb851eb851eb8p-5",
+        "0x1.eb851eb851eb8p-4",
+        "0x1.70a3d70a3d70ap-3",
+        "0x1.eb851eb851eb8p-3",
+        "0x1.3333333333334p-2",
+        "0x1.70a3d70a3d70ap-2",
+        "0x1.ae147ae147ae2p-2",
+        "0x1.eb851eb851eb8p-2",
+        "0x1.147ae147ae148p-1",
+        "0x1.3333333333334p-1",
+        "0x1.51eb851eb851fp-1",
+        "0x1.70a3d70a3d70ap-1",
+        "0x1.8f5c28f5c28f6p-1",
+        "0x1.ae147ae147ae2p-1",
+        "0x1.cccccccccccccp-1",
+        "0x1.eb851eb851eb8p-1",
+        "0x1.051eb851eb852p+0",
+        "0x1.147ae147ae148p+0",
+        "0x1.23d70a3d70a3ep+0",
+        "0x1.3333333333334p+0",
+        "0x1.428f5c28f5c29p+0",
+        "0x1.51eb851eb851fp+0",
+        "0x1.6147ae147ae15p+0",
+        "0x1.70a3d70a3d70ap+0",
+        "0x1.8p+0",
+        "0x1.8f5c28f5c28f6p+0",
+        "0x1.9eb851eb851ecp+0",
+        "0x1.ae147ae147ae2p+0",
+        "0x1.bd70a3d70a3d6p+0",
+        "0x1.cccccccccccccp+0",
+        "0x1.dc28f5c28f5c2p+0",
+        "0x1.eb851eb851eb8p+0",
+        "0x1.fae147ae147aep+0",
+        "0x1.051eb851eb852p+1",
+        "0x1.0ccccccccccccp+1",
+        "0x1.147ae147ae148p+1",
+        "0x1.1c28f5c28f5c2p+1",
+        "0x1.23d70a3d70a3ep+1",
+        "0x1.2b851eb851eb8p+1",
+        "0x1.3333333333334p+1",
+        "0x1.3ae147ae147aep+1",
+        "0x1.428f5c28f5c29p+1",
+        "0x1.4a3d70a3d70a4p+1",
+        "0x1.51eb851eb851fp+1",
+        "0x1.599999999999ap+1",
+        "0x1.6147ae147ae15p+1",
+        "0x1.68f5c28f5c28fp+1",
+        "0x1.70a3d70a3d70ap+1",
+        "0x1.7851eb851eb85p+1",
+        "0x1.8p+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.6dd2137d9825bp-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f4d4078b7b4f3p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.6dd2137d9825bp-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.69a3641c359dp-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f4b2e4df1e532p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.69a3641c359dp-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.683f0a17305ffp-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f501a4a66dfa8p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.683f0a17305ffp-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.683f0a17305ffp-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f501a4a66dfa8p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.683f0a17305ffp-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.6dd2137d9825bp-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f4d4078b7b4f3p-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.6dd2137d9825bp-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.69a3641c359dp-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.f4b2e4df1e532p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.a7p+9",
+          "p_value_hex": "0x1.69a3641c359dp-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "0x1.58b8af64ec4bp-6",
+          "conf_high_hex": "0x1.2772456ba1173p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.15716eb29cbb1p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "0x1.2769a445c41bep-4",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "0x1.2769a445c41bep-4",
+          "conf_high_hex": "0x1.15716eb29cbb1p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "0x1.fed395e66487dp-2",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "0x1.4ee8821bb54efp-2",
+          "conf_low_hex": "0x1.0b556f79f2674p-3",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "name": "negative_shift_n20",
+      "a_hex": [
+        "-0x1.27ace65c44c8ep+1",
+        "-0x1.a3b855a071856p+0",
+        "-0x1.334a18d47d233p+0",
+        "-0x1.ab4f499d813d7p-1",
+        "-0x1.02c5c22240196p-1",
+        "-0x1.950342ce71384p-3",
+        "0x1.8a30a85dbe9b8p-4",
+        "0x1.8683670f04e2p-2",
+        "0x1.525f11d35feeep-1",
+        "0x1.dfe4e5aefe234p-1",
+        "0x1.3673f38ee754dp+0",
+        "0x1.7d36dd7cb66eep+0",
+        "0x1.c4c58ca2a52ep+0",
+        "0x1.06e1adf0453e5p+1",
+        "0x1.2c8367601a46bp+1",
+        "0x1.53e4a3bbc339ap+1",
+        "0x1.7e07059a93828p+1",
+        "0x1.acd83f9d71c4dp+1",
+        "0x1.e50f5e036bf5ep+1",
+        "0x1.1d700cc7bbfep+2"
+      ],
+      "b_hex": [
+        "0x1.3333333333334p-3",
+        "0x1.3333333333334p-2",
+        "0x1.cccccccccccccp-2",
+        "0x1.3333333333334p-1",
+        "0x1.8p-1",
+        "0x1.cccccccccccccp-1",
+        "0x1.0ccccccccccccp+0",
+        "0x1.3333333333334p+0",
+        "0x1.599999999999ap+0",
+        "0x1.8p+0",
+        "0x1.a666666666667p+0",
+        "0x1.cccccccccccccp+0",
+        "0x1.f333333333334p+0",
+        "0x1.0ccccccccccccp+1",
+        "0x1.2p+1",
+        "0x1.3333333333334p+1",
+        "0x1.4666666666666p+1",
+        "0x1.599999999999ap+1",
+        "0x1.6ccccccccccccp+1",
+        "0x1.8p+1"
+      ],
+      "wilcox": [
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f6b96p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": "NULL",
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f6b96p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f6b96p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-5",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4798p-6",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f6b96p-1",
+          "method": "Wilcoxon signed rank exact test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.5725a47566489p-5",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.5725a47566489p-6",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": true,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f63402cb2ed9bp-1",
+          "method": "Wilcoxon signed rank test with continuity correction",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "two.sided",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4809ee6417d3cp-5",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "less",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.4809ee6417d3cp-6",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "correct": false,
+          "alternative": "greater",
+          "statistic_hex": "0x1.9p+5",
+          "p_value_hex": "0x1.f5bfb08cdf416p-1",
+          "method": "Wilcoxon signed rank test",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "rank_biserial": [
+        {
+          "ci": 0.95,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1.966aa7feb350cp-1",
+          "conf_high_hex": "-0x1.4d6516862423bp-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "less",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.48d42cca78298p-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.95,
+          "alternative": "greater",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1.863106d71d4a3p-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "two.sided",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1.863106d71d4a3p-1",
+          "conf_high_hex": "-0x1.48d42cca78298p-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "less",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1p+0",
+          "conf_high_hex": "-0x1.fe85a26ace49cp-3",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "ci": 0.9,
+          "alternative": "greater",
+          "estimate_hex": "-0x1.0c30c30c30c3p-1",
+          "conf_low_hex": "-0x1.70da42b38afep-1",
+          "conf_high_hex": "0x1p+0",
+          "error": null,
+          "warnings": []
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

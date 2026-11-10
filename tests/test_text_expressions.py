@@ -47,7 +47,6 @@ from inferplot.stats import (
 )
 from tests.oracle_fixtures import (
     OracleCase,
-    load_cases,
     number,
     oracle_params,
     r_level_label,
@@ -63,6 +62,7 @@ from tests.test_text_format import (
     centrality_value,
     df_digits,
     subtitle_rows,
+    text_cases,
 )
 
 Row = Mapping[str, Any]
@@ -389,7 +389,7 @@ def test_v01_caption_is_first_and_last_items(case: OracleCase) -> None:
 def test_every_structure_is_covered() -> None:
     """The fixtures exercise the templates this module claims to check."""
     seen: set[str] = set()
-    for case in load_cases():
+    for case in text_cases():
         for where, _, rebuilt in checked_expressions(case):
             seen.add(where.split("[")[0].split("(")[0])
             assert rebuilt is not None
@@ -680,7 +680,7 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
 
 
 def parametric_params() -> list[Any]:
-    cases = [c for c in load_cases() if c.type == "parametric" and c.error is None]
+    cases = [c for c in text_cases() if c.type == "parametric" and c.error is None]
     assert cases
     return [pytest.param(c, id=c.name) for c in cases]
 

@@ -731,8 +731,10 @@ in plain words, never mathtext source.
   section 10). Result fields R's tables do not carry are compared with independent
   computations instead: the unadjusted pairwise p of Dunn's test with the normal tail
   of R's z, and lincon's t, df and unadjusted p with SciPy's Yuen test
-  (`test_pairwise_raw_p_and_df`). `test_r_ran_without_warnings_or_messages` fails when
-  a fixture records an R warning or message, which no other test reads.
+  (`test_pairwise_raw_p_and_df`). `test_r_warnings_and_messages_are_declared` fails
+  when a fixture records an R warning or message that has not been read and declared
+  (`DECLARED_R_NOISE`: afex's Huynh-Feldt and lme4 notes and insight's note on the
+  Bayesian repeated-measures ANOVA); no other test reads these fields.
 
 **Fixture schema (version 2).** One JSON object per case, named `<name>.json`:
 

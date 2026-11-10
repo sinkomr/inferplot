@@ -1,0 +1,526 @@
+{
+  "schema_version": 2,
+  "name": "ggwithinstats-edge_within_null-robust",
+  "function": "ggwithinstats",
+  "call": "ggstatsplot::ggwithinstats(data = data, x = condition, y = value, subject.id = subject, type = \"robust\")",
+  "dataset": {
+    "file": "edge_within_null.csv",
+    "sha256": "48f90e17f13f17b880ecbfbd6ab7ea1664139028aa0116ce5d52aa14022ca19e",
+    "rows": 60,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "condition",
+    "y": "value",
+    "subject.id": "subject",
+    "type": "robust"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a",
+    "b",
+    "c"
+  ],
+  "n_per_level": {
+    "a": 20,
+    "b": 20,
+    "c": 20
+  },
+  "within_data": {
+    "subject_id": "subject",
+    "levels": [
+      "a",
+      "b",
+      "c"
+    ],
+    "subjects": [
+      "s01",
+      "s02",
+      "s03",
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s09",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15",
+      "s16",
+      "s17",
+      "s18",
+      "s19",
+      "s20"
+    ],
+    "subject_order": "sorted by subject as complete_subjects() sorts (numbers numerically, text in the C locale); the analysis holds the rows subject by subject, levels in order",
+    "values": [
+      [
+        7.3,
+        6.43,
+        7.04
+      ],
+      [
+        10.08,
+        12.48,
+        6.69
+      ],
+      [
+        14.35,
+        12.23,
+        13.44
+      ],
+      [
+        7.8,
+        7.48,
+        10.45
+      ],
+      [
+        4.95,
+        6.87,
+        8.39
+      ],
+      [
+        7.71,
+        4.44,
+        5.19
+      ],
+      [
+        10.52,
+        10.8,
+        10.12
+      ],
+      [
+        15.81,
+        14.23,
+        10.5
+      ],
+      [
+        8.59,
+        10.02,
+        9.49
+      ],
+      [
+        12.08,
+        13.13,
+        13.3
+      ],
+      [
+        11.82,
+        10.35,
+        10.13
+      ],
+      [
+        4.6,
+        7.16,
+        4.53
+      ],
+      [
+        12.19,
+        13.87,
+        11.05
+      ],
+      [
+        7.09,
+        5.52,
+        8.66
+      ],
+      [
+        15.6,
+        14.72,
+        16.01
+      ],
+      [
+        10.41,
+        9.73,
+        8.77
+      ],
+      [
+        6.92,
+        9.83,
+        10.2
+      ],
+      [
+        9.3,
+        8.93,
+        11.04
+      ],
+      [
+        11.05,
+        11.26,
+        11.91
+      ],
+      [
+        11.1,
+        9.78,
+        12.36
+      ]
+    ],
+    "dropped_subjects": [],
+    "rows_without_x_or_subject": 0
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "subtitle": "list(italic(\"F\")[\"trimmed-means\"](1.7, 18.7) == \"0.12\", italic(p) == \"0.85\", widehat(delta)[\"R-avg\"]^\"AKP\" == \"-0.08\", CI[\"95%\"] ~ \"[\" * \"-0.59\", \"0.49\" * \"]\", italic(\"n\")[\"pairs\"] == \"20\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 0.122916064728026,
+        "df": 1.70008767614885,
+        "df.error": 18.7009644376373,
+        "p.value": 0.853752589512773,
+        "method": "A heteroscedastic one-way repeated measures ANOVA for trimmed means",
+        "effectsize": "Algina-Keselman-Penfield robust standardized difference average",
+        "estimate": -0.0806489025919091,
+        "conf.level": 0.95,
+        "conf.low": -0.585640721651672,
+        "conf.high": 0.489794429750065,
+        "n.obs": 20,
+        "expression": "list(italic(\"F\")[\"trimmed-means\"](1.7, 18.7) == \"0.12\", italic(p) == \"0.85\", widehat(delta)[\"R-avg\"]^\"AKP\" == \"-0.08\", CI[\"95%\"] ~ \"[\" * \"-0.59\", \"0.49\" * \"]\", italic(\"n\")[\"pairs\"] == \"20\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": [
+      {
+        "group1": "a",
+        "group2": "b",
+        "estimate": 0.105,
+        "conf.level": 0.95,
+        "conf.low": -1.26216793717014,
+        "conf.high": 1.47216793717014,
+        "p.value": 1,
+        "p.crit": 0.05,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"1.00\")"
+      },
+      {
+        "group1": "a",
+        "group2": "c",
+        "estimate": -0.15,
+        "conf.level": 0.95,
+        "conf.low": -1.53108430166227,
+        "conf.high": 1.23108430166227,
+        "p.value": 1,
+        "p.crit": 0.025,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"1.00\")"
+      },
+      {
+        "group1": "b",
+        "group2": "c",
+        "estimate": -0.348333333333333,
+        "conf.level": 0.95,
+        "conf.low": -1.41418196455211,
+        "conf.high": 0.717515297885442,
+        "p.value": 1,
+        "p.crit": 0.0169,
+        "p.adjust.method": "Holm",
+        "test": "Yuen's trimmed means",
+        "expression": "list(italic(p)[\"Holm\" - adj.] == \"1.00\")"
+      }
+    ],
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_point",
+      "geom": "GeomPoint",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_boxplot",
+      "geom": "GeomBoxplot",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_violin",
+      "geom": "GeomViolin",
+      "data": null,
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_path",
+      "geom": "GeomPath",
+      "data": [
+        {
+          "condition": "a",
+          "value": 9.81333333333333,
+          "std.dev": 3.1761732602217,
+          "iqr": 4.6125,
+          "conf.low": 8.18578125,
+          "conf.high": 11.603484375,
+          "min": 4.6,
+          "max": 15.81,
+          "skewness": 0.214766423085254,
+          "kurtosis": -0.470773678728943,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"9.81\")",
+          "n.expression": "a\n(n = 20)"
+        },
+        {
+          "condition": "b",
+          "value": 10.0041666666667,
+          "std.dev": 2.9702774989978,
+          "iqr": 5.1775,
+          "conf.low": 8.533828125,
+          "conf.high": 11.65290625,
+          "min": 4.44,
+          "max": 14.72,
+          "skewness": -0.136476171374765,
+          "kurtosis": -0.833460621751489,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.00\")",
+          "n.expression": "b\n(n = 20)"
+        },
+        {
+          "condition": "c",
+          "value": 10.0591666666667,
+          "std.dev": 2.8067405238855,
+          "iqr": 3.2375,
+          "conf.low": 8.56334375,
+          "conf.high": 11.27578125,
+          "min": 4.53,
+          "max": 16.01,
+          "skewness": -0.0343407463667687,
+          "kurtosis": 0.239998846295196,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.06\")",
+          "n.expression": "c\n(n = 20)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_point...5",
+      "geom": "GeomPoint",
+      "data": [
+        {
+          "condition": "a",
+          "value": 9.81333333333333,
+          "std.dev": 3.1761732602217,
+          "iqr": 4.6125,
+          "conf.low": 8.18578125,
+          "conf.high": 11.603484375,
+          "min": 4.6,
+          "max": 15.81,
+          "skewness": 0.214766423085254,
+          "kurtosis": -0.470773678728943,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"9.81\")",
+          "n.expression": "a\n(n = 20)"
+        },
+        {
+          "condition": "b",
+          "value": 10.0041666666667,
+          "std.dev": 2.9702774989978,
+          "iqr": 5.1775,
+          "conf.low": 8.533828125,
+          "conf.high": 11.65290625,
+          "min": 4.44,
+          "max": 14.72,
+          "skewness": -0.136476171374765,
+          "kurtosis": -0.833460621751489,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.00\")",
+          "n.expression": "b\n(n = 20)"
+        },
+        {
+          "condition": "c",
+          "value": 10.0591666666667,
+          "std.dev": 2.8067405238855,
+          "iqr": 3.2375,
+          "conf.low": 8.56334375,
+          "conf.high": 11.27578125,
+          "min": 4.53,
+          "max": 16.01,
+          "skewness": -0.0343407463667687,
+          "kurtosis": 0.239998846295196,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.06\")",
+          "n.expression": "c\n(n = 20)"
+        }
+      ],
+      "params": null,
+      "built": null
+    },
+    {
+      "name": "geom_label_repel",
+      "geom": "GeomLabelRepel",
+      "data": [
+        {
+          "condition": "a",
+          "value": 9.81333333333333,
+          "std.dev": 3.1761732602217,
+          "iqr": 4.6125,
+          "conf.low": 8.18578125,
+          "conf.high": 11.603484375,
+          "min": 4.6,
+          "max": 15.81,
+          "skewness": 0.214766423085254,
+          "kurtosis": -0.470773678728943,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"9.81\")",
+          "n.expression": "a\n(n = 20)"
+        },
+        {
+          "condition": "b",
+          "value": 10.0041666666667,
+          "std.dev": 2.9702774989978,
+          "iqr": 5.1775,
+          "conf.low": 8.533828125,
+          "conf.high": 11.65290625,
+          "min": 4.44,
+          "max": 14.72,
+          "skewness": -0.136476171374765,
+          "kurtosis": -0.833460621751489,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.00\")",
+          "n.expression": "b\n(n = 20)"
+        },
+        {
+          "condition": "c",
+          "value": 10.0591666666667,
+          "std.dev": 2.8067405238855,
+          "iqr": 3.2375,
+          "conf.low": 8.56334375,
+          "conf.high": 11.27578125,
+          "min": 4.53,
+          "max": 16.01,
+          "skewness": -0.0343407463667687,
+          "kurtosis": 0.239998846295196,
+          "n.obs": 20,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[trimmed] == \"10.06\")",
+          "n.expression": "c\n(n = 20)"
+        }
+      ],
+      "params": null,
+      "built": null
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "effect size confidence interval",
+    "call": "WRS2::wmcpAKP(wide, tr = 0.2, nboot = R)",
+    "data_order": "complete subjects sorted by subject, then by condition, as statsExpressions passes them (dep.effect and wmcpAKP: one column per condition)",
+    "conf_level": 0.95,
+    "requested_conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": -0.0806489025919091,
+      "conf_low": -0.585640721651672,
+      "conf_high": 0.489794429750065,
+      "resamples": 100,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::wmcpAKP(wide, tr = 0.2, nboot = R)",
+          "values": [
+            -0.0806489025919091,
+            -0.585640721651672,
+            0.489794429750065
+          ],
+          "matches": true
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": -0.0806489025919091,
+    "conf_low": -0.668261723823743,
+    "conf_high": 0.508487213225344,
+    "raw": [-0.0806489025919091, -0.668261723823743, 0.508487213225344],
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": -0.0806489025919091,
+      "estimate_sd": 0,
+      "conf_low_mean": -0.671369948715863,
+      "conf_low_sd": 0.0158360594719853,
+      "conf_high_mean": 0.512197467617258,
+      "conf_high_sd": 0.0127709403500234
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

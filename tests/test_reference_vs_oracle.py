@@ -30,6 +30,9 @@ Three or more groups:
                    then Holm, with the Studentized maximum modulus CI (inline)
     bayes          JZS Bayes factor of every pair (reference); the Bayes ANOVA
                    itself arrives in v0.2
+
+ggwithinstats (paired designs) has its own section at the end ("Within subjects"),
+read from the subjects-by-conditions table each fixture records.
 """
 
 from __future__ import annotations
@@ -1268,3 +1271,459 @@ def test_ranks_probe_k_samples() -> None:
                 _hex(pair["p_value_hex"]),
                 what=what,
             )
+
+
+# Within subjects (ggwithinstats) ----------------------------------------------------
+#
+# The same checks for ggwithinstats, on the subjects-by-conditions table the fixture
+# records (`within_data`; tests/test_oracle_fixtures.py rebuilds it from the CSV by
+# subject id on every backend). Each column is one condition, in R's level order,
+# subjects in the same order in every column.
+#
+# Two conditions (x = first level, y = second, as statsExpressions passes them):
+#     parametric     paired t (SciPy); Hedges' g of the differences, d_z x J(n - 1),
+#                    with a noncentral-t CI (inline); the Bayes caption (reference)
+#     nonparametric  Wilcoxon signed rank, normal approximation with continuity and
+#                    tie corrections, zeros dropped (inline); the matched-pairs
+#                    rank-biserial r with a Fisher-z CI (inline)
+#     robust         Yuen's test for dependent trimmed means (inline, Wilcox 2017)
+#     bayes          paired JZS Bayes factor (reference)
+# Three or more conditions:
+#     parametric     repeated-measures ANOVA with the Greenhouse-Geisser correction
+#                    (reference); partial omega squared from the error strata with
+#                    its CI at the uncorrected df (inline); paired t per pair, then
+#                    the case's p.adjust method
+#     nonparametric  Friedman (SciPy); Kendall's W; Durbin-Conover per pair
+#                    (inline, Conover 1999), then the p.adjust method
+#     robust         rmmcp per pair: Tukey-McLaughlin trimmed mean of the differences
+#                    (inline), then the p.adjust method
+#     bayes          paired JZS Bayes factor of every pair (reference)
+
+
+def _within_params(
+    type_: str, *, two: bool, needs: Output | None = "subtitle"
+) -> list[Any]:
+    """ggwithinstats cases of one type and design that have the output a check reads
+    (an output whose error the case declares ggstatsplot swallows has none)."""
+    cases = [
+        case
+        for case in cases_for("ggwithinstats")
+        if case.type == type_
+        and (len(case.analysis_levels) == 2) == two
+        and (needs is None or _draws(case, needs))
+        and (needs is None or needs not in case.expected_hidden_errors)
+    ]
+    design = "two conditions" if two else "three or more conditions"
+    require_cases(cases, f"ggwithinstats {type_}, {design}, with {needs}")
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+def _conditions(case: OracleCase) -> list[FloatArray]:
+    """One array per condition, in R's level order, subjects in R's order."""
+    columns = case.within_columns()
+    assert tuple(columns) == case.analysis_levels
+    return [
+        np.array(columns[level], dtype=np.float64) for level in case.analysis_levels
+    ]
+
+
+def _signed_rank(d: FloatArray, alternative: str) -> tuple[float, float]:
+    """Wilcoxon's (1945) signed-rank V and its p as stats::wilcox.test(exact = FALSE)
+    computes it: zero differences dropped, mid-ranks of |d|, V the sum of the
+    positive ranks, the normal approximation with the tie correction
+    sum(t^3 - t) / 48 in the variance and a continuity correction of 0.5 toward the
+    null (its sign follows z when two-sided)."""
+    nonzero = d[d != 0]
+    n = nonzero.size
+    ranks = stats.rankdata(np.abs(nonzero))
+    v = float(ranks[nonzero > 0].sum())
+    ties = np.unique(np.abs(nonzero), return_counts=True)[1].astype(np.float64)
+    sigma = math.sqrt(
+        n * (n + 1) * (2 * n + 1) / 24 - float((ties**3 - ties).sum()) / 48
+    )
+    z = v - n * (n + 1) / 4
+    correction = {"two.sided": 0.5 * math.copysign(1.0, z) if z else 0.0}.get(
+        alternative, 0.5 if alternative == "greater" else -0.5
+    )
+    z = (z - correction) / sigma
+    if alternative == "two.sided":
+        p = 2 * min(float(stats.norm.cdf(z)), float(stats.norm.sf(z)))
+    elif alternative == "greater":
+        p = float(stats.norm.sf(z))
+    else:
+        p = float(stats.norm.cdf(z))
+    return v, p
+
+
+def _trimmed_kernel_paired(
+    x: FloatArray, y: FloatArray, tr: float
+) -> tuple[float, float, float]:
+    """Yuen's test for dependent trimmed means (Wilcox 2017, sec. 5.9.5): winsorize
+    each condition at g = floor(tr n), d_j = (n - 1) s_wj^2 / (h (h - 1)) and
+    d_12 = (n - 1) s_w12 / (h (h - 1)) with h = n - 2g; t = (tm_x - tm_y) /
+    sqrt(d_1 + d_2 - 2 d_12) on h - 1 df. Returns (t, df, difference)."""
+    n = x.size
+    g = math.floor(tr * n)
+    h = n - 2 * g
+
+    def winsorize(v: FloatArray) -> FloatArray:
+        ordered = np.sort(v)
+        return np.clip(v, ordered[g], ordered[n - g - 1])
+
+    wx, wy = winsorize(x), winsorize(y)
+    q = (n - 1) * np.cov(wx, wy)
+    se = math.sqrt((q[0, 0] + q[1, 1] - 2 * q[0, 1]) / (h * (h - 1)))
+    difference = float(stats.trim_mean(x, tr) - stats.trim_mean(y, tr))
+    return difference / se, float(h - 1), difference
+
+
+def _trimmed_one_sample(d: FloatArray, tr: float) -> tuple[float, float, float]:
+    """The Tukey-McLaughlin test of a trimmed mean (Wilcox 2017, sec. 4.4.1):
+    t = tm / (s_w / ((1 - 2 tr) sqrt(n))) on n - 2g - 1 df. Returns (tm, t, df)."""
+    n = d.size
+    g = math.floor(tr * n)
+    ordered = np.sort(d)
+    winsorized = np.clip(d, ordered[g], ordered[n - g - 1])
+    se = math.sqrt(float(winsorized.var(ddof=1))) / ((1 - 2 * tr) * math.sqrt(n))
+    tm = float(stats.trim_mean(d, tr))
+    return tm, tm / se, float(n - 2 * g - 1)
+
+
+@pytest.mark.parametrize("case", _within_params("parametric", two=True))
+def test_paired_t(case: OracleCase) -> None:
+    a, b = _conditions(case)
+    result = stats.ttest_rel(a, b, alternative=SCIPY_ALTERNATIVE[_alternative(case)])
+    row = case.subtitle_data
+    assert row["alternative"] == _alternative(case)
+    assert_close(
+        "closed_form", float(result.statistic), _value(row, "statistic"), what="t"
+    )
+    assert_close("closed_form", a.size - 1.0, _value(row, "df.error"), what="df")
+    assert_close("closed_form", float(result.pvalue), _value(row, "p.value"), what="p")
+
+
+@pytest.mark.parametrize("case", _within_params("parametric", two=True))
+def test_paired_hedges_g(case: OracleCase) -> None:
+    # effectsize::hedges_g(x, y, paired = TRUE): the one-sample effect size of the
+    # differences, d_z = mean(d) / sd(d), times Hedges' J at n - 1 df; the CI is the
+    # noncentral-t interval at the paired t and n - 1 df, each bound / sqrt(n) x J.
+    # Negative control: d_av, the mean difference over the average SD of the two
+    # conditions.
+    a, b = _conditions(case)
+    d = a - b
+    n = d.size
+    sd = float(d.std(ddof=1))
+    j = ref.hedges_j(n - 1.0)
+    row = case.subtitle_data
+    assert row["effectsize"] == "Hedges' g"
+    g = _value(row, "estimate")
+    assert_close("closed_form", float(d.mean()) / sd * j, g, what="Hedges' g")
+    d_av = float(d.mean()) / math.sqrt(
+        (float(a.var(ddof=1)) + float(b.var(ddof=1))) / 2
+    )
+    assert not is_close("closed_form", d_av * j, g)
+    alpha = 1 - _value(row, "conf.level")
+    side = _alternative(case)
+    tail = alpha / 2 if side == "two.sided" else alpha
+    t = float(d.mean()) / (sd / math.sqrt(n))
+    scale = j / math.sqrt(n)
+    low = -math.inf if side == "less" else _ncp_at(t, n - 1.0, 1 - tail) * scale
+    high = math.inf if side == "greater" else _ncp_at(t, n - 1.0, tail) * scale
+    assert_close("noncentral_ci", low, _value(row, "conf.low"), what="g CI low")
+    assert_close("noncentral_ci", high, _value(row, "conf.high"), what="g CI high")
+
+
+@pytest.mark.parametrize("case", _within_params("nonparametric", two=True))
+def test_wilcoxon_signed_rank(case: OracleCase) -> None:
+    a, b = _conditions(case)
+    v, p = _signed_rank(a - b, _alternative(case))
+    row = case.subtitle_data
+    assert_close("closed_form", v, _value(row, "statistic"), what="V")
+    assert_close("closed_form", p, _value(row, "p.value"), what="p")
+
+
+@pytest.mark.parametrize("case", _within_params("nonparametric", two=True))
+def test_paired_rank_biserial(case: OracleCase) -> None:
+    # effectsize::rank_biserial(paired = TRUE): the matched-pairs rank-biserial r =
+    # (W+ - W-) / (W+ + W-) over the nonzero differences (Kerby 2014); its CI is
+    # tanh(atanh(r) -/+ z SE) with the null SE of r, sqrt(n(n + 1)(2n + 1) / 6) /
+    # (n(n + 1) / 2), where n counts every pair, zero differences included
+    # (probe-signrank: the nonzero count misses edge_within2_ties by 0.037). With
+    # |r| = 1 both bounds are r itself.
+    a, b = _conditions(case)
+    d = a - b
+    nonzero = d[d != 0]
+    ranks = stats.rankdata(np.abs(nonzero))
+    plus, minus = float(ranks[nonzero > 0].sum()), float(ranks[nonzero < 0].sum())
+    r = (plus - minus) / (plus + minus)
+    row = case.subtitle_data
+    assert_close("closed_form", r, _value(row, "estimate"), what="r")
+    n = d.size
+    se = math.sqrt(n * (n + 1) * (2 * n + 1) / 6) / (n * (n + 1) / 2)
+    q = _one_sided_quantile(case, row)
+    side = _alternative(case)
+    if abs(r) < 1:
+        low, high = math.tanh(math.atanh(r) - q * se), math.tanh(math.atanh(r) + q * se)
+    else:
+        low = high = r
+    low = -1.0 if side == "less" else low
+    high = 1.0 if side == "greater" else high
+    assert_close("closed_form", low, _value(row, "conf.low"), what="r CI low")
+    assert_close("closed_form", high, _value(row, "conf.high"), what="r CI high")
+
+
+@pytest.mark.parametrize("case", _within_params("robust", two=True))
+def test_yuend(case: OracleCase) -> None:
+    # WRS2::yuend; p = 2 (1 - pt(|t|, df)) as WRS2 computes it (probe-wrs2within:
+    # every yuend p is that bit for bit). `alternative` has no effect.
+    a, b = _conditions(case)
+    t, df, _ = _trimmed_kernel_paired(a, b, _tr(case))
+    row = case.subtitle_data
+    assert_close("closed_form", t, _value(row, "statistic"), what="yuend t")
+    assert_close("closed_form", df, _value(row, "df.error"), what="yuend df")
+    p = 2 * _r_upper_tail(float(stats.t.sf(abs(t), df)))
+    assert_close("wrs2_p", p, _value(row, "p.value"), what="yuend p", atol_scale=2)
+
+
+def _check_paired_jzs(
+    row: Row, a: FloatArray, b: FloatArray, *, prior: float, what: str
+) -> None:
+    """BayesFactor::ttestBF(x, y, paired = TRUE): the one-sample JZS Bayes factor of
+    the differences, n = number of pairs, df = n - 1."""
+    assert number(row["prior.scale"]) == prior, f"{what}: {row['prior.scale']}"
+    d = a - b
+    n = d.size
+    t = float(stats.ttest_1samp(d, 0.0).statistic)
+    got = ref.jzs_bf10_t(t, float(n), n - 1.0, r=prior)
+    assert_close("ttest_bayes_factor", got, _value(row, "bf10"), what=f"{what} BF10")
+    other = math.sqrt(2) / 2 if prior == JZS_PRIOR else JZS_PRIOR
+    wrong = ref.jzs_bf10_t(t, float(n), n - 1.0, r=other)
+    assert not is_close("ttest_bayes_factor", wrong, _value(row, "bf10")), what
+
+
+@pytest.mark.parametrize("case", _within_params("bayes", two=True))
+def test_paired_jzs_bayes_factor(case: OracleCase) -> None:
+    a, b = _conditions(case)
+    _check_paired_jzs(case.subtitle_data, a, b, prior=_prior(case), what=case.name)
+
+
+@pytest.mark.parametrize(
+    "case", _within_params("parametric", two=True, needs="caption")
+)
+def test_paired_jzs_bayes_factor_caption(case: OracleCase) -> None:
+    caption = case.caption_data
+    assert caption is not None, "no Bayes caption"
+    a, b = _conditions(case)
+    _check_paired_jzs(caption, a, b, prior=_prior(case), what=f"{case.name} caption")
+
+
+@pytest.mark.parametrize("case", _within_params("parametric", two=False))
+def test_rm_anova_greenhouse_geisser(case: OracleCase) -> None:
+    # afex::aov_ez as statsExpressions calls it: the F test with the
+    # Greenhouse-Geisser correction (afex's default), df and p corrected.
+    # Negative control: the uncorrected df.
+    columns = _conditions(case)
+    data = np.column_stack(columns)
+    result = ref.rm_anova_gg(data)
+    row = case.subtitle_data
+    assert_close("closed_form", result["F"], _value(row, "statistic"), what="F")
+    assert_close("closed_form", result["df1"], _value(row, "df"), what="GG df1")
+    assert_close("closed_form", result["df2"], _value(row, "df.error"), what="GG df2")
+    assert_close("closed_form", result["p"], _value(row, "p.value"), what="GG p")
+    if result["epsilon"] < 1:
+        k = data.shape[1]
+        assert not is_close("closed_form", k - 1.0, _value(row, "df"))
+
+
+def _rm_omega(data: FloatArray) -> tuple[float, float, float, float]:
+    """Partial omega squared of a one-way repeated-measures design, as
+    effectsize::omega_squared gives it for an afex model (Olejnik & Algina 2003):
+    df_c (MS_c - MS_e) / (SS_c + SS_e + SS_s + MS_s), floored at 0, with the
+    condition (c), error (e) and subject (s) sums of squares. Returns (omega, F,
+    df_c, df_e), the F test uncorrected."""
+    n, k = data.shape
+    grand = data.mean()
+    ss_c = n * float(((data.mean(axis=0) - grand) ** 2).sum())
+    ss_s = k * float(((data.mean(axis=1) - grand) ** 2).sum())
+    ss_e = float(((data - grand) ** 2).sum()) - ss_c - ss_s
+    df_c, df_e, df_s = k - 1.0, (k - 1.0) * (n - 1.0), n - 1.0
+    ms_c, ms_e, ms_s = ss_c / df_c, ss_e / df_e, ss_s / df_s
+    omega = max(0.0, df_c * (ms_c - ms_e) / (ss_c + ss_e + ss_s + ms_s))
+    return omega, ms_c / ms_e, df_c, df_e
+
+
+@pytest.mark.parametrize("case", _within_params("parametric", two=False))
+def test_rm_omega_squared(case: OracleCase) -> None:
+    # The estimate from the error strata (`_rm_omega`); the one-sided CI as for
+    # betweenstats (F_w = omega df2 / ((1 - omega) df1), invert the noncentral F at
+    # conf.level, lambda / (lambda + df2)), but at the uncorrected df, although the
+    # subtitle reports the Greenhouse-Geisser df (probe-rmanova). Negative control:
+    # the F test's own omega from F (F_to_omega2) is far off.
+    data = np.column_stack(_conditions(case))
+    omega, f_stat, df1, df2 = _rm_omega(data)
+    row = case.subtitle_data
+    assert row["effectsize"] == "Omega2_partial" or "Omega" in str(row["effectsize"])
+    assert_close("closed_form", omega, _value(row, "estimate"), what="omega")
+    assert omega == 0.0 or not is_close(
+        "closed_form",
+        ref.omega2_partial_from_f(f_stat, df1, df2),
+        _value(row, "estimate"),
+    )
+    level = _value(row, "conf.level")
+    assert level == float(case.args.get("conf.level", 0.95))
+    assert _value(row, "conf.high") == 1.0
+    f_w = omega * df2 / ((1 - omega) * df1) if omega > 0 else 0.0
+    lam = _f_ncp(f_w, df1, df2, level)
+    assert_close(
+        "noncentral_ci", lam / (lam + df2), _value(row, "conf.low"), what="omega CI low"
+    )
+
+
+def _pairwise_rows(case: OracleCase) -> dict[tuple[str, str], Row]:
+    rows = {(str(r["group1"]), str(r["group2"])): r for r in case.pairwise}
+    k = len(case.analysis_levels)
+    assert len(rows) == k * (k - 1) // 2
+    return rows
+
+
+def _check_adjusted(
+    case: OracleCase, raw: dict[tuple[str, str], float], *, kind: str = "closed_form"
+) -> None:
+    method = _adjust_method(case)
+    keys = list(raw)
+    adjusted = dict(zip(keys, _p_adjust([raw[k] for k in keys], method), strict=True))
+    rows = _pairwise_rows(case)
+    # wrs2_p's absolute part scales with what multiplies the one-sided tail: 2 for
+    # two-sided, times at most the number of pairs after the adjustment.
+    scale = 2.0 * len(keys) if kind == "wrs2_p" else 1.0
+    for key, row in rows.items():
+        assert row["p.adjust.method"] == P_ADJUST_LABELS[method]
+        assert_close(
+            kind,
+            adjusted[key],
+            number(row["p.value"]),
+            what=f"{case.name} {key} {method} p",
+            atol_scale=scale,
+        )
+
+
+def _level_pairs(case: OracleCase) -> list[tuple[int, int]]:
+    k = len(case.analysis_levels)
+    return [(i, j) for i in range(k) for j in range(i + 1, k)]
+
+
+@pytest.mark.parametrize(
+    "case", _within_params("parametric", two=False, needs="pairwise")
+)
+def test_paired_t_pairwise(case: OracleCase) -> None:
+    # stats::pairwise.t.test(paired = TRUE, p.adjust.method = "none"), then the
+    # case's method over all pairs.
+    columns = _conditions(case)
+    levels = case.analysis_levels
+    raw = {
+        (levels[i], levels[j]): float(stats.ttest_rel(columns[i], columns[j]).pvalue)
+        for i, j in _level_pairs(case)
+    }
+    assert {str(r["test"]) for r in case.pairwise} == {"Student's t"}
+    _check_adjusted(case, raw)
+
+
+@pytest.mark.parametrize("case", _within_params("nonparametric", two=False))
+def test_friedman_and_kendalls_w(case: OracleCase) -> None:
+    # stats::friedman.test (with its tie correction) and Kendall's W = chi^2 /
+    # (n (k - 1)), the tie-corrected W (effectsize::kendalls_w).
+    columns = _conditions(case)
+    result = stats.friedmanchisquare(*columns)
+    row = case.subtitle_data
+    n, k = columns[0].size, len(columns)
+    assert_close(
+        "closed_form", float(result.statistic), _value(row, "statistic"), what="chi2"
+    )
+    assert_close("closed_form", k - 1.0, _value(row, "df.error"), what="df")
+    assert_close("closed_form", float(result.pvalue), _value(row, "p.value"), what="p")
+    assert_close(
+        "closed_form",
+        float(result.statistic) / (n * (k - 1)),
+        _value(row, "estimate"),
+        what="Kendall's W",
+    )
+
+
+def _durbin_conover(
+    columns: Sequence[FloatArray],
+) -> dict[tuple[int, int], tuple[float, float]]:
+    """Durbin-Conover pairwise tests for complete blocks (Conover 1999, sec. 5.9):
+    ranks within each subject, R_j the condition rank sums, A = sum r^2, C = b k (k
+    + 1)^2 / 4, T = (k - 1) / (A - C) sum (R_j - b (k + 1) / 2)^2; for i < j,
+    t = |R_i - R_j| / sqrt((A - C) 2 b / ((b - 1)(k - 1)) (1 - T / (b (k - 1)))) on
+    (b - 1)(k - 1) df, two-sided."""
+    data = np.column_stack(columns)
+    b, k = data.shape
+    ranks = np.apply_along_axis(stats.rankdata, 1, data)
+    sums = ranks.sum(axis=0)
+    a = float((ranks**2).sum())
+    c = b * k * (k + 1) ** 2 / 4
+    t_stat = (k - 1) / (a - c) * float(((sums - b * (k + 1) / 2) ** 2).sum())
+    df = (b - 1) * (k - 1)
+    se = math.sqrt((a - c) * 2 * b / df * (1 - t_stat / (b * (k - 1))))
+    out = {}
+    for i in range(k):
+        for j in range(i + 1, k):
+            difference = abs(float(sums[i] - sums[j]))
+            # Every subject ranking the conditions alike (Kendall's W = 1) leaves no
+            # error variance: R reports t = Inf and p = 0 (edge_within_small).
+            t = difference / se if se > 0 else math.inf
+            out[(i, j)] = (t, float(2 * stats.t.sf(t, df)))
+    return out
+
+
+@pytest.mark.parametrize(
+    "case", _within_params("nonparametric", two=False, needs="pairwise")
+)
+def test_durbin_conover_pairwise(case: OracleCase) -> None:
+    levels = case.analysis_levels
+    reference = _durbin_conover(_conditions(case))
+    rows = _pairwise_rows(case)
+    raw = {}
+    for (i, j), (t, p) in reference.items():
+        key = (levels[i], levels[j])
+        assert rows[key]["test"] == "Durbin-Conover"
+        assert_close(
+            "closed_form", t, abs(number(rows[key]["statistic"])), what=f"{key} t"
+        )
+        raw[key] = p
+    _check_adjusted(case, raw)
+
+
+@pytest.mark.parametrize("case", _within_params("robust", two=False, needs="pairwise"))
+def test_rmmcp_pairwise(case: OracleCase) -> None:
+    # WRS2::rmmcp: per pair, the trimmed mean of the differences (group1 - group2)
+    # and its Tukey-McLaughlin test, p = 2 (1 - pt) (probe-wrs2within); ggstatsplot
+    # then applies the case's p.adjust method (rmmcp's own p.crit is not used).
+    columns = _conditions(case)
+    levels = case.analysis_levels
+    rows = _pairwise_rows(case)
+    tr = _tr(case)
+    raw = {}
+    for i, j in _level_pairs(case):
+        key = (levels[i], levels[j])
+        tm, t, df = _trimmed_one_sample(columns[i] - columns[j], tr)
+        assert_close(
+            "closed_form", tm, number(rows[key]["estimate"]), what=f"{key} psihat"
+        )
+        raw[key] = 2 * _r_upper_tail(float(stats.t.sf(abs(t), df)))
+    _check_adjusted(case, raw, kind="wrs2_p")
+
+
+@pytest.mark.parametrize("case", _within_params("bayes", two=False, needs="pairwise"))
+def test_paired_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
+    columns = dict(zip(case.analysis_levels, _conditions(case), strict=True))
+    rows = _pairwise_rows(case)
+    for (g1, g2), row in rows.items():
+        _check_paired_jzs(
+            row,
+            columns[g1],
+            columns[g2],
+            prior=JZS_PRIOR,
+            what=f"{case.name} {g1}-{g2}",
+        )

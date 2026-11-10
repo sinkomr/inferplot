@@ -147,11 +147,20 @@ def test_constant_data_give_the_value() -> None:
 # 6.2e-15 relative, below the FFT's rounding, and R's which.max takes the later;
 # inferplot's tie rule (map_estimate, 1e-12) takes the first: one grid step.
 MAP_DIFFERS = {"normal_n1e5": 1}
-# shifted_large and timestamps (values near 1e8 and 1.7e9, 2.4e10 and 7.5e11 bin
-# widths from zero): R's bw.SJ anchors the pair-distance bins at min(x) there and
-# at zero everywhere else, as inferplot does (density._pair_counts); with the zero
-# anchor their bandwidths would differ by 9.6e-4 and 4.9e-4 relative.
-MIN_ANCHORED = {"shifted_large": 9.6e-4, "timestamps": 4.9e-4}
+# shifted_large, timestamps and anchor_26027507 (values near 1e8, 1.7e9 and 2.6e7;
+# 2.4e10, 7.5e11 and 1.00000066 x 2^31 bin widths from zero): R's bw.SJ anchors the
+# pair-distance bins at min(x) there and at zero everywhere else, as inferplot does
+# (density._pair_counts); with the zero anchor their bandwidths would differ by
+# 9.6e-4, 4.9e-4 and 1.04e-3 relative.
+MIN_ANCHORED = {
+    "shifted_large": 9.6e-4,
+    "timestamps": 4.9e-4,
+    "anchor_26027507": 1.04e-3,
+}
+# The probe-map vector closest to 2^31 bin widths from below (0.999998 x 2^31):
+# R still anchors at zero there; anchored at min(x) its bandwidth would differ by
+# 1.31e-3 relative.
+ZERO_ANCHORED_NEAREST = ("anchor_26027440", 1.31e-3)
 
 
 def _probe_map_rows() -> list[Any]:
@@ -198,7 +207,7 @@ def test_map_and_bandwidth_against_probe_map(row: Any) -> None:
 def test_probe_map_differences_are_all_listed() -> None:
     names = {str(row["name"]) for row in probe("probe-map").rows("rows")}
     assert set(MAP_DIFFERS) | set(MIN_ANCHORED) <= names
-    assert len(names) == 52
+    assert len(names) == 56
 
 
 def _zero_anchored_bandwidth(x: FloatArray) -> float:
@@ -219,10 +228,12 @@ def _binned_pairs(bins: FloatArray, size: int) -> list[float]:
 
 
 def test_bins_anchor_at_min_exactly_where_r_does() -> None:
-    # probe-map: R anchors its bins at min(x) on the two vectors far from zero
-    # (max|x| / width 2.4e10 and 7.5e11) and at zero on the 49 others with spread
-    # (at most 2.8e4). The zero anchor misses R's bandwidth on the first two by the
-    # amounts in MIN_ANCHORED; the threshold 2^31 lies between, not pinned.
+    # probe-map: R anchors its bins at min(x) on the three vectors at or beyond 2^31
+    # bin widths from zero (max|x| / width 1.00000066 x 2^31, 2.4e10 and 7.5e11) and
+    # at zero on the 52 others with spread, the farthest 0.999998 x 2^31
+    # (anchor_26027440). The zero anchor misses R's bandwidth on the first three by
+    # the amounts in MIN_ANCHORED, the min(x) anchor the farthest zero-anchored one
+    # by ZERO_ANCHORED_NEAREST's: the threshold is 2^31 to within 2e-6.
     ratios: dict[str, float] = {}
     for row in probe("probe-map").rows("rows"):
         x = np.array([r_double(str(h)) for h in row["x_hex"]], dtype=np.float64)
@@ -239,7 +250,25 @@ def test_bins_anchor_at_min_exactly_where_r_does() -> None:
             )
     far = {name for name, ratio in ratios.items() if ratio >= 2.0**31}
     assert far == set(MIN_ANCHORED)
-    assert max(r for name, r in ratios.items() if name not in far) < 2.8e4
+    nearest, miss = ZERO_ANCHORED_NEAREST
+    near_ratio, near_name = max(
+        (r, name) for name, r in ratios.items() if name not in far
+    )
+    assert near_name == nearest
+    assert 0.999998 * 2.0**31 < near_ratio < 2.0**31
+    assert min(ratios[name] for name in far) < 1.000001 * 2.0**31
+    row = next(r for r in probe("probe-map").rows("rows") if r["name"] == nearest)
+    x = np.array([r_double(str(h)) for h in row["x_hex"]], dtype=np.float64)
+    r_bw = r_double(str(row["bw_sj"]["hex"]))
+    assert r_bw is not None
+    assert bw_sj(x) == pytest.approx(r_bw, rel=1e-14)
+    original = density_module._ANCHOR_AT_MIN  # pyright: ignore[reportPrivateUsage]
+    try:
+        density_module._ANCHOR_AT_MIN = 0.0  # pyright: ignore[reportPrivateUsage]
+        at_min = bw_sj(x)
+    finally:
+        density_module._ANCHOR_AT_MIN = original  # pyright: ignore[reportPrivateUsage]
+    assert abs(at_min / r_bw - 1) == pytest.approx(miss, rel=0.01)
 
 
 def test_values_far_from_zero_have_a_map() -> None:

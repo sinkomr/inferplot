@@ -146,6 +146,36 @@ phase2_cases <- function(dataset, x, y, label = dataset, types = PHASE2_TYPES,
   })
 }
 
+# Phase 3 (withinstats): ggwithinstats cases, one per type in `types`. Every case
+# names its subject column (subject.id); inferplot pairs by subject, never by row
+# order. `expect_error` maps a type to the failure that case declares, as above, and
+# `expect_hidden_errors` a type to the components whose error ggstatsplot swallows.
+within_cases <- function(dataset, x, y, subject, label = dataset, types = TYPES,
+                         extra_args = list(), factor_levels = NULL, expect_error = list(),
+                         expect_hidden_errors = list()) {
+  unknown <- setdiff(c(names(expect_error), names(expect_hidden_errors)), types)
+  if (length(unknown) > 0L) stop(label, ": expectations for types without a case: ", unknown)
+  lapply(types, function(type) {
+    list(
+      name = paste("ggwithinstats", label, type, sep = "-"),
+      fun = "ggwithinstats",
+      dataset = dataset,
+      factor_levels = factor_levels,
+      args = c(list(x = x, y = y, subject.id = subject, type = type), extra_args),
+      columns = c("x", "y", "subject.id"),
+      expect_error = expect_error[[type]],
+      expect_hidden_errors = expect_hidden_errors[[type]] %||% character()
+    )
+  })
+}
+
+# The within-subject edge datasets (oracle/export_datasets.R) share their columns.
+edge_within <- function(dataset, ...) {
+  within_cases(dataset, x = "condition", y = "value", subject = "subject", ...)
+}
+
+P_ADJUST_OTHERS <- c("bonferroni", "hochberg", "hommel", "BH", "BY", "fdr", "none")
+
 CASES <- c(
   between_cases("ToothGrowth", x = "supp", y = "len"), # k = 2, n = 30 + 30
   between_cases("PlantGrowth", x = "group", y = "weight"), # k = 3, n = 10 each
@@ -440,6 +470,162 @@ CASES <- c(
   phase2_cases(
     "PlantGrowth", x = "group", y = "weight", label = "PlantGrowth-prior08",
     types = "bayes", extra_args = list(bf.prior = 0.8)
+  ),
+  # Phase 3: heavy ties in small groups, so that some bootstrap resamples of AKP
+  # (group a's winsorized variance 0 in about 12% of resamples) and of t1way's
+  # explanatory effect size (every group's winsorized variance 0, about 5%) are
+  # infinite: whether WRS2 returns +-Inf there and what ggstatsplot prints.
+  phase2_cases("edge_heavy_ties2", x = "group", y = "value", types = "robust"),
+  phase2_cases("edge_heavy_ties3", x = "group", y = "value", types = "robust"),
+
+  # Phase 3 (withinstats): ggwithinstats, all four types, two conditions and three or
+  # more. statsExpressions::complete_subjects() keeps the subjects observed in every
+  # condition; the fixture records the subjects-by-conditions data it analyzed
+  # (`within_data`).
+  # Two conditions. R's sleep: ten subjects, a zero difference and tied differences.
+  within_cases("sleep", x = "group", y = "extra", subject = "ID"),
+  # Five subjects.
+  edge_within("edge_within2_small"),
+  # A declared order (pre, then post, the reverse of the sorted order) with an empty
+  # level between the two: the sign of every difference.
+  edge_within(
+    "edge_within2_small", label = "edge_within2_small-declared",
+    factor_levels = list(condition = c("pre", "empty", "post"))
+  ),
+  # Zero and tied absolute differences: Wilcoxon's handling of both.
+  edge_within("edge_within2_ties"),
+  edge_within("edge_within2_negative"),
+  edge_within("edge_within2_outliers"),
+  # The rows of edge_within2_outliers in a random order: the same results.
+  edge_within("edge_within2_shuffled"),
+  edge_within("edge_within2_null"),
+  # 1,500 subjects.
+  edge_within("edge_within2_large_n"),
+  # A subject without a post row, a missing value, a row without a subject and a row
+  # without a condition; subject ids that sort differently as text.
+  edge_within("edge_within2_missing"),
+  # Three or more conditions. ggstatsplot's bugs_long: four conditions, subjects with
+  # missing values.
+  within_cases("bugs_long", x = "condition", y = "desire", subject = "subject"),
+  # A subject missing one of three conditions (s05 has no mid row).
+  edge_within("edge_within_missing"),
+  # Declared order with an empty level: pre, (empty), mid, post.
+  edge_within(
+    "edge_within_missing", label = "edge_within_missing-declared",
+    factor_levels = list(condition = c("pre", "empty", "mid", "post"))
+  ),
+  # Four subjects, every one ranking the conditions a < b < c: Kendall's W is 1 in
+  # every bootstrap resample, kendalls_w's CI fails ("arguments imply differing
+  # number of rows: 1, 0"; probe-friedman) and ggstatsplot swallows the error, so
+  # the nonparametric type has no subtitle; Durbin-Conover's t is infinite there.
+  edge_within(
+    "edge_within_small", expect_hidden_errors = list(nonparametric = "subtitle")
+  ),
+  # Integer scores with ties within subjects: Friedman, Durbin-Conover, Kendall's W.
+  edge_within("edge_within_ties"),
+  edge_within("edge_within_negative"),
+  edge_within("edge_within_outliers"),
+  # The rows of edge_within_outliers in a random order: the same results.
+  edge_within("edge_within_shuffled"),
+  # Condition means equal: F near 0.
+  edge_within("edge_within_null"),
+  # 1,100 subjects.
+  edge_within("edge_within_large_n"),
+  # Five conditions, ten pairs: sphericity correction, many pairs.
+  edge_within("edge_within_k5"),
+  # Greenhouse-Geisser epsilon near its lower bound.
+  edge_within("edge_within_nonspherical"),
+  # Every other p.adjust method on the paired t, Durbin-Conover and rmmcp p-values.
+  unlist(lapply(P_ADJUST_OTHERS, function(method) {
+    within_cases(
+      "bugs_long", x = "condition", y = "desire", subject = "subject",
+      label = paste0("bugs_long-padj-", method),
+      types = c("parametric", "nonparametric", "robust"),
+      extra_args = list(p.adjust.method = method)
+    )
+  }), recursive = FALSE),
+  # A 90% confidence level: whether it reaches each effect size and its bootstrap.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-cl90",
+    extra_args = list(conf.level = 0.90)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-cl90", extra_args = list(conf.level = 0.90)
+  ),
+  # 10% trimming: yuend, dep.effect, rmanova, wmcpAKP, rmmcp, trimmed-mean labels.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-tr01",
+    types = "robust", extra_args = list(tr = 0.1)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-tr01", types = "robust", extra_args = list(tr = 0.1)
+  ),
+  # Which pairs get brackets.
+  unlist(lapply(c("all", "non-significant", "none"), function(display) {
+    within_cases(
+      "bugs_long", x = "condition", y = "desire", subject = "subject",
+      label = paste0(
+        "bugs_long-display-",
+        c(all = "all", `non-significant` = "ns", none = "none")[[display]]
+      ),
+      extra_args = list(pairwise.display = display)
+    )
+  }), recursive = FALSE),
+  # Three digits in every printed number.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-digits3",
+    extra_args = list(digits = 3L)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-digits3", extra_args = list(digits = 3L)
+  ),
+  # No statistical subtitle.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-nosubtitle", extra_args = list(results.subtitle = FALSE)
+  ),
+  # One-sided alternatives: the paired t and Wilcoxon p, the sidedness of their
+  # effect-size CIs; and whether yuend and the paired Bayes factor take them at all.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-greater",
+    extra_args = list(alternative = "greater")
+  ),
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-less",
+    types = c("parametric", "nonparametric"), extra_args = list(alternative = "less")
+  ),
+  # Another Cauchy prior scale: the paired Bayes factor (subtitle and caption), and
+  # with four conditions the Bayes ANOVA and whether the pairs keep 0.707.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-prior08",
+    types = c("parametric", "bayes"), extra_args = list(bf.prior = 0.8)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-prior08", types = "bayes", extra_args = list(bf.prior = 0.8)
+  ),
+  # No Bayes caption.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-nobf",
+    types = "parametric", extra_args = list(bf.message = FALSE)
+  ),
+  # The arguments ggwithinstats adds: the lines joining each subject's points (two
+  # conditions only) and the centrality values.
+  within_cases(
+    "sleep", x = "group", y = "extra", subject = "ID", label = "sleep-nopaths",
+    types = "parametric", extra_args = list(point.path = FALSE, centrality.path = FALSE)
+  ),
+  within_cases(
+    "bugs_long", x = "condition", y = "desire", subject = "subject",
+    label = "bugs_long-nopaths", types = "parametric",
+    extra_args = list(centrality.path = FALSE)
   )
 )
 
@@ -447,17 +633,30 @@ case_names <- vapply(CASES, function(case) case$name, character(1L))
 if (anyDuplicated(case_names)) stop("duplicate case names: ", case_names[duplicated(case_names)])
 
 # Arguments whose consequences the bookkeeping below knows (which hidden calls
-# ggbetweenstats makes, which outputs it draws). Fail closed on any other.
+# ggbetweenstats and ggwithinstats make, which outputs they draw). Fail closed on any
+# other. ggwithinstats adds subject.id (always given) and the two path flags, which
+# change only the plot's layers.
 KNOWN_ARGS <- c(
   "x", "y", "type", "alternative", "conf.level", "digits", "p.adjust.method",
   "pairwise.display", "results.subtitle", "bf.message", "bf.prior", "tr"
 )
+KNOWN_ARGS_BY_FUNCTION <- list(
+  ggbetweenstats = KNOWN_ARGS,
+  ggwithinstats = c(KNOWN_ARGS, "subject.id", "point.path", "centrality.path")
+)
 for (case in CASES) {
-  unknown <- setdiff(names(case$args), KNOWN_ARGS)
+  known <- KNOWN_ARGS_BY_FUNCTION[[case$fun]]
+  if (is.null(known)) stop(case$name, ": generate.R has no bookkeeping for ", case$fun)
+  unknown <- setdiff(names(case$args), known)
   if (length(unknown) > 0L) {
     stop(case$name, ": generate.R has no bookkeeping for ", paste(unknown, collapse = ", "))
   }
-  for (flag in c("results.subtitle", "bf.message")) {
+  if (case$fun == "ggwithinstats" && is.null(case$args$subject.id)) {
+    # Without subject.id ggwithinstats pairs rows by their order within each level;
+    # inferplot never does, so every case names its subjects.
+    stop(case$name, ": ggwithinstats cases must give subject.id")
+  }
+  for (flag in c("results.subtitle", "bf.message", "point.path", "centrality.path")) {
     value <- case$args[[flag]]
     if (!is.null(value) && !(isTRUE(value) || isFALSE(value))) {
       stop(case$name, ": ", flag, " must be TRUE or FALSE")
@@ -668,21 +867,30 @@ local({
   }
 })
 
-# The `.eval_f` calls ggbetweenstats 1.1.4 makes, in order: with results.subtitle
-# (default TRUE) it computes the subtitle, and then the Bayes caption when
-# bf.condition (type "parametric") and bf.message (default TRUE) both hold; with
-# results.subtitle = FALSE it computes neither (ggbetweenstats() and
-# .subtitle_caption() in ggstatsplot's R/ggbetweenstats.R and R/0-utils.R).
+# The functions whose hidden calls the rules below describe. ggbetweenstats and
+# ggwithinstats 1.1.4 share them: both compute the subtitle and caption through
+# .bw_subtitle_caption() and .subtitle_caption(), and the labels and pairs through
+# .bw_decorate() (ggstatsplot's R/ggbetweenstats-helpers.R and R/0-utils.R).
+HIDDEN_CALL_FUNCTIONS <- c("ggbetweenstats", "ggwithinstats")
+
+# The `.eval_f` calls ggbetweenstats and ggwithinstats 1.1.4 make, in order: with
+# results.subtitle (default TRUE) they compute the subtitle, and then the Bayes
+# caption when bf.condition (type "parametric") and bf.message (default TRUE) both
+# hold; with results.subtitle = FALSE they compute neither.
 expected_eval_f <- function(case) {
+  if (!(case$fun %in% HIDDEN_CALL_FUNCTIONS)) {
+    stop("generate.R has no hidden-call rules for ", case$fun, "; add them first")
+  }
   if (isFALSE(case$args$results.subtitle)) {
     return(character())
   }
   c("subtitle", if (case$args$type == "parametric" && !isFALSE(case$args$bf.message)) "caption")
 }
 
-# Every hidden call ggbetweenstats makes, in order: the `.eval_f` calls above, then
-# centrality_description() (always, also when the labels are not drawn), then
-# pairwise_comparisons() for three or more groups unless pairwise.display = "none".
+# Every hidden call ggbetweenstats and ggwithinstats make, in order: the `.eval_f`
+# calls above, then centrality_description() (always, also when the labels are not
+# drawn), then pairwise_comparisons() for three or more groups (ggwithinstats: three
+# or more conditions after complete_subjects()) unless pairwise.display = "none".
 expected_hidden_calls <- function(case, levels) {
   display <- case$args$pairwise.display
   pairwise <- length(levels) > 2L && !identical(display, "none")
@@ -756,10 +964,11 @@ VERSIONS <- list(
 #
 # For effect sizes whose CI ggstatsplot bootstraps:
 #
-# 1. Replay ggstatsplot's own computation. Inside ggbetweenstats() the effect-size
-#    call is the first to draw random numbers (statsExpressions 2.2.1 source), so
-#    set.seed(CASE_SEED) followed by the same call with GG_RESAMPLES resamples, on
-#    the rows in statsExpressions' order, must reproduce ggstatsplot's estimate and
+# 1. Replay ggstatsplot's own computation. Inside ggbetweenstats() and
+#    ggwithinstats() the effect-size call is the first to draw random numbers
+#    (statsExpressions 2.2.1 source), so set.seed(CASE_SEED) followed by the same
+#    call with GG_RESAMPLES resamples, on the rows in statsExpressions' order, must
+#    reproduce ggstatsplot's estimate and
 #    both CI bounds exactly. A match proves the reference call below is the method
 #    and variant ggstatsplot ran. A case may list several candidate calls (both
 #    EQVAR settings of akp.effect); the one that matches is used, and every
@@ -778,6 +987,37 @@ statsexpressions_rows <- function(analysis) {
   convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
   long <- convert(data = analysis, x = x, y = y, paired = FALSE, spread = FALSE)
   data.frame(y = long[["y"]], x = long[["x"]])
+}
+
+# The same for a within-subjects design, from the complete subjects ggwithinstats
+# passes on (within_analysis(): columns .rowid, x, y): the long tibble
+# long_to_wide_converter(paired = TRUE, spread = FALSE) gives two_sample_test(),
+# oneway_anova() and pairwise_comparisons() (rows sorted by subject, then by
+# condition), and the wide tibble (one column per condition, subjects in that order)
+# two_sample_test() gives dep.effect for the robust type. The columns keep the
+# case's own names (x_name, y_name), as in ggstatsplot: renamed to x and y, a level
+# called "x" or "y" (edge_within_nonspherical) would clash with them when the data are
+# spread wide.
+statsexpressions_paired_rows <- function(analysis, x_name, y_name) {
+  convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
+  data <- analysis
+  names(data) <- c(".rowid", x_name, y_name)
+  xs <- rlang::sym(x_name)
+  ys <- rlang::sym(y_name)
+  list(
+    x = x_name, y = y_name,
+    long = rlang::inject(convert(
+      data = data, x = !!xs, y = !!ys, subject.id = .rowid, paired = TRUE, spread = FALSE
+    )),
+    wide = rlang::inject(convert(
+      data = data, x = !!xs, y = !!ys, subject.id = .rowid, paired = TRUE, spread = TRUE
+    ))
+  )
+}
+
+# statsExpressions' formula y ~ x | .rowid for a design (friedman.test, kendalls_w).
+blocked_formula <- function(rows) {
+  stats::as.formula(sprintf("`%s` ~ `%s` | .rowid", rows$y, rows$x))
 }
 
 akp_candidate <- function(analysis, eqvar, alpha, tr) {
@@ -802,17 +1042,120 @@ akp_candidate <- function(analysis, eqvar, alpha, tr) {
       } else {
         as.numeric(ci)[1:2]
       }
+      # jsonlite writes non-finite doubles as null: an infinite bound is kept as text
+      # (row by row for a matrix), finite output exactly as before.
+      ci_raw <- if (all(is.finite(ci))) {
+        ci
+      } else if (is.matrix(ci)) {
+        lapply(seq_len(nrow(ci)), function(i) encode_doubles(ci[i, ]))
+      } else {
+        encode_doubles(ci)
+      }
       list(
         values = c(effect[[1L]], as.numeric(pair)),
-        raw = list(AKPeffect = r$AKPeffect, AKPci = r$AKPci, AKPci_dim = dim(r$AKPci))
+        raw = list(AKPeffect = r$AKPeffect, AKPci = ci_raw, AKPci_dim = dim(r$AKPci))
       )
     }
   )
 }
 
+# The effect-size row statsExpressions keeps from a WRS2 object, as it keeps it:
+# estimate, conf.low, conf.high from tidy_model_parameters().
+tidy_effect <- function(model, ...) {
+  tidy <- statsExpressions::tidy_model_parameters(model, ...)
+  if (nrow(tidy) != 1L) stop("expected one effect-size row, got ", nrow(tidy))
+  c(tidy$estimate, tidy$conf.low, tidy$conf.high)
+}
+
+# A WRS2 matrix or list output for the fixture, with row names kept.
+raw_matrix <- function(m) {
+  m <- unclass(m)
+  if (!is.matrix(m)) {
+    return(to_json_value(m))
+  }
+  df <- data.frame(
+    row = rownames(m) %||% as.character(seq_len(nrow(m))), m,
+    check.names = FALSE, stringsAsFactors = FALSE
+  )
+  names(df) <- make.unique(names(df))
+  frame_rows(df)
+}
+
+# ggwithinstats' bootstrapped effect sizes (statsExpressions 2.2.1 source):
+# WRS2::dep.effect for two robust conditions (its AKP row: tidy_model_parameters(keep
+# = "AKP")), WRS2::wmcpAKP for three or more robust conditions, and
+# effectsize::kendalls_w for three or more nonparametric conditions. statsExpressions
+# passes neither alpha nor conf.level to the two WRS2 calls, only tr and nboot.
+within_bootstrap_candidates <- function(case, rows, subtitle_row) {
+  k <- nlevels(rows$long[[rows$x]])
+  type <- case$args$type
+  if (type %in% c("parametric", "bayes") || (type == "nonparametric" && k == 2L)) {
+    return(list())
+  }
+  if (length(subtitle_row) == 0L) {
+    return(list())
+  }
+  conf_level <- case_conf_level(case)
+  tr <- case_tr(case)
+  if (type == "robust" && k == 2L) {
+    wide <- rows$wide
+    return(list(list(
+      call = sprintf(
+        "WRS2::dep.effect(x = wide[[2]], y = wide[[3]], tr = %s, nboot = R)", format(tr)
+      ),
+      conf_level = NULL,
+      run = function(resamples) {
+        r <- WRS2::dep.effect(x = wide[[2L]], y = wide[[3L]], tr = tr, nboot = resamples)
+        list(values = tidy_effect(r, keep = "AKP"), raw = raw_matrix(r))
+      }
+    )))
+  }
+  if (type == "robust") {
+    # oneway_anova(): long_to_wide_converter(data, x, y) on its long data (whose .rowid
+    # it made a factor), without .rowid.
+    convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
+    long <- rows$long
+    long$.rowid <- as.factor(long$.rowid)
+    xs <- rlang::sym(rows$x)
+    ys <- rlang::sym(rows$y)
+    wide <- rlang::inject(convert(data = long, x = !!xs, y = !!ys))
+    wide$.rowid <- NULL
+    return(list(list(
+      call = sprintf("WRS2::wmcpAKP(wide, tr = %s, nboot = R)", format(tr)),
+      conf_level = NULL,
+      run = function(resamples) {
+        r <- WRS2::wmcpAKP(wide, tr = tr, nboot = resamples)
+        list(values = tidy_effect(r), raw = to_json_value(unclass(r)))
+      }
+    )))
+  }
+  if (type == "nonparametric") {
+    long <- rows$long
+    long$.rowid <- as.factor(long$.rowid)
+    formula <- blocked_formula(rows)
+    return(list(list(
+      call = sprintf(
+        "effectsize::kendalls_w(%s, data, ci = %s, iterations = R)",
+        deparse_text(formula), format(conf_level)
+      ),
+      run = function(resamples) {
+        r <- effectsize::kendalls_w(
+          formula,
+          data = long, ci = conf_level, iterations = resamples, verbose = FALSE
+        )
+        list(values = c(r[[1L]], r$CI_low, r$CI_high), raw = r)
+      }
+    )))
+  }
+  stop(case$name, ": no bootstrap rule for type ", type)
+}
+
 bootstrap_candidates <- function(case, analysis, subtitle_row) {
   # Fail closed: each function needs its own replay (paired row order, other effect
   # sizes) before its cases are added.
+  if (case$fun == "ggwithinstats") {
+    return(within_bootstrap_candidates(case, analysis, subtitle_row))
+  }
   if (case$fun != "ggbetweenstats") {
     stop("generate.R has no bootstrap replay for ", case$fun, "; add one first")
   }
@@ -890,32 +1233,11 @@ run_or_stop <- function(case, what, expr) {
   out
 }
 
-bootstrap_reference <- function(case, analysis, stats) {
-  subtitle_row <- stats$subtitle_data
-  ordered <- statsexpressions_rows(analysis)
-  candidates <- bootstrap_candidates(case, ordered, subtitle_row)
-  if (length(candidates) == 0L) {
-    return(NULL)
-  }
-  gg_values <- unname(c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high))
+# Bootstrap references already computed in this run, by call and data.
+BOOT_CACHE <- new.env()
 
-  tried <- list()
-  chosen <- NULL
-  for (candidate in candidates) {
-    replay <- run_or_stop(case, "ggstatsplot replay", {
-      set.seed(CASE_SEED)
-      candidate$run(GG_RESAMPLES)
-    })
-    values <- unname(replay$value$values)
-    matches <- isTRUE(all.equal(values, gg_values, tolerance = 1e-10))
-    tried[[length(tried) + 1L]] <- list(
-      call = candidate$call, values = as.list(values), matches = matches
-    )
-    if (matches && is.null(chosen)) chosen <- candidate
-  }
-  replayed <- !is.null(chosen)
-  if (!replayed) chosen <- candidates[[1L]]
-
+# The 20,000-resample reference and the 2,000-resample replicates of one call.
+bootstrap_runs <- function(case, chosen) {
   reference <- run_or_stop(case, "bootstrap reference", {
     set.seed(BOOT_SEED)
     chosen$run(BOOT_REFERENCE_RESAMPLES)
@@ -943,17 +1265,81 @@ bootstrap_reference <- function(case, analysis, stats) {
       stop("bootstrap replicates failed for ", case$name, ": ", run$error)
     }
   }
+  list(reference = reference, runs = runs)
+}
+
+bootstrap_reference <- function(case, analysis, stats) {
+  subtitle_row <- stats$subtitle_data
+  within <- case$fun == "ggwithinstats"
+  ordered <- if (within) {
+    statsexpressions_paired_rows(analysis, case$args$x, case$args$y)
+  } else {
+    statsexpressions_rows(analysis)
+  }
+  candidates <- bootstrap_candidates(case, ordered, subtitle_row)
+  if (length(candidates) == 0L) {
+    return(NULL)
+  }
+  gg_values <- unname(c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high))
+
+  tried <- list()
+  chosen <- NULL
+  for (candidate in candidates) {
+    replay <- run_or_stop(case, "ggstatsplot replay", {
+      set.seed(CASE_SEED)
+      candidate$run(GG_RESAMPLES)
+    })
+    values <- unname(replay$value$values)
+    matches <- isTRUE(all.equal(values, gg_values, tolerance = 1e-10))
+    tried[[length(tried) + 1L]] <- list(
+      call = candidate$call, values = as.list(encode_doubles(values)), matches = matches
+    )
+    if (matches && is.null(chosen)) chosen <- candidate
+  }
+  replayed <- !is.null(chosen)
+  if (!replayed) chosen <- candidates[[1L]]
+
+  # The reference and the replicates depend only on the call and its data (each run
+  # sets its own seed), so cases that share both (the p.adjust, display and digits
+  # variants of one dataset) share one computation; the values are the same either
+  # way.
+  key <- digest::digest(list(chosen$call, ordered), algo = "sha256")
+  cached <- BOOT_CACHE[[key]]
+  if (is.null(cached)) {
+    cached <- bootstrap_runs(case, chosen)
+    assign(key, cached, envir = BOOT_CACHE)
+  }
+  reference <- cached$reference
+  runs <- cached$runs
   replicates <- list(
     value = t(vapply(runs, function(run) run$values, numeric(3L))),
     warnings = unlist(lapply(runs, function(run) run$warnings))
   )
-  ref <- unname(reference$value$values)
+  # Infinite bounds (an effect size whose winsorized variance is 0 in enough
+  # resamples) are written as "Inf" and "-Inf", like every other fixture double.
+  ref <- encode_doubles(unname(reference$value$values))
   reps <- replicates$value
-  list(
+  spread <- function(column, f) encode_doubles(f(reps[, column]))
+  gg_values <- encode_doubles(gg_values)
+  out <- list(
     quantity = "effect size confidence interval",
     call = chosen$call,
-    data_order = "rows ordered by the levels of x, as statsExpressions passes them",
-    conf_level = case_conf_level(case),
+    data_order = if (within) {
+      paste(
+        "complete subjects sorted by subject, then by condition, as statsExpressions",
+        "passes them (dep.effect and wmcpAKP: one column per condition)"
+      )
+    } else {
+      "rows ordered by the levels of x, as statsExpressions passes them"
+    },
+    # The level of the interval the call computes. dep.effect and wmcpAKP take no
+    # confidence level (statsExpressions passes none): their level is the one
+    # ggstatsplot reports, and the case's own is kept as requested_conf_level.
+    conf_level = if (within && "conf_level" %in% names(chosen)) {
+      subtitle_row$conf.level
+    } else {
+      case_conf_level(case)
+    },
     ggstatsplot = list(
       estimate = gg_values[[1L]],
       conf_low = gg_values[[2L]],
@@ -972,15 +1358,19 @@ bootstrap_reference <- function(case, analysis, stats) {
       count = BOOT_REPLICATES,
       resamples = BOOT_REPLICATE_RESAMPLES,
       first_seed = BOOT_SEED + 1L,
-      estimate_mean = mean(reps[, 1L]),
-      estimate_sd = stats::sd(reps[, 1L]),
-      conf_low_mean = mean(reps[, 2L]),
-      conf_low_sd = stats::sd(reps[, 2L]),
-      conf_high_mean = mean(reps[, 3L]),
-      conf_high_sd = stats::sd(reps[, 3L])
+      estimate_mean = spread(1L, mean),
+      estimate_sd = spread(1L, stats::sd),
+      conf_low_mean = spread(2L, mean),
+      conf_low_sd = spread(2L, stats::sd),
+      conf_high_mean = spread(3L, mean),
+      conf_high_sd = spread(3L, stats::sd)
     ),
     r_warnings = as.list(unique(c(reference$warnings, replicates$warnings)))
   )
+  if (within) {
+    out <- append(out, list(requested_conf_level = case_conf_level(case)), after = 4L)
+  }
+  out
 }
 
 # Running a case --------------------------------------------------------------------
@@ -1006,14 +1396,63 @@ between_analysis <- function(data, x, y) {
   data.frame(y = used[[y]], x = droplevels(groups))
 }
 
-# Which rows each function analyzes. Fail closed: within-subjects designs keep only
-# complete subjects (statsExpressions::complete_subjects), one-sample designs have no
-# x, and so on, so every other function needs its own entry before its cases.
-ANALYSES <- list(ggbetweenstats = between_analysis)
-for (case in CASES) {
-  if (is.null(ANALYSES[[case$fun]])) {
-    stop("generate.R has no analysis bookkeeping for ", case$fun, "; add it first")
+# The data ggstatsplot analyzes for a within-subjects design: ggwithinstats() first
+# calls statsExpressions::complete_subjects(data, x, y, subject.id), which drops rows
+# without x or subject, stops on a subject repeated within a level, keeps the
+# subjects observed (with y) in every level of x and sorts by subject (columns .rowid,
+# x, y; x a factor without empty levels). Every test, label and the plot use that.
+within_analysis <- function(data, x, y, subject) {
+  frame <- data.frame(
+    x = data[[x]], y = data[[y]], subject = data[[subject]], stringsAsFactors = FALSE
+  )
+  out <- statsExpressions::complete_subjects(frame, x, y, subject)
+  if (!identical(names(out), c(".rowid", "x", "y"))) {
+    stop("complete_subjects() returned columns ", paste(names(out), collapse = ", "))
   }
+  out
+}
+
+# Which rows each function analyzes. Fail closed: one-sample designs have no x, and
+# so on, so every other function needs its own entry before its cases.
+ANALYSES <- list(
+  ggbetweenstats = function(data, case) between_analysis(data, case$args$x, case$args$y),
+  ggwithinstats = function(data, case) {
+    within_analysis(data, case$args$x, case$args$y, case$args$subject.id)
+  }
+)
+
+# The subjects-by-conditions data a within-subjects case analyzed, as ggwithinstats
+# analyzed it (within_analysis()): `subjects` in the order ggstatsplot holds them
+# (complete_subjects() sorts by subject: numbers numerically, text in the C locale;
+# within a subject the rows follow the level order), which is the order dep.effect,
+# wmcpAKP and kendalls_w resample; `values`, one row per subject and one column per
+# level; `dropped_subjects`, the subjects with a row (x and subject present) that were
+# left out for a missing level or value; and the number of rows without x or subject.
+within_data <- function(data, case, analysis) {
+  x <- case$args$x
+  subject <- case$args$subject.id
+  levels <- levels(analysis$x)
+  subjects <- unique(analysis$.rowid)
+  columns <- lapply(levels, function(level) {
+    rows <- analysis$x == level
+    as.numeric(analysis$y[rows][match(subjects, analysis$.rowid[rows])])
+  })
+  usable <- !is.na(data[[x]]) & !is.na(data[[subject]])
+  candidates <- sort(unique(data[[subject]][usable]))
+  list(
+    subject_id = subject,
+    levels = as.list(levels),
+    subjects = as.list(as.character(subjects)),
+    subject_order = paste(
+      "sorted by subject as complete_subjects() sorts (numbers numerically, text in",
+      "the C locale); the analysis holds the rows subject by subject, levels in order"
+    ),
+    values = lapply(seq_along(subjects), function(i) {
+      as.list(vapply(columns, function(column) column[[i]], numeric(1L)))
+    }),
+    dropped_subjects = as.list(as.character(setdiff(candidates, subjects))),
+    rows_without_x_or_subject = sum(!usable)
+  )
 }
 
 # Group counts from ggstatsplot's own centrality labels (`n.obs`), named by level.
@@ -1053,7 +1492,7 @@ run_case <- function(case) {
   failed <- inherits(outcome$value, "error")
   hidden <- name_hidden(case, HIDDEN$log, failed)
 
-  analysis <- ANALYSES[[case$fun]](data, case$args$x, case$args$y)
+  analysis <- ANALYSES[[case$fun]](data, case)
   fixture <- list(
     schema_version = SCHEMA_VERSION,
     name = case$name,
@@ -1102,6 +1541,11 @@ run_case <- function(case) {
     },
     versions = VERSIONS
   )
+  if (case$fun == "ggwithinstats") {
+    # After n_per_level (each level's count is the number of complete subjects).
+    at <- match("n_per_level", names(fixture))
+    fixture <- append(fixture, list(within_data = within_data(data, case, analysis)), after = at)
+  }
   fixture
 }
 
@@ -1153,8 +1597,8 @@ outcome_problems <- function(case, fixture) {
       paste(calls, collapse = ", "), paste(expected_calls, collapse = ", ")
     ))
   }
-  # ggbetweenstats draws the subtitle unless results.subtitle = FALSE, and the Bayes
-  # caption only for type "parametric" with bf.message (ggstatsplot's bf.condition),
+  # ggbetweenstats and ggwithinstats draw the subtitle unless results.subtitle =
+  # FALSE, and the Bayes caption only for type "parametric" with bf.message (ggstatsplot's bf.condition),
   # never without the subtitle; the tables behind them follow the same rule.
   evaluated <- expected_eval_f(case)
   wants_subtitle <- "subtitle" %in% evaluated
@@ -1175,7 +1619,7 @@ outcome_problems <- function(case, fixture) {
   if (has_caption != has_caption_data) {
     out <- c(out, "caption and caption_data disagree")
   }
-  # Pairwise comparisons exist exactly when ggbetweenstats computes them.
+  # Pairwise comparisons exist exactly when ggbetweenstats or ggwithinstats computes them.
   wants_pairwise <- "pairwise_comparisons" %in% expected_calls
   has_pairwise <- length(fixture$stats$pairwise_comparisons_data) > 0L
   if (wants_pairwise != has_pairwise) {
@@ -2205,6 +2649,16 @@ map_vectors <- function() {
         5 + 0.003 * normal_scores(30L)
       ),
       outlier_tail = c(0.1 * normal_scores(95L), 10, 12, 15, 20, 30)
+    ),
+    # Phase 3: where bw.SJ starts anchoring its pair-distance bins at min(x). One
+    # base vector (range 12, bin width 0.01212) shifted by c: about 1e5 and 1e8 bin
+    # widths, and just below and just above 2^31 bin widths (26027440 and
+    # 26027507), where the two anchors' bandwidths differ by about 1e-3.
+    stats::setNames(
+      lapply(c(1200, 1211988, 26027440, 26027507), function(shift) {
+        c(0, 1, 2, 2, 3, 3, 3, 4, 5, 7, 9, 12) + shift
+      }),
+      paste0("anchor_", c("1200", "1211988", "26027440", "26027507"))
     )
   )
   list(
@@ -2397,12 +2851,474 @@ ranks_probe <- function() {
   )
 }
 
+# Phase 3 probes ----------------------------------------------------------------------
+#
+# What withinstats needs beyond the cases: the paired Wilcoxon test and rank-biserial
+# r on zeros and ties (probe-signrank), paired JZS Bayes factors at large |t|
+# (probe-pairedbf), Friedman, Durbin-Conover and Kendall's W on ties
+# (probe-friedman), afex's repeated-measures ANOVA with each sphericity correction
+# and the omega squared behind it (probe-rmanova), and WRS2's yuend, rmanova, rmmcp,
+# dep.effect and wmcpAKP (probe-wrs2within). Doubles are hex text as above.
+
+# The within-subject datasets the probes read, as ggwithinstats analyzes them.
+WITHIN_PROBE_DESIGNS <- list(
+  list(name = "bugs_long", dataset = "bugs_long", x = "condition", y = "desire", subject = "subject"),
+  list(name = "edge_within_missing", dataset = "edge_within_missing"),
+  list(name = "edge_within_small", dataset = "edge_within_small"),
+  list(name = "edge_within_ties", dataset = "edge_within_ties"),
+  list(name = "edge_within_negative", dataset = "edge_within_negative"),
+  list(name = "edge_within_outliers", dataset = "edge_within_outliers"),
+  list(name = "edge_within_null", dataset = "edge_within_null"),
+  list(name = "edge_within_k5", dataset = "edge_within_k5"),
+  list(name = "edge_within_nonspherical", dataset = "edge_within_nonspherical")
+)
+
+# One design: the CSV's `datasets` entry; the complete subjects (within_analysis());
+# the long rows with .rowid a factor, as oneway_anova() uses them; the wide table; and
+# each level's values in subject order as hex.
+within_probe_design <- function(design) {
+  x <- design$x %||% "condition"
+  y <- design$y %||% "value"
+  subject <- design$subject %||% "subject"
+  set <- probe_dataset(design$dataset)
+  analysis <- within_analysis(set$data, x, y, subject)
+  rows <- statsexpressions_paired_rows(analysis, x, y)
+  long <- rows$long
+  long$.rowid <- as.factor(long$.rowid)
+  levels <- levels(analysis$x)
+  list(
+    name = design$name, entry = set$entry, analysis = analysis, long = long,
+    paired_long = rows$long, wide = rows$wide, levels = levels, x = x, y = y,
+    values_hex = stats::setNames(
+      lapply(levels, function(level) hex_list(analysis$y[analysis$x == level])), levels
+    ),
+    subjects = as.list(as.character(unique(analysis$.rowid)))
+  )
+}
+
+# A data frame's numeric columns as hex text next to the 15-digit values.
+frame_with_hex <- function(df) {
+  df <- as.data.frame(df, stringsAsFactors = FALSE)
+  names(df) <- make.unique(names(df))
+  for (column in names(df)) {
+    if (is.double(df[[column]])) df[[paste0(column, "_hex")]] <- hex(df[[column]])
+  }
+  frame_rows(df)
+}
+
+# probe-signrank: stats::wilcox.test(paired = TRUE) with exact NULL, TRUE and FALSE,
+# with and without the continuity correction, every alternative; and
+# effectsize::rank_biserial(paired = TRUE) at 95% and 90%, every alternative; on
+# pairs with zero differences, tied absolute differences, all differences zero, n of
+# 3 to 60, and untied pairs on either side of wilcox.test's exact threshold (n = 50).
+signrank_probe <- function() {
+  sleep <- probe_dataset("sleep")
+  ties <- probe_dataset("edge_within2_ties")
+  small <- probe_dataset("edge_within2_small")
+  by_subject <- function(set, x, y, subject, level) {
+    d <- set$data[!is.na(set$data[[y]]) & as.character(set$data[[x]]) == level, ]
+    d[[y]][order(d[[subject]])]
+  }
+  shifted <- function(n, shift) {
+    base <- seq_len(n) / n * 3
+    list(base + normal_scores(n) + shift, base)
+  }
+  pairs <- list(
+    sleep = list(
+      by_subject(sleep, "group", "extra", "ID", "1"), by_subject(sleep, "group", "extra", "ID", "2")
+    ),
+    edge_within2_ties = list(
+      by_subject(ties, "condition", "value", "subject", "post"),
+      by_subject(ties, "condition", "value", "subject", "pre")
+    ),
+    edge_within2_small = list(
+      by_subject(small, "condition", "value", "subject", "post"),
+      by_subject(small, "condition", "value", "subject", "pre")
+    ),
+    untied_n8 = list(
+      c(1.83, 0.50, 1.62, 2.48, 1.68, 1.88, 1.55, 3.06),
+      c(0.878, 0.647, 0.598, 2.05, 1.06, 1.29, 1.06, 3.14)
+    ),
+    zeros_and_ties = list(
+      c(3, 4, 5, 5, 6, 7, 8, 8, 9, 10, 4, 6), c(3, 4, 4, 3, 5, 7, 6, 6, 10, 7, 5, 3)
+    ),
+    all_zero = list(1:6 + 0, 1:6 + 0),
+    one_nonzero = list(c(1, 2, 3, 4), c(1, 2, 3, 5)),
+    n3 = list(c(1.1, 2.5, 3.2), c(0.4, 1.0, 3.5)),
+    ties_n60 = list(rep(1:6, 10L) + 0, rep(1:6, 10L) + rep(c(-2, -1, 0, 1, 1, 2), 10L)),
+    untied_n49 = shifted(49L, 0.3),
+    untied_n50 = shifted(50L, 0.3),
+    negative_shift_n20 = shifted(20L, -0.5)
+  )
+  rows <- lapply(names(pairs), function(name) {
+    a <- pairs[[name]][[1L]]
+    b <- pairs[[name]][[2L]]
+    tests <- list()
+    for (exact in list(NULL, TRUE, FALSE)) {
+      for (correct in c(TRUE, FALSE)) {
+        for (alternative in c("two.sided", "less", "greater")) {
+          out <- probe_attempt(stats::wilcox.test(
+            a, b, paired = TRUE, exact = exact, correct = correct, alternative = alternative
+          ))
+          tests[[length(tests) + 1L]] <- list(
+            exact = if (is.null(exact)) "NULL" else exact, correct = correct,
+            alternative = alternative,
+            statistic_hex = if (is.null(out$value)) NULL else hex(unname(out$value$statistic)),
+            p_value_hex = if (is.null(out$value)) NULL else hex(out$value$p.value),
+            method = if (is.null(out$value)) NULL else out$value$method,
+            error = out$error, warnings = out$warnings
+          )
+        }
+      }
+    }
+    biserial <- list()
+    for (ci in c(0.95, 0.9)) {
+      for (alternative in c("two.sided", "less", "greater")) {
+        out <- probe_attempt(effectsize::rank_biserial(
+          a, b, paired = TRUE, ci = ci, alternative = alternative, verbose = FALSE
+        ))
+        r <- out$value
+        biserial[[length(biserial) + 1L]] <- list(
+          ci = ci, alternative = alternative,
+          estimate_hex = if (is.null(r)) NULL else hex(r[[1L]]),
+          conf_low_hex = if (is.null(r)) NULL else hex(r$CI_low),
+          conf_high_hex = if (is.null(r)) NULL else hex(r$CI_high),
+          error = out$error, warnings = out$warnings
+        )
+      }
+    }
+    list(name = name, a_hex = hex_list(a), b_hex = hex_list(b), wilcox = tests, rank_biserial = biserial)
+  })
+  probe_file(
+    "probe-signrank",
+    "wilcox.test(paired = TRUE) by exact, correct and alternative; effectsize::rank_biserial(paired = TRUE)",
+    list(pairs = rows),
+    datasets = list(sleep$entry, ties$entry, small$entry)
+  )
+}
+
+# probe-pairedbf: BayesFactor::ttestBF(x, y, paired = TRUE) at |t| from 0 to 1,000
+# (n 5, 10, 30 and 200; rscale 0.707 and 0.8), with BayesFactor's own error estimate
+# and the paired t from t.test: where its quadrature could miss (D50 found misses for
+# two samples at |t| near 40 to 50).
+PAIREDBF_T <- c(0, 0.5, 1, 2, 3, 5, 8, 12, 20, 30, 40, 50, 70, 100, 150, 200, 300, 500, 1000)
+
+pairedbf_probe <- function() {
+  rows <- list()
+  for (n in c(5L, 10L, 30L, 200L)) {
+    noise <- normal_scores(n)
+    base <- seq_len(n) / n * 3
+    for (target in PAIREDBF_T) {
+      b <- base
+      a <- base + noise + target * stats::sd(noise) / sqrt(n)
+      tt <- probe_call("paired t.test", stats::t.test(a, b, paired = TRUE))$value
+      for (rscale in c(0.707, 0.8)) {
+        out <- probe_attempt(BayesFactor::ttestBF(x = a, y = b, paired = TRUE, rscale = rscale))
+        bf <- if (is.null(out$value)) NULL else BayesFactor::extractBF(out$value)
+        log_bf <- if (is.null(out$value)) NULL else BayesFactor::extractBF(out$value, logbf = TRUE)
+        rows[[length(rows) + 1L]] <- list(
+          n = n, t_target = target, rscale = rscale, rscale_hex = hex(rscale),
+          a_hex = hex_list(a), b_hex = hex_list(b),
+          t_hex = hex(unname(tt$statistic)), df = unname(tt$parameter),
+          bf10_hex = if (is.null(bf)) NULL else hex(bf$bf[[1L]]),
+          log_bf10_hex = if (is.null(log_bf)) NULL else hex(log_bf$bf[[1L]]),
+          error = if (is.null(bf)) NULL else encode_doubles(bf$error[[1L]]),
+          call_error = out$error, warnings = out$warnings
+        )
+      }
+    }
+  }
+  probe_file(
+    "probe-pairedbf",
+    "BayesFactor::ttestBF(paired = TRUE) and its error estimate at |t| from 0 to 1000",
+    list(rows = rows)
+  )
+}
+
+# probe-friedman: stats::friedman.test, PMCMRplus::durbinAllPairsTest (unadjusted) and
+# effectsize::kendalls_w (no CI) on the within-subject datasets as ggwithinstats
+# analyzes them, and on two constructed tables (every subject tied across conditions
+# in some rows; no ties at all).
+friedman_probe <- function() {
+  designs <- lapply(WITHIN_PROBE_DESIGNS, within_probe_design)
+  constructed <- list(
+    tied_rows = matrix(c(
+      1, 2, 3, 2, 2, 2, 3, 1, 2, 4, 4, 1, 1, 3, 2, 5, 5, 5, 2, 3, 4, 1, 1, 2
+    ), ncol = 3L, byrow = TRUE),
+    untied = matrix(c(
+      1.1, 2.3, 3.7, 0.4, 2.2, 1.9, 3.3, 1.2, 2.8, 4.4, 4.9, 1.5, 0.7, 3.1, 2.6, 5.2, 5.8,
+      5.5, 2.1, 3.6, 4.0, 1.3, 0.9, 2.4
+    ), ncol = 3L, byrow = TRUE)
+  )
+  for (name in names(constructed)) {
+    m <- constructed[[name]]
+    long <- data.frame(
+      .rowid = factor(rep(seq_len(nrow(m)), each = ncol(m))),
+      x = factor(rep(c("a", "b", "c"), times = nrow(m))),
+      y = as.vector(t(m))
+    )
+    designs[[length(designs) + 1L]] <- list(
+      name = name, entry = NULL, long = long, x = "x", y = "y",
+      paired_long = data.frame(.rowid = as.integer(long$.rowid), x = long$x, y = long$y),
+      levels = c("a", "b", "c"),
+      values_hex = stats::setNames(lapply(seq_len(ncol(m)), function(j) hex_list(m[, j])), c("a", "b", "c")),
+      subjects = as.list(as.character(seq_len(nrow(m))))
+    )
+  }
+  rows <- lapply(designs, function(design) {
+    long <- design$long
+    formula <- blocked_formula(design)
+    friedman <- probe_attempt(stats::friedman.test(formula, data = long))
+    paired <- design$paired_long
+    durbin <- probe_attempt(PMCMRplus::durbinAllPairsTest(
+      y = paired[[design$y]], groups = paired[[design$x]], blocks = paired$.rowid,
+      p.adjust.method = "none"
+    ))
+    kendall <- probe_attempt(effectsize::kendalls_w(
+      formula, data = long, ci = NULL, verbose = FALSE
+    ))
+    # With its bootstrap CI, as statsExpressions calls it (100 resamples, the cases'
+    # seed).
+    set.seed(CASE_SEED)
+    kendall_ci <- probe_attempt(effectsize::kendalls_w(
+      formula, data = long, ci = 0.95, iterations = 100L, verbose = FALSE
+    ))
+    levels <- design$levels
+    k <- length(levels)
+    durbin_pairs <- list()
+    if (!is.null(durbin$value)) {
+      for (i in seq_len(k - 1L)) {
+        for (j in (i + 1L):k) {
+          durbin_pairs[[length(durbin_pairs) + 1L]] <- list(
+            group1 = levels[[i]], group2 = levels[[j]],
+            statistic_hex = hex(durbin$value$statistic[levels[[j]], levels[[i]]]),
+            p_value_hex = hex(durbin$value$p.value[levels[[j]], levels[[i]]])
+          )
+        }
+      }
+    }
+    list(
+      name = design$name, levels = as.list(levels), subjects = design$subjects,
+      values_hex = design$values_hex,
+      friedman_statistic_hex = if (is.null(friedman$value)) NULL else hex(unname(friedman$value$statistic)),
+      friedman_parameter = if (is.null(friedman$value)) NULL else unname(friedman$value$parameter),
+      friedman_p_value_hex = if (is.null(friedman$value)) NULL else hex(friedman$value$p.value),
+      friedman_error = friedman$error, friedman_warnings = friedman$warnings,
+      durbin_method = if (is.null(durbin$value)) NULL else to_json_value(durbin$value$method),
+      durbin_dist = if (is.null(durbin$value)) NULL else to_json_value(durbin$value$dist),
+      durbin_error = durbin$error, durbin_warnings = durbin$warnings,
+      durbin_pairs = durbin_pairs,
+      kendalls_w_hex = if (is.null(kendall$value)) NULL else hex(kendall$value[[1L]]),
+      kendalls_w_error = kendall$error, kendalls_w_warnings = kendall$warnings,
+      kendalls_w_ci = if (is.null(kendall_ci$value)) NULL else frame_with_hex(kendall_ci$value),
+      kendalls_w_ci_error = kendall_ci$error, kendalls_w_ci_warnings = kendall_ci$warnings
+    )
+  })
+  probe_file(
+    "probe-friedman",
+    "friedman.test, PMCMRplus::durbinAllPairsTest (unadjusted) and effectsize::kendalls_w on within-subject data with ties",
+    list(designs = rows),
+    datasets = Filter(Negate(is.null), lapply(designs, function(design) design$entry))
+  )
+}
+
+# probe-rmanova: afex::aov_ez as statsExpressions calls it (include_aov = TRUE) on the
+# within-subject datasets: the ANOVA table without correction and with the
+# Greenhouse-Geisser and Huynh-Feldt corrections, the sphericity tests and epsilons
+# (summary()), the error strata's sums of squares, what tidy_model_parameters()
+# (ggstatsplot's subtitle) reads from the model, effectsize::omega_squared on the model
+# at 95% and 90%, and effectsize::F_to_omega2 at the uncorrected and the corrected df.
+rmanova_probe <- function() {
+  designs <- lapply(WITHIN_PROBE_DESIGNS, within_probe_design)
+  rows <- lapply(designs, function(design) {
+    long <- design$long
+    fit <- probe_call(
+      paste("aov_ez for", design$name),
+      afex::aov_ez(id = ".rowid", dv = design$y, data = long, within = design$x, include_aov = TRUE)
+    )
+    mod <- fit$value
+    tables <- lapply(c("none", "GG", "HF"), function(correction) {
+      out <- probe_attempt(as.data.frame(anova(mod, correction = correction, es = "none")))
+      list(correction = correction, table = if (is.null(out$value)) NULL else frame_with_hex(out$value), error = out$error)
+    })
+    sphericity <- probe_attempt(summary(mod))
+    s <- sphericity$value
+    strata <- probe_attempt(lapply(summary(mod$aov), function(stratum) {
+      table <- stratum[[1L]]
+      frame_with_hex(data.frame(term = trimws(rownames(table)), unclass(table), check.names = FALSE))
+    }))
+    tidy <- probe_attempt(statsExpressions::tidy_model_parameters(mod))
+    omega <- lapply(c(0.95, 0.9), function(ci) {
+      out <- probe_attempt(effectsize::omega_squared(mod, ci = ci, verbose = FALSE))
+      list(ci = ci, value = if (is.null(out$value)) NULL else frame_with_hex(out$value), error = out$error, warnings = out$warnings)
+    })
+    uncorrected <- tables[[1L]]$table
+    gg <- tables[[2L]]$table
+    from_f <- function(table) {
+      if (is.null(table)) {
+        return(NULL)
+      }
+      row <- table[[1L]]
+      f <- row[["F"]]
+      lapply(c(0.95, 0.9), function(ci) {
+        out <- probe_attempt(effectsize::F_to_omega2(f, row[["num Df"]], row[["den Df"]], ci = ci))
+        list(ci = ci, value = if (is.null(out$value)) NULL else frame_with_hex(out$value), error = out$error)
+      })
+    }
+    list(
+      name = design$name, levels = as.list(design$levels), subjects = design$subjects,
+      values_hex = design$values_hex,
+      aov_ez_warnings = as.list(unique(fit$warnings)), aov_ez_messages = as.list(unique(fit$messages)),
+      anova = tables,
+      sphericity_tests = if (is.null(s)) NULL else raw_matrix(s$sphericity.tests),
+      pval_adjustments = if (is.null(s)) NULL else raw_matrix(s$pval.adjustments),
+      summary_error = sphericity$error,
+      strata = strata$value, strata_error = strata$error,
+      tidy_model_parameters = if (is.null(tidy$value)) NULL else frame_with_hex(tidy$value),
+      tidy_error = tidy$error,
+      omega_squared = omega,
+      f_to_omega2_uncorrected = from_f(uncorrected),
+      f_to_omega2_gg = from_f(gg)
+    )
+  })
+  probe_file(
+    "probe-rmanova",
+    "afex::aov_ez with no, GG and HF corrections, sphericity epsilons, error strata, omega squared",
+    list(designs = rows),
+    datasets = lapply(designs, function(design) design$entry)
+  )
+}
+
+# probe-wrs2within: WRS2's within-subject functions next to exact tails.
+# 1. yuend over shifts that take |t| from 0 to about 40, at n 6, 20 and 300:
+#    t, df, p, the trimmed-mean difference and CI, with 1 - pt and the exact tail.
+# 2. rmanova on three conditions over the same shifts (n 8, 20, 200): F, df, p, with
+#    1 - pf and the exact tail.
+# 3. rmmcp on those designs: its whole table (rmmcp reports a critical p per pair,
+#    p.crit, from its own rule at alpha 0.05), with yuend on each pair.
+# 4. dep.effect's whole table (AKP, QS, QStr, SIGN with CIs) and wmcpAKP's output on
+#    the within-subject datasets at tr 0.2 and 0.1 (seed 1, 100 resamples).
+wrs2within_probe <- function() {
+  t_tails <- function(t, df) {
+    list(
+      one_minus_cdf_hex = hex(1 - stats::pt(abs(t), df)),
+      upper_tail_hex = hex(stats::pt(abs(t), df, lower.tail = FALSE))
+    )
+  }
+  # A fixed, scrambled order of n normal scores: the part of y not shared with x.
+  scrambled <- function(n) normal_scores(n)[order(sin(seq_len(n) * 12.9898))]
+  yuend_rows <- list()
+  for (n in c(6L, 20L, 300L)) {
+    x <- normal_scores(n)
+    y0 <- 0.6 * x + 0.8 * scrambled(n)
+    unit <- 1.4 * stats::sd(x - y0) / sqrt(n)
+    for (shift in WRS2P_SHIFTS) {
+      y <- y0 + shift * unit
+      r <- probe_call("yuend", WRS2::yuend(x, y))$value
+      yuend_rows[[length(yuend_rows) + 1L]] <- c(
+        list(
+          n = n, shift = shift, x_hex = hex_list(x), y_hex = hex_list(y),
+          test_hex = hex(r$test), df_hex = hex(r$df), p_value_hex = hex(r$p.value),
+          p_value = r$p.value, diff_hex = hex(r$diff), conf_int_hex = hex_list(r$conf.int)
+        ),
+        t_tails(r$test, r$df)
+      )
+    }
+  }
+  rm_rows <- list()
+  for (n in c(8L, 20L, 200L)) {
+    base <- normal_scores(n)
+    noise <- cbind(scrambled(n), rev(scrambled(n)), scrambled(n)[c(n, seq_len(n - 1L))])
+    unit <- 1.4 * stats::sd(noise[, 1L] - noise[, 2L]) / sqrt(n)
+    for (shift in WRS2P_SHIFTS) {
+      m <- base + 0.7 * noise + outer(rep(1, n), c(0, 1, 2) * shift * unit)
+      y <- as.vector(t(m))
+      groups <- factor(rep(c("a", "b", "c"), times = n))
+      blocks <- rep(seq_len(n), each = 3L)
+      r <- probe_call("rmanova", WRS2::rmanova(y, groups, blocks))$value
+      mcp <- probe_call("rmmcp", WRS2::rmmcp(y, groups, blocks))$value
+      pairs <- lapply(list(c(1L, 2L), c(1L, 3L), c(2L, 3L)), function(p) {
+        yd <- WRS2::yuend(m[, p[[1L]]], m[, p[[2L]]])
+        c(
+          list(
+            group1 = c("a", "b", "c")[[p[[1L]]]], group2 = c("a", "b", "c")[[p[[2L]]]],
+            yuend_test_hex = hex(yd$test), yuend_df_hex = hex(yd$df),
+            yuend_p_value_hex = hex(yd$p.value), yuend_diff_hex = hex(yd$diff)
+          ),
+          t_tails(yd$test, yd$df)
+        )
+      })
+      rm_rows[[length(rm_rows) + 1L]] <- list(
+        n = n, shift = shift,
+        values_hex = lapply(1:3, function(j) hex_list(m[, j])),
+        test_hex = hex(r$test), df1_hex = hex(r$df1), df2_hex = hex(r$df2),
+        p_value_hex = hex(r$p.value), p_value = r$p.value,
+        one_minus_cdf_hex = hex(1 - stats::pf(r$test, r$df1, r$df2)),
+        upper_tail_hex = hex(stats::pf(r$test, r$df1, r$df2, lower.tail = FALSE)),
+        rmmcp = frame_with_hex(data.frame(unclass(mcp$comp), check.names = FALSE)),
+        rmmcp_fnames = to_json_value(mcp$fnames),
+        rmmcp_tidy = frame_with_hex(statsExpressions::tidy_model_parameters(mcp)),
+        pairs = pairs
+      )
+    }
+  }
+  two <- list(
+    sleep = list(dataset = "sleep", x = "group", y = "extra", subject = "ID"),
+    edge_within2_small = list(dataset = "edge_within2_small"),
+    edge_within2_ties = list(dataset = "edge_within2_ties"),
+    edge_within2_outliers = list(dataset = "edge_within2_outliers")
+  )
+  entries <- list()
+  dep <- list()
+  for (name in names(two)) {
+    design <- c(list(name = name), two[[name]])
+    d <- within_probe_design(design)
+    entries[[length(entries) + 1L]] <- d$entry
+    for (tr in c(0.2, 0.1)) {
+      set.seed(1L)
+      out <- probe_attempt(WRS2::dep.effect(x = d$wide[[2L]], y = d$wide[[3L]], tr = tr, nboot = 100L))
+      dep[[length(dep) + 1L]] <- list(
+        name = name, tr = tr, levels = as.list(d$levels), values_hex = d$values_hex,
+        table = if (is.null(out$value)) NULL else raw_matrix(out$value),
+        tidy = if (is.null(out$value)) NULL else frame_with_hex(statsExpressions::tidy_model_parameters(out$value, keep = "AKP")),
+        error = out$error, warnings = out$warnings
+      )
+    }
+  }
+  akp <- list()
+  for (design in WITHIN_PROBE_DESIGNS[c(1L, 3L, 4L, 8L)]) {
+    d <- within_probe_design(design)
+    entries[[length(entries) + 1L]] <- d$entry
+    wide <- d$wide
+    wide$.rowid <- NULL
+    for (tr in c(0.2, 0.1)) {
+      set.seed(1L)
+      out <- probe_attempt(WRS2::wmcpAKP(wide, tr = tr, nboot = 100L))
+      akp[[length(akp) + 1L]] <- list(
+        name = d$name, tr = tr, levels = as.list(d$levels), values_hex = d$values_hex,
+        value = if (is.null(out$value)) NULL else to_json_value(unclass(out$value)),
+        value_hex = if (is.null(out$value)) NULL else lapply(Filter(is.numeric, unclass(out$value)), hex_list),
+        error = out$error, warnings = out$warnings
+      )
+    }
+  }
+  probe_file(
+    "probe-wrs2within",
+    "WRS2 yuend, rmanova and rmmcp next to exact tails; dep.effect and wmcpAKP outputs",
+    list(yuend = yuend_rows, rmanova = rm_rows, dep_effect = dep, wmcp_akp = akp),
+    datasets = unique(entries)
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
 # sets its own seed), and a failing probe stops the run in minutes, not after the
 # bootstrap references.
 games_howell_cases <- Filter(function(case) {
+  if (case$fun != "ggbetweenstats") {
+    return(FALSE)
+  }
   analysis <- between_analysis(read_dataset(case)$data, case$args$x, case$args$y)
   case$args$type == "parametric" && nlevels(analysis$x) > 2L
 }, CASES)
@@ -2415,7 +3331,12 @@ PROBE_BUILDERS <- list(
   "probe-wrs2p" = wrs2p_probe,
   "probe-akp" = akp_probe,
   "probe-map" = map_probe,
-  "probe-ranks" = ranks_probe
+  "probe-ranks" = ranks_probe,
+  "probe-signrank" = signrank_probe,
+  "probe-pairedbf" = pairedbf_probe,
+  "probe-friedman" = friedman_probe,
+  "probe-rmanova" = rmanova_probe,
+  "probe-wrs2within" = wrs2within_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
@@ -2426,6 +3347,85 @@ if (nzchar(SUBSET)) {
   PROBE_BUILDERS <- PROBE_BUILDERS[grepl(SUBSET, names(PROBE_BUILDERS))]
   CASES <- Filter(function(case) grepl(SUBSET, case$name), CASES)
   case_names <- vapply(CASES, function(case) case$name, character(1L))
+}
+
+# Shards ---------------------------------------------------------------------------
+#
+# The bootstrap references take hours in one process, so oracle.yml runs the
+# generator in parallel jobs: ORACLE_SHARD = "i/n" runs the i-th of n shares of the
+# probes and cases and writes shard-i.json (what it ran, R's version and library)
+# instead of a manifest. Cases that can share a bootstrap reference (same function,
+# dataset, declared levels, type, conf.level and tr) stay in one shard, and the groups
+# are spread by an estimate of their cost (one per case, 30 more for a bootstrap), the
+# largest first, each to the least loaded shard. Every case and probe sets its own
+# seeds, so a shard computes exactly what one process would. ORACLE_MERGE = "true"
+# then runs no probe and no case: it reads the shard files the shards' outputs were
+# merged with, checks that together they ran every probe and case exactly once, on
+# this R and this library, removes them and writes the manifest.
+SHARD <- Sys.getenv("ORACLE_SHARD")
+MERGE <- identical(Sys.getenv("ORACLE_MERGE"), "true")
+
+case_bootstraps <- function(case) {
+  if (isFALSE(case$args$results.subtitle)) {
+    return(FALSE)
+  }
+  type <- case$args$type
+  if (type == "robust") {
+    return(TRUE)
+  }
+  if (type != "nonparametric") {
+    return(FALSE)
+  }
+  nlevels(ANALYSES[[case$fun]](read_dataset(case)$data, case)$x) > 2L
+}
+
+assign_shards <- function(cases, n) {
+  keys <- vapply(cases, function(case) {
+    paste(
+      case$fun, case$dataset, paste(unlist(case$factor_levels), collapse = ","),
+      case$args$type, format(case_conf_level(case)), format(case_tr(case)),
+      sep = "|"
+    )
+  }, character(1L))
+  boots <- vapply(cases, case_bootstraps, logical(1L))
+  groups <- split(seq_along(cases), keys)
+  weights <- vapply(groups, function(ix) length(ix) + 30 * any(boots[ix]), numeric(1L))
+  load <- numeric(n)
+  out <- integer(length(cases))
+  for (g in names(groups)[order(-weights, names(groups))]) {
+    shard <- which.min(load)
+    out[groups[[g]]] <- shard
+    load[[shard]] <- load[[shard]] + weights[[g]]
+  }
+  out
+}
+
+library_listing <- function() {
+  packages <- utils::installed.packages(lib.loc = .libPaths())
+  packages <- packages[!duplicated(packages[, "Package"]), , drop = FALSE]
+  packages <- packages[order(packages[, "Package"]), , drop = FALSE]
+  stats::setNames(as.list(unname(packages[, "Version"])), unname(packages[, "Package"]))
+}
+
+if (nzchar(SHARD) && MERGE) stop("set ORACLE_SHARD or ORACLE_MERGE, not both")
+ALL_CASE_NAMES <- case_names
+ALL_PROBE_FILES <- paste0(names(PROBE_BUILDERS), ".json")
+if (nzchar(SHARD)) {
+  parts <- as.integer(strsplit(SHARD, "/", fixed = TRUE)[[1L]])
+  if (length(parts) != 2L || anyNA(parts) || parts[[1L]] < 1L || parts[[1L]] > parts[[2L]]) {
+    stop("ORACLE_SHARD must be i/n with 1 <= i <= n, not ", SHARD)
+  }
+  shard_index <- parts[[1L]]
+  shard_count <- parts[[2L]]
+  CASES <- CASES[assign_shards(CASES, shard_count) == shard_index]
+  case_names <- vapply(CASES, function(case) case$name, character(1L))
+  PROBE_BUILDERS <- PROBE_BUILDERS[
+    (seq_along(PROBE_BUILDERS) - 1L) %% shard_count + 1L == shard_index
+  ]
+}
+if (MERGE) {
+  PROBE_BUILDERS <- list()
+  CASES <- list()
 }
 
 probe_files <- character()
@@ -2490,6 +3490,52 @@ if (length(problems) > 0L) {
   message("Unexpected case outcomes:\n", paste(problems, collapse = "\n"))
   quit(status = 1L)
 }
+if (nzchar(SHARD)) {
+  # What this shard ran, on which R and library; the merge checks it.
+  write_json_file(
+    list(
+      shard = SHARD, cases = as.list(case_names), probes = as.list(probe_files),
+      versions = VERSIONS, r_library = library_listing()
+    ),
+    file.path(out_dir, sprintf("shard-%d.json", shard_index))
+  )
+  message("ORACLE_SHARD is set: no manifest written")
+  quit(status = 0L)
+}
+if (MERGE) {
+  shard_paths <- list.files(out_dir, pattern = "^shard-[0-9]+\\.json$", full.names = TRUE)
+  if (length(shard_paths) == 0L) stop("ORACLE_MERGE: no shard files in ", out_dir)
+  shards <- lapply(shard_paths, jsonlite::fromJSON, simplifyVector = FALSE)
+  merged_cases <- unlist(lapply(shards, function(shard) unlist(shard$cases)))
+  merged_probes <- unlist(lapply(shards, function(shard) unlist(shard$probes)))
+  counts <- unique(vapply(shards, function(shard) {
+    as.integer(strsplit(shard$shard, "/", fixed = TRUE)[[1L]][[2L]])
+  }, integer(1L)))
+  if (length(counts) != 1L || counts != length(shards)) {
+    stop("ORACLE_MERGE: ", length(shards), " shard files for shard counts ", paste(counts, collapse = ", "))
+  }
+  if (anyDuplicated(merged_cases) || !setequal(merged_cases, ALL_CASE_NAMES)) {
+    stop("ORACLE_MERGE: the shards ran other cases than the generator lists")
+  }
+  if (anyDuplicated(merged_probes) || !setequal(merged_probes, ALL_PROBE_FILES)) {
+    stop("ORACLE_MERGE: the shards ran other probes than the generator lists")
+  }
+  here <- jsonlite::fromJSON(
+    jsonlite::toJSON(
+      list(versions = VERSIONS, r_library = library_listing()),
+      auto_unbox = TRUE, digits = NA, na = "null", null = "null"
+    ),
+    simplifyVector = FALSE
+  )
+  for (shard in shards) {
+    if (!identical(shard$versions, here$versions) || !identical(shard$r_library, here$r_library)) {
+      stop("ORACLE_MERGE: shard ", shard$shard, " ran on another R or library")
+    }
+  }
+  unlink(shard_paths)
+  case_names <- ALL_CASE_NAMES
+  probe_files <- ALL_PROBE_FILES
+}
 if (nzchar(SUBSET)) {
   message("ORACLE_SUBSET is set: no manifest written")
   quit(status = 0L)
@@ -2509,9 +3555,6 @@ env_or_null <- function(name) {
   value <- Sys.getenv(name)
   if (nzchar(value)) value else NULL
 }
-library_packages <- utils::installed.packages(lib.loc = .libPaths())
-library_packages <- library_packages[!duplicated(library_packages[, "Package"]), , drop = FALSE]
-library_packages <- library_packages[order(library_packages[, "Package"]), , drop = FALSE]
 manifest <- list(
   schema_version = SCHEMA_VERSION,
   generator = "oracle/generate.R",
@@ -2530,10 +3573,7 @@ manifest <- list(
   ),
   R = VERSIONS$R,
   rng_kind = VERSIONS$rng_kind,
-  r_library = stats::setNames(
-    as.list(unname(library_packages[, "Version"])),
-    unname(library_packages[, "Package"])
-  ),
+  r_library = library_listing(),
   fixtures = stats::setNames(
     lapply(fixture_files, function(f) file_sha256(file.path(out_dir, f))),
     fixture_files

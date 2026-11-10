@@ -130004,6 +130004,402 @@
         "to_hex": "0x1.ep+4",
         "x_at_max_hex": "0x1.53feb7642192p-7"
       }
+    },
+    {
+      "name": "anchor_1200",
+      "n": 12,
+      "x_hex": [
+        "0x1.2cp+10",
+        "0x1.2c4p+10",
+        "0x1.2c8p+10",
+        "0x1.2c8p+10",
+        "0x1.2ccp+10",
+        "0x1.2ccp+10",
+        "0x1.2ccp+10",
+        "0x1.2dp+10",
+        "0x1.2d4p+10",
+        "0x1.2dcp+10",
+        "0x1.2e4p+10",
+        "0x1.2fp+10"
+      ],
+      "map_estimate_hex": "0x1.2caa6a9aa6a9bp+10",
+      "map_estimate_error": null,
+      "map_estimate_warnings": [],
+      "centrality_hex": "0x1.2caa6a9aa6a9bp+10",
+      "centrality_label": [
+        "list(widehat(mu)[MAP] == \"1202.66\")"
+      ],
+      "centrality_error": null,
+      "centrality_warnings": [],
+      "bw_sj": {
+        "hex": "0x1.77c415b79993ap+0",
+        "error": null,
+        "warnings": []
+      },
+      "bw_nrd0_hex": "0x1.6e1bb3d767f8cp+0",
+      "density_data_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.2cp+10",
+        "to_hex": "0x1.2fp+10",
+        "bw_hex": "0x1.77c415b79993ap+0",
+        "argmax": 228,
+        "x_at_max_hex": "0x1.2caa6a9aa6a9bp+10",
+        "x_at_max": 1202.66275659824,
+        "y_near_max_index": [
+          226,
+          227,
+          228,
+          229,
+          230
+        ],
+        "y_near_max_hex": [
+          "0x1.28efb6cfc78aep-3",
+          "0x1.28f34ee8b5452p-3",
+          "0x1.28f408e48d383p-3",
+          "0x1.28f2bbd855a13p-3",
+          "0x1.28eeaaac73322p-3"
+        ],
+        "near_ties": [
+          228
+        ],
+        "y_hex": null
+      },
+      "density_default_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.2ae62cefb64cdp+10",
+        "to_hex": "0x1.3019d31049b33p+10",
+        "bw_hex": "0x1.77c415b79993ap+0",
+        "argmax": 349,
+        "x_at_max_hex": "0x1.2cab2ba475947p+10",
+        "x_at_max": 1202.67453872187,
+        "y_near_max_index": [
+          347,
+          348,
+          349,
+          350,
+          351
+        ],
+        "y_near_max_hex": [
+          "0x1.28eb8eba3ff64p-3",
+          "0x1.28f1a0f6c6a83p-3",
+          "0x1.28f276b17ead2p-3",
+          "0x1.28e82e04187b9p-3",
+          "0x1.28d8ef0823f14p-3"
+        ],
+        "near_ties": [
+          349
+        ],
+        "y_hex": null
+      },
+      "estimate_density": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.2cp+10",
+        "to_hex": "0x1.2fp+10",
+        "x_at_max_hex": "0x1.2caa6a9aa6a9bp+10"
+      }
+    },
+    {
+      "name": "anchor_1211988",
+      "n": 12,
+      "x_hex": [
+        "0x1.27e54p+20",
+        "0x1.27e55p+20",
+        "0x1.27e56p+20",
+        "0x1.27e56p+20",
+        "0x1.27e57p+20",
+        "0x1.27e57p+20",
+        "0x1.27e57p+20",
+        "0x1.27e58p+20",
+        "0x1.27e59p+20",
+        "0x1.27e5bp+20",
+        "0x1.27e5dp+20",
+        "0x1.27e6p+20"
+      ],
+      "map_estimate_hex": "0x1.27e56a9aa6a9bp+20",
+      "map_estimate_error": null,
+      "map_estimate_warnings": [],
+      "centrality_hex": "0x1.27e56a9aa6a9bp+20",
+      "centrality_label": [
+        "list(widehat(mu)[MAP] == \"1.21e+06\")"
+      ],
+      "centrality_error": null,
+      "centrality_warnings": [],
+      "bw_sj": {
+        "hex": "0x1.77c415b79993ap+0",
+        "error": null,
+        "warnings": []
+      },
+      "bw_nrd0_hex": "0x1.6e1bb3d767f8cp+0",
+      "density_data_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.27e54p+20",
+        "to_hex": "0x1.27e6p+20",
+        "bw_hex": "0x1.77c415b79993ap+0",
+        "argmax": 228,
+        "x_at_max_hex": "0x1.27e56a9aa6a9bp+20",
+        "x_at_max": 1211990.6627566,
+        "y_near_max_index": [
+          226,
+          227,
+          228,
+          229,
+          230
+        ],
+        "y_near_max_hex": [
+          "0x1.28efb6cfc8b76p-3",
+          "0x1.28f34ee8b57d9p-3",
+          "0x1.28f408e48d48p-3",
+          "0x1.28f2bbd855c92p-3",
+          "0x1.28eeaaac72f49p-3"
+        ],
+        "near_ties": [
+          228
+        ],
+        "y_hex": null
+      },
+      "density_default_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.27e4f98b3bed9p+20",
+        "to_hex": "0x1.27e64674c4127p+20",
+        "bw_hex": "0x1.77c415b79993ap+0",
+        "argmax": 349,
+        "x_at_max_hex": "0x1.27e56acae91d6p+20",
+        "x_at_max": 1211990.67453872,
+        "y_near_max_index": [
+          347,
+          348,
+          349,
+          350,
+          351
+        ],
+        "y_near_max_hex": [
+          "0x1.28eb8eba3f552p-3",
+          "0x1.28f1a0f6c6c5bp-3",
+          "0x1.28f276b17ea89p-3",
+          "0x1.28e82e041741cp-3",
+          "0x1.28d8ef08236cdp-3"
+        ],
+        "near_ties": [
+          349
+        ],
+        "y_hex": null
+      },
+      "estimate_density": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.27e54p+20",
+        "to_hex": "0x1.27e6p+20",
+        "x_at_max_hex": "0x1.27e56a9aa6a9bp+20"
+      }
+    },
+    {
+      "name": "anchor_26027440",
+      "n": 12,
+      "x_hex": [
+        "0x1.8d25bp+24",
+        "0x1.8d25b1p+24",
+        "0x1.8d25b2p+24",
+        "0x1.8d25b2p+24",
+        "0x1.8d25b3p+24",
+        "0x1.8d25b3p+24",
+        "0x1.8d25b3p+24",
+        "0x1.8d25b4p+24",
+        "0x1.8d25b5p+24",
+        "0x1.8d25b7p+24",
+        "0x1.8d25b9p+24",
+        "0x1.8d25bcp+24"
+      ],
+      "map_estimate_hex": "0x1.8d25b2a9aa6aap+24",
+      "map_estimate_error": null,
+      "map_estimate_warnings": [],
+      "centrality_hex": "0x1.8d25b2a9aa6aap+24",
+      "centrality_label": [
+        "list(widehat(mu)[MAP] == \"2.60e+07\")"
+      ],
+      "centrality_error": null,
+      "centrality_warnings": [],
+      "bw_sj": {
+        "hex": "0x1.77ddefb623acfp+0",
+        "error": null,
+        "warnings": []
+      },
+      "bw_nrd0_hex": "0x1.6e1bb3d767f8cp+0",
+      "density_data_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25bp+24",
+        "to_hex": "0x1.8d25bcp+24",
+        "bw_hex": "0x1.77ddefb623acfp+0",
+        "argmax": 228,
+        "x_at_max_hex": "0x1.8d25b2a9aa6aap+24",
+        "x_at_max": 26027442.6627566,
+        "y_near_max_index": [
+          226,
+          227,
+          228,
+          229,
+          230
+        ],
+        "y_near_max_hex": [
+          "0x1.28e57eabc223fp-3",
+          "0x1.28e8fee24efedp-3",
+          "0x1.28e9cfe041941p-3",
+          "0x1.28e86bc11fe95p-3",
+          "0x1.28e472159e468p-3"
+        ],
+        "near_ties": [
+          228
+        ],
+        "y_hex": null
+      },
+      "density_default_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25ab986630ep+24",
+        "to_hex": "0x1.8d25c06799cf2p+24",
+        "bw_hex": "0x1.77ddefb623acfp+0",
+        "argmax": 349,
+        "x_at_max_hex": "0x1.8d25b2ac95c79p+24",
+        "x_at_max": 26027442.6741605,
+        "y_near_max_index": [
+          347,
+          348,
+          349,
+          350,
+          351
+        ],
+        "y_near_max_hex": [
+          "0x1.28e12abc397cap-3",
+          "0x1.28e7546bd7d6fp-3",
+          "0x1.28e85cd854b8cp-3",
+          "0x1.28de2cec0be71p-3",
+          "0x1.28cf0742464b9p-3"
+        ],
+        "near_ties": [
+          349
+        ],
+        "y_hex": null
+      },
+      "estimate_density": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25bp+24",
+        "to_hex": "0x1.8d25bcp+24",
+        "x_at_max_hex": "0x1.8d25b2a9aa6aap+24"
+      }
+    },
+    {
+      "name": "anchor_26027507",
+      "n": 12,
+      "x_hex": [
+        "0x1.8d25f3p+24",
+        "0x1.8d25f4p+24",
+        "0x1.8d25f5p+24",
+        "0x1.8d25f5p+24",
+        "0x1.8d25f6p+24",
+        "0x1.8d25f6p+24",
+        "0x1.8d25f6p+24",
+        "0x1.8d25f7p+24",
+        "0x1.8d25f8p+24",
+        "0x1.8d25fap+24",
+        "0x1.8d25fcp+24",
+        "0x1.8d25ffp+24"
+      ],
+      "map_estimate_hex": "0x1.8d25f5a9aa6aap+24",
+      "map_estimate_error": null,
+      "map_estimate_warnings": [],
+      "centrality_hex": "0x1.8d25f5a9aa6aap+24",
+      "centrality_label": [
+        "list(widehat(mu)[MAP] == \"2.60e+07\")"
+      ],
+      "centrality_error": null,
+      "centrality_warnings": [],
+      "bw_sj": {
+        "hex": "0x1.775fcadce2ca1p+0",
+        "error": null,
+        "warnings": []
+      },
+      "bw_nrd0_hex": "0x1.6e1bb3d767f8cp+0",
+      "density_data_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25f3p+24",
+        "to_hex": "0x1.8d25ffp+24",
+        "bw_hex": "0x1.775fcadce2ca1p+0",
+        "argmax": 228,
+        "x_at_max_hex": "0x1.8d25f5a9aa6aap+24",
+        "x_at_max": 26027509.6627566,
+        "y_near_max_index": [
+          226,
+          227,
+          228,
+          229,
+          230
+        ],
+        "y_near_max_hex": [
+          "0x1.2917874d0fef6p-3",
+          "0x1.291b7c6b64793p-3",
+          "0x1.291bdd2191aecp-3",
+          "0x1.291ae9efa4c34p-3",
+          "0x1.29167d90300d5p-3"
+        ],
+        "near_ties": [
+          228
+        ],
+        "y_hex": null
+      },
+      "density_default_range": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25ee99e09f7p+24",
+        "to_hex": "0x1.8d2603661f609p+24",
+        "bw_hex": "0x1.775fcadce2ca1p+0",
+        "argmax": 349,
+        "x_at_max_hex": "0x1.8d25f5ad0ebeap+24",
+        "x_at_max": 26027509.6760062,
+        "y_near_max_index": [
+          347,
+          348,
+          349,
+          350,
+          351
+        ],
+        "y_near_max_hex": [
+          "0x1.2913ebc6ddb76p-3",
+          "0x1.2919a2b2e48d3p-3",
+          "0x1.2919b338d50b5p-3",
+          "0x1.290f0a274a499p-3",
+          "0x1.28ff68915773p-3"
+        ],
+        "near_ties": [
+          349
+        ],
+        "y_hex": null
+      },
+      "estimate_density": {
+        "error": null,
+        "warnings": [],
+        "n": 1024,
+        "from_hex": "0x1.8d25f3p+24",
+        "to_hex": "0x1.8d25ffp+24",
+        "x_at_max_hex": "0x1.8d25f5a9aa6aap+24"
+      }
     }
   ],
   "versions": {
