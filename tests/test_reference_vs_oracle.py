@@ -1836,8 +1836,14 @@ def test_one_sample_hedges_g(case: OracleCase) -> None:
     tail = alpha / 2 if side == "two.sided" else alpha
     t = difference / (sd / math.sqrt(n))
     scale = j / math.sqrt(n)
-    low = -math.inf if side == "less" else _ncp_at(t, n - 1.0, 1 - tail) * scale
-    high = math.inf if side == "greater" else _ncp_at(t, n - 1.0, tail) * scale
+    if scale == 0.0:
+        # n = 2: J(1) is 0, so both bounds are 0 whatever the noncentrality (and
+        # SciPy 1.11's nct.cdf warns of a division by zero at 1 df).
+        assert n == 2
+        low = high = 0.0
+    else:
+        low = -math.inf if side == "less" else _ncp_at(t, n - 1.0, 1 - tail) * scale
+        high = math.inf if side == "greater" else _ncp_at(t, n - 1.0, tail) * scale
     for what, bound, column in (
         ("g CI low", low, "conf.low"),
         ("g CI high", high, "conf.high"),
