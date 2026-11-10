@@ -11,6 +11,8 @@ Measured on the drawn figure, after anything the user changed:
   shares the y axis);
 * ``flat_data`` (warning): values that differ drawn within two pixels of height
   (axis limits far wider than the data);
+* ``centrality_label_overlap`` (warning): a centrality point at least half
+  covered by a text's box (a label placed over it, or moved there later);
 * ``glyph_missing`` (warning): characters no font of a text can draw (shown as
   empty boxes);
 * ``low_contrast`` (warning): a level's colour or a text that can hardly be told
@@ -343,6 +345,55 @@ def _glyph_missing(extents: list[tuple[Text, str, Bbox]]) -> Issue | None:
     )
 
 
+# A centrality point counts as covered when a text covers this share of it.
+COVERED_SHARE: Final = 0.5
+
+
+def _covered_centers(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> Issue | None:
+    """Centrality points at least half covered by a text's box."""
+    dpi = float(root_figure(fig.figure).dpi)
+    found: list[str] = []
+    for level, point in fig.centers:
+        if not point.get_visible() or point.axes is None:
+            continue
+        offsets = np.asarray(point.get_offsets(), dtype=np.float64)
+        if offsets.size == 0:
+            continue
+        x, y = (float(v) for v in point.get_offset_transform().transform(offsets)[0])
+        sizes = np.asarray(point.get_sizes(), dtype=np.float64)
+        half = float(np.sqrt(sizes[0] if sizes.size else 36.0)) / 2 * dpi / 72.0
+        area = (2 * half) ** 2
+        covers: list[tuple[float, str]] = []
+        for _, described, box in extents:
+            width = min(box.x1, x + half) - max(box.x0, x - half)
+            height = min(box.y1, y + half) - max(box.y0, y - half)
+            if width > 0 and height > 0:
+                covers.append((width * height / area, described))
+        share = min(1.0, sum(c for c, _ in covers))
+        if share >= COVERED_SHARE:
+            by = ", the ".join(d for _, d in covers)
+            found.append(
+                f"the centrality point of {level!r} lies {share:.0%} under the {by}"
+            )
+    if not found:
+        return None
+    listed = "; ".join(found[:5]) + (
+        f"; and {len(found) - 5} more" if len(found) > 5 else ""
+    )
+    return Issue(
+        code="centrality_label_overlap",
+        severity="warning",
+        message=f"A text hides a centrality point: {listed}.",
+        fix=(
+            "Give the plot more room (a larger Axes passed as ax=, or inferplot's "
+            "own figure by leaving ax out) so the labels can be placed beside the "
+            "points, or move the text that covers it."
+        ),
+    )
+
+
 def view_issues(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[Issue]:
     """The view checks, in order; call after drawing."""
     issues: list[Issue] = []
@@ -350,7 +401,11 @@ def view_issues(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list
         issue = check(fig)
         if issue is not None:
             issues.append(issue)
-    for issue in (_low_contrast(fig, extents), _glyph_missing(extents)):
+    for issue in (
+        _covered_centers(fig, extents),
+        _low_contrast(fig, extents),
+        _glyph_missing(extents),
+    ):
         if issue is not None:
             issues.append(issue)
     return issues

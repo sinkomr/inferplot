@@ -18,7 +18,7 @@ from inferplot.render import theme
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
-    from matplotlib.collections import LineCollection
+    from matplotlib.collections import LineCollection, PathCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
 
@@ -105,6 +105,7 @@ class StatsFigure:
     __slots__ = (
         "_axes",
         "_brackets",
+        "_centers",
         "_colors",
         "_figure",
         "_inside",
@@ -130,6 +131,7 @@ class StatsFigure:
         paths: DrawnPaths | None = None,
         view: DrawnView | None = None,
         colors: tuple[theme.Color, ...] = (),
+        centers: tuple[tuple[str, PathCollection], ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -142,6 +144,7 @@ class StatsFigure:
         self._paths = paths
         self._view = view
         self._colors = colors
+        self._centers = centers
 
     @property
     def figure(self) -> Figure:
@@ -248,6 +251,11 @@ class StatsFigure:
     def paths(self) -> DrawnPaths | None:
         """The subject and centrality paths (withinstats), or None."""
         return self._paths
+
+    @property
+    def centers(self) -> tuple[tuple[str, PathCollection], ...]:
+        """Each drawn centrality point, with its level."""
+        return self._centers
 
     @property
     def colors(self) -> tuple[theme.Color, ...]:

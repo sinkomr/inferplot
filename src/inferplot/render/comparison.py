@@ -134,6 +134,9 @@ class Options:
     centrality_path: bool = False  # withinstats only
 
 
+CENTRALITY_SIZE: Final = 40.0  # centrality point marker area, points squared
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class LabelPlace:
     """Where a centrality label goes relative to its point.
@@ -145,6 +148,51 @@ class LabelPlace:
 
     side: Literal["right", "left"] = "right"
     rise: Literal["center", "above", "below"] = "center"
+
+
+_RISES: Final[tuple[Literal["center", "above", "below"], ...]] = (
+    "center",
+    "above",
+    "below",
+)
+
+
+def label_candidates(first: LabelPlace) -> list[LabelPlace]:
+    """Where a centrality label may go, in order of preference: ``first`` (the
+    drawing's own choice), then on the same side above and below the point's
+    height (the link line, at the point's height, leads to the label's corner),
+    then the same three on the other side."""
+    other: Literal["right", "left"] = "left" if first.side == "right" else "right"
+    rises: list[Literal["center", "above", "below"]] = [
+        first.rise,
+        *(r for r in _RISES if r != first.rise),
+    ]
+    return [
+        *(LabelPlace(side=first.side, rise=r) for r in rises),
+        *(LabelPlace(side=other, rise=r) for r in _RISES),
+    ]
+
+
+@dataclasses.dataclass(slots=True)
+class _Label:
+    """A drawn centrality label with its link line and point, and where it is."""
+
+    i: int
+    value: float
+    link: Line2D
+    point: PathCollection
+    text: Text
+    place: LabelPlace
+
+
+def _overlap(a: Bbox, b: Bbox) -> float:
+    """Area two boxes share, counting only overlaps of more than half a pixel in
+    both directions (anti-aliasing slack)."""
+    width = min(a.x1, b.x1) - max(a.x0, b.x0)
+    height = min(a.y1, b.y1) - max(a.y0, b.y0)
+    if width <= 0.5 or height <= 0.5:
+        return 0.0
+    return width * height
 
 
 def checked_result(result: StatsResult, analysis: str, call: str) -> int:
@@ -837,6 +885,7 @@ class Drawing:
         self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
         self.outlier_marks: list[PathCollection] = []
         self.tick_texts: list[str] | None = None
+        self.label_entries: list[_Label] = []
         # The y layout's inputs: bracket levels used, room above and below (px).
         self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
         self.levels_of_brackets: list[int] = []
@@ -948,10 +997,14 @@ class Drawing:
         self.draw_data()
         self.draw_ticks_and_labels()
         self.draw_text_blocks()
-        if self.own:
-            self.layout_own()
-        else:
-            self.layout_in_axes()
+        self.layout()
+        for last in (False, False, True):
+            if not self.choose_label_places():
+                break
+            self.layout()  # the labels moved: room above, below or left
+            if last:
+                break
+        if not self.own:
             self.finish_ink()
         self.finish_fonts()
         result = self.result
@@ -978,6 +1031,9 @@ class Drawing:
             paths=self.drawn_paths(),
             view=self.view,
             colors=tuple(self.colors),
+            centers=tuple(
+                (self.result.levels[e.i], e.point) for e in self.label_entries
+            ),
         )
 
     def draw_data(self) -> None:
@@ -1067,20 +1123,19 @@ class Drawing:
                 continue  # a MAP without a density: nothing to mark (D55)
             place = self.label_place(i)
             end = i + LABEL_OFFSET if place.side == "right" else i - LABEL_OFFSET
-            ax.add_line(
-                Line2D(
-                    [i, end],
-                    [d.value, d.value],
-                    color=theme.CENTRALITY_COLOR,
-                    linewidth=0.7,
-                    zorder=4.0,
-                    gid=f"centrality-link-{i}",
-                )
+            link = Line2D(
+                [i, end],
+                [d.value, d.value],
+                color=theme.CENTRALITY_COLOR,
+                linewidth=0.7,
+                zorder=4.0,
+                gid=f"centrality-link-{i}",
             )
-            ax.scatter(
+            ax.add_line(link)
+            point = ax.scatter(
                 [i],
                 [d.value],
-                s=40.0,
+                s=CENTRALITY_SIZE,
                 color=theme.CENTRALITY_COLOR,
                 zorder=5.0,
                 gid=f"centrality-{i}",
@@ -1115,6 +1170,11 @@ class Drawing:
                 gid=f"centrality-label-{i}",
                 **where,
             )
+            self.label_entries.append(
+                _Label(
+                    i=i, value=d.value, link=link, point=point, text=text, place=place
+                )
+            )
             if place.side == "left":
                 self.left_labels.append(text)
             if place.rise != "center":
@@ -1129,6 +1189,87 @@ class Drawing:
                 )
             )
             self.inside.append(text)
+
+    # -- centrality label places ------------------------------------------------
+
+    def layout(self) -> None:
+        if self.own:
+            self.layout_own()
+        else:
+            self.layout_in_axes()
+
+    def place_label(self, entry: _Label, place: LabelPlace) -> None:
+        """Move a drawn centrality label (and its link line) to ``place``."""
+        ax, i = self.ax, entry.i
+        end = i + LABEL_OFFSET if place.side == "right" else i - LABEL_OFFSET
+        entry.link.set_xdata([i, end])
+        text = entry.text
+        text.set_x(end)
+        text.set_horizontalalignment("left" if place.side == "right" else "right")
+        if place.rise == "center":
+            text.set_transform(ax.transData)
+            text.set_verticalalignment("center")
+        else:
+            rise = LABEL_BOX_PAD * theme.SIZE_LABEL + 1.0
+            up = place.rise == "above"
+            text.set_transform(
+                offset_copy(
+                    ax.transData, fig=self.figure, y=rise if up else -rise,
+                    units="points",
+                )
+            )  # fmt: skip
+            text.set_verticalalignment("bottom" if up else "top")
+        entry.place = place
+        self.left_labels = [
+            e.text for e in self.label_entries if e.place.side == "left"
+        ]
+        lift = px(LABEL_BOX_PAD * theme.SIZE_LABEL + 1.0, self.dpi)
+        self.raised = [
+            (e.text, lift) for e in self.label_entries if e.place.rise != "center"
+        ]
+
+    def point_boxes(self) -> list[Bbox]:
+        """Each centrality point's square in pixels (its marker's extent)."""
+        half = px(np.sqrt(CENTRALITY_SIZE) / 2, self.dpi)
+        boxes: list[Bbox] = []
+        for e in self.label_entries:
+            x, y = (float(v) for v in self.ax.transData.transform((e.i, e.value)))
+            boxes.append(Bbox.from_extents(x - half, y - half, x + half, y + half))
+        return boxes
+
+    def choose_label_places(self) -> bool:
+        """Put each centrality label where it covers no centrality point and no
+        other centrality label: the first free place of :func:`label_candidates`
+        (the drawing's own choice first, so a figure where nothing collides is
+        unchanged), else the one that covers least. Whether a label moved.
+
+        Measured in pixels on the current layout; ``fig.check()`` reports a point
+        still half covered (``centrality_label_overlap``).
+        """
+        entries = self.label_entries
+        if len(entries) < 2:
+            return False
+        points = self.point_boxes()
+        area = max(points[0].width * points[0].height, 1.0)
+        moved = False
+        for entry in entries:
+            others = [self.extent(e.text) for e in entries if e is not entry]
+            start = entry.place
+            best: tuple[float, LabelPlace] | None = None
+            for place in label_candidates(self.label_place(entry.i)):
+                self.place_label(entry, place)
+                box = self.extent(entry.text)
+                bad = sum(_overlap(box, p) / area for p in points) + sum(
+                    _overlap(box, o) / max(o.width * o.height, 1.0) for o in others
+                )
+                if best is None or bad < best[0]:
+                    best = (bad, place)
+                if bad == 0.0:
+                    break
+            assert best is not None
+            self.place_label(entry, best[1])
+            moved |= best[1] != start
+        return moved
 
     def make_bracket_labels(self) -> None:
         levels = self.result.levels
@@ -1386,6 +1527,10 @@ class Drawing:
         ax.set_ylim(layout.bottom, layout.top)
         self.view.xlim = (left, right)
         self.view.ylim = (layout.bottom, layout.top)
+        if self.bracket_lines:  # laid out before: move the lines
+            self.levels_of_brackets = levels
+            self.place_bracket_levels(layout)
+            return
         for m, ((i, j), level) in enumerate(
             zip(self.bracket_pairs, levels, strict=True)
         ):
