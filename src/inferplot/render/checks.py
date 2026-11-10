@@ -1,3 +1,6 @@
+# NumPy's stubs type several functions taking array-likes as partly Unknown, which
+# strict mode reports on every call; the arguments we pass are all float arrays.
+# pyright: reportUnknownMemberType=false
 """Figure-level problems for ``fig.check()`` (SPEC section 8).
 
 Measured on the drawn figure from the rendered bounding boxes of its texts:
@@ -8,7 +11,13 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
 * ``text_clipped`` (warning): a text extends outside the figure, or a text drawn
   inside the Axes (labels, and the subtitle and caption when ``ax=`` was given)
   extends outside that Axes;
-* ``points_subsampled`` (info): the points show a subsample of a large panel.
+* ``points_subsampled`` (info): the points show a subsample of a large panel;
+* ``path_hidden`` (warning, withinstats): a text is drawn over the centrality path
+  or a subject path for more than a pixel of its length;
+* ``paths_crowded`` (warning, withinstats): the subject paths are at least half
+  opaque over more than 15% of the area between the two conditions, measured on
+  the paths alone rendered as drawn, so they hide the boxes and violins beneath
+  them.
 """
 
 from __future__ import annotations
@@ -19,17 +28,20 @@ from typing import TYPE_CHECKING, Any, Final, cast
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
+from matplotlib.backends.backend_agg import RendererAgg
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from matplotlib.transforms import Bbox, BboxBase
+from numpy.typing import NDArray
 
 from inferplot.check import Issue
 from inferplot.render.figure import describe_text, root_figure
 
 if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
+    from matplotlib.collections import LineCollection
 
-    from inferplot.render.figure import StatsFigure
+    from inferplot.render.figure import DrawnPaths, StatsFigure
 
 __all__ = ["figure_issues", "text_extents"]
 
@@ -37,6 +49,16 @@ __all__ = ["figure_issues", "text_extents"]
 # counts (anti-aliasing slack).
 _CLIP_TOLERANCE: Final = 0.5
 _MAX_LISTED: Final = 5
+# Pixels of a path's length a text may cover before it counts (an end of the path
+# touching a text's box by anti-aliasing slack).
+_HIDDEN_TOLERANCE: Final = 1.0
+_PATH_STEP: Final = 0.25  # pixels between the samples along a path
+# The subject paths are crowded when they are at least _CROWDED_OPACITY opaque over
+# more than _CROWDED_SHARE of the area between the two conditions (calibrated by
+# eye on figures of 10 to 2,500 subjects: 200 subjects cover 10% and still read,
+# 300 cover 18% and hide the boxes and the centrality path).
+_CROWDED_OPACITY: Final = 0.5
+_CROWDED_SHARE: Final = 0.15
 
 
 def _renderer(fig: StatsFigure) -> RendererBase | None:
@@ -218,8 +240,167 @@ def _clipped(
     return out_of_figure, out_of_axes
 
 
+FloatArray = NDArray[np.float64]
+
+
+def _covered(pieces: FloatArray, boxes: list[Bbox]) -> FloatArray:
+    """Pixels of each straight piece that lie under each box.
+
+    ``pieces`` is (m, 2, 2): m pieces from (x0, y0) to (x1, y1) in pixels. Returns
+    an (m, len(boxes)) array of covered lengths, sampled at the midpoints of
+    stretches of at most _PATH_STEP pixels; a piece with a NaN end (where a path
+    breaks) covers nothing. A box counts only where a sample is more than
+    _CLIP_TOLERANCE inside it.
+    """
+    out = np.zeros((pieces.shape[0], len(boxes)), dtype=np.float64)
+    finite = np.isfinite(pieces).all(axis=(1, 2))
+    if not boxes or not finite.any():
+        return out
+    start, stop = pieces[finite, 0, :], pieces[finite, 1, :]
+    delta = stop - start
+    length = np.hypot(delta[:, 0], delta[:, 1])
+    steps = max(1, int(np.ceil(float(length.max()) / _PATH_STEP)))
+    t = (np.arange(steps) + 0.5) / steps
+    xs = start[:, None, 0] + delta[:, None, 0] * t[None, :]
+    ys = start[:, None, 1] + delta[:, None, 1] * t[None, :]
+    covered = np.empty((start.shape[0], len(boxes)), dtype=np.float64)
+    tol = _CLIP_TOLERANCE
+    for b, box in enumerate(boxes):
+        inside = (
+            (xs > box.x0 + tol)
+            & (xs < box.x1 - tol)
+            & (ys > box.y0 + tol)
+            & (ys < box.y1 - tol)
+        )
+        covered[:, b] = inside.mean(axis=1) * length
+    out[finite] = covered
+    return out
+
+
+def _pixels(ax: Axes, points: FloatArray) -> FloatArray:
+    return np.asarray(cast("Any", ax.transData).transform(points), dtype=np.float64)
+
+
+def _hidden(
+    fig: StatsFigure, paths: DrawnPaths, extents: list[tuple[Text, str, Bbox]]
+) -> list[str]:
+    """The paths a text is drawn over, in words."""
+    ax = fig.axes["main"]
+    names = [described for _, described, _ in extents]
+    boxes = [box for _, _, box in extents]
+    found: list[str] = []
+    line = paths.centrality
+    if line is not None and line.get_visible() and line.axes is not None:
+        xy = _pixels(ax, np.asarray(cast("Any", line).get_xydata(), dtype=np.float64))
+        covered = _covered(np.stack([xy[:-1], xy[1:]], axis=1), boxes)
+        for j in range(covered.shape[0]):
+            texts = [names[b] for b in np.flatnonzero(covered[j] > _HIDDEN_TOLERANCE)]
+            if texts:
+                found.append(
+                    f"the centrality path between {paths.levels[j]!r} and "
+                    f"{paths.levels[j + 1]!r} runs under the {', the '.join(texts)}"
+                )
+    subjects = paths.subjects
+    if subjects is not None and subjects.get_visible() and subjects.axes is not None:
+        segments = [np.asarray(s, dtype=np.float64) for s in subjects.get_segments()]
+        if segments:
+            xy = np.stack([_pixels(ax, s) for s in segments])  # (paths, levels, 2)
+            pieces = np.stack([xy[:, :-1], xy[:, 1:]], axis=2).reshape(-1, 2, 2)
+            covered = _covered(pieces, boxes)
+            per_path = covered.reshape(xy.shape[0], -1, len(boxes)).sum(axis=1)
+            under = per_path > _HIDDEN_TOLERANCE
+            if under.any():
+                texts = [names[b] for b in np.flatnonzero(under.any(axis=0))]
+                count = int(under.any(axis=1).sum())
+                found.append(
+                    f"{count} of the {xy.shape[0]} subject paths "
+                    f"{'runs' if count == 1 else 'run'} under the "
+                    f"{', the '.join(texts)}"
+                )
+    return found
+
+
+def crowding(fig: StatsFigure, subjects: LineCollection) -> float:
+    """Share of the area between the two conditions where the subject paths, drawn
+    alone as they are drawn in the figure, are at least _CROWDED_OPACITY opaque.
+
+    The area spans the two levels' positions across and the drawn paths' range of
+    y, within the Axes. Call after drawing.
+    """
+    segments = [np.asarray(s, dtype=np.float64) for s in subjects.get_segments()]
+    if not segments:
+        return 0.0
+    figure = root_figure(fig.figure)
+    ax = fig.axes["main"]
+    width, height = (int(np.ceil(float(size))) for size in figure.bbox.size)
+    renderer = RendererAgg(width, height, figure.dpi)
+    subjects.draw(renderer)
+    # The buffer's first row is the top of the figure.
+    opacity = np.asarray(renderer.buffer_rgba())[::-1, :, 3] / 255.0
+    ys = _pixels(ax, np.concatenate(segments))[:, 1]
+    xs = _pixels(ax, np.array([[0.0, 0.0], [1.0, 0.0]]))[:, 0]
+    frame = ax.bbox
+    x0 = max(int(np.floor(float(xs.min()))), int(np.floor(frame.x0)), 0)
+    x1 = min(int(np.ceil(float(xs.max()))), int(np.ceil(frame.x1)), width)
+    y0 = max(int(np.floor(float(ys.min()))), int(np.floor(frame.y0)), 0)
+    y1 = min(int(np.ceil(float(ys.max()))), int(np.ceil(frame.y1)), height)
+    region = opacity[y0:y1, x0:x1]
+    if region.size == 0:
+        return 0.0
+    return float((region >= _CROWDED_OPACITY).mean())
+
+
+def _path_issues(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> list[Issue]:
+    """path_hidden and paths_crowded (withinstats)."""
+    paths = fig.paths
+    if paths is None:
+        return []
+    issues: list[Issue] = []
+    hidden = _hidden(fig, paths, extents)
+    if hidden:
+        issues.append(
+            Issue(
+                code="path_hidden",
+                severity="warning",
+                message=f"A text is drawn over a path: {'; '.join(hidden)}.",
+                fix=(
+                    "Give the plot more room (a larger Axes passed as ax=, or "
+                    "inferplot's own figure by leaving ax out), shorten the texts, "
+                    "or leave the path out with point_path=False or "
+                    "centrality_path=False."
+                ),
+            )
+        )
+    subjects = paths.subjects
+    if subjects is not None and subjects.get_visible() and subjects.axes is not None:
+        share = crowding(fig, subjects)
+        if share > _CROWDED_SHARE:
+            n = len(subjects.get_segments())
+            issues.append(
+                Issue(
+                    code="paths_crowded",
+                    severity="warning",
+                    message=(
+                        f"The {n:,} subject paths are at least half opaque over "
+                        f"{share:.0%} of the area between the two conditions, so "
+                        "they hide the boxes and violins beneath them and single "
+                        "subjects cannot be followed."
+                    ),
+                    fix=(
+                        "Pass point_path=False to draw the points without paths "
+                        "(the centrality path still shows how the centre changes), "
+                        "or draw into a larger Axes with ax=."
+                    ),
+                )
+            )
+    return issues
+
+
 def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
-    """Rendering issues: label_overlap, text_clipped, points_subsampled."""
+    """Rendering issues: label_overlap, text_clipped, points_subsampled, and for
+    withinstats path_hidden and paths_crowded."""
     fig.draw()
     extents = text_extents(fig)
     issues: list[Issue] = []
@@ -277,16 +458,25 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
                 fix=room,
             )
         )
+    issues += _path_issues(fig, extents)
     sub = fig.subsample
     if sub is not None:
+        whole = (
+            ""
+            if sub.subjects is None
+            else (
+                f": every value of {sub.subjects[0]:,} of the {sub.subjects[1]:,} "
+                "subjects"
+            )
+        )
         issues.append(
             Issue(
                 code="points_subsampled",
                 severity="info",
                 message=(
                     f"The points show a random subsample of {sub.shown:,} of the "
-                    f"{sub.total:,} values (seed {sub.seed}); the {sub.density} and "
-                    "boxes are drawn from all values."
+                    f"{sub.total:,} values{whole} (seed {sub.seed}); the "
+                    f"{sub.density} and boxes are drawn from all values."
                 ),
                 fix=(
                     "Nothing needs fixing. Pass another seed to the analysis to draw "

@@ -35,11 +35,15 @@ import inferplot.render
 import inferplot.export
 assert "matplotlib.pyplot" not in sys.modules, "import"
 from tests.render._results import many_points_result
-fig = inferplot.render.betweenstats(many_points_result())
-fig.check()
-for suffix in (".svg", ".pdf", ".png"):
-    fig.save({str(tmp_path)!r} + "/f" + suffix, dpi=40)
-fig._repr_png_()
+from tests.render._within import many_subjects
+for fig in (
+    inferplot.render.betweenstats(many_points_result()),
+    inferplot.render.withinstats(many_subjects(3_000)),
+):
+    fig.check()
+    for suffix in (".svg", ".pdf", ".png"):
+        fig.save({str(tmp_path)!r} + "/f" + suffix, dpi=40)
+    fig._repr_png_()
 assert "matplotlib.pyplot" not in sys.modules, "render"
 print("ok")
 """

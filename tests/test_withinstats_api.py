@@ -1,10 +1,11 @@
 """``ip.withinstats``, ``ip.analyze.withinstats`` and ``ip.render.withinstats``:
 signatures, argument checks and the result a within-subjects design returns.
 
-No within-subjects statistics exist yet: every call that passes the checks and reads
-the data raises ``NotImplementedError`` naming the type and the number of
+No within-subjects statistics exist yet: every analysis call that passes the checks
+and reads the data raises ``NotImplementedError`` naming the type and the number of
 conditions. The result contract is checked through ``_assemble`` with parts made up
-here, so it is ready for the statistics.
+here, so it is ready for the statistics; ``ip.render.withinstats`` draws such a
+result (tests/render/test_withinstats_render.py).
 """
 
 from __future__ import annotations
@@ -472,12 +473,11 @@ def _args() -> Any:
     )
 
 
-def test_render_checks_then_raises_not_implemented(four: pd.DataFrame) -> None:
+def test_render_checks_then_draws(four: pd.DataFrame) -> None:
     result = _fake_result(four)
-    text = message(NotImplementedError, lambda: draw(result))
-    assert text.startswith(
-        "render.withinstats(): drawing a within-subjects result is not implemented yet"
-    )
+    fig = draw(result)
+    assert fig.result.analysis == "withinstats"
+    assert fig.result.warnings == result.warnings
     assert "point_path must be True or False" in message(
         TypeError, lambda: draw(result, point_path=1)
     )
