@@ -42,6 +42,7 @@ from inferplot.stats.descriptive import (
     exact_mean,
     ordinal,
     scaled_variance,
+    sqrt_rounded,
 )
 from inferplot.stats.effect_sizes import EffectSizeCI, hedges_j
 from inferplot.stats.noncentral import check_conf_level, t_ncp_interval
@@ -431,26 +432,6 @@ def bootstrap_t_critical_value(
     return float(ordered[k - 1])
 
 
-def _sqrt_rounded(value: Fraction) -> float:
-    """sqrt(value) of an exact rational value >= 0, correctly rounded (one
-    rounding): the integer square root to at least 62 bits with a sticky bit for
-    the rest, then Python's correctly rounded conversion of the rational."""
-    if value == 0:
-        return 0.0
-    num, den = value.numerator, value.denominator
-    k = 62 - (num.bit_length() - den.bit_length()) // 2
-    if k >= 0:
-        num <<= 2 * k
-    else:
-        den <<= -2 * k
-    root = math.isqrt(num // den)
-    sticky = int(root * root * den != num)
-    try:
-        return float(Fraction(2 * root + sticky) * Fraction(2) ** -(k + 1))
-    except OverflowError:
-        return math.inf
-
-
 def _trimmed_t(winsorized: FloatArray, tmean: Fraction, mu: float, tr: float) -> float:
     """t = (trimmed mean - mu) / (s_w / ((1 - 2 tr) sqrt(n))) from exact
     quantities, rounded once: t^2 = (trimmed mean - mu)^2 (1 - 2 tr)^2 n (n - 1)
@@ -467,7 +448,7 @@ def _trimmed_t(winsorized: FloatArray, tmean: Fraction, mu: float, tr: float) ->
     ss = squares - total * total / n
     difference = tmean - Fraction(mu)
     shrink = 1 - 2 * Fraction(tr)
-    magnitude = _sqrt_rounded(
+    magnitude = sqrt_rounded(
         difference * difference * shrink * shrink * n * (n - 1) / ss
     )
     return math.copysign(magnitude, float(difference)) + 0.0
@@ -615,7 +596,7 @@ def trimmed_mean_bootstrap_t(
             ratio = (tm_s - tm_w) ** 2 / wss_s
             value_ = row_value
             if not math.isfinite(value_):  # one number in binary, not as written
-                value_ = shrink * _sqrt_rounded(ratio * (n - 1))
+                value_ = shrink * sqrt_rounded(ratio * (n - 1))
             if t != 0.0:
                 if ratio == target:
                     value_ = abs_t

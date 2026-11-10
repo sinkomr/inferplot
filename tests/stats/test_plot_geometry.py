@@ -242,3 +242,102 @@ def test_ols_band_is_exact_at_extreme_scales() -> None:
         ols_band([1.0, 2.0], [1.0, 2.0])
     with pytest.raises(ValueError, match="same number"):
         ols_band([1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 4.0])
+
+
+def _band_definition(
+    x: np.ndarray[Any, Any], y: np.ndarray[Any, Any]
+) -> tuple[list[float], list[float]]:
+    """fit and se at the 80 grid points from the definition, in exact rationals,
+    divided by max |y| (so the reference's own floats neither overflow nor
+    underflow)."""
+    n = x.size
+    xs = [Fraction(v) for v in x.tolist()]
+    ys = [Fraction(v) for v in y.tolist()]
+    mx = sum(xs, Fraction(0)) / n
+    my = sum(ys, Fraction(0)) / n
+    sxx = sum(((v - mx) ** 2 for v in xs), Fraction(0))
+    sxy = sum(((a - mx) * (b - my) for a, b in zip(xs, ys, strict=True)), Fraction(0))
+    slope = sxy / sxx
+    residuals = [b - my - slope * (a - mx) for a, b in zip(xs, ys, strict=True)]
+    s2 = sum((r * r for r in residuals), Fraction(0)) / (n - 2)
+    lo, hi = float(x.min()), float(x.max())
+    step = (hi - lo) / 79
+    grid = [lo + i * step for i in range(80)]
+    grid[-1] = hi
+    scale = Fraction(float(np.max(np.abs(y))))
+    fits = [float((my + slope * (Fraction(g) - mx)) / scale) for g in grid]
+    ses = [
+        math.sqrt(
+            float(s2 * (Fraction(1, n) + (Fraction(g) - mx) ** 2 / sxx) / scale**2)
+        )
+        for g in grid
+    ]
+    return fits, ses
+
+
+@pytest.mark.parametrize(
+    "exponent", [-300, -200, -165, -162, -160, 0, 154, 155, 200, 300]
+)
+@pytest.mark.parametrize("axis", ["x", "y"])
+def test_ols_band_at_any_scale(exponent: int, axis: str) -> None:
+    # Review Z4: the band's variance overflowed for y of order 1e155 (an
+    # OverflowError) and underflowed below 1e-162 (a band of no width).
+    rng = np.random.default_rng(3)
+    x = rng.normal(size=15)
+    y = 0.5 * x + rng.normal(size=15)
+    if axis == "x":
+        x = x * 10.0**exponent
+    else:
+        y = y * 10.0**exponent
+    band = ols_band(x, y)
+    fits, ses = _band_definition(x, y)
+    scale = float(np.max(np.abs(y)))
+    for got, want in zip(band.se, ses, strict=True):
+        assert got / scale == pytest.approx(want, rel=1e-13)
+    for got, want in zip(band.fit, fits, strict=True):
+        assert got / scale == pytest.approx(want, rel=1e-13, abs=1e-15)
+    width = band.conf_high[40] - band.conf_low[40]
+    assert width == pytest.approx(2 * band.critical_value * band.se[40], rel=1e-12)
+    assert width > 0.0
+
+
+def test_ols_band_raises_where_a_double_cannot_hold_it() -> None:
+    rng = np.random.default_rng(3)
+    x = rng.normal(size=15) * 1e-300
+    y = rng.normal(size=15) * 1e300  # a slope of order 1e600
+    with pytest.raises(ValueError, match="the slope of the least-squares line"):
+        ols_band(x, y)
+
+
+@pytest.mark.parametrize(
+    ("values", "binwidth", "message"),
+    [
+        ([1.0, 2.0, 3.0], 5e-324, "more bins"),
+        ([1.7e308, -1.7e308, 0.0], 0.1, "range of x exceeds"),
+    ],
+)
+def test_histogram_overflow_guard(
+    values: list[float], binwidth: float, message: str
+) -> None:
+    # Review Z6 (7): OverflowError "cannot convert float infinity to integer".
+    with pytest.raises(ValueError, match=message):
+        histogram_bins(np.array(values), binwidth=binwidth)
+
+
+def test_marginal_bins_of_a_subnormal_range() -> None:
+    # Review Z6 (7): a ZeroDivisionError from a bin width that underflows to 0.
+    with pytest.raises(ValueError, match="too small for doubles to separate 30"):
+        marginal_bins(np.array([0.0, 5e-324, 1e-323]))
+
+
+def test_a_value_within_rounding_of_a_break_counts_on_its_left() -> None:
+    # Planted bug G05 (no fuzz at the breaks) survived the suite: stat_bin moves
+    # every inner break right by 1e-8 of the bin width, so a value one unit in the
+    # last place above the break 1.5 still counts in (0.5, 1.5].
+    above = float(np.nextafter(1.5, 2.0))
+    bins = histogram_bins(np.array([0.0, above, 3.0]), binwidth=1.0)
+    assert bins.edges == (-0.5, 0.5, 1.5, 2.5, 3.5)
+    assert bins.counts == (1, 1, 0, 1)
+    # Beyond the fuzz it counts on the right.
+    beyond = histogram_bins(np.array([0.0, 1.5 + 1e-6, 3.0]), binwidth=1.0)
+    assert beyond.counts == (1, 0, 1, 1)

@@ -24,7 +24,13 @@ from typing import Final
 import numpy as np
 
 from inferplot.stats.correlation import cross_moments
-from inferplot.stats.descriptive import FloatArray, SampleLike, as_sample, exact_mean
+from inferplot.stats.descriptive import (
+    FloatArray,
+    SampleLike,
+    as_sample,
+    exact_mean,
+    sqrt_rounded,
+)
 from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.smm import smm_quantile
 
@@ -181,6 +187,17 @@ def histogram_bins(x: SampleLike, *, binwidth: float | None = None) -> Histogram
         width = float(binwidth)
         if not (math.isfinite(width) and width > 0.0):
             raise ValueError(f"binwidth must be a finite number > 0; got {binwidth!r}")
+    low, high = float(arr.min()), float(arr.max())
+    if math.isinf(high - low):
+        raise ValueError(
+            "the range of x exceeds the largest double (about 1.8e308); rescale x"
+        )
+    if not all(math.isfinite(v / width) for v in (low, high, high - low)):
+        raise ValueError(
+            f"the bin width {width!r} gives more bins over the range of the values "
+            f"than ggplot2 draws ({_MAX_BINS:,}): the values lie more than the "
+            "largest double (about 1.8e308) bin widths from 0; use a larger bin width"
+        )
     return _bins(arr, width, 0.5 * width)
 
 
@@ -207,6 +224,11 @@ def marginal_bins(x: SampleLike, *, bins: int = MARGINAL_BINS) -> HistogramBins:
             raise ValueError(
                 "the range of x exceeds the largest double (about 1.8e308); rescale x"
             )
+        if not (width > 0.0 and math.isfinite(low / width)):
+            raise ValueError(
+                f"the range of x ({high - low!r}) is too small for doubles to separate "
+                f"{int(bins)} marginal bins at the magnitude of its values; rescale x"
+            )
     return _bins(arr, width, low - 0.5 * width)
 
 
@@ -219,6 +241,25 @@ def _seq_length(start: float, stop: float, count: int) -> FloatArray:
     return out
 
 
+def _too_large(what: str) -> ValueError:
+    return ValueError(
+        f"{what} of the least-squares line exceeds the largest double (about "
+        "1.8e308) at the scale of x and y; rescale x or y, for example by changing "
+        "their units"
+    )
+
+
+def _held(value: Fraction, what: str) -> float:
+    """``value`` rounded once to a double; a plain error where none holds it."""
+    try:
+        out = float(value)
+    except OverflowError:
+        raise _too_large(what) from None
+    if not math.isfinite(out):  # pragma: no cover - float() raises instead
+        raise _too_large(what)
+    return out
+
+
 def ols_band(x: SampleLike, y: SampleLike, *, conf_level: float = 0.95) -> OlsBand:
     """The least-squares line of y on x and its pointwise confidence band, as
     ggplot2's ``geom_smooth(method = "lm", formula = y ~ x, level = conf_level)``
@@ -228,12 +269,17 @@ def ols_band(x: SampleLike, y: SampleLike, *, conf_level: float = 0.95) -> OlsBa
     the band fit -/+ t se, t the quantile of Student's t at (1 + conf_level) / 2
     on n - 2 df (``smm_quantile`` with one comparison, accurate to 1e-14 at any
     SciPy). The sums of squares and products are exact (rationals from the exact
-    sums of the doubles), rounded once. Every lm fixture: fit, se and band to 1e-8.
+    sums of the doubles); each fit is rounded once and each se is the correctly
+    rounded square root of its exact variance, so the band keeps its relative
+    accuracy at any scale of x and y from 1e-300 to 1e300 (Phase 4 review Z4: the
+    variance overflowed at y of order 1e155 and the band had no width below
+    1e-162). Every lm fixture: fit, se and band to 1e-8.
 
     Raises:
         ValueError: fewer than 3 pairs (no residual df), unequal lengths, a
-            non-finite value, a constant x (no line: ggplot2 draws none), or
-            conf_level not strictly between 0 and 1.
+            non-finite value, a constant x (no line: ggplot2 draws none),
+            conf_level not strictly between 0 and 1, or a fit, band, slope or
+            intercept beyond the largest double.
     """
     level = check_conf_level(conf_level)
     a = as_sample(x, name="x", min_size=3)
@@ -264,23 +310,30 @@ def ols_band(x: SampleLike, y: SampleLike, *, conf_level: float = 0.95) -> OlsBa
     ses: list[float] = []
     lows: list[float] = []
     highs: list[float] = []
+    # Each number is formed exactly and rounded once: the fit as a rational, the
+    # standard error as the correctly rounded square root of its exact variance,
+    # so neither overflows in an intermediate step (y of order 1e155 squared) nor
+    # underflows (below 1e-162); a number a double cannot hold raises.
     for x0 in grid.tolist():
         offset = Fraction(x0) - mx
-        fit = my + slope * offset
-        var = s2 * (Fraction(1, n) + offset * offset / sxx)
-        se = math.sqrt(float(var))
-        fits.append(float(fit))
+        fit = _held(my + slope * offset, "the fitted line")
+        se = sqrt_rounded(s2 * (Fraction(1, n) + offset * offset / sxx))
+        band = critical * se
+        bounds = (fit - band, fit + band)
+        if not (math.isfinite(se) and all(math.isfinite(v) for v in bounds)):
+            raise _too_large("the confidence band")
+        fits.append(fit)
         ses.append(se)
-        lows.append(float(fit) - critical * se)
-        highs.append(float(fit) + critical * se)
+        lows.append(bounds[0])
+        highs.append(bounds[1])
     return OlsBand(
         x=tuple(grid.tolist()),
         fit=tuple(fits),
         se=tuple(ses),
         conf_low=tuple(lows),
         conf_high=tuple(highs),
-        slope=float(slope),
-        intercept=float(my - slope * mx),
+        slope=_held(slope, "the slope"),
+        intercept=_held(my - slope * mx, "the intercept"),
         df=df,
         critical_value=critical,
         conf_level=level,

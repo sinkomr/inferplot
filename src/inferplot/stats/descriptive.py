@@ -36,6 +36,7 @@ __all__ = [
     "median",
     "rounding_tolerance",
     "scaled_variance",
+    "sqrt_rounded",
     "variance",
 ]
 
@@ -247,6 +248,26 @@ def differences_same_within_rounding(x: FloatArray, y: FloatArray) -> bool:
     tolerance = (rounding_tolerance(x) + rounding_tolerance(y)) * scale
     relative: FloatArray = (s - s[0]) + e
     return bool((relative - tolerance).max() <= (relative + tolerance).min())
+
+
+def sqrt_rounded(value: Fraction) -> float:
+    """sqrt(value) of an exact rational value >= 0, correctly rounded (one
+    rounding): the integer square root to at least 62 bits with a sticky bit for
+    the rest, then Python's correctly rounded conversion of the rational."""
+    if value == 0:
+        return 0.0
+    num, den = value.numerator, value.denominator
+    k = 62 - (num.bit_length() - den.bit_length()) // 2
+    if k >= 0:
+        num <<= 2 * k
+    else:
+        den <<= -2 * k
+    root = math.isqrt(num // den)
+    sticky = int(root * root * den != num)
+    try:
+        return float(Fraction(2 * root + sticky) * Fraction(2) ** -(k + 1))
+    except OverflowError:
+        return math.inf
 
 
 def scaled_variance(x: FloatArray) -> float:
