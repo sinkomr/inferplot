@@ -293,6 +293,8 @@ def checked_expressions(case: OracleCase) -> list[tuple[str, str, tx.Node]]:
                 (f"annotation{pair}", str(ann), rebuild_pair(case, by_pair[pair]))
             )
     for layer in case.plot_layers:
+        if layer["geom"] != "GeomSignif":
+            continue  # gghistostats and ggscatterstats record other layers built too
         for j, built in enumerate(layer["built"] or []):
             # group "setosa-versicolor-1": the bracket's 1-based comparison index
             index = int(str(built["group"]).rsplit("-", 1)[1]) - 1
@@ -336,7 +338,11 @@ def test_expressions_equal_ggstatsplot(case: OracleCase) -> None:
     # Each fixture holds the texts its own arguments ask for, except where
     # ggstatsplot swallowed an error and dropped one (tests/within_np_cases.py).
     has_subtitle = "subtitle_data" in where
-    dropped = HIDDEN.get(case.name) == "subtitle"
+    # A case ggstatsplot fails on may have dropped its subtitle first
+    # (edge_rm_all_tied), as the case declares.
+    dropped = (
+        HIDDEN.get(case.name) == "subtitle" or "subtitle" in case.expected_hidden_errors
+    )
     assert has_subtitle == (results_subtitle(case) and not dropped)
     assert ("subtitle" in where) == (has_subtitle and case.error is None)
     if case.type == "parametric":

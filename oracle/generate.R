@@ -174,6 +174,65 @@ edge_within <- function(dataset, ...) {
   within_cases(dataset, x = "condition", y = "value", subject = "subject", ...)
 }
 
+# Phase 4: gghistostats cases (one numeric column `x` against `test.value`) and
+# ggscatterstats cases (a correlation of `x` and `y`), one per type in `types`, with
+# `expect_error` and `expect_hidden_errors` mapping a type to what the case declares,
+# as above, and `expect_empty_layers` the geoms ggplot2 builds no rows for (a smooth
+# line on constant x). `columns` names the arguments that are column names
+# (label.var too).
+phase4_cases <- function(fun, dataset, args, label, types, extra_args, expect_error,
+                         expect_hidden_errors, expect_empty_layers, expect_na_values) {
+  declared <- c(
+    names(expect_error), names(expect_hidden_errors), names(expect_empty_layers),
+    names(expect_na_values)
+  )
+  unknown <- setdiff(declared, types)
+  if (length(unknown) > 0L) stop(label, ": expectations for types without a case: ", unknown)
+  lapply(types, function(type) {
+    all_args <- c(args, list(type = type), extra_args)
+    list(
+      name = paste(fun, label, type, sep = "-"),
+      fun = fun,
+      dataset = dataset,
+      factor_levels = NULL,
+      args = all_args,
+      columns = intersect(c("x", "y", "label.var"), names(all_args)),
+      expect_error = expect_error[[type]],
+      expect_hidden_errors = expect_hidden_errors[[type]] %||% character(),
+      expect_empty_layers = expect_empty_layers[[type]] %||% character(),
+      expect_na_values = expect_na_values[[type]] %||% character()
+    )
+  })
+}
+
+# `expect_na_values` maps a type to the tables (subtitle, caption) where R reports a
+# statistic, p-value, estimate, bound or Bayes factor as NA: ggstatsplot prints such a
+# number as "NA" or as an empty string, with at most a warning, so an NA no case
+# declares stops the run.
+histo_cases <- function(dataset, x, label = dataset, types = TYPES, extra_args = list(),
+                        expect_error = list(), expect_hidden_errors = list(),
+                        expect_empty_layers = list(), expect_na_values = list()) {
+  phase4_cases(
+    "gghistostats", dataset, list(x = x), label, types, extra_args, expect_error,
+    expect_hidden_errors, expect_empty_layers, expect_na_values
+  )
+}
+
+scatter_cases <- function(dataset, x, y, label = dataset, types = TYPES, extra_args = list(),
+                          expect_error = list(), expect_hidden_errors = list(),
+                          expect_empty_layers = list(), expect_na_values = list()) {
+  phase4_cases(
+    "ggscatterstats", dataset, list(x = x, y = y), label, types, extra_args, expect_error,
+    expect_hidden_errors, expect_empty_layers, expect_na_values
+  )
+}
+
+# The one-sample and correlation edge datasets share their columns.
+edge_one <- function(dataset, test_value, ...) {
+  histo_cases(dataset, x = "value", extra_args = list(test.value = test_value), ...)
+}
+edge_corr <- function(dataset, ...) scatter_cases(dataset, x = "x", y = "y", ...)
+
 P_ADJUST_OTHERS <- c("bonferroni", "hochberg", "hommel", "BH", "BY", "fdr", "none")
 
 CASES <- c(
@@ -626,11 +685,229 @@ CASES <- c(
     "bugs_long", x = "condition", y = "desire", subject = "subject",
     label = "bugs_long-nopaths", types = "parametric",
     extra_args = list(centrality.path = FALSE)
+  ),
+
+  # Review of Phases 0-3 (STATUS.md T7): small hand-written cases that decide open
+  # rules, each with its bootstrap reference where it has one.
+  # About 2% of AKP resamples are 0/0: group a's resample is all 5 after winsorizing
+  # (winsorized SD 0) and its trimmed mean equals b's (D65). (edge_akp_undefined,
+  # about 17%: in HELD_OUT_CASES below.)
+  phase2_cases("edge_akp_undefined2", x = "group", y = "value", types = "robust"),
+  # Three groups of three sharing the value 1: about 8.8% of the stratified resamples
+  # of rank epsilon squared have every value tied (D54 in R itself).
+  phase2_cases("edge_tied3_small", x = "group", y = "value", types = "nonparametric"),
+  # tr 0.29 with n = 100: 0.29 * 100 is 28.999999999999996 in floating point, so
+  # floor(tr n) trims 28 values from each end, not 29. Values: round(20 + 4 sin(0.7 i)
+  # + 0.05 i, 2) for a and round(22 + 5 cos(0.53 i) + 0.03 i, 2) for b, i = 1..100.
+  phase2_cases(
+    "edge_tr029", x = "group", y = "value", types = "robust", extra_args = list(tr = 0.29)
+  ),
+  # Two values against fifty (b: round(10 + 2 sin(1.3 i), 2), i = 1..50): Welch's df
+  # about 1.002, Hedges' g at a df just above 1.
+  parametric_case("edge_n2_vs50", x = "group", y = "value"),
+  # (Three subjects, four conditions: in HELD_OUT_CASES below.)
+  # Friedman with every subject constant across conditions (0/0), and with five of
+  # eight subjects constant (Kendall's W bootstrap draws resamples of only those).
+  # All tied: the subtitle fails ("missing value where TRUE/FALSE needed") and
+  # ggstatsplot swallows that; then Durbin-Conover's table has no rows and
+  # pairwise_comparisons() stops.
+  edge_within(
+    "edge_rm_all_tied", types = "nonparametric",
+    expect_hidden_errors = list(nonparametric = "subtitle"),
+    expect_error = list(nonparametric = list(
+      component = "pairwise_comparisons",
+      message = "arguments imply differing number of rows: 0, 1",
+      reason = paste(
+        "every subject constant across conditions: Friedman's statistic is 0/0, the",
+        "subtitle fails silently, and the Durbin-Conover table has no rows"
+      )
+    ))
+  ),
+  edge_within("edge_rm_some_tied", types = "nonparametric"),
+
+  # Phase 4 (histostats): gghistostats, all four types. The fixture records the
+  # values it analyzed (`analyzed_data`), the histogram as ggplot2 built it and the
+  # centrality line and label (`centrality`).
+  # mtcars mpg against the default test value 0, far below every value (t about 19).
+  histo_cases("mtcars", x = "mpg"),
+  # A test value inside the data, equal to no value (mtcars) or to seven (iris).
+  histo_cases("mtcars", x = "mpg", label = "mtcars-tv20", extra_args = list(test.value = 20)),
+  histo_cases(
+    "iris", x = "Sepal.Length", label = "iris-sepal", extra_args = list(test.value = 5.8)
+  ),
+  histo_cases("ToothGrowth", x = "len", extra_args = list(test.value = 18)),
+  # Far above every value: |t| about 80.
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-tv100", extra_args = list(test.value = 100)
+  ),
+  # Missing values in x.
+  histo_cases("bugs_long", x = "desire", extra_args = list(test.value = 5)),
+  # Five values.
+  edge_one("edge_one_small", 3),
+  # Integer scores, five of them equal to the test value (Wilcoxon's zeros and ties).
+  edge_one("edge_one_ties", 3),
+  edge_one("edge_one_negative", -10),
+  # One value six times as far out as the rest.
+  edge_one("edge_one_outlier", 10),
+  # Mean 0.00625 above the test value: t near 0.
+  edge_one("edge_one_null", 50),
+  # 2,000 values: round(100 + 15 sin(0.37 i) + 5 cos(1.13 i), 2), i = 1..2000.
+  edge_one("edge_one_large_n", 100),
+  # Missing values in the analyzed column and in another one.
+  edge_one("edge_one_missing", 10),
+  # Arguments, on ToothGrowth against 18.
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-cl90",
+    extra_args = list(test.value = 18, conf.level = 0.90)
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-tr01", types = "robust",
+    extra_args = list(test.value = 18, tr = 0.1)
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-digits3",
+    extra_args = list(test.value = 18, digits = 3L)
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-nosubtitle",
+    extra_args = list(test.value = 18, results.subtitle = FALSE)
+  ),
+  # One-sided: the t and Wilcoxon p and the sidedness of their effect-size CIs, and
+  # whether trimcibt and the Bayes factor take `alternative` at all.
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-greater",
+    extra_args = list(test.value = 18, alternative = "greater")
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-less",
+    types = c("parametric", "nonparametric"),
+    extra_args = list(test.value = 18, alternative = "less")
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-prior08", types = c("parametric", "bayes"),
+    extra_args = list(test.value = 18, bf.prior = 0.8)
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-nobf", types = "parametric",
+    extra_args = list(test.value = 18, bf.message = FALSE)
+  ),
+  # A given bin width (the default is range / sqrt(n)), and no centrality line.
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-binwidth2", types = "parametric",
+    extra_args = list(test.value = 18, binwidth = 2)
+  ),
+  histo_cases(
+    "ToothGrowth", x = "len", label = "ToothGrowth-nocentrality", types = "parametric",
+    extra_args = list(test.value = 18, centrality.plotting = FALSE)
+  ),
+
+  # Phase 4 (scatterstats): ggscatterstats, all four types. The fixture records the
+  # complete pairs it analyzed (`analyzed_data`), correlation::correlation's own row
+  # (`correlation`), and the smooth line, its band and the marginal histograms as
+  # ggplot2 built them.
+  scatter_cases("mtcars", x = "wt", y = "mpg"),
+  # 150 pairs with ties in both columns.
+  scatter_cases("iris", x = "Sepal.Length", y = "Petal.Length"),
+  edge_corr("edge_corr_small"),
+  edge_corr("edge_corr_ties"),
+  # r = 1 and r = -1: BayesFactor's correlation Bayes factor is NaN there, and
+  # ggstatsplot prints log(BF01) as an empty string.
+  edge_corr(
+    "edge_corr_perfect",
+    expect_na_values = list(parametric = "caption", bayes = "subtitle")
+  ),
+  scatter_cases(
+    "edge_corr_perfect", x = "x", y = "y_neg", label = "edge_corr_perfect-neg",
+    expect_na_values = list(parametric = "caption", bayes = "subtitle")
+  ),
+  edge_corr("edge_corr_null"),
+  # One point that turns a strong positive correlation negative.
+  edge_corr("edge_corr_outlier"),
+  # 2,000 pairs: x = round(50 + 10 sin(0.37 i) + 3 cos(1.7 i), 2), y = round(20 +
+  # 3 sin(0.37 i) + 4 sin(2.3 i + 0.4), 2), i = 1..2000.
+  edge_corr("edge_corr_large_n"),
+  # Missing x, missing y and both.
+  edge_corr("edge_corr_missing"),
+  # Constant x: no correlation is defined. Pearson's r is NA ("the standard deviation
+  # is zero") and the parametric subtitle prints NA; the Bayesian correlation stops
+  # ("No valid values found"), which ggstatsplot swallows (the parametric caption, the
+  # bayes subtitle). The OLS line has no slope, and geom_smooth(na.rm = TRUE) draws
+  # nothing.
+  edge_corr(
+    "edge_corr_constant_x",
+    expect_hidden_errors = list(parametric = "caption", bayes = "subtitle"),
+    expect_na_values = list(
+      parametric = "subtitle", nonparametric = "subtitle", robust = "subtitle"
+    ),
+    expect_empty_layers = list(
+      parametric = "GeomSmooth", nonparametric = "GeomSmooth", robust = "GeomSmooth",
+      bayes = "GeomSmooth"
+    )
+  ),
+  # Arguments, on mtcars wt and mpg.
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-cl90", extra_args = list(conf.level = 0.90)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-tr01", types = "robust",
+    extra_args = list(tr = 0.1)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-digits3", extra_args = list(digits = 3L)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-prior08", types = c("parametric", "bayes"),
+    extra_args = list(bf.prior = 0.8)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-nobf", types = "parametric",
+    extra_args = list(bf.message = FALSE)
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-nomarginal", types = "parametric",
+    extra_args = list(marginal = FALSE)
+  ),
+  # Another smoother: smooth.line.args replaces the whole default list.
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-loess", types = "parametric",
+    extra_args = list(smooth.line.args = list(method = "loess", formula = "y ~ x"))
+  ),
+  # Point labels: every point, and the points label.expression selects.
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-labels", types = "parametric",
+    extra_args = list(label.var = "model")
+  ),
+  scatter_cases(
+    "mtcars", x = "wt", y = "mpg", label = "mtcars-labelexpr", types = "parametric",
+    extra_args = list(label.var = "model", label.expression = "mpg > 25 | wt > 5")
   )
 )
 
+# Cases run like the others but written into probe-heldout instead of a fixture of
+# their own: R's result differs from what inferplot computes today by a rule the
+# lead has yet to decide, so they must not enter the parity tests (which collect
+# every fixture of a function) until then (review of Phases 0-3, T7).
+HELD_OUT_CASES <- c(
+  # About 17% of AKP resamples are 0/0 (a: 5,5,5,5,5,5,6,7,8,9; b: ten 5s). WRS2 drops
+  # them when it sorts but keeps the bound positions of all B, so the upper bound is
+  # NA (probe-bootrules) and ggstatsplot prints CI [0.22, NA]; inferplot leaves them
+  # out and counts positions over the rest (D65), a finite bound.
+  phase2_cases("edge_akp_undefined", x = "group", y = "value", types = "robust"),
+  # Three subjects, four conditions: fewer subjects than conditions, so the covariance
+  # of the three contrasts is singular. afex then computes no sphericity correction
+  # ("corresponding non-sphericity tests and corrections not available") and
+  # ggstatsplot prints the uncorrected F(3, 6); inferplot applies the
+  # Greenhouse-Geisser epsilon of the singular matrix (D62).
+  edge_within("edge_rm_n3k4", types = "parametric")
+)
+
 case_names <- vapply(CASES, function(case) case$name, character(1L))
-if (anyDuplicated(case_names)) stop("duplicate case names: ", case_names[duplicated(case_names)])
+all_names <- c(case_names, vapply(HELD_OUT_CASES, function(case) case$name, character(1L)))
+if (anyDuplicated(all_names)) stop("duplicate case names: ", all_names[duplicated(all_names)])
 
 # Arguments whose consequences the bookkeeping below knows (which hidden calls
 # ggbetweenstats and ggwithinstats make, which outputs they draw). Fail closed on any
@@ -642,9 +919,23 @@ KNOWN_ARGS <- c(
 )
 KNOWN_ARGS_BY_FUNCTION <- list(
   ggbetweenstats = KNOWN_ARGS,
-  ggwithinstats = c(KNOWN_ARGS, "subject.id", "point.path", "centrality.path")
+  ggwithinstats = c(KNOWN_ARGS, "subject.id", "point.path", "centrality.path"),
+  # gghistostats 1.1.4 has no pairwise or y arguments; binwidth and
+  # centrality.plotting change only the plot's layers (and whether the centrality
+  # label is computed).
+  gghistostats = c(
+    "x", "type", "test.value", "alternative", "conf.level", "digits", "results.subtitle",
+    "bf.message", "bf.prior", "tr", "binwidth", "centrality.plotting"
+  ),
+  # ggscatterstats 1.1.4 takes no `alternative`. label.expression is R code kept as
+  # text in the case and parsed when the call is built; smooth.line.args replaces
+  # geom_smooth()'s arguments (its `formula` is kept as text the same way).
+  ggscatterstats = c(
+    "x", "y", "type", "conf.level", "digits", "results.subtitle", "bf.message", "bf.prior",
+    "tr", "marginal", "smooth.line.args", "label.var", "label.expression"
+  )
 )
-for (case in CASES) {
+for (case in c(CASES, HELD_OUT_CASES)) {
   known <- KNOWN_ARGS_BY_FUNCTION[[case$fun]]
   if (is.null(known)) stop(case$name, ": generate.R has no bookkeeping for ", case$fun)
   unknown <- setdiff(names(case$args), known)
@@ -656,7 +947,14 @@ for (case in CASES) {
     # inferplot never does, so every case names its subjects.
     stop(case$name, ": ggwithinstats cases must give subject.id")
   }
-  for (flag in c("results.subtitle", "bf.message", "point.path", "centrality.path")) {
+  if (!is.null(case$args$label.expression) && is.null(case$args$label.var)) {
+    stop(case$name, ": label.expression has no effect without label.var")
+  }
+  flags <- c(
+    "results.subtitle", "bf.message", "point.path", "centrality.path", "marginal",
+    "centrality.plotting"
+  )
+  for (flag in flags) {
     value <- case$args[[flag]]
     if (!is.null(value) && !(isTRUE(value) || isFALSE(value))) {
       stop(case$name, ": ", flag, " must be TRUE or FALSE")
@@ -871,27 +1169,50 @@ local({
 # ggwithinstats 1.1.4 share them: both compute the subtitle and caption through
 # .bw_subtitle_caption() and .subtitle_caption(), and the labels and pairs through
 # .bw_decorate() (ggstatsplot's R/ggbetweenstats-helpers.R and R/0-utils.R).
-HIDDEN_CALL_FUNCTIONS <- c("ggbetweenstats", "ggwithinstats")
+HIDDEN_CALL_FUNCTIONS <- c("ggbetweenstats", "ggwithinstats", "gghistostats", "ggscatterstats")
+# Functions whose design has no groups: their fixtures have no levels and record the
+# analyzed values instead (`analyzed_data`).
+NO_LEVEL_FUNCTIONS <- c("gghistostats", "ggscatterstats")
 
-# The `.eval_f` calls ggbetweenstats and ggwithinstats 1.1.4 make, in order: with
-# results.subtitle (default TRUE) they compute the subtitle, and then the Bayes
-# caption when bf.condition (type "parametric") and bf.message (default TRUE) both
-# hold; with results.subtitle = FALSE they compute neither.
+# The `.eval_f` calls each function makes, in order. All four compute the subtitle and
+# caption through .subtitle_caption(): with results.subtitle (default TRUE) the
+# subtitle, and then the Bayes caption when bf.condition (type "parametric") and
+# bf.message (default TRUE) both hold; with results.subtitle = FALSE neither.
+# ggscatterstats then builds its two marginal histogram layers through `.eval_f`
+# (ggside::geom_xsidehistogram, then geom_ysidehistogram) unless marginal = FALSE, so
+# an error there would drop the marginals silently.
 expected_eval_f <- function(case) {
   if (!(case$fun %in% HIDDEN_CALL_FUNCTIONS)) {
     stop("generate.R has no hidden-call rules for ", case$fun, "; add them first")
   }
-  if (isFALSE(case$args$results.subtitle)) {
-    return(character())
+  calls <- if (isFALSE(case$args$results.subtitle)) {
+    character()
+  } else {
+    c("subtitle", if (case$args$type == "parametric" && !isFALSE(case$args$bf.message)) "caption")
   }
-  c("subtitle", if (case$args$type == "parametric" && !isFALSE(case$args$bf.message)) "caption")
+  if (case$fun == "ggscatterstats" && !isFALSE(case$args$marginal)) {
+    calls <- c(calls, "xsidehistogram", "ysidehistogram")
+  }
+  calls
 }
 
-# Every hidden call ggbetweenstats and ggwithinstats make, in order: the `.eval_f`
-# calls above, then centrality_description() (always, also when the labels are not
-# drawn), then pairwise_comparisons() for three or more groups (ggwithinstats: three
-# or more conditions after complete_subjects()) unless pairwise.display = "none".
+# Every hidden call each function makes, in order. ggbetweenstats and ggwithinstats:
+# the `.eval_f` calls above, then centrality_description() (always, also when the
+# labels are not drawn), then pairwise_comparisons() for three or more groups
+# (ggwithinstats: three or more conditions after complete_subjects()) unless
+# pairwise.display = "none". gghistostats: the `.eval_f` calls, then
+# centrality_description() (through .histo_labeller()) unless centrality.plotting =
+# FALSE. ggscatterstats: the `.eval_f` calls only.
 expected_hidden_calls <- function(case, levels) {
+  if (case$fun == "gghistostats") {
+    return(c(
+      expected_eval_f(case),
+      if (!isFALSE(case$args$centrality.plotting)) "centrality_description"
+    ))
+  }
+  if (case$fun == "ggscatterstats") {
+    return(expected_eval_f(case))
+  }
   display <- case$args$pairwise.display
   pairwise <- length(levels) > 2L && !identical(display, "none")
   c(expected_eval_f(case), "centrality_description", if (pairwise) "pairwise_comparisons")
@@ -917,7 +1238,12 @@ name_hidden <- function(case, log, failed = FALSE) {
 # The plot's layers in drawing order, with each layer's own data. The centrality
 # labels live here (ggstatsplot 1.1.4's extract_stats() leaves descriptive_data
 # empty). Layers that draw the plot's main data have data null.
-plot_layers <- function(plot) {
+#
+# `build_all` (gghistostats, ggscatterstats): every layer but the raw points also
+# carries `params` and `built`, so the histogram's bins and counts, the centrality
+# line, the smooth line with its confidence band and the marginal histograms are
+# recorded as ggplot2 computed them.
+plot_layers <- function(plot, build_all = FALSE) {
   # ggplot2 4.x plots are S7 objects; fall back to `$` for older S3 plots.
   layers <- tryCatch(plot@layers, error = function(e) plot$layers)
   layer_names <- names(layers)
@@ -925,7 +1251,7 @@ plot_layers <- function(plot) {
   unname(Map(function(layer, name, index) {
     data <- layer$data
     geom <- class(layer$geom)[[1L]]
-    signif <- geom == "GeomSignif"
+    detailed <- geom == "GeomSignif" || (build_all && geom != "GeomPoint")
     list(
       name = name,
       geom = geom,
@@ -933,7 +1259,7 @@ plot_layers <- function(plot) {
       # Significance brackets keep the drawn pairs (`comparisons`) and their labels
       # (`annotations`) in the layer's parameters, not in its data; `built` is the
       # layer as ggplot2 computes it for drawing.
-      params = if (signif) {
+      params = if (detailed) {
         list(
           stat = to_json_value(layer$stat_params),
           geom = to_json_value(layer$geom_params),
@@ -942,7 +1268,7 @@ plot_layers <- function(plot) {
       } else {
         NULL
       },
-      built = if (signif) frame_rows(ggplot2::layer_data(plot, index)) else NULL
+      built = if (detailed) frame_rows(ggplot2::layer_data(plot, index)) else NULL
     )
   }, layers, layer_names, seq_along(layers)))
 }
@@ -1150,11 +1476,74 @@ within_bootstrap_candidates <- function(case, rows, subtitle_row) {
   stop(case$name, ": no bootstrap rule for type ", type)
 }
 
+# WRS2::trimcibt's documented default number of bootstrap samples (its help page:
+# nboot = 200). statsExpressions 2.2.1's one_sample_test() passes no nboot, so
+# gghistostats' robust subtitle uses this many; the replay checks it (a candidate with
+# nboot left out and one with nboot = 200 must both reproduce ggstatsplot).
+TRIMCIBT_DEFAULT_RESAMPLES <- 200L
+
+# gghistostats' one bootstrapped quantity (statsExpressions 2.2.1 one_sample_test()):
+# type robust calls WRS2::trimcibt(x, nv = test.value, tr, alpha = 1 - conf.level), a
+# bootstrap-t test whose statistic and estimate are exact while its p-value and the
+# interval come from the bootstrap. The reference therefore records the p-value
+# (`fields`) next to the estimate and the bounds. The values are x without missing
+# values, in file order, as one_sample_test() passes them.
+histo_bootstrap_candidates <- function(case, values, subtitle_row) {
+  if (case$args$type != "robust" || length(subtitle_row) == 0L) {
+    return(list())
+  }
+  conf_level <- case_conf_level(case)
+  tr <- case_tr(case)
+  test_value <- case$args$test.value %||% 0
+  candidates <- list()
+  for (resamples in list(NA_integer_, TRIMCIBT_DEFAULT_RESAMPLES)) {
+    for (alpha in alpha_spellings(conf_level)) {
+      candidates[[length(candidates) + 1L]] <- local({
+        alpha <- alpha
+        gg_resamples <- resamples
+        list(
+          call = sprintf(
+            "WRS2::trimcibt(x, nv = %s, tr = %s, alpha = %s, nboot = R)",
+            format(test_value), format(tr), alpha$text
+          ),
+          fields = c("estimate", "conf_low", "conf_high", "p_value"),
+          gg_columns = c("estimate", "conf.low", "conf.high", "p.value"),
+          gg_resamples = TRIMCIBT_DEFAULT_RESAMPLES,
+          replay_resamples = gg_resamples,
+          run = function(resamples) {
+            r <- if (is.na(resamples)) {
+              WRS2::trimcibt(x = values, nv = test_value, tr = tr, alpha = alpha$value)
+            } else {
+              WRS2::trimcibt(
+                x = values, nv = test_value, tr = tr, alpha = alpha$value, nboot = resamples
+              )
+            }
+            raw <- Filter(is.numeric, unclass(r))
+            list(
+              values = c(r$estimate, as.numeric(r$ci)[1:2], r$p.value),
+              raw = lapply(raw, encode_doubles)
+            )
+          }
+        )
+      })
+    }
+  }
+  candidates
+}
+
 bootstrap_candidates <- function(case, analysis, subtitle_row) {
   # Fail closed: each function needs its own replay (paired row order, other effect
   # sizes) before its cases are added.
   if (case$fun == "ggwithinstats") {
     return(within_bootstrap_candidates(case, analysis, subtitle_row))
+  }
+  if (case$fun == "gghistostats") {
+    return(histo_bootstrap_candidates(case, analysis, subtitle_row))
+  }
+  if (case$fun == "ggscatterstats") {
+    # correlation::correlation computes every ggscatterstats interval analytically
+    # (the Bayes type samples a posterior, a v0.2 output, replayed in `correlation`).
+    return(list())
   }
   if (case$fun != "ggbetweenstats") {
     stop("generate.R has no bootstrap replay for ", case$fun, "; add one first")
@@ -1268,11 +1657,22 @@ bootstrap_runs <- function(case, chosen) {
   list(reference = reference, runs = runs)
 }
 
+# The quantities a bootstrap reference records, as fixture field names, and the
+# subtitle_data columns that hold ggstatsplot's values of them. Every effect-size
+# candidate records these three; gghistostats' trimcibt adds the p-value.
+DEFAULT_BOOT_FIELDS <- c("estimate", "conf_low", "conf_high")
+DEFAULT_BOOT_COLUMNS <- c("estimate", "conf.low", "conf.high")
+
 bootstrap_reference <- function(case, analysis, stats) {
   subtitle_row <- stats$subtitle_data
   within <- case$fun == "ggwithinstats"
+  histo <- case$fun == "gghistostats"
   ordered <- if (within) {
     statsexpressions_paired_rows(analysis, case$args$x, case$args$y)
+  } else if (histo) {
+    analysis$x
+  } else if (case$fun == "ggscatterstats") {
+    analysis
   } else {
     statsexpressions_rows(analysis)
   }
@@ -1280,20 +1680,37 @@ bootstrap_reference <- function(case, analysis, stats) {
   if (length(candidates) == 0L) {
     return(NULL)
   }
-  gg_values <- unname(c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high))
+  fields <- candidates[[1L]]$fields %||% DEFAULT_BOOT_FIELDS
+  gg_columns <- candidates[[1L]]$gg_columns %||% DEFAULT_BOOT_COLUMNS
+  gg_values <- unname(vapply(gg_columns, function(column) {
+    value <- subtitle_row[[column]]
+    if (length(value) == 1L) as.numeric(value) else NA_real_
+  }, numeric(1L)))
 
   tried <- list()
   chosen <- NULL
   for (candidate in candidates) {
+    replay_resamples <- if ("replay_resamples" %in% names(candidate)) {
+      candidate$replay_resamples
+    } else {
+      GG_RESAMPLES
+    }
     replay <- run_or_stop(case, "ggstatsplot replay", {
       set.seed(CASE_SEED)
-      candidate$run(GG_RESAMPLES)
+      candidate$run(replay_resamples)
     })
     values <- unname(replay$value$values)
     matches <- isTRUE(all.equal(values, gg_values, tolerance = 1e-10))
-    tried[[length(tried) + 1L]] <- list(
+    entry <- list(
       call = candidate$call, values = as.list(encode_doubles(values)), matches = matches
     )
+    if ("replay_resamples" %in% names(candidate)) {
+      # Which nboot the replay passed: "default" when it left nboot out.
+      entry <- append(entry, list(
+        replay_resamples = if (is.na(replay_resamples)) "default" else replay_resamples
+      ), after = 1L)
+    }
+    tried[[length(tried) + 1L]] <- entry
     if (matches && is.null(chosen)) chosen <- candidate
   }
   replayed <- !is.null(chosen)
@@ -1312,7 +1729,7 @@ bootstrap_reference <- function(case, analysis, stats) {
   reference <- cached$reference
   runs <- cached$runs
   replicates <- list(
-    value = t(vapply(runs, function(run) run$values, numeric(3L))),
+    value = t(vapply(runs, function(run) run$values, numeric(length(fields)))),
     warnings = unlist(lapply(runs, function(run) run$warnings))
   )
   # Infinite bounds (an effect size whose winsorized variance is 0 in enough
@@ -1321,14 +1738,30 @@ bootstrap_reference <- function(case, analysis, stats) {
   reps <- replicates$value
   spread <- function(column, f) encode_doubles(f(reps[, column]))
   gg_values <- encode_doubles(gg_values)
+  # Each field: ggstatsplot's value, the reference's, and the replicates' mean and SD,
+  # in the order of `fields`.
+  gg_list <- stats::setNames(lapply(seq_along(fields), function(i) gg_values[[i]]), fields)
+  ref_list <- stats::setNames(lapply(seq_along(fields), function(i) ref[[i]]), fields)
+  spread_list <- unlist(lapply(seq_along(fields), function(i) {
+    stats::setNames(
+      list(spread(i, mean), spread(i, stats::sd)),
+      paste0(fields[[i]], c("_mean", "_sd"))
+    )
+  }), recursive = FALSE)
   out <- list(
-    quantity = "effect size confidence interval",
+    quantity = if (histo) {
+      "bootstrap-t trimmed-mean test: confidence interval and p-value"
+    } else {
+      "effect size confidence interval"
+    },
     call = chosen$call,
     data_order = if (within) {
       paste(
         "complete subjects sorted by subject, then by condition, as statsExpressions",
         "passes them (dep.effect and wmcpAKP: one column per condition)"
       )
+    } else if (histo) {
+      "the values of x in file order, missing values dropped, as statsExpressions passes them"
     } else {
       "rows ordered by the levels of x, as statsExpressions passes them"
     },
@@ -1340,32 +1773,29 @@ bootstrap_reference <- function(case, analysis, stats) {
     } else {
       case_conf_level(case)
     },
-    ggstatsplot = list(
-      estimate = gg_values[[1L]],
-      conf_low = gg_values[[2L]],
-      conf_high = gg_values[[3L]],
-      resamples = GG_RESAMPLES,
-      seed = CASE_SEED
+    ggstatsplot = c(
+      gg_list,
+      list(resamples = chosen$gg_resamples %||% GG_RESAMPLES, seed = CASE_SEED)
     ),
     replay = list(matches = replayed, candidates = tried),
     seed = BOOT_SEED,
-    resamples = BOOT_REFERENCE_RESAMPLES,
-    estimate = ref[[1L]],
-    conf_low = ref[[2L]],
-    conf_high = ref[[3L]],
-    raw = reference$value$raw,
-    replicates = list(
-      count = BOOT_REPLICATES,
-      resamples = BOOT_REPLICATE_RESAMPLES,
-      first_seed = BOOT_SEED + 1L,
-      estimate_mean = spread(1L, mean),
-      estimate_sd = spread(1L, stats::sd),
-      conf_low_mean = spread(2L, mean),
-      conf_low_sd = spread(2L, stats::sd),
-      conf_high_mean = spread(3L, mean),
-      conf_high_sd = spread(3L, stats::sd)
-    ),
-    r_warnings = as.list(unique(c(reference$warnings, replicates$warnings)))
+    resamples = BOOT_REFERENCE_RESAMPLES
+  )
+  out <- c(
+    out,
+    ref_list,
+    list(
+      raw = reference$value$raw,
+      replicates = c(
+        list(
+          count = BOOT_REPLICATES,
+          resamples = BOOT_REPLICATE_RESAMPLES,
+          first_seed = BOOT_SEED + 1L
+        ),
+        spread_list
+      ),
+      r_warnings = as.list(unique(c(reference$warnings, replicates$warnings)))
+    )
   )
   if (within) {
     out <- append(out, list(requested_conf_level = case_conf_level(case)), after = 4L)
@@ -1412,14 +1842,119 @@ within_analysis <- function(data, x, y, subject) {
   out
 }
 
-# Which rows each function analyzes. Fail closed: one-sample designs have no x, and
-# so on, so every other function needs its own entry before its cases.
+# Which rows each function analyzes. Fail closed: every other function (ggbarstats
+# counts its rows, and so on) needs its own entry before its cases.
 ANALYSES <- list(
   ggbetweenstats = function(data, case) between_analysis(data, case$args$x, case$args$y),
   ggwithinstats = function(data, case) {
     within_analysis(data, case$args$x, case$args$y, case$args$subject.id)
+  },
+  # gghistostats: tidyr::drop_na(select(data, x)), so only a missing x drops a row;
+  # statsExpressions' one_sample_test() and the histogram use the rest in file order.
+  gghistostats = function(data, case) {
+    keep <- !is.na(data[[case$args$x]])
+    data.frame(x = as.numeric(data[[case$args$x]][keep]), row = which(keep))
+  },
+  # ggscatterstats: filter(data, !is.na(x), !is.na(y)), the complete pairs in file
+  # order; corr_test() drops the same rows again.
+  ggscatterstats = function(data, case) {
+    keep <- !is.na(data[[case$args$x]]) & !is.na(data[[case$args$y]])
+    data.frame(
+      x = as.numeric(data[[case$args$x]][keep]),
+      y = as.numeric(data[[case$args$y]][keep]),
+      row = which(keep)
+    )
   }
 )
+
+# The values a one-sample or correlation case analyzed (gghistostats,
+# ggscatterstats), as `within_data` records the subjects of a ggwithinstats case:
+# the column(s), the 1-based CSV rows kept (in file order), their values, and how many
+# rows were left out for a missing value.
+analyzed_data <- function(data, case, analysis) {
+  if (case$fun == "gghistostats") {
+    return(list(
+      x = case$args$x,
+      rows = as.list(analysis$row),
+      x_values = as.list(analysis$x),
+      n = nrow(analysis),
+      rows_dropped = nrow(data) - nrow(analysis),
+      rule = "rows with x present, in file order (tidyr::drop_na on x alone)"
+    ))
+  }
+  list(
+    x = case$args$x,
+    y = case$args$y,
+    rows = as.list(analysis$row),
+    x_values = as.list(analysis$x),
+    y_values = as.list(analysis$y),
+    n = nrow(analysis),
+    rows_dropped = nrow(data) - nrow(analysis),
+    rule = "rows with both x and y present, in file order (complete pairs)"
+  )
+}
+
+# correlation::correlation() as statsExpressions 2.2.1's corr_test() calls it, on the
+# complete pairs with the case's column names, after set.seed(CASE_SEED): inside
+# ggscatterstats() the subtitle's call is the first to draw random numbers (the Bayes
+# type samples its posterior), so this replays the subtitle's row exactly. Its whole
+# output row is recorded (`value`), and `matches_subtitle` says whether r, its CI,
+# the statistic and p equal ggstatsplot's subtitle_data.
+correlation_record <- function(case, analysis, subtitle_row) {
+  type <- case$args$type
+  data <- stats::setNames(
+    data.frame(analysis$x, analysis$y), c(case$args$x, case$args$y)
+  )
+  conf_level <- case_conf_level(case)
+  prior <- case$args$bf.prior %||% 0.707
+  winsorize <- if (type == "robust") case_tr(case) else FALSE
+  set.seed(CASE_SEED)
+  out <- capture(correlation::correlation(
+    data = data,
+    method = if (type == "nonparametric") "spearman" else "pearson",
+    ci = conf_level,
+    bayesian = type == "bayes",
+    bayesian_prior = prior,
+    winsorize = winsorize
+  ))
+  failed <- inherits(out$value, "error")
+  value <- if (failed) NULL else as.data.frame(out$value)
+  matches <- NULL
+  if (!failed && length(subtitle_row) > 0L && nrow(value) == 1L) {
+    estimate <- value[[intersect(c("r", "rho"), names(value))[[1L]]]]
+    mine <- c(estimate, value$CI_low, value$CI_high)
+    theirs <- c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high)
+    if (type != "bayes") {
+      statistic <- intersect(c("t", "S"), names(value))
+      # statsExpressions' add_expression_col() stores a p of exactly 0 as
+      # .Machine$double.xmin (r = -1: correlation's p is 0, the subtitle's 2.2e-308).
+      p <- if (isTRUE(value$p == 0)) .Machine$double.xmin else value$p
+      mine <- c(mine, value[[statistic[[1L]]]], p)
+      theirs <- c(theirs, subtitle_row$statistic, subtitle_row$p.value)
+    } else {
+      mine <- c(mine, value$BF)
+      theirs <- c(theirs, subtitle_row$bf10)
+    }
+    matches <- identical(length(mine), length(theirs)) &&
+      isTRUE(all.equal(unname(mine), unname(theirs), tolerance = 0))
+  }
+  list(
+    call = sprintf(
+      paste0(
+        "correlation::correlation(data, method = \"%s\", ci = %s, bayesian = %s, ",
+        "bayesian_prior = %s, winsorize = %s)"
+      ),
+      if (type == "nonparametric") "spearman" else "pearson", format(conf_level),
+      type == "bayes", format(prior), format(winsorize)
+    ),
+    seed = CASE_SEED,
+    value = if (failed) NULL else to_json_value(value),
+    error = if (failed) conditionMessage(out$value) else NULL,
+    warnings = as.list(unique(out$warnings)),
+    messages = as.list(unique(out$messages)),
+    matches_subtitle = matches
+  )
+}
 
 # The subjects-by-conditions data a within-subjects case analyzed, as ggwithinstats
 # analyzed it (within_analysis()): `subjects` in the order ggstatsplot holds them
@@ -1473,9 +2008,20 @@ run_case <- function(case) {
   data <- dataset$data
   call_args <- case$args
   for (name in case$columns) call_args[[name]] <- as.name(call_args[[name]])
+  # R code kept as text in the case: label.expression (an expression ggscatterstats
+  # passes to dplyr::filter) and the formula in smooth.line.args.
+  if (!is.null(call_args$label.expression)) {
+    call_args$label.expression <- str2lang(call_args$label.expression)
+  }
+  if (is.character(call_args$smooth.line.args$formula)) {
+    call_args$smooth.line.args$formula <- stats::as.formula(
+      call_args$smooth.line.args$formula, env = globalenv()
+    )
+  }
   fn <- call("::", as.name("ggstatsplot"), as.name(case$fun))
   cl <- as.call(c(list(fn, data = quote(data)), call_args))
   env <- environment()
+  no_levels <- case$fun %in% NO_LEVEL_FUNCTIONS
 
   HIDDEN$log <- list()
   HIDDEN$values <- list()
@@ -1486,7 +2032,7 @@ run_case <- function(case) {
       stats = ggstatsplot::extract_stats(plot),
       subtitle = ggstatsplot::extract_subtitle(plot),
       caption = ggstatsplot::extract_caption(plot),
-      layers = plot_layers(plot)
+      layers = plot_layers(plot, build_all = no_levels)
     )
   })
   failed <- inherits(outcome$value, "error")
@@ -1506,8 +2052,10 @@ run_case <- function(case) {
     ),
     args = case$args,
     seed = CASE_SEED,
-    analysis_levels = as.list(levels(analysis$x)),
-    n_per_level = as.list(table(analysis$x)),
+    # A one-sample or correlation design has no levels: an empty list and an empty
+    # object, and `analyzed_data` holds what it analyzed.
+    analysis_levels = if (no_levels) list() else as.list(levels(analysis$x)),
+    n_per_level = if (no_levels) stats::setNames(list(), character()) else as.list(table(analysis$x)),
     error = if (failed) conditionMessage(outcome$value) else NULL,
     expected_error = case$expect_error,
     # What the hidden calls returned before ggstatsplot failed, one entry per call.
@@ -1546,7 +2094,116 @@ run_case <- function(case) {
     at <- match("n_per_level", names(fixture))
     fixture <- append(fixture, list(within_data = within_data(data, case, analysis)), after = at)
   }
+  if (no_levels) {
+    at <- match("n_per_level", names(fixture))
+    fixture <- append(
+      fixture, list(analyzed_data = analyzed_data(data, case, analysis)), after = at
+    )
+    at <- match("expected_hidden_errors", names(fixture))
+    fixture <- append(
+      fixture,
+      list(
+        expected_empty_layers = as.list(case$expect_empty_layers),
+        expected_na_values = as.list(case$expect_na_values)
+      ),
+      after = at
+    )
+    extra <- if (case$fun == "gghistostats") {
+      # The centrality line's value and its label (drawn on a secondary x axis, not a
+      # layer): what centrality_description() returned; null without the line.
+      centrality <- NULL
+      for (i in seq_along(hidden)) {
+        if (identical(hidden[[i]]$component, "centrality_description")) {
+          centrality <- HIDDEN$values[[i]]
+        }
+      }
+      list(centrality = to_json_value(centrality))
+    } else {
+      subtitle_row <- if (failed) NULL else outcome$value$stats$subtitle_data
+      list(correlation = correlation_record(case, analysis, subtitle_row))
+    }
+    at <- match("plot_layers", names(fixture))
+    fixture <- append(fixture, extra, after = at)
+  }
   fixture
+}
+
+# The checks of a gghistostats or ggscatterstats case that replace the per-level
+# counts: the number of analyzed values (pairs) must be ggstatsplot's own n (the
+# subtitle's n.obs; gghistostats' centrality table too), and the layers the
+# arguments imply must be there with their data built.
+no_level_problems <- function(case, fixture) {
+  out <- character()
+  n <- fixture$analyzed_data$n
+  geoms <- vapply(fixture$plot_layers, function(layer) layer$geom, character(1L))
+  subtitle_rows <- fixture$stats$subtitle_data
+  if (length(subtitle_rows) > 0L) {
+    counts <- unique(vapply(subtitle_rows, function(row) as.integer(row[["n.obs"]]), integer(1L)))
+    if (!identical(counts, as.integer(n))) {
+      out <- c(out, sprintf("analyzed %d values; the subtitle's n.obs is %s", n, paste(counts, collapse = ",")))
+    }
+  }
+  if (case$fun == "gghistostats") {
+    centrality <- fixture$centrality
+    wants_centrality <- !isFALSE(case$args$centrality.plotting)
+    if (wants_centrality != !is.null(centrality)) {
+      out <- c(out, if (wants_centrality) "no centrality table" else "unexpected centrality table")
+    }
+    if (!is.null(centrality) && !identical(as.integer(centrality[[1L]][["n.obs"]]), as.integer(n))) {
+      out <- c(out, "the centrality table's n.obs differs from the analyzed values")
+    }
+    expected <- c("GeomBar", if (wants_centrality) "GeomVline")
+    if (!identical(unname(geoms), expected)) {
+      out <- c(out, sprintf("layers %s; expected %s", paste(geoms, collapse = ", "), paste(expected, collapse = ", ")))
+    }
+  } else {
+    record <- fixture$correlation
+    if (!is.null(record$error) && length(subtitle_rows) > 0L) {
+      out <- c(out, paste("correlation::correlation failed although the subtitle exists:", record$error))
+    }
+    if (length(subtitle_rows) > 0L && !isTRUE(record$matches_subtitle)) {
+      out <- c(out, "correlation::correlation's row does not reproduce the subtitle")
+    }
+    if (!("GeomSmooth" %in% geoms)) out <- c(out, "no smooth line layer")
+    sides <- sum(grepl("side", geoms, ignore.case = TRUE))
+    if (sides != (if (isFALSE(case$args$marginal)) 0L else 2L)) {
+      out <- c(out, sprintf("%d marginal histogram layers (%s)", sides, paste(geoms, collapse = ", ")))
+    }
+    if (!is.null(case$args$label.var) != ("GeomLabelRepel" %in% geoms)) {
+      out <- c(out, "point labels do not follow label.var")
+    }
+  }
+  # No number in the subtitle or caption table is NA unless the case declares it:
+  # ggstatsplot prints such a number as "NA" or "", with at most a warning.
+  for (table in c("subtitle", "caption")) {
+    rows <- fixture$stats[[paste0(table, "_data")]]
+    numbers <- c("statistic", "p.value", "estimate", "conf.low", "conf.high", "bf10")
+    missing_value <- function(v) {
+      is.null(v) || identical(v, "NaN") || (length(v) == 1L && is.atomic(v) && is.na(v))
+    }
+    has_na <- any(vapply(rows, function(row) {
+      any(vapply(intersect(numbers, names(row)), function(column) {
+        missing_value(row[[column]])
+      }, logical(1L)))
+    }, logical(1L)))
+    if (has_na != (table %in% case$expect_na_values)) {
+      out <- c(out, sprintf(
+        "%s table %s", table, if (has_na) "holds NA" else "holds no NA as declared"
+      ))
+    }
+  }
+  # Every layer but the raw points was built, with rows unless the case declares
+  # that ggplot2 builds none.
+  for (layer in fixture$plot_layers) {
+    if (layer$geom == "GeomPoint") next
+    empty <- length(layer$built) == 0L
+    if (empty != (layer$geom %in% case$expect_empty_layers)) {
+      out <- c(out, sprintf(
+        "layer %s %s", layer$geom, if (empty) "has no built data" else "is not empty as declared"
+      ))
+    }
+  }
+  out
 }
 
 # Everything about a finished case that differs from what the case declares.
@@ -1567,9 +2224,14 @@ outcome_problems <- function(case, fixture) {
     errors <- lapply(fixture$suppressed, function(entry) entry$error)
     last <- length(calls)
     planned <- expected_hidden_calls(case, unlist(fixture$analysis_levels))
+    # A call before the failing one may have failed only where the case declares
+    # that ggstatsplot swallows its error (edge_rm_all_tied: the subtitle).
+    earlier_failed <- !vapply(errors[-last], is.null, logical(1L))
+    undeclared <- earlier_failed & !(calls[-last] %in% case$expect_hidden_errors)
     if (last == 0L || calls[[last]] != expected$component || is.null(errors[[last]]) ||
       !identical(unname(calls), planned[seq_len(min(last, length(planned)))]) ||
-      any(!vapply(errors[-last], is.null, logical(1L)))) {
+      any(undeclared) ||
+      !setequal(calls[-last][earlier_failed], case$expect_hidden_errors)) {
       out <- c(out, sprintf(
         "expected %s to fail after %s; hidden calls were %s",
         expected$component, paste(planned, collapse = ", "), paste(calls, collapse = ", ")
@@ -1624,6 +2286,9 @@ outcome_problems <- function(case, fixture) {
   has_pairwise <- length(fixture$stats$pairwise_comparisons_data) > 0L
   if (wants_pairwise != has_pairwise) {
     out <- c(out, if (wants_pairwise) "no pairwise comparisons" else "unexpected pairwise comparisons")
+  }
+  if (case$fun %in% NO_LEVEL_FUNCTIONS) {
+    return(c(out, no_level_problems(case, fixture)))
   }
   # n_per_level must be what ggstatsplot itself counted.
   labels <- label_counts(fixture$plot_layers, case$args$x)
@@ -3310,6 +3975,505 @@ wrs2within_probe <- function() {
   )
 }
 
+# Phase 4 probes ----------------------------------------------------------------------
+#
+# The percentile rules of every bootstrapped interval ggstatsplot uses, read from R's
+# own replicate values (probe-bootrules); correlation::correlation's methods
+# (probe-corr); one-sample JZS Bayes factors at large |t| (probe-onesamplebf).
+
+# Tracing. While `run()` runs, base R's sort.int (behind sort()), sample.int and
+# sample, stats' quantile.default and boot::boot are traced: for every sort.int or
+# quantile call on a numeric vector whose length is in `lengths`, the vector it was
+# given and what it returned; for sample.int and sample (`record_samples`), what they
+# returned; for boot::boot, its t0 and t. This records the bootstrap replicate values
+# a function sorts or takes quantiles of, and the resamples it draws, without reading
+# its code. Tracing changes no value and draws no random number.
+TRACE <- new.env()
+TRACE$active <- FALSE
+
+.trace_entry <- function(name, x, extra = NULL) {
+  if (isTRUE(TRACE$active)) {
+    TRACE$stack[[length(TRACE$stack) + 1L]] <- list(name = name, x = x, extra = extra)
+  }
+  invisible(NULL)
+}
+
+.trace_exit <- function(name, value) {
+  if (isTRUE(TRACE$active) && length(TRACE$stack) > 0L) {
+    n <- length(TRACE$stack)
+    top <- TRACE$stack[[n]]
+    TRACE$stack[[n]] <- NULL
+    if (is.numeric(top$x) && length(top$x) %in% TRACE$lengths) {
+      TRACE$calls[[length(TRACE$calls) + 1L]] <- list(
+        name = name, input = as.numeric(top$x), extra = top$extra,
+        output = if (is.numeric(value)) as.numeric(value) else NULL
+      )
+    }
+  }
+  invisible(NULL)
+}
+
+.trace_sample <- function(name, value) {
+  if (isTRUE(TRACE$active) && isTRUE(TRACE$record_samples) && is.numeric(value)) {
+    TRACE$samples[[length(TRACE$samples) + 1L]] <- list(name = name, value = as.numeric(value))
+  }
+  invisible(NULL)
+}
+
+.trace_boot <- function(value) {
+  if (isTRUE(TRACE$active) && is.list(value)) {
+    TRACE$boots[[length(TRACE$boots) + 1L]] <- list(
+      t0 = as.numeric(value$t0), t = as.numeric(value$t), dim = dim(value$t)
+    )
+  }
+  invisible(NULL)
+}
+
+TRACE_TARGETS <- list(
+  list(
+    what = "sort.int", where = "base",
+    tracer = quote(.trace_entry("sort.int", x)),
+    exit = quote(.trace_exit("sort.int", returnValue()))
+  ),
+  list(
+    what = "quantile.default", where = "stats",
+    tracer = quote(.trace_entry("quantile", x, list(probs = probs, type = type))),
+    exit = quote(.trace_exit("quantile", returnValue()))
+  ),
+  list(
+    what = "sample.int", where = "base", tracer = NULL,
+    exit = quote(.trace_sample("sample.int", returnValue()))
+  ),
+  list(
+    what = "sample", where = "base", tracer = NULL,
+    exit = quote(.trace_sample("sample", returnValue()))
+  ),
+  list(
+    what = "boot", where = "boot", tracer = NULL,
+    exit = quote(.trace_boot(returnValue()))
+  )
+)
+
+trace_where <- function(name) if (name == "base") baseenv() else asNamespace(name)
+
+traced_run <- function(run, lengths, record_samples = FALSE) {
+  loadNamespace("boot")
+  TRACE$stack <- list()
+  TRACE$calls <- list()
+  TRACE$samples <- list()
+  TRACE$boots <- list()
+  TRACE$lengths <- lengths
+  TRACE$record_samples <- record_samples
+  on.exit({
+    TRACE$active <- FALSE
+    for (target in TRACE_TARGETS) {
+      suppressMessages(untrace(target$what, where = trace_where(target$where)))
+    }
+  })
+  for (target in TRACE_TARGETS) {
+    args <- list(
+      what = target$what, exit = target$exit, print = FALSE,
+      where = trace_where(target$where)
+    )
+    if (!is.null(target$tracer)) args$tracer <- target$tracer
+    # quote = TRUE: the tracer and exit expressions are passed unevaluated.
+    suppressMessages(do.call(trace, args, quote = TRUE))
+  }
+  TRACE$active <- TRUE
+  out <- probe_attempt(run())
+  TRACE$active <- FALSE
+  list(
+    result = out,
+    calls = lapply(TRACE$calls, function(call) {
+      list(
+        name = call$name, length = length(call$input),
+        input_hex = hex_list(call$input),
+        extra = if (is.null(call$extra)) NULL else lapply(call$extra, encode_doubles),
+        output_hex = if (is.null(call$output)) NULL else hex_list(call$output)
+      )
+    }),
+    samples = lapply(TRACE$samples, function(s) list(name = s$name, value_hex = hex_list(s$value))),
+    boots = lapply(TRACE$boots, function(b) {
+      list(t0_hex = hex_list(b$t0), t_hex = hex_list(b$t), dim = as.list(b$dim))
+    }),
+    unbalanced = length(TRACE$stack)
+  )
+}
+
+# probe-bootrules (review T6 and T7): for each bootstrapped interval ggstatsplot uses
+# (akp.effect, t1way's explanatory measure, rank_epsilon_squared, dep.effect,
+# wmcpAKP, kendalls_w, and trimcibt's bootstrap-t), the bounds the function returns
+# next to the replicate values it sorted (traced), at B = 39, 40, 99, 100, 199 and 200
+# resamples and, where the function takes a level, 95% and 90%, so that the candidate
+# percentile rules give different order statistics and a percentile helper applied
+# to R's own replicates must return R's bounds exactly. At B = 100 and 95% the
+# resamples drawn are recorded too. Then the T7 data sets with undefined resamples
+# (edge_akp_undefined and 2 for AKP, edge_tied3_small for rank epsilon squared,
+# edge_rm_some_tied for Kendall's W) at the resample counts ggstatsplot (100) and
+# inferplot (2,000) use, three seeds each: what each function does with a 0/0
+# resample.
+BOOTRULE_B <- c(39L, 40L, 99L, 100L, 199L, 200L)
+BOOTRULE_CONF <- c(0.95, 0.90)
+
+bootrule_designs <- function() {
+  scrambled <- function(n) normal_scores(n)[order(sin(seq_len(n) * 12.9898))]
+  two <- data.frame(
+    y = c(normal_scores(12L) * 2 + 10, normal_scores(15L) * 3 + 11.5),
+    x = factor(rep(c("a", "b"), c(12L, 15L)))
+  )
+  three <- smm_data(3L)
+  three <- data.frame(y = three$y, x = three$g)
+  paired_x <- normal_scores(15L)
+  paired_y <- 0.6 * paired_x + 0.8 * scrambled(15L) + 0.4
+  base <- normal_scores(12L) * 2
+  wide <- data.frame(
+    a = base + 0.7 * scrambled(12L),
+    b = base + 0.7 * rev(scrambled(12L)) + 0.5,
+    c = base + 0.7 * scrambled(12L)[c(12L, 1:11)] + 0.9
+  )
+  long <- data.frame(
+    .rowid = factor(rep(seq_len(12L), each = 3L)),
+    x = factor(rep(c("a", "b", "c"), times = 12L)),
+    y = as.vector(t(as.matrix(wide)))
+  )
+  one <- normal_scores(20L) * 2 + 0.7
+  conf_alpha <- function(conf) list(text = paste("1 -", format(conf)), value = 1.0 - conf)
+  list(
+    akp.effect = list(
+      call = "WRS2::akp.effect(y ~ x, two, EQVAR = FALSE, tr = 0.2, nboot = B, alpha = 1 - conf)",
+      data = list(a_hex = hex_list(two$y[two$x == "a"]), b_hex = hex_list(two$y[two$x == "b"])),
+      conf = BOOTRULE_CONF,
+      run = function(B, conf) akp_candidate(two, FALSE, conf_alpha(conf), 0.2)$run(B)$values
+    ),
+    t1way = list(
+      call = "WRS2::t1way(y ~ x, three, tr = 0.2, alpha = 1 - conf, nboot = B)",
+      data = lapply(split(three$y, three$x), hex_list),
+      conf = BOOTRULE_CONF,
+      run = function(B, conf) {
+        r <- WRS2::t1way(y ~ x, data = three, tr = 0.2, alpha = 1.0 - conf, nboot = B)
+        c(r$effsize, r$effsize_ci)
+      }
+    ),
+    rank_epsilon_squared = list(
+      call = "effectsize::rank_epsilon_squared(y ~ x, three, ci = conf, alternative = \"greater\", iterations = B)",
+      data = lapply(split(three$y, three$x), hex_list),
+      conf = BOOTRULE_CONF,
+      run = function(B, conf) {
+        r <- effectsize::rank_epsilon_squared(
+          y ~ x, data = three, ci = conf, alternative = "greater", iterations = B,
+          verbose = FALSE
+        )
+        c(r[[1L]], r$CI_low, r$CI_high)
+      }
+    ),
+    dep.effect = list(
+      call = "WRS2::dep.effect(x = paired_x, y = paired_y, tr = 0.2, nboot = B)",
+      data = list(x_hex = hex_list(paired_x), y_hex = hex_list(paired_y)),
+      conf = NA_real_,
+      run = function(B, conf) {
+        r <- WRS2::dep.effect(x = paired_x, y = paired_y, tr = 0.2, nboot = B)
+        tidy_effect(r, keep = "AKP")
+      }
+    ),
+    wmcpAKP = list(
+      call = "WRS2::wmcpAKP(wide, tr = 0.2, nboot = B)",
+      data = lapply(wide, hex_list),
+      conf = NA_real_,
+      run = function(B, conf) tidy_effect(WRS2::wmcpAKP(wide, tr = 0.2, nboot = B))
+    ),
+    kendalls_w = list(
+      call = "effectsize::kendalls_w(y ~ x | .rowid, long, ci = conf, iterations = B)",
+      data = lapply(wide, hex_list),
+      conf = BOOTRULE_CONF,
+      run = function(B, conf) {
+        r <- effectsize::kendalls_w(
+          y ~ x | .rowid, data = long, ci = conf, iterations = B, verbose = FALSE
+        )
+        c(r[[1L]], r$CI_low, r$CI_high)
+      }
+    ),
+    trimcibt = list(
+      call = "WRS2::trimcibt(one, nv = 0.5, tr = 0.2, alpha = 1 - conf, nboot = B)",
+      data = list(x_hex = hex_list(one)),
+      conf = BOOTRULE_CONF,
+      run = function(B, conf) {
+        r <- WRS2::trimcibt(x = one, nv = 0.5, tr = 0.2, alpha = 1.0 - conf, nboot = B)
+        c(r$estimate, as.numeric(r$ci)[1:2], r$p.value, r$test.stat)
+      }
+    )
+  )
+}
+
+bootrule_row <- function(design, B, conf, seed, record_samples) {
+  set.seed(seed)
+  traced <- traced_run(function() design$run(B, conf), lengths = B, record_samples = record_samples)
+  values <- traced$result$value
+  list(
+    B = B, conf = encode_doubles(conf), seed = seed,
+    values_hex = if (is.null(values)) NULL else hex_list(values),
+    error = traced$result$error, warnings = traced$result$warnings,
+    traced = traced$calls, samples = traced$samples, boots = traced$boots,
+    unbalanced_traces = traced$unbalanced
+  )
+}
+
+bootrules_probe <- function() {
+  designs <- bootrule_designs()
+  rules <- lapply(names(designs), function(name) {
+    design <- designs[[name]]
+    rows <- list()
+    for (B in BOOTRULE_B) {
+      for (conf in design$conf) {
+        rows[[length(rows) + 1L]] <- bootrule_row(
+          design, B, conf, 1L, record_samples = B == 100L && (is.na(conf) || conf == 0.95)
+        )
+      }
+    }
+    list(name = name, call = design$call, data = design$data, rows = rows)
+  })
+
+  # T7: undefined resamples.
+  akp1 <- probe_dataset("edge_akp_undefined")
+  akp2 <- probe_dataset("edge_akp_undefined2")
+  tied <- probe_dataset("edge_tied3_small")
+  some <- probe_dataset("edge_rm_some_tied")
+  between_frame <- function(set) between_analysis(set$data, "group", "value")
+  akp_design <- function(set) {
+    frame <- between_frame(set)
+    list(
+      call = "WRS2::akp.effect(y ~ x, data, EQVAR = FALSE, tr = 0.2, nboot = B, alpha = 1 - 0.95)",
+      data = lapply(split(frame$y, frame$x), hex_list),
+      run = function(B, conf) akp_candidate(frame, FALSE, conf_alpha95, 0.2)$run(B)$values
+    )
+  }
+  conf_alpha95 <- list(text = "1 - 0.95", value = 1.0 - 0.95)
+  tied_frame <- between_frame(tied)
+  some_long <- within_analysis(some$data, "condition", "value", "subject")
+  some_long$.rowid <- as.factor(some_long$.rowid)
+  undefined_designs <- list(
+    edge_akp_undefined = akp_design(akp1),
+    edge_akp_undefined2 = akp_design(akp2),
+    edge_tied3_small = list(
+      call = "effectsize::rank_epsilon_squared(y ~ x, data, ci = 0.95, alternative = \"greater\", iterations = B)",
+      data = lapply(split(tied_frame$y, tied_frame$x), hex_list),
+      run = function(B, conf) {
+        r <- effectsize::rank_epsilon_squared(
+          y ~ x, data = tied_frame, ci = 0.95, alternative = "greater", iterations = B,
+          verbose = FALSE
+        )
+        c(r[[1L]], r$CI_low, r$CI_high)
+      }
+    ),
+    edge_rm_some_tied = list(
+      call = "effectsize::kendalls_w(y ~ x | .rowid, data, ci = 0.95, iterations = B)",
+      data = lapply(split(some_long$y, some_long$x), hex_list),
+      run = function(B, conf) {
+        r <- effectsize::kendalls_w(
+          y ~ x | .rowid, data = some_long, ci = 0.95, iterations = B, verbose = FALSE
+        )
+        c(r[[1L]], r$CI_low, r$CI_high)
+      }
+    )
+  )
+  undefined <- lapply(names(undefined_designs), function(name) {
+    design <- undefined_designs[[name]]
+    rows <- list()
+    for (B in c(GG_RESAMPLES, BOOT_REPLICATE_RESAMPLES)) {
+      for (seed in c(CASE_SEED, 1L, 2L)) {
+        rows[[length(rows) + 1L]] <- bootrule_row(design, B, 0.95, seed, record_samples = FALSE)
+      }
+    }
+    list(name = name, call = design$call, data = design$data, rows = rows)
+  })
+  probe_file(
+    "probe-bootrules",
+    paste(
+      "bootstrap bounds next to the replicate values each function sorted (traced sort.int,",
+      "quantile and boot::boot), at several B and levels; T7 data with undefined resamples"
+    ),
+    list(rules = rules, undefined = undefined),
+    datasets = list(akp1$entry, akp2$entry, tied$entry, some$entry)
+  )
+}
+
+# probe-corr: what correlation::correlation computes for ggscatterstats, next to the
+# base R and package functions that could be behind it: cor.test (Pearson at 95% and
+# 90%; Spearman with exact NULL, TRUE and FALSE); correlation() with Pearson and
+# Spearman at both levels; the winsorized correlation at tr 0.2 and 0.1 next to
+# datawizard::winsorize's values and WRS2::wincor; and the Bayes factor at priors
+# 0.707 and 0.8 next to BayesFactor::correlationBF at those rscales and at "medium".
+corr_probe <- function() {
+  cars <- probe_dataset("mtcars")
+  iris_set <- probe_dataset("iris")
+  sets <- list(
+    small = probe_dataset("edge_corr_small"),
+    ties = probe_dataset("edge_corr_ties"),
+    null = probe_dataset("edge_corr_null"),
+    outlier = probe_dataset("edge_corr_outlier"),
+    missing = probe_dataset("edge_corr_missing"),
+    perfect = probe_dataset("edge_corr_perfect")
+  )
+  complete <- function(set, x, y) {
+    keep <- !is.na(set$data[[x]]) & !is.na(set$data[[y]])
+    list(x = as.numeric(set$data[[x]][keep]), y = as.numeric(set$data[[y]][keep]))
+  }
+  designs <- c(
+    list(
+      mtcars = complete(cars, "wt", "mpg"),
+      iris = complete(iris_set, "Sepal.Length", "Petal.Length")
+    ),
+    lapply(sets, function(set) complete(set, "x", "y")),
+    list(perfect_neg = complete(sets$perfect, "x", "y_neg"))
+  )
+  rows <- lapply(names(designs), function(name) {
+    x <- designs[[name]]$x
+    y <- designs[[name]]$y
+    data <- data.frame(x = x, y = y)
+    row_of <- function(out) if (is.null(out$value)) NULL else frame_with_hex(out$value)
+    pearson <- lapply(c(0.95, 0.9), function(cl) {
+      out <- probe_attempt(stats::cor.test(x, y, conf.level = cl))
+      r <- out$value
+      list(
+        conf = cl,
+        estimate_hex = if (is.null(r)) NULL else hex(unname(r$estimate)),
+        statistic_hex = if (is.null(r)) NULL else hex(unname(r$statistic)),
+        parameter = if (is.null(r)) NULL else unname(r$parameter),
+        p_value_hex = if (is.null(r)) NULL else hex(r$p.value),
+        conf_int_hex = if (is.null(r)) NULL else hex_list(r$conf.int),
+        error = out$error, warnings = out$warnings
+      )
+    })
+    spearman <- lapply(list(NULL, TRUE, FALSE), function(exact) {
+      out <- probe_attempt(stats::cor.test(x, y, method = "spearman", exact = exact))
+      r <- out$value
+      list(
+        exact = if (is.null(exact)) "NULL" else exact,
+        estimate_hex = if (is.null(r)) NULL else hex(unname(r$estimate)),
+        statistic_hex = if (is.null(r)) NULL else hex(unname(r$statistic)),
+        p_value_hex = if (is.null(r)) NULL else hex(r$p.value),
+        error = out$error, warnings = out$warnings
+      )
+    })
+    correlation_rows <- list()
+    for (method in c("pearson", "spearman")) {
+      for (cl in c(0.95, 0.9)) {
+        out <- probe_attempt(correlation::correlation(data, method = method, ci = cl))
+        correlation_rows[[length(correlation_rows) + 1L]] <- list(
+          method = method, ci = cl, row = row_of(out), error = out$error, warnings = out$warnings
+        )
+      }
+    }
+    winsorized <- lapply(c(0.2, 0.1), function(tr) {
+      out <- probe_attempt(correlation::correlation(data, method = "pearson", ci = 0.95, winsorize = tr))
+      w <- probe_attempt(datawizard::winsorize(data, threshold = tr))
+      wc <- probe_attempt(WRS2::wincor(x, y, tr = tr))
+      list(
+        tr = tr, correlation = row_of(out), error = out$error, warnings = out$warnings,
+        winsorized_x_hex = if (is.null(w$value)) NULL else hex_list(w$value$x),
+        winsorized_y_hex = if (is.null(w$value)) NULL else hex_list(w$value$y),
+        winsorize_error = w$error, winsorize_warnings = w$warnings,
+        wincor = if (is.null(wc$value)) NULL else lapply(Filter(is.numeric, unclass(wc$value)), hex_list),
+        wincor_error = wc$error, wincor_warnings = wc$warnings
+      )
+    })
+    bayes <- lapply(list(0.707, 0.8, "medium", 1 / 3), function(prior) {
+      bf <- probe_attempt(BayesFactor::correlationBF(y = y, x = x, rscale = prior))
+      extracted <- if (is.null(bf$value)) NULL else BayesFactor::extractBF(bf$value)
+      log_bf <- if (is.null(bf$value)) NULL else BayesFactor::extractBF(bf$value, logbf = TRUE)
+      corr <- if (is.numeric(prior)) {
+        set.seed(1L)
+        probe_attempt(correlation::correlation(
+          data, method = "pearson", ci = 0.95, bayesian = TRUE, bayesian_prior = prior
+        ))
+      }
+      list(
+        prior = prior,
+        bf10_hex = if (is.null(extracted)) NULL else hex(extracted$bf[[1L]]),
+        log_bf10_hex = if (is.null(log_bf)) NULL else hex(log_bf$bf[[1L]]),
+        bf_error = if (is.null(extracted)) NULL else encode_doubles(extracted$error[[1L]]),
+        call_error = bf$error, warnings = bf$warnings,
+        correlation = if (is.null(corr)) NULL else row_of(corr),
+        correlation_error = if (is.null(corr)) NULL else corr$error,
+        correlation_warnings = if (is.null(corr)) NULL else corr$warnings
+      )
+    })
+    list(
+      name = name, n = length(x), x_hex = hex_list(x), y_hex = hex_list(y),
+      pearson = pearson, spearman = spearman, correlation = correlation_rows,
+      winsorized = winsorized, bayes = bayes
+    )
+  })
+  probe_file(
+    "probe-corr",
+    paste(
+      "cor.test (Pearson; Spearman exact NULL/TRUE/FALSE), correlation::correlation, the",
+      "winsorized correlation with datawizard::winsorize and WRS2::wincor, correlationBF"
+    ),
+    list(designs = rows),
+    datasets = c(list(cars$entry, iris_set$entry), unname(lapply(sets, function(set) set$entry)))
+  )
+}
+
+# probe-onesamplebf: BayesFactor::ttestBF(x, mu = mu) at |t| from 0 to 1,000 (n 5, 10,
+# 30 and 200; mu 0 and 3; rscale 0.707 and 0.8), with its own error estimate and the
+# one-sample t from t.test, as probe-pairedbf does for paired data: where its
+# quadrature could miss the accurate one-sample Bayes factor.
+onesamplebf_probe <- function() {
+  rows <- list()
+  for (n in c(5L, 10L, 30L, 200L)) {
+    noise <- normal_scores(n)
+    for (mu in c(0, 3)) {
+      for (target in PAIREDBF_T) {
+        x <- mu + noise + target * stats::sd(noise) / sqrt(n)
+        tt <- probe_call("one-sample t.test", stats::t.test(x, mu = mu))$value
+        for (rscale in c(0.707, 0.8)) {
+          out <- probe_attempt(BayesFactor::ttestBF(x = x, mu = mu, rscale = rscale))
+          bf <- if (is.null(out$value)) NULL else BayesFactor::extractBF(out$value)
+          log_bf <- if (is.null(out$value)) NULL else BayesFactor::extractBF(out$value, logbf = TRUE)
+          rows[[length(rows) + 1L]] <- list(
+            n = n, mu = mu, t_target = target, rscale = rscale, rscale_hex = hex(rscale),
+            x_hex = hex_list(x),
+            t_hex = hex(unname(tt$statistic)), df = unname(tt$parameter),
+            bf10_hex = if (is.null(bf)) NULL else hex(bf$bf[[1L]]),
+            log_bf10_hex = if (is.null(log_bf)) NULL else hex(log_bf$bf[[1L]]),
+            error = if (is.null(bf)) NULL else encode_doubles(bf$error[[1L]]),
+            call_error = out$error, warnings = out$warnings
+          )
+        }
+      }
+    }
+  }
+  probe_file(
+    "probe-onesamplebf",
+    "BayesFactor::ttestBF(x, mu) and its error estimate at |t| from 0 to 1000",
+    list(rows = rows)
+  )
+}
+
+# probe-heldout: the HELD_OUT_CASES, each run exactly as a case is (run_case(),
+# bootstrap reference included) and checked the same way (outcome_problems(), which
+# must find nothing), its would-be fixture kept whole under `fixture`.
+heldout_probe <- function() {
+  entries <- lapply(HELD_OUT_CASES, function(case) {
+    message("== (held out) ", case$name)
+    fixture <- run_case(case)
+    problems <- outcome_problems(case, fixture)
+    if (length(problems) > 0L) {
+      stop("held-out case ", case$name, ": ", paste(problems, collapse = "; "))
+    }
+    list(name = case$name, fixture = fixture)
+  })
+  datasets <- unique(lapply(entries, function(entry) {
+    list(file = entry$fixture$dataset$file, sha256 = entry$fixture$dataset$sha256)
+  }))
+  probe_file(
+    "probe-heldout",
+    "cases whose R result differs from inferplot's by a rule not yet decided, run as cases are",
+    list(cases = entries),
+    datasets = datasets
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -3336,7 +4500,11 @@ PROBE_BUILDERS <- list(
   "probe-pairedbf" = pairedbf_probe,
   "probe-friedman" = friedman_probe,
   "probe-rmanova" = rmanova_probe,
-  "probe-wrs2within" = wrs2within_probe
+  "probe-wrs2within" = wrs2within_probe,
+  "probe-bootrules" = bootrules_probe,
+  "probe-corr" = corr_probe,
+  "probe-onesamplebf" = onesamplebf_probe,
+  "probe-heldout" = heldout_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
@@ -3370,10 +4538,13 @@ case_bootstraps <- function(case) {
     return(FALSE)
   }
   type <- case$args$type
+  if (case$fun == "ggscatterstats") {
+    return(FALSE)
+  }
   if (type == "robust") {
     return(TRUE)
   }
-  if (type != "nonparametric") {
+  if (type != "nonparametric" || case$fun == "gghistostats") {
     return(FALSE)
   }
   nlevels(ANALYSES[[case$fun]](read_dataset(case)$data, case)$x) > 2L

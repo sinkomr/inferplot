@@ -47,9 +47,10 @@ _EFFECT_SIZES = {"rank_biserial": "r (rank biserial)", "kendalls_w": "Kendall's 
 
 
 def test_fixture_counts() -> None:
-    # The brief's inventory: 15 cases with two conditions, 25 with three or more;
-    # ggstatsplot fails on none, and swallows an error in the HIDDEN ones.
-    assert (len(nc.TWO), len(nc.MORE)) == (15, 25)
+    # The brief's inventory: 15 cases with two conditions, 25 with three or more,
+    # and edge_rm_some_tied (review T7); ggstatsplot fails on none of these (it fails
+    # on edge_rm_all_tied, a failed case), and swallows an error in the HIDDEN ones.
+    assert (len(nc.TWO), len(nc.MORE)) == (15, 26)
     hidden = {c.name: c.expected_hidden_errors for c in nc.CASES}
     assert {name: e for name, e in hidden.items() if e} == {
         name: (component,) for name, component in nc.HIDDEN.items()
@@ -283,8 +284,9 @@ def test_hidden_errors() -> None:
 
 
 # Warnings these fixtures add beyond the data notes: the collapsed rank-biserial
-# interval where every nonzero difference has the same sign, and the identical
-# rankings of edge_within_small (test_hidden_errors).
+# interval where every nonzero difference has the same sign, the identical
+# rankings of edge_within_small (test_hidden_errors), and Kendall's W resamples of
+# constant subjects only, left out of the interval (D54, D64; edge_rm_some_tied).
 @pytest.mark.parametrize("name", nc.names(nc.CASES))
 def test_warnings(name: str) -> None:
     result = nc.analyze(name, "pandas")
@@ -294,6 +296,10 @@ def test_warnings(name: str) -> None:
     es = result.effect_size
     assert es is not None
     collapsed = abs(es.estimate) == 1.0 and es.conf_low == es.conf_high
+    undefined = (es.undefined_resamples or 0) > 0
+    undefined_notes = [w for w in method_warnings if "bootstrap resamples" in w]
+    assert len(undefined_notes) == int(undefined)
+    method_warnings = [w for w in method_warnings if w not in undefined_notes]
     assert len(method_warnings) == int(collapsed)
     if collapsed and es.name == "rank_biserial":
         (entry,) = method_warnings

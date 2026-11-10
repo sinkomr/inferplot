@@ -1,0 +1,331 @@
+{
+  "schema_version": 2,
+  "name": "gghistostats-edge_one_negative-parametric",
+  "function": "gghistostats",
+  "call": "ggstatsplot::gghistostats(data = data, x = value, type = \"parametric\", test.value = -10)",
+  "dataset": {
+    "file": "edge_one_negative.csv",
+    "sha256": "a787a3d84ef33ff84718de5d074c71bd7160e5c07f34499751f221c62c2135f0",
+    "rows": 12,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "value",
+    "type": "parametric",
+    "test.value": -10
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "analyzed_data": {
+    "x": "value",
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "x_values": [
+      -12.3,
+      -8.7,
+      -15.1,
+      -9.9,
+      -11.4,
+      -13.8,
+      -7.6,
+      -10.5,
+      -14.2,
+      -12.9,
+      -9.1,
+      -11.7
+    ],
+    "n": 12,
+    "rows_dropped": 0,
+    "rule": "rows with x present, in file order (tidyr::drop_na on x alone)"
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_empty_layers": [],
+  "expected_na_values": [],
+  "subtitle": "list(italic(\"t\")[\"Student\"] * \"(\" * 11 * \")\" == \"-2.12\", italic(p) == \"0.06\", widehat(italic(\"g\"))[\"Hedges\"] == \"-0.57\", CI[\"95%\"] ~ \"[\" * \"-1.13\", \"0.02\" * \"]\", italic(\"n\")[\"obs\"] == \"12\")",
+  "caption": "list(log[e] * (BF[\"01\"]) == \"-0.39\", widehat(delta)[\"difference\"]^\"posterior\" == \"-1.34\", CI[\"95%\"]^ETI ~ \"[\" * \"-2.87\", \"0.25\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
+  "stats": {
+    "subtitle_data": [
+      {
+        "mu": -10,
+        "statistic": -2.11705700579836,
+        "df.error": 11,
+        "p.value": 0.0578646124374919,
+        "method": "One Sample t-test",
+        "alternative": "two.sided",
+        "effectsize": "Hedges' g",
+        "estimate": -0.568337234166799,
+        "conf.level": 0.95,
+        "conf.low": -1.1338199912156,
+        "conf.high": 0.0184071770320551,
+        "conf.method": "ncp",
+        "conf.distribution": "t",
+        "n.obs": 12,
+        "expression": "list(italic(\"t\")[\"Student\"] * \"(\" * 11 * \")\" == \"-2.12\", italic(p) == \"0.06\", widehat(italic(\"g\"))[\"Hedges\"] == \"-0.57\", CI[\"95%\"] ~ \"[\" * \"-1.13\", \"0.02\" * \"]\", italic(\"n\")[\"obs\"] == \"12\")"
+      }
+    ],
+    "caption_data": [
+      {
+        "term": "Difference",
+        "effectsize": "Bayesian t-test",
+        "estimate": -1.33748538298855,
+        "conf.level": 0.95,
+        "conf.low": -2.8678378035336,
+        "conf.high": 0.249935431640504,
+        "pd": 0.954,
+        "prior.distribution": "cauchy",
+        "prior.location": 0,
+        "prior.scale": 0.707,
+        "bf10": 1.4839446429065,
+        "method": "Bayesian t-test",
+        "conf.method": "ETI",
+        "log_e_bf10": 0.394703841425775,
+        "n.obs": 12,
+        "expression": "list(log[e] * (BF[\"01\"]) == \"-0.39\", widehat(delta)[\"difference\"]^\"posterior\" == \"-1.34\", CI[\"95%\"]^ETI ~ \"[\" * \"-2.87\", \"0.25\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+      }
+    ],
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_bar",
+      "geom": "GeomBar",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false,
+          "orientation": null,
+          "binwidth": 2.1650635094611,
+          "bins": null,
+          "center": null,
+          "boundary": null,
+          "closed": ["right", "left"],
+          "pad": false,
+          "breaks": null,
+          "drop": "none"
+        },
+        "geom": {
+          "na.rm": false,
+          "orientation": null
+        },
+        "aes": {
+          "colour": "black",
+          "fill": "grey50",
+          "alpha": 0.7
+        }
+      },
+      "built": [
+        {
+          "count": 2,
+          "x": -15.1554445662277,
+          "xmin": -16.2379763209582,
+          "xmax": -14.0729128114971,
+          "density": 0.0769800358919501,
+          "ncount": 0.5,
+          "ndensity": 0.5,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 2,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 2,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 3,
+          "x": -12.9903810567666,
+          "xmin": -14.0729128114971,
+          "xmax": -11.907849302036,
+          "density": 0.115470053837925,
+          "ncount": 0.75,
+          "ndensity": 0.749999999999999,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 3,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 3,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 4,
+          "x": -10.8253175473055,
+          "xmin": -11.907849302036,
+          "xmax": -9.74278579257494,
+          "density": 0.1539600717839,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 4,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 4,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 3,
+          "x": -8.66025403784439,
+          "xmin": -9.74278579257494,
+          "xmax": -7.57772228311384,
+          "density": 0.115470053837925,
+          "ncount": 0.75,
+          "ndensity": 0.749999999999999,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 3,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 3,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_vline",
+      "geom": "GeomVline",
+      "data": [
+        {
+          "xintercept": -11.4333333333333
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed"
+        }
+      },
+      "built": [
+        {
+          "xintercept": -11.4333333333333,
+          "PANEL": "1",
+          "group": -1,
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed",
+          "alpha": null
+        }
+      ]
+    }
+  ],
+  "centrality": [
+    {
+      ".x": ".x",
+      "var": -11.4333333333333,
+      "std.dev": 2.3453370889077,
+      "iqr": 4.275,
+      "conf.low": -12.8547916666667,
+      "conf.high": -10.2720833333333,
+      "min": -15.1,
+      "max": -7.6,
+      "skewness": 0.053418447518311,
+      "kurtosis": -0.994039748766647,
+      "n.obs": 12,
+      "missing.obs": 0,
+      "expression": "list(widehat(mu)[mean] == \"-11.43\")",
+      "n.expression": ".x\n(n = 12)"
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

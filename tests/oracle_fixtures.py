@@ -51,6 +51,9 @@ GENERATOR_FILES = (
 
 Backend = Literal["pandas", "polars", "pyarrow"]
 Row = Mapping[str, Any]
+# R functions whose design has no groups: a one-sample test and a correlation. Their
+# fixtures record the analyzed values (`analyzed_data`) instead of levels.
+NO_LEVEL_FUNCTIONS = frozenset({"gghistostats", "ggscatterstats"})
 
 
 class FixtureIntegrityError(AssertionError):
@@ -138,6 +141,44 @@ class OracleCase:
         if self.function != "ggwithinstats":
             raise ValueError(f"{self.name}: only ggwithinstats records within_data")
         return self.raw["within_data"]
+
+    @property
+    def analyzed_data(self) -> Mapping[str, Any]:
+        """The values a gghistostats or ggscatterstats case analyzed.
+
+        These designs have no levels (``analysis_levels`` is empty and
+        ``n_per_level`` is ``{}``). gghistostats: ``x`` (the column), ``rows`` (the
+        1-based CSV rows kept, in file order: rows with x present), ``x_values``,
+        ``n`` and ``rows_dropped``. ggscatterstats: the same with ``y`` and
+        ``y_values``, for the complete pairs.
+        """
+        if self.function not in NO_LEVEL_FUNCTIONS:
+            raise ValueError(
+                f"{self.name}: only {sorted(NO_LEVEL_FUNCTIONS)} record analyzed_data"
+            )
+        return self.raw["analyzed_data"]
+
+    def analyzed_values(self, column: Literal["x", "y"] = "x") -> list[float]:
+        """The analyzed values of x (or, for a correlation, y) as floats."""
+        return [number(v) for v in self.analyzed_data[f"{column}_values"]]
+
+    @property
+    def centrality(self) -> list[Row] | None:
+        """gghistostats: what ``centrality_description()`` returned (the line's
+        value, its label ``expression`` and ``n.obs``); None without the line."""
+        if self.function != "gghistostats":
+            raise ValueError(f"{self.name}: only gghistostats records centrality")
+        rows = self.raw["centrality"]
+        return None if rows is None else list(rows)
+
+    @property
+    def correlation(self) -> Mapping[str, Any]:
+        """ggscatterstats: ``correlation::correlation()`` as ``corr_test()`` calls
+        it, replayed after ``set.seed(seed)``: ``call``, ``value`` (its row),
+        ``error``, ``warnings``, ``messages`` and ``matches_subtitle``."""
+        if self.function != "ggscatterstats":
+            raise ValueError(f"{self.name}: only ggscatterstats records correlation")
+        return self.raw["correlation"]
 
     def within_columns(self) -> dict[str, list[float]]:
         """Each level's values in subject order, as floats (``within_data``)."""
@@ -274,16 +315,36 @@ class OracleCase:
     def layer_params(self, geom: str) -> list[Mapping[str, Any]]:
         """Parameters (``stat``, ``geom``, ``aes``) of the layers drawn with ``geom``.
 
-        The generator records parameters only for the significance brackets
-        (``GeomSignif``); any other geom raises ``KeyError``. Empty when this plot
-        draws no brackets.
+        For ggbetweenstats and ggwithinstats the generator records parameters only
+        for the significance brackets (``GeomSignif``); any other geom raises
+        ``KeyError``. Empty when this plot draws no brackets. gghistostats and
+        ggscatterstats record them for every layer but the raw points.
         """
+        if self.function in NO_LEVEL_FUNCTIONS:
+            _check_geom(geom)
+            return [
+                layer["params"]
+                for layer in self.plot_layers
+                if layer["geom"] == geom and layer["params"] is not None
+            ]
         if geom not in PARAMETER_GEOMS:
             raise KeyError(
                 f"layer parameters are recorded only for {sorted(PARAMETER_GEOMS)}, "
                 f"not {geom!r}"
             )
         return [layer["params"] for layer in self.plot_layers if layer["geom"] == geom]
+
+    def layer_built(self, geom: str) -> list[list[Row]]:
+        """The rows ggplot2 computed for drawing each layer drawn with ``geom`` (the
+        histogram's bins, the smooth line and its band, the marginal histograms).
+        Recorded for the brackets, and for every gghistostats and ggscatterstats
+        layer but the raw points; a geom no fixture draws raises ``KeyError``."""
+        _check_geom(geom)
+        return [
+            list(layer["built"])
+            for layer in self.plot_layers
+            if layer["geom"] == geom and layer["built"] is not None
+        ]
 
     def layer_data(self, geom: str) -> list[list[Row]]:
         """Own data of the layers drawn with ``geom``, e.g. ``"GeomLabelRepel"``.

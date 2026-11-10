@@ -383,11 +383,23 @@ def test_effect_size(name: str, backend: Backend) -> None:
             kind = "wrs2_xi_constant"
         assert_close(kind, es.estimate, number(row["estimate"]), what="estimate")
     for bound in ("conf_low", "conf_high"):
+        expected = number(reference[bound])
+        mc_sd = number(replicates[f"{bound}_sd"])
+        if es.name == "akp_delta" and mc_sd == 0 and math.isfinite(expected):
+            # A bound every replicate run agrees on is one resample's AKP, which
+            # differs from R's by WRS2's constant as the estimate does (D42;
+            # edge_akp_undefined2's lower bound).
+            trim = result.settings.tr
+            scale = wrs2_akp_constant(trim) / math.sqrt(
+                stats.winsorized_normal_variance(trim)
+            )
+            assert number(replicates[f"{bound}_mean"]) == expected
+            assert_close(
+                "closed_form", getattr(es, bound) * scale, expected, what=bound
+            )
+            continue
         assert_within_monte_carlo(
-            getattr(es, bound),
-            number(reference[bound]),
-            number(replicates[f"{bound}_sd"]),
-            what=f"{name} {bound}",
+            getattr(es, bound), expected, mc_sd, what=f"{name} {bound}"
         )
 
 
@@ -571,6 +583,12 @@ EXPECTED_METHOD_WARNINGS: Mapping[str, str] = {
     "ggbetweenstats-edge_ties_small-nonparametric": (
         "8 of 2,000 bootstrap resamples have every value tied, where rank epsilon "
         "squared is undefined; its confidence interval comes from the other 1,992, "
+        "as in ggstatsplot."
+    ),
+    # Review T7: three groups of three sharing the value 1 (D54 in R itself).
+    "ggbetweenstats-edge_tied3_small-nonparametric": (
+        "169 of 2,000 bootstrap resamples have every value tied, where rank epsilon "
+        "squared is undefined; its confidence interval comes from the other 1,831, "
         "as in ggstatsplot."
     ),
 }

@@ -1,0 +1,343 @@
+{
+  "schema_version": 2,
+  "name": "gghistostats-edge_one_outlier-bayes",
+  "function": "gghistostats",
+  "call": "ggstatsplot::gghistostats(data = data, x = value, type = \"bayes\", test.value = 10)",
+  "dataset": {
+    "file": "edge_one_outlier.csv",
+    "sha256": "0a768ed995f3bb3a2e586ea6dc34bcab64ff61dc12a54b937c233150eb1ff989",
+    "rows": 20,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "value",
+    "type": "bayes",
+    "test.value": 10
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "analyzed_data": {
+    "x": "value",
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "x_values": [
+      10.4,
+      9.7,
+      11.2,
+      10.9,
+      9.3,
+      10.1,
+      11.6,
+      9.9,
+      10.6,
+      10.2,
+      9.5,
+      11,
+      10.8,
+      9.8,
+      10.3,
+      11.4,
+      9.6,
+      10.7,
+      10,
+      60
+    ],
+    "n": 20,
+    "rows_dropped": 0,
+    "rule": "rows with x present, in file order (tidyr::drop_na on x alone)"
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_empty_layers": [],
+  "expected_na_values": [],
+  "subtitle": "list(log[e] * (BF[\"01\"]) == \"0.88\", widehat(delta)[\"difference\"]^\"posterior\" == \"2.05\", CI[\"95%\"]^ETI ~ \"[\" * \"-3.16\", \"7.19\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "term": "Difference",
+        "effectsize": "Bayesian t-test",
+        "estimate": 2.05447935801905,
+        "conf.level": 0.95,
+        "conf.low": -3.16283082733477,
+        "conf.high": 7.18888920891285,
+        "pd": 0.785,
+        "prior.distribution": "cauchy",
+        "prior.location": 0,
+        "prior.scale": 0.707,
+        "bf10": 0.41326875061678,
+        "method": "Bayesian t-test",
+        "conf.method": "ETI",
+        "log_e_bf10": -0.883657169767024,
+        "n.obs": 20,
+        "expression": "list(log[e] * (BF[\"01\"]) == \"0.88\", widehat(delta)[\"difference\"]^\"posterior\" == \"2.05\", CI[\"95%\"]^ETI ~ \"[\" * \"-3.16\", \"7.19\" * \"]\", italic(\"r\")[\"Cauchy\"]^\"JZS\" == \"0.71\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_bar",
+      "geom": "GeomBar",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false,
+          "orientation": null,
+          "binwidth": 11.3368646459239,
+          "bins": null,
+          "center": null,
+          "boundary": null,
+          "closed": ["right", "left"],
+          "pad": false,
+          "breaks": null,
+          "drop": "none"
+        },
+        "geom": {
+          "na.rm": false,
+          "orientation": null
+        },
+        "aes": {
+          "colour": "black",
+          "fill": "grey50",
+          "alpha": 0.7
+        }
+      },
+      "built": [
+        {
+          "count": 19,
+          "x": 11.3368646459239,
+          "xmin": 5.66843232296197,
+          "xmax": 17.0052969688859,
+          "density": 0.08379741927514,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 19,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 19,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 0,
+          "x": 22.6737292918479,
+          "xmin": 17.0052969688859,
+          "xmax": 28.3421616148098,
+          "density": 0,
+          "ncount": 0,
+          "ndensity": 0,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 0,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 0,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 0,
+          "x": 34.0105939377718,
+          "xmin": 28.3421616148098,
+          "xmax": 39.6790262607338,
+          "density": 0,
+          "ncount": 0,
+          "ndensity": 0,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 0,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 0,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 0,
+          "x": 45.3474585836957,
+          "xmin": 39.6790262607338,
+          "xmax": 51.0158909066577,
+          "density": 0,
+          "ncount": 0,
+          "ndensity": 0,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 0,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 0,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 1,
+          "x": 56.6843232296197,
+          "xmin": 51.0158909066577,
+          "xmax": 62.3527555525816,
+          "density": 0.00441039048816527,
+          "ncount": 0.0526315789473684,
+          "ndensity": 0.0526315789473684,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 1,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 1,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_vline",
+      "geom": "GeomVline",
+      "data": [
+        {
+          "xintercept": 10.192082111437
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed"
+        }
+      },
+      "built": [
+        {
+          "xintercept": 10.192082111437,
+          "PANEL": "1",
+          "group": -1,
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed",
+          "alpha": null
+        }
+      ]
+    }
+  ],
+  "centrality": [
+    {
+      ".x": ".x",
+      "var": 10.192082111437,
+      "iqr": 1.15,
+      "conf.low": 9.61972140762463,
+      "conf.high": 11.0325610948192,
+      "min": 9.3,
+      "max": 60,
+      "skewness": 4.44674540966029,
+      "kurtosis": 19.8408422862486,
+      "n.obs": 20,
+      "missing.obs": 0,
+      "expression": "list(widehat(mu)[MAP] == \"10.19\")",
+      "n.expression": ".x\n(n = 20)"
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

@@ -43,8 +43,8 @@ CASES = case_params()
 
 def test_every_completed_parametric_fixture_is_drawn() -> None:
     # 28 new parametric cases plus the Phase 0 parametric ones, minus edge_n2,
-    # which ggstatsplot itself fails on.
-    assert len(CASES) == 40
+    # which ggstatsplot itself fails on, plus edge_n2_vs50 (review T7).
+    assert len(CASES) == 41
 
 
 @pytest.mark.parametrize("case", CASES)

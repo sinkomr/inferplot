@@ -146,11 +146,22 @@ def test_akp_effect(case: OracleCase) -> None:
     assert_close(
         "closed_form", as_wrs2, number(reference["estimate"]), what="AKP (reference)"
     )
-    _check_bootstrap_bounds(case, result.conf_low, result.conf_high)
+    _check_bootstrap_bounds(
+        case,
+        result.conf_low,
+        result.conf_high,
+        fixed_kind="closed_form",
+        fixed_scale=as_wrs2 / result.estimate if result.estimate else None,
+    )
 
 
 def _check_bootstrap_bounds(
-    case: OracleCase, low: float, high: float, *, fixed_kind: str | None = None
+    case: OracleCase,
+    low: float,
+    high: float,
+    *,
+    fixed_kind: str | None = None,
+    fixed_scale: float | None = None,
 ) -> None:
     """The bounds against the 20,000-resample reference (SPEC.md section 10).
 
@@ -158,7 +169,10 @@ def _check_bootstrap_bounds(
     agree on (replicate SD 0). Such a bound does not depend on the resamples; it
     is one value of the statistic, and differs from R's the way the estimate does
     (edge_n2's upper bound of xi: the largest value three groups of two can give,
-    1 - 3.2404e-8 times inferplot's, WRS2's constant at tr 0.2).
+    1 - 3.2404e-8 times inferplot's, WRS2's constant at tr 0.2). ``fixed_scale``
+    multiplies such a bound first: WRS2's AKP constant over the exact one (D42), as
+    for the estimate (edge_akp_undefined2's lower bound, the same resample value in
+    every run).
     """
     reference = case.bootstrap_reference
     assert reference is not None
@@ -168,9 +182,10 @@ def _check_bootstrap_bounds(
         expected = number(reference[name])
         mc_sd = number(replicates[f"{name}_sd"])
         what = f"{case.name} {name}"
-        if fixed_kind is not None and mc_sd == 0:
+        if fixed_kind is not None and mc_sd == 0 and math.isfinite(expected):
             assert number(replicates[f"{name}_mean"]) == expected, what
-            assert_close(fixed_kind, bound, expected, what=what)
+            scaled = bound if fixed_scale is None else bound * fixed_scale
+            assert_close(fixed_kind, scaled, expected, what=what)
         else:
             assert_within_monte_carlo(bound, expected, mc_sd, what=what)
 

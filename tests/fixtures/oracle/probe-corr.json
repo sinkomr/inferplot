@@ -1,0 +1,5347 @@
+{
+  "schema_version": 2,
+  "name": "probe-corr",
+  "kind": "probe",
+  "description": "cor.test (Pearson; Spearman exact NULL/TRUE/FALSE), correlation::correlation, the winsorized correlation with datawizard::winsorize and WRS2::wincor, correlationBF",
+  "datasets": [
+    {
+      "file": "mtcars.csv",
+      "sha256": "f188c5614db7341420cc36d42a8ab4b6ba50e4749757a3396fa93df199b853ce"
+    },
+    {
+      "file": "iris.csv",
+      "sha256": "d440daded18634c1da2f05e6b1a30385f2aca6cd38455b31d263e1657260112a"
+    },
+    {
+      "file": "edge_corr_small.csv",
+      "sha256": "12853e4b65d64ca6f33471e81067213aead0b117e9955a418be75b9b1bd445d4"
+    },
+    {
+      "file": "edge_corr_ties.csv",
+      "sha256": "5493432d27246a9143abfafb4ab423f5d2ed02e38355421cf154b3673347a828"
+    },
+    {
+      "file": "edge_corr_null.csv",
+      "sha256": "68034b80b39e26c63bb82108b9b9e1a77745ae144eecd03ed7577bd63eece1b2"
+    },
+    {
+      "file": "edge_corr_outlier.csv",
+      "sha256": "fea2ae196a0c817dad3d435a750ac2769f7489fe3ef9e16a4ba56d4c64c492f4"
+    },
+    {
+      "file": "edge_corr_missing.csv",
+      "sha256": "06a44f6aa4258e25cd47f43c8bcdf26bd07aa24b2e9b712ca0f04157d501c1f3"
+    },
+    {
+      "file": "edge_corr_perfect.csv",
+      "sha256": "f66afb57873181f8ee9dda072a527e031b8da9a16bf03dff7052fb294e609bdf"
+    }
+  ],
+  "designs": [
+    {
+      "name": "mtcars",
+      "n": 32,
+      "x_hex": [
+        "0x1.4f5c28f5c28f6p+1",
+        "0x1.7p+1",
+        "0x1.28f5c28f5c28fp+1",
+        "0x1.9b851eb851eb8p+1",
+        "0x1.b851eb851eb85p+1",
+        "0x1.bae147ae147aep+1",
+        "0x1.c8f5c28f5c28fp+1",
+        "0x1.9851eb851eb85p+1",
+        "0x1.9333333333333p+1",
+        "0x1.b851eb851eb85p+1",
+        "0x1.b851eb851eb85p+1",
+        "0x1.047ae147ae148p+2",
+        "0x1.dd70a3d70a3d7p+1",
+        "0x1.e3d70a3d70a3dp+1",
+        "0x1.5p+2",
+        "0x1.5b22d0e560419p+2",
+        "0x1.56147ae147ae1p+2",
+        "0x1.199999999999ap+1",
+        "0x1.9d70a3d70a3d7p+0",
+        "0x1.d5c28f5c28f5cp+0",
+        "0x1.3b851eb851eb8p+1",
+        "0x1.c28f5c28f5c29p+1",
+        "0x1.b7ae147ae147bp+1",
+        "0x1.eb851eb851eb8p+1",
+        "0x1.ec28f5c28f5c3p+1",
+        "0x1.ef5c28f5c28f6p+0",
+        "0x1.11eb851eb851fp+1",
+        "0x1.8353f7ced9168p+0",
+        "0x1.95c28f5c28f5cp+1",
+        "0x1.628f5c28f5c29p+1",
+        "0x1.c8f5c28f5c28fp+1",
+        "0x1.63d70a3d70a3dp+1"
+      ],
+      "y_hex": [
+        "0x1.5p+4",
+        "0x1.5p+4",
+        "0x1.6cccccccccccdp+4",
+        "0x1.5666666666666p+4",
+        "0x1.2b33333333333p+4",
+        "0x1.219999999999ap+4",
+        "0x1.c99999999999ap+3",
+        "0x1.8666666666666p+4",
+        "0x1.6cccccccccccdp+4",
+        "0x1.3333333333333p+4",
+        "0x1.1cccccccccccdp+4",
+        "0x1.0666666666666p+4",
+        "0x1.14ccccccccccdp+4",
+        "0x1.e666666666666p+3",
+        "0x1.4cccccccccccdp+3",
+        "0x1.4cccccccccccdp+3",
+        "0x1.d666666666666p+3",
+        "0x1.0333333333333p+5",
+        "0x1.e666666666666p+4",
+        "0x1.0f33333333333p+5",
+        "0x1.58p+4",
+        "0x1.fp+3",
+        "0x1.e666666666666p+3",
+        "0x1.a99999999999ap+3",
+        "0x1.3333333333333p+4",
+        "0x1.b4ccccccccccdp+4",
+        "0x1.ap+4",
+        "0x1.e666666666666p+4",
+        "0x1.f99999999999ap+3",
+        "0x1.3b33333333333p+4",
+        "0x1.ep+3",
+        "0x1.5666666666666p+4"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "-0x1.bc3dd98c6b22p-1",
+          "statistic_hex": "-0x1.31e3b08d087e7p+3",
+          "parameter": 30,
+          "p_value_hex": "0x1.1c8b6629270adp-33",
+          "conf_int_hex": [
+            "-0x1.de1e7ee2666a5p-1",
+            "-0x1.7cf8ff3c56472p-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "-0x1.bc3dd98c6b22p-1",
+          "statistic_hex": "-0x1.31e3b08d087e7p+3",
+          "parameter": 30,
+          "p_value_hex": "0x1.1c8b6629270adp-33",
+          "conf_int_hex": [
+            "-0x1.da118cef3edfep-1",
+            "-0x1.89c5cc6b0f24cp-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "-0x1.c5d91bd6b312ep-1",
+          "statistic_hex": "0x1.41a28c853f221p+13",
+          "p_value_hex": "0x1.05b3510551a26p-36",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": true,
+          "estimate_hex": "-0x1.c5d91bd6b312ep-1",
+          "statistic_hex": "0x1.41a28c853f221p+13",
+          "p_value_hex": "0x1.05b3510551a26p-36",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": false,
+          "estimate_hex": "-0x1.c5d91bd6b312ep-1",
+          "statistic_hex": "0x1.41a28c853f221p+13",
+          "p_value_hex": "0x1.05b3510551a26p-36",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.867659376517228,
+              "CI": 0.95,
+              "CI_low": -0.933826413284994,
+              "CI_high": -0.744087196460113,
+              "t": -9.55904414697211,
+              "df_error": 30,
+              "p": 1.29395870135052e-10,
+              "Method": "Pearson correlation",
+              "n_Obs": 32,
+              "r_hex": "-0x1.bc3dd98c6b22p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.de1e7ee2666a5p-1",
+              "CI_high_hex": "-0x1.7cf8ff3c56472p-1",
+              "t_hex": "-0x1.31e3b08d087e7p+3",
+              "p_hex": "0x1.1c8b6629270adp-33"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.867659376517228,
+              "CI": 0.9,
+              "CI_low": -0.925915149884019,
+              "CI_high": -0.769087207859749,
+              "t": -9.55904414697211,
+              "df_error": 30,
+              "p": 1.29395870135052e-10,
+              "Method": "Pearson correlation",
+              "n_Obs": 32,
+              "r_hex": "-0x1.bc3dd98c6b22p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.da118cef3edfep-1",
+              "CI_high_hex": "-0x1.89c5cc6b0f24cp-1",
+              "t_hex": "-0x1.31e3b08d087e7p+3",
+              "p_hex": "0x1.1c8b6629270adp-33"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.886422033270298,
+              "CI": 0.95,
+              "CI_low": -0.944661767634971,
+              "CI_high": -0.774011803061892,
+              "S": 10292.3186135227,
+              "p": 1.48759485812743e-11,
+              "Method": "Spearman correlation",
+              "n_Obs": 32,
+              "rho_hex": "-0x1.c5d91bd6b312ep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.e3aab50b8c28fp-1",
+              "CI_high_hex": "-0x1.8c4b4669bcd61p-1",
+              "S_hex": "0x1.41a28c853f221p+13",
+              "p_hex": "0x1.05b3510551a26p-36"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.886422033270298,
+              "CI": 0.9,
+              "CI_low": -0.937796199636477,
+              "CI_high": -0.797061443848413,
+              "S": 10292.3186135227,
+              "p": 1.48759485812743e-11,
+              "Method": "Spearman correlation",
+              "n_Obs": 32,
+              "rho_hex": "-0x1.c5d91bd6b312ep-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.e026d2cf80e65p-1",
+              "CI_high_hex": "-0x1.981870047683bp-1",
+              "S_hex": "0x1.41a28c853f221p+13",
+              "p_hex": "0x1.05b3510551a26p-36"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.864326363580528,
+              "CI": 0.95,
+              "CI_low": -0.93209923970423,
+              "CI_high": -0.738078458381309,
+              "t": -9.41303523062628,
+              "df_error": 30,
+              "p": 1.83593500746439e-10,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 32,
+              "r_hex": "-0x1.ba88fc314c465p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.dd3c1c8e4ff09p-1",
+              "CI_high_hex": "-0x1.79e56b714277ap-1",
+              "t_hex": "-0x1.2d3795a8f4577p+3",
+              "p_hex": "0x1.93b9f3e3bb605p-33"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.4f5c28f5c28f6p+1",
+            "0x1.7p+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.9b851eb851eb8p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.bae147ae147aep+1",
+            "0x1.c8f5c28f5c28fp+1",
+            "0x1.9851eb851eb85p+1",
+            "0x1.9333333333333p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.dd70a3d70a3d7p+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.3b851eb851eb8p+1",
+            "0x1.c28f5c28f5c29p+1",
+            "0x1.b7ae147ae147bp+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.95c28f5c28f5cp+1",
+            "0x1.628f5c28f5c29p+1",
+            "0x1.c8f5c28f5c28fp+1",
+            "0x1.63d70a3d70a3dp+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1.5p+4",
+            "0x1.5p+4",
+            "0x1.6cccccccccccdp+4",
+            "0x1.5666666666666p+4",
+            "0x1.2b33333333333p+4",
+            "0x1.219999999999ap+4",
+            "0x1.e666666666666p+3",
+            "0x1.8666666666666p+4",
+            "0x1.6cccccccccccdp+4",
+            "0x1.3333333333333p+4",
+            "0x1.1cccccccccccdp+4",
+            "0x1.0666666666666p+4",
+            "0x1.14ccccccccccdp+4",
+            "0x1.e666666666666p+3",
+            "0x1.e666666666666p+3",
+            "0x1.e666666666666p+3",
+            "0x1.e666666666666p+3",
+            "0x1.8666666666666p+4",
+            "0x1.8666666666666p+4",
+            "0x1.8666666666666p+4",
+            "0x1.58p+4",
+            "0x1.fp+3",
+            "0x1.e666666666666p+3",
+            "0x1.e666666666666p+3",
+            "0x1.3333333333333p+4",
+            "0x1.8666666666666p+4",
+            "0x1.8666666666666p+4",
+            "0x1.8666666666666p+4",
+            "0x1.f99999999999ap+3",
+            "0x1.3b33333333333p+4",
+            "0x1.e666666666666p+3",
+            "0x1.5666666666666p+4"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "-0x1.ba88fc314c465p-1"
+            ],
+            "cov": [
+              "-0x1.c47fa2fb2d62ep+0"
+            ],
+            "test": [
+              "-0x1.2d3795a8f4578p+3"
+            ],
+            "p.value": [
+              "0x1.81ff764p-26"
+            ],
+            "n": [
+              "0x1p+5"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.896766128963728,
+              "CI": 0.95,
+              "CI_low": -0.948779615037403,
+              "CI_high": -0.797424298194507,
+              "t": -11.0999705017719,
+              "df_error": 30,
+              "p": 3.81393948218156e-12,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 32,
+              "r_hex": "-0x1.cb24ee181e94cp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.e5c6711364ec2p-1",
+              "CI_high_hex": "-0x1.9847ff638ff46p-1",
+              "t_hex": "-0x1.6332f556759aep+3",
+              "p_hex": "0x1.0c61d362963cp-38"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.4f5c28f5c28f6p+1",
+            "0x1.7p+1",
+            "0x1.28f5c28f5c28fp+1",
+            "0x1.9b851eb851eb8p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.bae147ae147aep+1",
+            "0x1.c8f5c28f5c28fp+1",
+            "0x1.9851eb851eb85p+1",
+            "0x1.9333333333333p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.b851eb851eb85p+1",
+            "0x1.047ae147ae148p+2",
+            "0x1.dd70a3d70a3d7p+1",
+            "0x1.e3d70a3d70a3dp+1",
+            "0x1.047ae147ae148p+2",
+            "0x1.047ae147ae148p+2",
+            "0x1.047ae147ae148p+2",
+            "0x1.199999999999ap+1",
+            "0x1.ef5c28f5c28f6p+0",
+            "0x1.ef5c28f5c28f6p+0",
+            "0x1.3b851eb851eb8p+1",
+            "0x1.c28f5c28f5c29p+1",
+            "0x1.b7ae147ae147bp+1",
+            "0x1.eb851eb851eb8p+1",
+            "0x1.ec28f5c28f5c3p+1",
+            "0x1.ef5c28f5c28f6p+0",
+            "0x1.11eb851eb851fp+1",
+            "0x1.ef5c28f5c28f6p+0",
+            "0x1.95c28f5c28f5cp+1",
+            "0x1.628f5c28f5c29p+1",
+            "0x1.c8f5c28f5c28fp+1",
+            "0x1.63d70a3d70a3dp+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1.5p+4",
+            "0x1.5p+4",
+            "0x1.6cccccccccccdp+4",
+            "0x1.5666666666666p+4",
+            "0x1.2b33333333333p+4",
+            "0x1.219999999999ap+4",
+            "0x1.c99999999999ap+3",
+            "0x1.8666666666666p+4",
+            "0x1.6cccccccccccdp+4",
+            "0x1.3333333333333p+4",
+            "0x1.1cccccccccccdp+4",
+            "0x1.0666666666666p+4",
+            "0x1.14ccccccccccdp+4",
+            "0x1.e666666666666p+3",
+            "0x1.c99999999999ap+3",
+            "0x1.c99999999999ap+3",
+            "0x1.d666666666666p+3",
+            "0x1.e666666666666p+4",
+            "0x1.e666666666666p+4",
+            "0x1.e666666666666p+4",
+            "0x1.58p+4",
+            "0x1.fp+3",
+            "0x1.e666666666666p+3",
+            "0x1.c99999999999ap+3",
+            "0x1.3333333333333p+4",
+            "0x1.b4ccccccccccdp+4",
+            "0x1.ap+4",
+            "0x1.e666666666666p+4",
+            "0x1.f99999999999ap+3",
+            "0x1.3b33333333333p+4",
+            "0x1.ep+3",
+            "0x1.5666666666666p+4"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "-0x1.cb24ee181e94cp-1"
+            ],
+            "cov": [
+              "-0x1.ada59738bfd9fp+1"
+            ],
+            "test": [
+              "-0x1.6332f556759afp+3"
+            ],
+            "p.value": [
+              "0x1.0f398p-34"
+            ],
+            "n": [
+              "0x1p+5"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.acf29c7f883b1p+25",
+          "log_bf10_hex": "0x1.1d8473e051587p+4",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.841366062508224,
+              "CI": 0.95,
+              "CI_low": -0.926841699801615,
+              "CI_high": -0.725138552301016,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 56223032.9963449,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 32,
+              "rho_hex": "-0x1.aec78854dfcd5p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.da8afeca6f18ap-1",
+              "CI_high_hex": "-0x1.73455c3e673e9p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.acf29c7f883b1p+25"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.ea2c3f856847p+25",
+          "log_bf10_hex": "0x1.1fa6f41b405fcp+4",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.844644460747083,
+              "CI": 0.95,
+              "CI_low": -0.926841699801615,
+              "CI_high": -0.725545884221494,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 64247935.0422448,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 32,
+              "rho_hex": "-0x1.b0753d1f5003cp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.da8afeca6f18ap-1",
+              "CI_high_hex": "-0x1.737ac008f51adp-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.ea2c3f856847p+25"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.9579c49e0591ep+23",
+          "log_bf10_hex": "0x1.066fb124bd341p+4",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.9579c49e0591ep+23",
+          "log_bf10_hex": "0x1.066fb124bd341p+4",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.816676882464771,
+              "CI": 0.95,
+              "CI_low": -0.922441392458828,
+              "CI_high": -0.663509669718282,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 13286626.3086362,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 32,
+              "rho_hex": "-0x1.a22378eb2bbdp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.d84a3cfa2cbb9p-1",
+              "CI_high_hex": "-0x1.53b78a180a21p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.9579c49e0591ep+23"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "iris",
+      "n": 150,
+      "x_hex": [
+        "0x1.4666666666666p+2",
+        "0x1.399999999999ap+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.2666666666666p+2",
+        "0x1.4p+2",
+        "0x1.599999999999ap+2",
+        "0x1.2666666666666p+2",
+        "0x1.4p+2",
+        "0x1.199999999999ap+2",
+        "0x1.399999999999ap+2",
+        "0x1.599999999999ap+2",
+        "0x1.3333333333333p+2",
+        "0x1.3333333333333p+2",
+        "0x1.1333333333333p+2",
+        "0x1.7333333333333p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.599999999999ap+2",
+        "0x1.4666666666666p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.4666666666666p+2",
+        "0x1.599999999999ap+2",
+        "0x1.4666666666666p+2",
+        "0x1.2666666666666p+2",
+        "0x1.4666666666666p+2",
+        "0x1.3333333333333p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.3333333333333p+2",
+        "0x1.599999999999ap+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.6p+2",
+        "0x1.399999999999ap+2",
+        "0x1.4p+2",
+        "0x1.6p+2",
+        "0x1.399999999999ap+2",
+        "0x1.199999999999ap+2",
+        "0x1.4666666666666p+2",
+        "0x1.4p+2",
+        "0x1.2p+2",
+        "0x1.199999999999ap+2",
+        "0x1.4p+2",
+        "0x1.4666666666666p+2",
+        "0x1.3333333333333p+2",
+        "0x1.4666666666666p+2",
+        "0x1.2666666666666p+2",
+        "0x1.5333333333333p+2",
+        "0x1.4p+2",
+        "0x1.cp+2",
+        "0x1.999999999999ap+2",
+        "0x1.b99999999999ap+2",
+        "0x1.6p+2",
+        "0x1.ap+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.399999999999ap+2",
+        "0x1.a666666666666p+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.4p+2",
+        "0x1.799999999999ap+2",
+        "0x1.8p+2",
+        "0x1.8666666666666p+2",
+        "0x1.6666666666666p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.6666666666666p+2",
+        "0x1.7333333333333p+2",
+        "0x1.8cccccccccccdp+2",
+        "0x1.6666666666666p+2",
+        "0x1.799999999999ap+2",
+        "0x1.8666666666666p+2",
+        "0x1.9333333333333p+2",
+        "0x1.8666666666666p+2",
+        "0x1.999999999999ap+2",
+        "0x1.a666666666666p+2",
+        "0x1.b333333333333p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.8p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.6p+2",
+        "0x1.6p+2",
+        "0x1.7333333333333p+2",
+        "0x1.8p+2",
+        "0x1.599999999999ap+2",
+        "0x1.8p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.6666666666666p+2",
+        "0x1.6p+2",
+        "0x1.6p+2",
+        "0x1.8666666666666p+2",
+        "0x1.7333333333333p+2",
+        "0x1.4p+2",
+        "0x1.6666666666666p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.8cccccccccccdp+2",
+        "0x1.4666666666666p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.7333333333333p+2",
+        "0x1.c666666666666p+2",
+        "0x1.9333333333333p+2",
+        "0x1.ap+2",
+        "0x1.e666666666666p+2",
+        "0x1.399999999999ap+2",
+        "0x1.d333333333333p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.ccccccccccccdp+2",
+        "0x1.ap+2",
+        "0x1.999999999999ap+2",
+        "0x1.b333333333333p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.7333333333333p+2",
+        "0x1.999999999999ap+2",
+        "0x1.ap+2",
+        "0x1.ecccccccccccdp+2",
+        "0x1.ecccccccccccdp+2",
+        "0x1.8p+2",
+        "0x1.b99999999999ap+2",
+        "0x1.6666666666666p+2",
+        "0x1.ecccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.ccccccccccccdp+2",
+        "0x1.8cccccccccccdp+2",
+        "0x1.8666666666666p+2",
+        "0x1.999999999999ap+2",
+        "0x1.ccccccccccccdp+2",
+        "0x1.d99999999999ap+2",
+        "0x1.f99999999999ap+2",
+        "0x1.999999999999ap+2",
+        "0x1.9333333333333p+2",
+        "0x1.8666666666666p+2",
+        "0x1.ecccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.999999999999ap+2",
+        "0x1.8p+2",
+        "0x1.b99999999999ap+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.b99999999999ap+2",
+        "0x1.7333333333333p+2",
+        "0x1.b333333333333p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.9333333333333p+2",
+        "0x1.ap+2",
+        "0x1.8cccccccccccdp+2",
+        "0x1.799999999999ap+2"
+      ],
+      "y_hex": [
+        "0x1.6666666666666p+0",
+        "0x1.6666666666666p+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.8p+0",
+        "0x1.6666666666666p+0",
+        "0x1.b333333333333p+0",
+        "0x1.6666666666666p+0",
+        "0x1.8p+0",
+        "0x1.6666666666666p+0",
+        "0x1.8p+0",
+        "0x1.8p+0",
+        "0x1.999999999999ap+0",
+        "0x1.6666666666666p+0",
+        "0x1.199999999999ap+0",
+        "0x1.3333333333333p+0",
+        "0x1.8p+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.6666666666666p+0",
+        "0x1.b333333333333p+0",
+        "0x1.8p+0",
+        "0x1.b333333333333p+0",
+        "0x1.8p+0",
+        "0x1p+0",
+        "0x1.b333333333333p+0",
+        "0x1.e666666666666p+0",
+        "0x1.999999999999ap+0",
+        "0x1.999999999999ap+0",
+        "0x1.8p+0",
+        "0x1.6666666666666p+0",
+        "0x1.999999999999ap+0",
+        "0x1.999999999999ap+0",
+        "0x1.8p+0",
+        "0x1.8p+0",
+        "0x1.6666666666666p+0",
+        "0x1.8p+0",
+        "0x1.3333333333333p+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.6666666666666p+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.8p+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.4cccccccccccdp+0",
+        "0x1.999999999999ap+0",
+        "0x1.e666666666666p+0",
+        "0x1.6666666666666p+0",
+        "0x1.999999999999ap+0",
+        "0x1.6666666666666p+0",
+        "0x1.8p+0",
+        "0x1.6666666666666p+0",
+        "0x1.2cccccccccccdp+2",
+        "0x1.2p+2",
+        "0x1.399999999999ap+2",
+        "0x1p+2",
+        "0x1.2666666666666p+2",
+        "0x1.2p+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.a666666666666p+1",
+        "0x1.2666666666666p+2",
+        "0x1.f333333333333p+1",
+        "0x1.cp+1",
+        "0x1.0cccccccccccdp+2",
+        "0x1p+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.ccccccccccccdp+1",
+        "0x1.199999999999ap+2",
+        "0x1.2p+2",
+        "0x1.0666666666666p+2",
+        "0x1.2p+2",
+        "0x1.f333333333333p+1",
+        "0x1.3333333333333p+2",
+        "0x1p+2",
+        "0x1.399999999999ap+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.1333333333333p+2",
+        "0x1.199999999999ap+2",
+        "0x1.3333333333333p+2",
+        "0x1.4p+2",
+        "0x1.2p+2",
+        "0x1.cp+1",
+        "0x1.e666666666666p+1",
+        "0x1.d99999999999ap+1",
+        "0x1.f333333333333p+1",
+        "0x1.4666666666666p+2",
+        "0x1.2p+2",
+        "0x1.2p+2",
+        "0x1.2cccccccccccdp+2",
+        "0x1.199999999999ap+2",
+        "0x1.0666666666666p+2",
+        "0x1p+2",
+        "0x1.199999999999ap+2",
+        "0x1.2666666666666p+2",
+        "0x1p+2",
+        "0x1.a666666666666p+1",
+        "0x1.0cccccccccccdp+2",
+        "0x1.0cccccccccccdp+2",
+        "0x1.0cccccccccccdp+2",
+        "0x1.1333333333333p+2",
+        "0x1.8p+1",
+        "0x1.0666666666666p+2",
+        "0x1.8p+2",
+        "0x1.4666666666666p+2",
+        "0x1.799999999999ap+2",
+        "0x1.6666666666666p+2",
+        "0x1.7333333333333p+2",
+        "0x1.a666666666666p+2",
+        "0x1.2p+2",
+        "0x1.9333333333333p+2",
+        "0x1.7333333333333p+2",
+        "0x1.8666666666666p+2",
+        "0x1.4666666666666p+2",
+        "0x1.5333333333333p+2",
+        "0x1.6p+2",
+        "0x1.4p+2",
+        "0x1.4666666666666p+2",
+        "0x1.5333333333333p+2",
+        "0x1.6p+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.b99999999999ap+2",
+        "0x1.4p+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.399999999999ap+2",
+        "0x1.acccccccccccdp+2",
+        "0x1.399999999999ap+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.8p+2",
+        "0x1.3333333333333p+2",
+        "0x1.399999999999ap+2",
+        "0x1.6666666666666p+2",
+        "0x1.7333333333333p+2",
+        "0x1.8666666666666p+2",
+        "0x1.999999999999ap+2",
+        "0x1.6666666666666p+2",
+        "0x1.4666666666666p+2",
+        "0x1.6666666666666p+2",
+        "0x1.8666666666666p+2",
+        "0x1.6666666666666p+2",
+        "0x1.6p+2",
+        "0x1.3333333333333p+2",
+        "0x1.599999999999ap+2",
+        "0x1.6666666666666p+2",
+        "0x1.4666666666666p+2",
+        "0x1.4666666666666p+2",
+        "0x1.799999999999ap+2",
+        "0x1.6cccccccccccdp+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.4p+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.599999999999ap+2",
+        "0x1.4666666666666p+2"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.be5682cb31dcdp-1",
+          "statistic_hex": "0x1.5a561861a9f1ap+4",
+          "parameter": 148,
+          "p_value_hex": "0x1.e5c3b7c665d3ap-157",
+          "conf_int_hex": [
+            "0x1.a7714e49064d8p-1",
+            "0x1.cf9ec03fe7e4bp-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.be5682cb31dcdp-1",
+          "statistic_hex": "0x1.5a561861a9f1ap+4",
+          "parameter": 148,
+          "p_value_hex": "0x1.e5c3b7c665d3ap-157",
+          "conf_int_hex": [
+            "0x1.ab8eed26e0984p-1",
+            "0x1.cd2abf43c32b5p-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.c38826b6e245ap-1",
+          "statistic_hex": "0x1.037d59f0fdb44p+16",
+          "p_value_hex": "0x1.9c3a5168ff6aap-165",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.c38826b6e245ap-1",
+          "statistic_hex": "0x1.037d59f0fdb44p+16",
+          "p_value_hex": "0x1.9c3a5168ff6aap-165",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.c38826b6e245ap-1",
+          "statistic_hex": "0x1.037d59f0fdb44p+16",
+          "p_value_hex": "0x1.9c3a5168ff6aap-165",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.871753775886583,
+              "CI": 0.95,
+              "CI_low": 0.827036329664362,
+              "CI_high": 0.905508048821454,
+              "t": 21.6460193457598,
+              "df_error": 148,
+              "p": 1.03866741944984e-47,
+              "Method": "Pearson correlation",
+              "n_Obs": 150,
+              "r_hex": "0x1.be5682cb31dcdp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a7714e49064d8p-1",
+              "CI_high_hex": "0x1.cf9ec03fe7e4bp-1",
+              "t_hex": "0x1.5a561861a9f1ap+4",
+              "p_hex": "0x1.e5c3b7c665d3ap-157"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.871753775886583,
+              "CI": 0.9,
+              "CI_low": 0.835074816699759,
+              "CI_high": 0.900716759702468,
+              "t": 21.6460193457598,
+              "df_error": 148,
+              "p": 1.03866741944984e-47,
+              "Method": "Pearson correlation",
+              "n_Obs": 150,
+              "r_hex": "0x1.be5682cb31dcdp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.ab8eed26e0984p-1",
+              "CI_high_hex": "0x1.cd2abf43c32b5p-1",
+              "t_hex": "0x1.5a561861a9f1ap+4",
+              "p_hex": "0x1.e5c3b7c665d3ap-157"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.881898126434986,
+              "CI": 0.95,
+              "CI_low": 0.83900703280966,
+              "CI_high": 0.91389735697155,
+              "S": 66429.3513334813,
+              "p": 3.4430872780472e-50,
+              "Method": "Spearman correlation",
+              "n_Obs": 150,
+              "rho_hex": "0x1.c38826b6e245ap-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.ad92546e101f5p-1",
+              "CI_high_hex": "0x1.d3ea5ab82ff2p-1",
+              "S_hex": "0x1.037d59f0fdb44p+16",
+              "p_hex": "0x1.9c3a5168ff6aap-165"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.881898126434986,
+              "CI": 0.9,
+              "CI_low": 0.846753499611502,
+              "CI_high": 0.909378400099522,
+              "S": 66429.3513334813,
+              "p": 3.4430872780472e-50,
+              "Method": "Spearman correlation",
+              "n_Obs": 150,
+              "rho_hex": "0x1.c38826b6e245ap-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.b189acb935bbfp-1",
+              "CI_high_hex": "0x1.d19a0bb03b856p-1",
+              "S_hex": "0x1.037d59f0fdb44p+16",
+              "p_hex": "0x1.9c3a5168ff6aap-165"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.874520335057344,
+              "CI": 0.95,
+              "CI_low": 0.830680281400897,
+              "CI_high": 0.9075824050744,
+              "t": 21.9365848842886,
+              "df_error": 148,
+              "p": 2.29995400987416e-48,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 150,
+              "r_hex": "0x1.bfc1211d843a3p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a94eed04190d5p-1",
+              "CI_high_hex": "0x1.d0aea418706c1p-1",
+              "t_hex": "0x1.5efc406e7f283p+4",
+              "p_hex": "0x1.ae41ea1d5867p-159"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.599999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.4666666666666p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.6p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.6p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4p+2",
+            "0x1.ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.6p+2",
+            "0x1.ap+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.4p+2",
+            "0x1.ap+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4p+2",
+            "0x1.799999999999ap+2",
+            "0x1.8p+2",
+            "0x1.8666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.6666666666666p+2",
+            "0x1.799999999999ap+2",
+            "0x1.8666666666666p+2",
+            "0x1.9333333333333p+2",
+            "0x1.8666666666666p+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.8p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.6p+2",
+            "0x1.6p+2",
+            "0x1.7333333333333p+2",
+            "0x1.8p+2",
+            "0x1.599999999999ap+2",
+            "0x1.8p+2",
+            "0x1.ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.6666666666666p+2",
+            "0x1.6p+2",
+            "0x1.6p+2",
+            "0x1.8666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.4p+2",
+            "0x1.6666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.4666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.4p+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.7333333333333p+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.8p+2",
+            "0x1.ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.8666666666666p+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.8666666666666p+2",
+            "0x1.ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.999999999999ap+2",
+            "0x1.8p+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.7333333333333p+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.ap+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.799999999999ap+2"
+          ],
+          "winsorized_y_hex": [
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.b333333333333p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.b333333333333p+0",
+            "0x1.8p+0",
+            "0x1.b333333333333p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.b333333333333p+0",
+            "0x1.e666666666666p+0",
+            "0x1.999999999999ap+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.999999999999ap+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.999999999999ap+0",
+            "0x1.e666666666666p+0",
+            "0x1.8p+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.2cccccccccccdp+2",
+            "0x1.2p+2",
+            "0x1.399999999999ap+2",
+            "0x1p+2",
+            "0x1.2666666666666p+2",
+            "0x1.2p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.a666666666666p+1",
+            "0x1.2666666666666p+2",
+            "0x1.f333333333333p+1",
+            "0x1.cp+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.ccccccccccccdp+1",
+            "0x1.199999999999ap+2",
+            "0x1.2p+2",
+            "0x1.0666666666666p+2",
+            "0x1.2p+2",
+            "0x1.f333333333333p+1",
+            "0x1.3333333333333p+2",
+            "0x1p+2",
+            "0x1.399999999999ap+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.1333333333333p+2",
+            "0x1.199999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.2p+2",
+            "0x1.cp+1",
+            "0x1.e666666666666p+1",
+            "0x1.d99999999999ap+1",
+            "0x1.f333333333333p+1",
+            "0x1.4666666666666p+2",
+            "0x1.2p+2",
+            "0x1.2p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.199999999999ap+2",
+            "0x1.0666666666666p+2",
+            "0x1p+2",
+            "0x1.199999999999ap+2",
+            "0x1.2666666666666p+2",
+            "0x1p+2",
+            "0x1.a666666666666p+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1.0cccccccccccdp+2",
+            "0x1.0cccccccccccdp+2",
+            "0x1.1333333333333p+2",
+            "0x1.8p+1",
+            "0x1.0666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.2p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4p+2",
+            "0x1.5333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.5333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.5333333333333p+2",
+            "0x1.4666666666666p+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.bfc1211d843a3p-1"
+            ],
+            "cov": [
+              "0x1.a0be824748f9cp-1"
+            ],
+            "test": [
+              "0x1.5efc406e7f284p+4"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.2cp+7"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.871930690454785,
+              "CI": 0.95,
+              "CI_low": 0.827269238884164,
+              "CI_high": 0.905640747039899,
+              "t": 21.6643371458222,
+              "df_error": 148,
+              "p": 9.44197736575655e-48,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 150,
+              "r_hex": "0x1.be6db30fc395cp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a78fd56bfd149p-1",
+              "CI_high_hex": "0x1.cfb024dcec39ap-1",
+              "t_hex": "0x1.5aa11ffcad301p+4",
+              "p_hex": "0x1.b995386b824f8p-157"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.4666666666666p+2",
+            "0x1.399999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.599999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.3333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.599999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.599999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.4666666666666p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.599999999999ap+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.6p+2",
+            "0x1.399999999999ap+2",
+            "0x1.4p+2",
+            "0x1.6p+2",
+            "0x1.399999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4p+2",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.5333333333333p+2",
+            "0x1.4p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.6p+2",
+            "0x1.ap+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.a666666666666p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4p+2",
+            "0x1.799999999999ap+2",
+            "0x1.8p+2",
+            "0x1.8666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.6666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.6666666666666p+2",
+            "0x1.799999999999ap+2",
+            "0x1.8666666666666p+2",
+            "0x1.9333333333333p+2",
+            "0x1.8666666666666p+2",
+            "0x1.999999999999ap+2",
+            "0x1.a666666666666p+2",
+            "0x1.b333333333333p+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.8p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.6p+2",
+            "0x1.6p+2",
+            "0x1.7333333333333p+2",
+            "0x1.8p+2",
+            "0x1.599999999999ap+2",
+            "0x1.8p+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.6666666666666p+2",
+            "0x1.6p+2",
+            "0x1.6p+2",
+            "0x1.8666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.4p+2",
+            "0x1.6666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.4666666666666p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.399999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.b99999999999ap+2",
+            "0x1.ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.b333333333333p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.7333333333333p+2",
+            "0x1.999999999999ap+2",
+            "0x1.ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.8p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.b99999999999ap+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.8666666666666p+2",
+            "0x1.999999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.b99999999999ap+2",
+            "0x1.999999999999ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.8666666666666p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.9333333333333p+2",
+            "0x1.999999999999ap+2",
+            "0x1.8p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.b99999999999ap+2",
+            "0x1.7333333333333p+2",
+            "0x1.b333333333333p+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.acccccccccccdp+2",
+            "0x1.9333333333333p+2",
+            "0x1.ap+2",
+            "0x1.8cccccccccccdp+2",
+            "0x1.799999999999ap+2"
+          ],
+          "winsorized_y_hex": [
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.b333333333333p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.999999999999ap+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.b333333333333p+0",
+            "0x1.8p+0",
+            "0x1.b333333333333p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.b333333333333p+0",
+            "0x1.e666666666666p+0",
+            "0x1.999999999999ap+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.999999999999ap+0",
+            "0x1.999999999999ap+0",
+            "0x1.8p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.999999999999ap+0",
+            "0x1.e666666666666p+0",
+            "0x1.6666666666666p+0",
+            "0x1.999999999999ap+0",
+            "0x1.6666666666666p+0",
+            "0x1.8p+0",
+            "0x1.6666666666666p+0",
+            "0x1.2cccccccccccdp+2",
+            "0x1.2p+2",
+            "0x1.399999999999ap+2",
+            "0x1p+2",
+            "0x1.2666666666666p+2",
+            "0x1.2p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.a666666666666p+1",
+            "0x1.2666666666666p+2",
+            "0x1.f333333333333p+1",
+            "0x1.cp+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.ccccccccccccdp+1",
+            "0x1.199999999999ap+2",
+            "0x1.2p+2",
+            "0x1.0666666666666p+2",
+            "0x1.2p+2",
+            "0x1.f333333333333p+1",
+            "0x1.3333333333333p+2",
+            "0x1p+2",
+            "0x1.399999999999ap+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.1333333333333p+2",
+            "0x1.199999999999ap+2",
+            "0x1.3333333333333p+2",
+            "0x1.4p+2",
+            "0x1.2p+2",
+            "0x1.cp+1",
+            "0x1.e666666666666p+1",
+            "0x1.d99999999999ap+1",
+            "0x1.f333333333333p+1",
+            "0x1.4666666666666p+2",
+            "0x1.2p+2",
+            "0x1.2p+2",
+            "0x1.2cccccccccccdp+2",
+            "0x1.199999999999ap+2",
+            "0x1.0666666666666p+2",
+            "0x1p+2",
+            "0x1.199999999999ap+2",
+            "0x1.2666666666666p+2",
+            "0x1p+2",
+            "0x1.a666666666666p+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1.0cccccccccccdp+2",
+            "0x1.0cccccccccccdp+2",
+            "0x1.1333333333333p+2",
+            "0x1.8p+1",
+            "0x1.0666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.2p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.6p+2",
+            "0x1.4p+2",
+            "0x1.4666666666666p+2",
+            "0x1.5333333333333p+2",
+            "0x1.6p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.4p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.399999999999ap+2",
+            "0x1.7333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.7333333333333p+2",
+            "0x1.3333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6666666666666p+2",
+            "0x1.4666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6666666666666p+2",
+            "0x1.6p+2",
+            "0x1.3333333333333p+2",
+            "0x1.599999999999ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.4666666666666p+2",
+            "0x1.4666666666666p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6cccccccccccdp+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.599999999999ap+2",
+            "0x1.4666666666666p+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.be6db30fc395cp-1"
+            ],
+            "cov": [
+              "0x1.0be815713096bp+0"
+            ],
+            "test": [
+              "0x1.5aa11ffcad301p+4"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.2cp+7"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.661bc1fe495fep+146",
+          "log_bf10_hex": "0x1.9623fd813cf8ep+6",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.866882349498626,
+              "CI": 0.95,
+              "CI_low": 0.825225512135362,
+              "CI_high": 0.903971334201864,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 1.24782575395247e+44,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 150,
+              "rho_hex": "0x1.bbd800d92709p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a683f554e4787p-1",
+              "CI_high_hex": "0x1.ced554a9d644ep-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.661bc1fe495fep+146"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.a2eb71f7cb44ap+146",
+          "log_bf10_hex": "0x1.96c4991396c91p+6",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.867617406705613,
+              "CI": 0.95,
+              "CI_low": 0.826859250497845,
+              "CI_high": 0.90496867776897,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 1.45972213460343e+44,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 150,
+              "rho_hex": "0x1.bc3859467b5c8p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a75a187e910e9p-1",
+              "CI_high_hex": "0x1.cf580df5d81bcp-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.a2eb71f7cb44ap+146"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.ea8330a639187p+143",
+          "log_bf10_hex": "0x1.8f14cec8159b2p+6",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.ea8330a639187p+143",
+          "log_bf10_hex": "0x1.8f14cec8159b2p+6",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.86293467474288,
+              "CI": 0.95,
+              "CI_low": 0.822108824276091,
+              "CI_high": 0.900956902988464,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 2.13648308813261e+43,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 150,
+              "rho_hex": "0x1.b9d292dd35cb6p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.a4eb72a409a2dp-1",
+              "CI_high_hex": "0x1.cd4a3922e1bd8p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.ea8330a639187p+143"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "small",
+      "n": 5,
+      "x_hex": [
+        "0x1.3333333333333p+0",
+        "0x1.7333333333333p+1",
+        "0x1.8cccccccccccdp+1",
+        "0x1.3333333333333p+2",
+        "0x1.6p+2"
+      ],
+      "y_hex": [
+        "0x1.2666666666666p+1",
+        "0x1.0cccccccccccdp+1",
+        "0x1p+2",
+        "0x1.2666666666666p+2",
+        "0x1.8cccccccccccdp+2"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.c609cc2f6e041p-1",
+          "statistic_hex": "0x1.a965d59d34b6dp+1",
+          "parameter": 3,
+          "p_value_hex": "0x1.702451a94a17fp-5",
+          "conf_int_hex": [
+            "0x1.54d7ec96d703p-6",
+            "0x1.fc2be13ad6003p-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.c609cc2f6e041p-1",
+          "statistic_hex": "0x1.a965d59d34b6dp+1",
+          "parameter": 3,
+          "p_value_hex": "0x1.702451a94a17fp-5",
+          "conf_int_hex": [
+            "0x1.e94c436d31af1p-3",
+            "0x1.fa08c4e7f6132p-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.ccccccccccccbp-1",
+          "statistic_hex": "0x1.0000000000009p+1",
+          "p_value_hex": "0x1.5555555555555p-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.ccccccccccccbp-1",
+          "statistic_hex": "0x1.0000000000009p+1",
+          "p_value_hex": "0x1.5555555555555p-4",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.ccccccccccccbp-1",
+          "statistic_hex": "0x1.0000000000009p+1",
+          "p_value_hex": "0x1.3244475bf011fp-5",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.886793499746098,
+              "CI": 0.95,
+              "CI_low": 0.0208034334603868,
+              "CI_high": 0.992522276336786,
+              "t": 3.32342024017401,
+              "df_error": 3,
+              "p": 0.0449391932436951,
+              "Method": "Pearson correlation",
+              "n_Obs": 5,
+              "r_hex": "0x1.c609cc2f6e041p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.54d7ec96d703p-6",
+              "CI_high_hex": "0x1.fc2be13ad6003p-1",
+              "t_hex": "0x1.a965d59d34b6dp+1",
+              "p_hex": "0x1.702451a94a17fp-5"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.886793499746098,
+              "CI": 0.9,
+              "CI_low": 0.23891499211296,
+              "CI_high": 0.988348153415279,
+              "t": 3.32342024017401,
+              "df_error": 3,
+              "p": 0.0449391932436951,
+              "Method": "Pearson correlation",
+              "n_Obs": 5,
+              "r_hex": "0x1.c609cc2f6e041p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.e94c436d31af1p-3",
+              "CI_high_hex": "0x1.fa08c4e7f6132p-1",
+              "t_hex": "0x1.a965d59d34b6dp+1",
+              "p_hex": "0x1.702451a94a17fp-5"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.9,
+              "CI": 0.95,
+              "CI_low": 0.0453131191825805,
+              "CI_high": 0.993952261547089,
+              "S": 2,
+              "p": 0.0373860734684988,
+              "Method": "Spearman correlation",
+              "n_Obs": 5,
+              "rho_hex": "0x1.ccccccccccccbp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.73347f9f0180dp-5",
+              "CI_high_hex": "0x1.fce74f92428d6p-1",
+              "S_hex": "0x1.0000000000009p+1",
+              "p_hex": "0x1.3244475bf011fp-5"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.9,
+              "CI": 0.9,
+              "CI_low": 0.268037278364364,
+              "CI_high": 0.990448166826051,
+              "S": 2,
+              "p": 0.0373860734684988,
+              "Method": "Spearman correlation",
+              "n_Obs": 5,
+              "rho_hex": "0x1.ccccccccccccbp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.12785d42bc33cp-2",
+              "CI_high_hex": "0x1.fb1c05a9cd552p-1",
+              "S_hex": "0x1.0000000000009p+1",
+              "p_hex": "0x1.3244475bf011fp-5"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.852466384959011,
+              "CI": 0.95,
+              "CI_low": -0.120211124403475,
+              "CI_high": 0.990086390426288,
+              "t": 2.82434164597075,
+              "df_error": 3,
+              "p": 0.0664994555561931,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 5,
+              "r_hex": "0x1.b4767958ad357p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.ec627ffeda5fp-4",
+              "CI_high_hex": "0x1.faec9a7630f1fp-1",
+              "t_hex": "0x1.698406ed166cap+1",
+              "p_hex": "0x1.1061bbad0cec3p-4"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.7333333333333p+1",
+            "0x1.7333333333333p+1",
+            "0x1.8cccccccccccdp+1",
+            "0x1.3333333333333p+2",
+            "0x1.3333333333333p+2"
+          ],
+          "winsorized_y_hex": [
+            "0x1.2666666666666p+1",
+            "0x1.2666666666666p+1",
+            "0x1p+2",
+            "0x1.2666666666666p+2",
+            "0x1.2666666666666p+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.b4767958ad357p-1"
+            ],
+            "cov": [
+              "0x1.028f5c28f5c28p+0"
+            ],
+            "test": [
+              "0x1.698406ed166cbp+1"
+            ],
+            "p.value": [
+              "0x1.bbabca1364fap-3"
+            ],
+            "n": [
+              "0x1.4p+2"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.886793499746098,
+              "CI": 0.95,
+              "CI_low": 0.0208034334603868,
+              "CI_high": 0.992522276336786,
+              "t": 3.32342024017401,
+              "df_error": 3,
+              "p": 0.0449391932436951,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 5,
+              "r_hex": "0x1.c609cc2f6e041p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.54d7ec96d703p-6",
+              "CI_high_hex": "0x1.fc2be13ad6003p-1",
+              "t_hex": "0x1.a965d59d34b6dp+1",
+              "p_hex": "0x1.702451a94a17fp-5"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.3333333333333p+0",
+            "0x1.7333333333333p+1",
+            "0x1.8cccccccccccdp+1",
+            "0x1.3333333333333p+2",
+            "0x1.6p+2"
+          ],
+          "winsorized_y_hex": [
+            "0x1.2666666666666p+1",
+            "0x1.0cccccccccccdp+1",
+            "0x1p+2",
+            "0x1.2666666666666p+2",
+            "0x1.8cccccccccccdp+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.c609cc2f6e041p-1"
+            ],
+            "cov": [
+              "0x1.475c28f5c28f6p+1"
+            ],
+            "test": [
+              "0x1.a965d59d34b6ep+1"
+            ],
+            "p.value": [
+              "0x1.702451a94a18p-5"
+            ],
+            "n": [
+              "0x1.4p+2"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.2e6072540b74fp+1",
+          "log_bf10_hex": "0x1.b82330812c66ep-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.627315202672353,
+              "CI": 0.95,
+              "CI_low": 0.00976067512170829,
+              "CI_high": 0.957152018897118,
+              "pd": 0.96125,
+              "ROPE_Percentage": 0.05025,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 2.3623183164954,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 5,
+              "rho_hex": "0x1.412f754f85d2p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.3fd67a37a18f6p-7",
+              "CI_high_hex": "0x1.ea0fd454ed4f4p-1",
+              "pd_hex": "0x1.ec28f5c28f5c3p-1",
+              "ROPE_Percentage_hex": "0x1.9ba5e353f7ceep-5",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.2e6072540b74fp+1"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.3995e93a4689ap+1",
+          "log_bf10_hex": "0x1.cac606d17231ap-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.648748497986552,
+              "CI": 0.95,
+              "CI_low": 0.00976067512170829,
+              "CI_high": 0.95921004102173,
+              "pd": 0.96225,
+              "ROPE_Percentage": 0.049,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 2.44988742204175,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 5,
+              "rho_hex": "0x1.4c28c35c5cdb9p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.3fd67a37a18f6p-7",
+              "CI_high_hex": "0x1.eb1d94185dc58p-1",
+              "pd_hex": "0x1.ecac083126e98p-1",
+              "ROPE_Percentage_hex": "0x1.916872b020c4ap-5",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.3995e93a4689ap+1"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.c4b8757eeed1ap+0",
+          "log_bf10_hex": "0x1.23e3d4bb0cf8dp-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.c4b8757eeed1ap+0",
+          "log_bf10_hex": "0x1.23e3d4bb0cf8dp-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.427644470237121,
+              "CI": 0.95,
+              "CI_low": -0.146324320270871,
+              "CI_high": 0.848007990661694,
+              "pd": 0.90175,
+              "ROPE_Percentage": 0.11125,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 1.7684396204848,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 5,
+              "rho_hex": "0x1.b5e86e97ef4a3p-2",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.2bac15d161efcp-3",
+              "CI_high_hex": "0x1.b22e1a7546fdp-1",
+              "pd_hex": "0x1.cdb22d0e56042p-1",
+              "ROPE_Percentage_hex": "0x1.c7ae147ae147bp-4",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.c4b8757eeed1ap+0"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "ties",
+      "n": 20,
+      "x_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.8p+1",
+        "0x1.8p+1"
+      ],
+      "y_hex": [
+        "0x1p+1",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.4p+2",
+        "0x1p+2",
+        "0x1p+0",
+        "0x1.8p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.8p+2",
+        "0x1p+1",
+        "0x1p+2",
+        "0x1p+2",
+        "0x1p+1",
+        "0x1.8p+1"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.b99f40bac90abp-1",
+          "statistic_hex": "0x1.cedf29183e01bp+2",
+          "parameter": 18,
+          "p_value_hex": "0x1.0c47263fc2d7ap-20",
+          "conf_int_hex": [
+            "0x1.5bce9a92ff62cp-1",
+            "0x1.e39aaf9fe2b78p-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.b99f40bac90abp-1",
+          "statistic_hex": "0x1.cedf29183e01bp+2",
+          "parameter": 18,
+          "p_value_hex": "0x1.0c47263fc2d7ap-20",
+          "conf_int_hex": [
+            "0x1.6fcd8a0798ebap-1",
+            "0x1.df10c2f701fdcp-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.bcfa0e58f4513p-1",
+          "statistic_hex": "0x1.5c34e175dab23p+7",
+          "p_value_hex": "0x1.6274d4f9f3eedp-21",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.bcfa0e58f4513p-1",
+          "statistic_hex": "0x1.5c34e175dab23p+7",
+          "p_value_hex": "0x1.6274d4f9f3eedp-21",
+          "error": null,
+          "warnings": [
+            "Cannot compute exact p-value with ties"
+          ]
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.bcfa0e58f4513p-1",
+          "statistic_hex": "0x1.5c34e175dab23p+7",
+          "p_value_hex": "0x1.6274d4f9f3eedp-21",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.862543127823775,
+              "CI": 0.95,
+              "CI_low": 0.679310636943858,
+              "CI_high": 0.944539535777365,
+              "t": 7.23237063758281,
+              "df_error": 18,
+              "p": 9.99413160176733e-07,
+              "Method": "Pearson correlation",
+              "n_Obs": 20,
+              "r_hex": "0x1.b99f40bac90abp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.5bce9a92ff62cp-1",
+              "CI_high_hex": "0x1.e39aaf9fe2b78p-1",
+              "t_hex": "0x1.cedf29183e01bp+2",
+              "p_hex": "0x1.0c47263fc2d7ap-20"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.862543127823775,
+              "CI": 0.9,
+              "CI_low": 0.718365014483843,
+              "CI_high": 0.935674755718533,
+              "t": 7.23237063758281,
+              "df_error": 18,
+              "p": 9.99413160176733e-07,
+              "Method": "Pearson correlation",
+              "n_Obs": 20,
+              "r_hex": "0x1.b99f40bac90abp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.6fcd8a0798ebap-1",
+              "CI_high_hex": "0x1.df10c2f701fdcp-1",
+              "t_hex": "0x1.cedf29183e01bp+2",
+              "p_hex": "0x1.0c47263fc2d7ap-20"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.869095276220977,
+              "CI": 0.95,
+              "CI_low": 0.685785658437855,
+              "CI_high": 0.948717062175691,
+              "S": 174.103282626101,
+              "p": 6.60226447063746e-07,
+              "Method": "Spearman correlation",
+              "n_Obs": 20,
+              "rho_hex": "0x1.bcfa0e58f4513p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.5f1f4c3e1ce25p-1",
+              "CI_high_hex": "0x1.e5be3e2667515p-1",
+              "S_hex": "0x1.5c34e175dab23p+7",
+              "p_hex": "0x1.6274d4f9f3eedp-21"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.869095276220977,
+              "CI": 0.9,
+              "CI_low": 0.725253718170821,
+              "CI_high": 0.94023816171236,
+              "S": 174.103282626101,
+              "p": 6.60226447063746e-07,
+              "Method": "Spearman correlation",
+              "n_Obs": 20,
+              "rho_hex": "0x1.bcfa0e58f4513p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.73547491b1314p-1",
+              "CI_high_hex": "0x1.e166e57602f1p-1",
+              "S_hex": "0x1.5c34e175dab23p+7",
+              "p_hex": "0x1.6274d4f9f3eedp-21"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.826041574222922,
+              "CI": 0.95,
+              "CI_low": 0.604484337400754,
+              "CI_high": 0.928981818825837,
+              "t": 6.21813423545727,
+              "df_error": 18,
+              "p": 7.23185450443334e-06,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 20,
+              "r_hex": "0x1.a6eeebd4d8fcfp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.357ef89829333p-1",
+              "CI_high_hex": "0x1.dba38144df026p-1",
+              "t_hex": "0x1.8df5e94bdb52ep+2",
+              "p_hex": "0x1.e5525078d7458p-18"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.8p+1",
+            "0x1.8p+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1.8p+1"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.a6eeebd4d8fcfp-1"
+            ],
+            "cov": [
+              "0x1.2308158ed2308p-1"
+            ],
+            "test": [
+              "0x1.8df5e94bdb52fp+2"
+            ],
+            "p.value": [
+              "0x1.9f924f0484p-14"
+            ],
+            "n": [
+              "0x1.4p+4"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.843215971985836,
+              "CI": 0.95,
+              "CI_low": 0.639210617829783,
+              "CI_high": 0.936347495767754,
+              "t": 6.65481604915819,
+              "df_error": 18,
+              "p": 3.03237392906501e-06,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 20,
+              "r_hex": "0x1.afba00fe49bcdp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.47469d35ab747p-1",
+              "CI_high_hex": "0x1.df68f060072b2p-1",
+              "t_hex": "0x1.a9e8819301f16p+2",
+              "p_hex": "0x1.96ff93287e1b4p-19"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.8p+1",
+            "0x1.8p+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1p+1",
+            "0x1p+2",
+            "0x1p+2",
+            "0x1p+1",
+            "0x1.8p+1"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.afba00fe49bcdp-1"
+            ],
+            "cov": [
+              "0x1.da46102b1da46p-1"
+            ],
+            "test": [
+              "0x1.a9e8819301f16p+2"
+            ],
+            "p.value": [
+              "0x1.6cecb22ccp-17"
+            ],
+            "n": [
+              "0x1.4p+4"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.a9e44dfe66da3p+13",
+          "log_bf10_hex": "0x1.30a331e9e6412p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.819203844125569,
+              "CI": 0.95,
+              "CI_low": 0.654065441816483,
+              "CI_high": 0.93780419880003,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 13628.5380828891,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 20,
+              "rho_hex": "0x1.a36eafae8db91p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.4ee1aa641756dp-1",
+              "CI_high_hex": "0x1.e027df37cb93dp-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.a9e44dfe66da3p+13"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.dd491303ce13p+13",
+          "log_bf10_hex": "0x1.344881206313p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.823040337982918,
+              "CI": 0.95,
+              "CI_low": 0.661520007794035,
+              "CI_high": 0.939575117470108,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 15273.1342846012,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 20,
+              "rho_hex": "0x1.a5658b0dd9d0ap-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.52b2c01e4005ep-1",
+              "CI_high_hex": "0x1.e10ffd6356c55p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.dd491303ce13p+13"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.025375499b9dfp+12",
+          "log_bf10_hex": "0x1.0a753c919af93p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.025375499b9dfp+12",
+          "log_bf10_hex": "0x1.0a753c919af93p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.769231841915903,
+              "CI": 0.95,
+              "CI_low": 0.601894032496179,
+              "CI_high": 0.924417257175111,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 4133.21613465107,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 20,
+              "rho_hex": "0x1.89d8c188242bap-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.342b74627511bp-1",
+              "CI_high_hex": "0x1.d94d37fed9a98p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.025375499b9dfp+12"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "null",
+      "n": 16,
+      "x_hex": [
+        "0x1.8cccccccccccdp+1",
+        "0x1.2cccccccccccdp+2",
+        "0x1.199999999999ap+1",
+        "0x1.799999999999ap+2",
+        "0x1.199999999999ap+2",
+        "0x1.9333333333333p+2",
+        "0x1.ccccccccccccdp+0",
+        "0x1.4666666666666p+2",
+        "0x1.ccccccccccccdp+1",
+        "0x1.399999999999ap+2",
+        "0x1.599999999999ap+1",
+        "0x1.6666666666666p+2",
+        "0x1.a666666666666p+1",
+        "0x1.0666666666666p+2",
+        "0x1.8p+2",
+        "0x1.4p+1"
+      ],
+      "y_hex": [
+        "0x1.4cccccccccccdp+2",
+        "0x1.0666666666666p+2",
+        "0x1.3333333333333p+2",
+        "0x1.399999999999ap+2",
+        "0x1.ccccccccccccdp+1",
+        "0x1.4p+2",
+        "0x1.1333333333333p+2",
+        "0x1.f333333333333p+1",
+        "0x1.6p+2",
+        "0x1.2666666666666p+2",
+        "0x1p+2",
+        "0x1.5333333333333p+2",
+        "0x1.e666666666666p+1",
+        "0x1.4666666666666p+2",
+        "0x1.199999999999ap+2",
+        "0x1.2cccccccccccdp+2"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.c234faeb2e9bfp-4",
+          "statistic_hex": "0x1.a7b279e9cb1b4p-2",
+          "parameter": 14,
+          "p_value_hex": "0x1.5ee16e29c6146p-1",
+          "conf_int_hex": [
+            "-0x1.a1d0ab8a19dadp-2",
+            "0x1.260e309b9f611p-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.c234faeb2e9bfp-4",
+          "statistic_hex": "0x1.a7b279e9cb1b4p-2",
+          "parameter": 14,
+          "p_value_hex": "0x1.5ee16e29c6146p-1",
+          "conf_int_hex": [
+            "-0x1.54aa80e099589p-2",
+            "0x1.069172e22ccddp-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.e1e1e1e1e1e1dp-4",
+          "statistic_hex": "0x1.2cp+9",
+          "p_value_hex": "0x1.5430ca710fcb1p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.e1e1e1e1e1e1dp-4",
+          "statistic_hex": "0x1.2cp+9",
+          "p_value_hex": "0x1.5430ca710fcb1p-1",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.e1e1e1e1e1e1dp-4",
+          "statistic_hex": "0x1.2cp+9",
+          "p_value_hex": "0x1.54248390c8872p-1",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.109913807059377,
+              "CI": 0.95,
+              "CI_low": -0.40802257566835,
+              "CI_high": 0.574327010151764,
+              "t": 0.413766770262352,
+              "df_error": 14,
+              "p": 0.685313646888098,
+              "Method": "Pearson correlation",
+              "n_Obs": 16,
+              "r_hex": "0x1.c234faeb2e9bfp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.a1d0ab8a19dadp-2",
+              "CI_high_hex": "0x1.260e309b9f611p-1",
+              "t_hex": "0x1.a7b279e9cb1b4p-2",
+              "p_hex": "0x1.5ee16e29c6146p-1"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.109913807059377,
+              "CI": 0.9,
+              "CI_low": -0.332681668957172,
+              "CI_high": 0.512828436002021,
+              "t": 0.413766770262352,
+              "df_error": 14,
+              "p": 0.685313646888098,
+              "Method": "Pearson correlation",
+              "n_Obs": 16,
+              "r_hex": "0x1.c234faeb2e9bfp-4",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.54aa80e099589p-2",
+              "CI_high_hex": "0x1.069172e22ccddp-1",
+              "t_hex": "0x1.a7b279e9cb1b4p-2",
+              "p_hex": "0x1.5ee16e29c6146p-1"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.117647058823529,
+              "CI": 0.95,
+              "CI_low": -0.414863966746514,
+              "CI_high": 0.59012701913274,
+              "S": 600,
+              "p": 0.664341079162354,
+              "Method": "Spearman correlation",
+              "n_Obs": 16,
+              "rho_hex": "0x1.e1e1e1e1e1e1dp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.a8d21985dc458p-2",
+              "CI_high_hex": "0x1.2e2520ef52798p-1",
+              "S_hex": "0x1.2cp+9",
+              "p_hex": "0x1.54248390c8872p-1"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.117647058823529,
+              "CI": 0.9,
+              "CI_low": -0.337698577784946,
+              "CI_high": 0.528370148934864,
+              "S": 600,
+              "p": 0.664341079162354,
+              "Method": "Spearman correlation",
+              "n_Obs": 16,
+              "rho_hex": "0x1.e1e1e1e1e1e1dp-4",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.59cda7edf7dd6p-2",
+              "CI_high_hex": "0x1.0e86883bb73d6p-1",
+              "S_hex": "0x1.2cp+9",
+              "p_hex": "0x1.54248390c8872p-1"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.125637245905114,
+              "CI": 0.95,
+              "CI_low": -0.39464628029616,
+              "CI_high": 0.584914645839477,
+              "t": 0.473846168578528,
+              "df_error": 14,
+              "p": 0.642914382902954,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 16,
+              "r_hex": "0x1.014e19b29367bp-3",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.941e278d70b23p-2",
+              "CI_high_hex": "0x1.2b79eeb5a9f8bp-1",
+              "t_hex": "0x1.e537ee1584ca7p-2",
+              "p_hex": "0x1.492c12f16475cp-1"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.8cccccccccccdp+1",
+            "0x1.2cccccccccccdp+2",
+            "0x1.599999999999ap+1",
+            "0x1.6666666666666p+2",
+            "0x1.199999999999ap+2",
+            "0x1.6666666666666p+2",
+            "0x1.599999999999ap+1",
+            "0x1.4666666666666p+2",
+            "0x1.ccccccccccccdp+1",
+            "0x1.399999999999ap+2",
+            "0x1.599999999999ap+1",
+            "0x1.6666666666666p+2",
+            "0x1.a666666666666p+1",
+            "0x1.0666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.599999999999ap+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1.4666666666666p+2",
+            "0x1.0666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.1333333333333p+2",
+            "0x1p+2",
+            "0x1.4666666666666p+2",
+            "0x1.2666666666666p+2",
+            "0x1p+2",
+            "0x1.4666666666666p+2",
+            "0x1p+2",
+            "0x1.4666666666666p+2",
+            "0x1.199999999999ap+2",
+            "0x1.2cccccccccccdp+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.014e19b29367bp-3"
+            ],
+            "cov": [
+              "0x1.13cc1e098ead8p-4"
+            ],
+            "test": [
+              "0x1.e537ee1584ca7p-2"
+            ],
+            "p.value": [
+              "0x1.4bea4ad174584p-1"
+            ],
+            "n": [
+              "0x1p+4"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.117099501488854,
+              "CI": 0.95,
+              "CI_low": -0.401937004119551,
+              "CI_high": 0.579184969971309,
+              "t": 0.441181460475182,
+              "df_error": 14,
+              "p": 0.665818611637144,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 16,
+              "r_hex": "0x1.dfa3ba145c48cp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.9b955fbefb95fp-2",
+              "CI_high_hex": "0x1.288aeeb0b918ap-1",
+              "t_hex": "0x1.c3c512a15ea3bp-2",
+              "p_hex": "0x1.54e62d54196dp-1"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.8cccccccccccdp+1",
+            "0x1.2cccccccccccdp+2",
+            "0x1.199999999999ap+1",
+            "0x1.799999999999ap+2",
+            "0x1.199999999999ap+2",
+            "0x1.8p+2",
+            "0x1.199999999999ap+1",
+            "0x1.4666666666666p+2",
+            "0x1.ccccccccccccdp+1",
+            "0x1.399999999999ap+2",
+            "0x1.599999999999ap+1",
+            "0x1.6666666666666p+2",
+            "0x1.a666666666666p+1",
+            "0x1.0666666666666p+2",
+            "0x1.8p+2",
+            "0x1.4p+1"
+          ],
+          "winsorized_y_hex": [
+            "0x1.4cccccccccccdp+2",
+            "0x1.0666666666666p+2",
+            "0x1.3333333333333p+2",
+            "0x1.399999999999ap+2",
+            "0x1.e666666666666p+1",
+            "0x1.4p+2",
+            "0x1.1333333333333p+2",
+            "0x1.f333333333333p+1",
+            "0x1.5333333333333p+2",
+            "0x1.2666666666666p+2",
+            "0x1p+2",
+            "0x1.5333333333333p+2",
+            "0x1.e666666666666p+1",
+            "0x1.4666666666666p+2",
+            "0x1.199999999999ap+2",
+            "0x1.2cccccccccccdp+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.dfa3ba145c48cp-4"
+            ],
+            "cov": [
+              "0x1.6508dfea27987p-4"
+            ],
+            "test": [
+              "0x1.c3c512a15ea3cp-2"
+            ],
+            "p.value": [
+              "0x1.5577482997dd8p-1"
+            ],
+            "n": [
+              "0x1p+4"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.97d70e9c78684p-2",
+          "log_bf10_hex": "-0x1.d758736ae1ee7p-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.0926795927231212,
+              "CI": 0.95,
+              "CI_low": -0.351716200596463,
+              "CI_high": 0.515965133686713,
+              "pd": 0.64525,
+              "ROPE_Percentage": 0.299,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 0.398281315136139,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 16,
+              "rho_hex": "0x1.7b9d98bc09d9dp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.68284aac2407dp-2",
+              "CI_high_hex": "0x1.082c94fe1f14p-1",
+              "pd_hex": "0x1.4a5e353f7ced9p-1",
+              "ROPE_Percentage_hex": "0x1.322d0e5604189p-2",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.97d70e9c78684p-2"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.7f5de95d48dc9p-2",
+          "log_bf10_hex": "-0x1.f7078c512a5c5p-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.0940763398019828,
+              "CI": 0.95,
+              "CI_low": -0.356066965290593,
+              "CI_high": 0.516900157582791,
+              "pd": 0.6455,
+              "ROPE_Percentage": 0.2945,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 0.374381681746141,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 16,
+              "rho_hex": "0x1.8156312c6e2ddp-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.6c9cd18c6fadfp-2",
+              "CI_high_hex": "0x1.08a723303b0dp-1",
+              "pd_hex": "0x1.4a7ef9db22d0ep-1",
+              "ROPE_Percentage_hex": "0x1.2d916872b020cp-2",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.7f5de95d48dc9p-2"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.1aba3236cc016p-1",
+          "log_bf10_hex": "-0x1.300c04c338e52p-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.1aba3236cc016p-1",
+          "log_bf10_hex": "-0x1.300c04c338e52p-1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.080003791339688,
+              "CI": 0.95,
+              "CI_low": -0.329272855230904,
+              "CI_high": 0.490813207999326,
+              "pd": 0.6345,
+              "ROPE_Percentage": 0.3275,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 0.55220181387813,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 16,
+              "rho_hex": "0x1.47b20e35c26dep-4",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.512ce742b5874p-2",
+              "CI_high_hex": "0x1.f697bcd335323p-2",
+              "pd_hex": "0x1.44dd2f1a9fbe7p-1",
+              "ROPE_Percentage_hex": "0x1.4f5c28f5c28f6p-2",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.1aba3236cc016p-1"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "outlier",
+      "n": 15,
+      "x_hex": [
+        "0x1.199999999999ap+0",
+        "0x1.e666666666666p+0",
+        "0x1.999999999999ap+1",
+        "0x1.e666666666666p+1",
+        "0x1.4666666666666p+2",
+        "0x1.8p+2",
+        "0x1.b333333333333p+2",
+        "0x1.0333333333333p+3",
+        "0x1.1cccccccccccdp+3",
+        "0x1.4666666666666p+3",
+        "0x1.6p+3",
+        "0x1.7cccccccccccdp+3",
+        "0x1.a333333333333p+3",
+        "0x1.cp+3",
+        "0x1.4p+5"
+      ],
+      "y_hex": [
+        "0x1p+1",
+        "0x1.4cccccccccccdp+1",
+        "0x1.8cccccccccccdp+1",
+        "0x1.a666666666666p+1",
+        "0x1.0cccccccccccdp+2",
+        "0x1.199999999999ap+2",
+        "0x1.4666666666666p+2",
+        "0x1.6666666666666p+2",
+        "0x1.9333333333333p+2",
+        "0x1.a666666666666p+2",
+        "0x1.d99999999999ap+2",
+        "0x1.ecccccccccccdp+2",
+        "0x1.1p+3",
+        "0x1.199999999999ap+3",
+        "-0x1.ep+4"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "-0x1.8ea5082fc4963p-1",
+          "statistic_hex": "-0x1.1e504e7e6c0bep+2",
+          "parameter": 13,
+          "p_value_hex": "0x1.48a2c9a0e41c9p-11",
+          "conf_int_hex": [
+            "-0x1.d879f2e376cccp-1",
+            "-0x1.c5aefaecfad48p-2"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "-0x1.8ea5082fc4963p-1",
+          "statistic_hex": "-0x1.1e504e7e6c0bep+2",
+          "parameter": 13,
+          "p_value_hex": "0x1.48a2c9a0e41c9p-11",
+          "conf_int_hex": [
+            "-0x1.d0f3dbd077f1fp-1",
+            "-0x1.06ba6d5ff7e71p-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.3ffffffffffffp-1",
+          "statistic_hex": "0x1.a400000000003p+7",
+          "p_value_hex": "0x1.e6ec8093736dep-7",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.3ffffffffffffp-1",
+          "statistic_hex": "0x1.a400000000003p+7",
+          "p_value_hex": "0x1.e6ec8093736dep-7",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.3ffffffffffffp-1",
+          "statistic_hex": "0x1.a400000000003p+7",
+          "p_value_hex": "0x1.a10d9e4bca3abp-7",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.778602844077153,
+              "CI": 0.95,
+              "CI_low": -0.922805395380601,
+              "CI_high": -0.443050308908557,
+              "t": -4.47365152688888,
+              "df_error": 13,
+              "p": 0.000626823213780319,
+              "Method": "Pearson correlation",
+              "n_Obs": 15,
+              "r_hex": "-0x1.8ea5082fc4963p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.d879f2e376cccp-1",
+              "CI_high_hex": "-0x1.c5aefaecfad48p-2",
+              "t_hex": "-0x1.1e504e7e6c0bep+2",
+              "p_hex": "0x1.48a2c9a0e41c9p-11"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -0.778602844077153,
+              "CI": 0.9,
+              "CI_low": -0.908110493848628,
+              "CI_high": -0.513141077008141,
+              "t": -4.47365152688888,
+              "df_error": 13,
+              "p": 0.000626823213780319,
+              "Method": "Pearson correlation",
+              "n_Obs": 15,
+              "r_hex": "-0x1.8ea5082fc4963p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.d0f3dbd077f1fp-1",
+              "CI_high_hex": "-0x1.06ba6d5ff7e71p-1",
+              "t_hex": "-0x1.1e504e7e6c0bep+2",
+              "p_hex": "0x1.48a2c9a0e41c9p-11"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.625,
+              "CI": 0.95,
+              "CI_low": 0.14951970805907,
+              "CI_high": 0.865707566147596,
+              "S": 210,
+              "p": 0.0127274535112337,
+              "Method": "Spearman correlation",
+              "n_Obs": 15,
+              "rho_hex": "0x1.3ffffffffffffp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.32376381c4f76p-3",
+              "CI_high_hex": "0x1.bb3e05a901e2dp-1",
+              "S_hex": "0x1.a400000000003p+7",
+              "p_hex": "0x1.a10d9e4bca3abp-7"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.625,
+              "CI": 0.9,
+              "CI_low": 0.239555817985323,
+              "CI_high": 0.840253211606828,
+              "S": 210,
+              "p": 0.0127274535112337,
+              "Method": "Spearman correlation",
+              "n_Obs": 15,
+              "rho_hex": "0x1.3ffffffffffffp-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.ea9c3d9e82077p-3",
+              "CI_high_hex": "0x1.ae35ab406babep-1",
+              "S_hex": "0x1.a400000000003p+7",
+              "p_hex": "0x1.a10d9e4bca3abp-7"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.788358687052449,
+              "CI": 0.95,
+              "CI_low": 0.463129062008415,
+              "CI_high": 0.926469663608428,
+              "t": 4.62027681051484,
+              "df_error": 13,
+              "p": 0.000479696244941759,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 15,
+              "r_hex": "0x1.93a3bff4d0c71p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.da3e813c9cf9fp-2",
+              "CI_high_hex": "0x1.da5a3b53de5f6p-1",
+              "t_hex": "0x1.27b29d81e8381p+2",
+              "p_hex": "0x1.f6ff7af1d2bbep-12"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.e666666666666p+1",
+            "0x1.e666666666666p+1",
+            "0x1.e666666666666p+1",
+            "0x1.e666666666666p+1",
+            "0x1.4666666666666p+2",
+            "0x1.8p+2",
+            "0x1.b333333333333p+2",
+            "0x1.0333333333333p+3",
+            "0x1.1cccccccccccdp+3",
+            "0x1.4666666666666p+3",
+            "0x1.6p+3",
+            "0x1.7cccccccccccdp+3",
+            "0x1.7cccccccccccdp+3",
+            "0x1.7cccccccccccdp+3",
+            "0x1.7cccccccccccdp+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.8cccccccccccdp+1",
+            "0x1.8cccccccccccdp+1",
+            "0x1.8cccccccccccdp+1",
+            "0x1.a666666666666p+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1.199999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.9333333333333p+2",
+            "0x1.a666666666666p+2",
+            "0x1.d99999999999ap+2",
+            "0x1.d99999999999ap+2",
+            "0x1.d99999999999ap+2",
+            "0x1.d99999999999ap+2",
+            "0x1.8cccccccccccdp+1"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.93a3bff4d0c71p-1"
+            ],
+            "cov": [
+              "0x1.3394b94b94b95p+2"
+            ],
+            "test": [
+              "0x1.27b29d81e8382p+2"
+            ],
+            "p.value": [
+              "0x1.3de540105e8p-9"
+            ],
+            "n": [
+              "0x1.ep+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.700342042188792,
+              "CI": 0.95,
+              "CI_low": 0.293305104872066,
+              "CI_high": 0.892435451798138,
+              "t": 3.53753560804809,
+              "df_error": 13,
+              "p": 0.00364234529748998,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 15,
+              "r_hex": "0x1.66933b6e6def1p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.2c582c64b394ep-2",
+              "CI_high_hex": "0x1.c8ed4cae87299p-1",
+              "t_hex": "0x1.c4cdf7808041dp+1",
+              "p_hex": "0x1.dd68d3ddee51dp-9"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.e666666666666p+0",
+            "0x1.e666666666666p+0",
+            "0x1.999999999999ap+1",
+            "0x1.e666666666666p+1",
+            "0x1.4666666666666p+2",
+            "0x1.8p+2",
+            "0x1.b333333333333p+2",
+            "0x1.0333333333333p+3",
+            "0x1.1cccccccccccdp+3",
+            "0x1.4666666666666p+3",
+            "0x1.6p+3",
+            "0x1.7cccccccccccdp+3",
+            "0x1.a333333333333p+3",
+            "0x1.cp+3",
+            "0x1.cp+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1p+1",
+            "0x1.4cccccccccccdp+1",
+            "0x1.8cccccccccccdp+1",
+            "0x1.a666666666666p+1",
+            "0x1.0cccccccccccdp+2",
+            "0x1.199999999999ap+2",
+            "0x1.4666666666666p+2",
+            "0x1.6666666666666p+2",
+            "0x1.9333333333333p+2",
+            "0x1.a666666666666p+2",
+            "0x1.d99999999999ap+2",
+            "0x1.ecccccccccccdp+2",
+            "0x1.1p+3",
+            "0x1.1p+3",
+            "0x1p+1"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.66933b6e6def1p-1"
+            ],
+            "cov": [
+              "0x1.b69b73f4afeedp+2"
+            ],
+            "test": [
+              "0x1.c4cdf7808041ep+1"
+            ],
+            "p.value": [
+              "0x1.30ed51d7538p-8"
+            ],
+            "n": [
+              "0x1.ep+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.d42acdbf6b149p+5",
+          "log_bf10_hex": "0x1.0470c96b50e46p+2",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.695915827210583,
+              "CI": 0.95,
+              "CI_low": -0.892733198284778,
+              "CI_high": -0.379482869655621,
+              "pd": 1,
+              "ROPE_Percentage": 0.00625,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 58.5209002451471,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 15,
+              "rho_hex": "-0x1.644f144d46c7ap-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.c91453655f8a8p-1",
+              "CI_high_hex": "-0x1.8497284a40a2ep-2",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x1.999999999999ap-8",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.d42acdbf6b149p+5"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.e9affef5f007bp+5",
+          "log_bf10_hex": "0x1.07511d67d20ecp+2",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.702520016658194,
+              "CI": 0.95,
+              "CI_low": -0.889569387234289,
+              "CI_high": -0.381305674873256,
+              "pd": 1,
+              "ROPE_Percentage": 0.00625,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 61.2109355176808,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 15,
+              "rho_hex": "-0x1.67b0b420aa25ep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.c775a3836357fp-1",
+              "CI_high_hex": "-0x1.8674fead707b3p-2",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x1.999999999999ap-8",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.e9affef5f007bp+5"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.0e88414a2d4c6p+5",
+          "log_bf10_hex": "0x1.c2ae7b5176cc4p+1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.0e88414a2d4c6p+5",
+          "log_bf10_hex": "0x1.c2ae7b5176cc4p+1",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -0.625805168297131,
+              "CI": 0.95,
+              "CI_low": -0.881658683558894,
+              "CI_high": -0.317832607582647,
+              "pd": 1,
+              "ROPE_Percentage": 0.007,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 33.8165307803225,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 15,
+              "rho_hex": "-0x1.406988f702063p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1.c368c4583d5ecp-1",
+              "CI_high_hex": "-0x1.4575e93cadf2dp-2",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x1.cac083126e979p-8",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.0e88414a2d4c6p+5"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "missing",
+      "n": 11,
+      "x_hex": [
+        "0x1.0cccccccccccdp+1",
+        "0x1p+2",
+        "0x1.4cccccccccccdp+2",
+        "0x1.8666666666666p+2",
+        "0x1.d333333333333p+2",
+        "0x1p+3",
+        "0x1.199999999999ap+3",
+        "0x1.3p+3",
+        "0x1.4cccccccccccdp+3",
+        "0x1.6333333333333p+3",
+        "0x1.8p+3"
+      ],
+      "y_hex": [
+        "0x1.8p+1",
+        "0x1.199999999999ap+2",
+        "0x1.7333333333333p+2",
+        "0x1.6p+2",
+        "0x1.b99999999999ap+2",
+        "0x1.f333333333333p+2",
+        "0x1.e666666666666p+2",
+        "0x1.1cccccccccccdp+3",
+        "0x1.2333333333333p+3",
+        "0x1.5333333333333p+3",
+        "0x1.4666666666666p+3"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.f8be2ad833426p-1",
+          "statistic_hex": "0x1.1a0c34c79e0fap+4",
+          "parameter": 9,
+          "p_value_hex": "0x1.d9835a382e37bp-26",
+          "conf_int_hex": [
+            "0x1.e396243ee7cdbp-1",
+            "0x1.fe2ce0ba731aap-1"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.f8be2ad833426p-1",
+          "statistic_hex": "0x1.1a0c34c79e0fap+4",
+          "parameter": 9,
+          "p_value_hex": "0x1.d9835a382e37bp-26",
+          "conf_int_hex": [
+            "0x1.e92291d13b611p-1",
+            "0x1.fdb88c31c74b7p-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.f2094f2094f2p-1",
+          "statistic_hex": "0x1.800000000001p+2",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.f2094f2094f2p-1",
+          "statistic_hex": "0x1.800000000001p+2",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.f2094f2094f2p-1",
+          "statistic_hex": "0x1.800000000001p+2",
+          "p_value_hex": "0x1.14118b1064f5cp-21",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.985825861827497,
+              "CI": 0.95,
+              "CI_low": 0.944504864386455,
+              "CI_high": 0.996436140785183,
+              "t": 17.6279800221973,
+              "df_error": 9,
+              "p": 2.75620896945263e-08,
+              "Method": "Pearson correlation",
+              "n_Obs": 11,
+              "r_hex": "0x1.f8be2ad833426p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.e396243ee7cdbp-1",
+              "CI_high_hex": "0x1.fe2ce0ba731aap-1",
+              "t_hex": "0x1.1a0c34c79e0fap+4",
+              "p_hex": "0x1.d9835a382e37bp-26"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.985825861827497,
+              "CI": 0.9,
+              "CI_low": 0.955341870108613,
+              "CI_high": 0.995548611713864,
+              "t": 17.6279800221973,
+              "df_error": 9,
+              "p": 2.75620896945263e-08,
+              "Method": "Pearson correlation",
+              "n_Obs": 11,
+              "r_hex": "0x1.f8be2ad833426p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.e92291d13b611p-1",
+              "CI_high_hex": "0x1.fdb88c31c74b7p-1",
+              "t_hex": "0x1.1a0c34c79e0fap+4",
+              "p_hex": "0x1.d9835a382e37bp-26"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.972727272727273,
+              "CI": 0.95,
+              "CI_low": 0.89109236210694,
+              "CI_high": 0.993384411230704,
+              "S": 6.00000000000001,
+              "p": 5.14217704904937e-07,
+              "Method": "Spearman correlation",
+              "n_Obs": 11,
+              "rho_hex": "0x1.f2094f2094f2p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.c83d4211edecap-1",
+              "CI_high_hex": "0x1.fc9ce1ad2f264p-1",
+              "S_hex": "0x1.800000000001p+2",
+              "p_hex": "0x1.14118b1064f5cp-21"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.972727272727273,
+              "CI": 0.9,
+              "CI_low": 0.91244022013952,
+              "CI_high": 0.991685673999879,
+              "S": 6.00000000000001,
+              "p": 5.14217704904937e-07,
+              "Method": "Spearman correlation",
+              "n_Obs": 11,
+              "rho_hex": "0x1.f2094f2094f2p-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.d32b5d521bca8p-1",
+              "CI_high_hex": "0x1.fbbe39837b7ep-1",
+              "S_hex": "0x1.800000000001p+2",
+              "p_hex": "0x1.14118b1064f5cp-21"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.980926306387231,
+              "CI": 0.95,
+              "CI_low": 0.925855233106445,
+              "CI_high": 0.995195352573185,
+              "t": 15.139309777389,
+              "df_error": 9,
+              "p": 1.04104145831254e-07,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 11,
+              "r_hex": "0x1.f63bf90b703f7p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.da09b2760b972p-1",
+              "CI_high_hex": "0x1.fd8a3ec8ddb4cp-1",
+              "t_hex": "0x1.e47539c73cc47p+3",
+              "p_hex": "0x1.bf1fb805f9462p-24"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.4cccccccccccdp+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.8666666666666p+2",
+            "0x1.d333333333333p+2",
+            "0x1p+3",
+            "0x1.199999999999ap+3",
+            "0x1.3p+3",
+            "0x1.4cccccccccccdp+3",
+            "0x1.4cccccccccccdp+3",
+            "0x1.4cccccccccccdp+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.6p+2",
+            "0x1.6p+2",
+            "0x1.7333333333333p+2",
+            "0x1.6p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.f333333333333p+2",
+            "0x1.e666666666666p+2",
+            "0x1.1cccccccccccdp+3",
+            "0x1.2333333333333p+3",
+            "0x1.2333333333333p+3",
+            "0x1.2333333333333p+3"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.f63bf90b703f7p-1"
+            ],
+            "cov": [
+              "0x1.aeb25cb7f2985p+1"
+            ],
+            "test": [
+              "0x1.e47539c73cc48p+3"
+            ],
+            "p.value": [
+              "0x1.7e4c7daefp-16"
+            ],
+            "n": [
+              "0x1.6p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 0.987296685456589,
+              "CI": 0.95,
+              "CI_low": 0.950155866488763,
+              "CI_high": 0.996807725649668,
+              "t": 18.6414226770967,
+              "df_error": 9,
+              "p": 1.68703120993683e-08,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 11,
+              "r_hex": "0x1.f97ef37ef8728p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.e67ad46957f39p-1",
+              "CI_high_hex": "0x1.fe5d950c21847p-1",
+              "t_hex": "0x1.2a43446cd0b14p+4",
+              "p_hex": "0x1.21d46ad2329cdp-26"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1p+2",
+            "0x1p+2",
+            "0x1.4cccccccccccdp+2",
+            "0x1.8666666666666p+2",
+            "0x1.d333333333333p+2",
+            "0x1p+3",
+            "0x1.199999999999ap+3",
+            "0x1.3p+3",
+            "0x1.4cccccccccccdp+3",
+            "0x1.6333333333333p+3",
+            "0x1.6333333333333p+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.199999999999ap+2",
+            "0x1.199999999999ap+2",
+            "0x1.7333333333333p+2",
+            "0x1.6p+2",
+            "0x1.b99999999999ap+2",
+            "0x1.f333333333333p+2",
+            "0x1.e666666666666p+2",
+            "0x1.1cccccccccccdp+3",
+            "0x1.2333333333333p+3",
+            "0x1.4666666666666p+3",
+            "0x1.4666666666666p+3"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.f97ef37ef8728p-1"
+            ],
+            "cov": [
+              "0x1.67621e295515cp+2"
+            ],
+            "test": [
+              "0x1.2a43446cd0b15p+4"
+            ],
+            "p.value": [
+              "0x1.54b2ba78p-22"
+            ],
+            "n": [
+              "0x1.6p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "0x1.cc51f62cf9387p+15",
+          "log_bf10_hex": "0x1.5f7c89fd22501p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.970821582385129,
+              "CI": 0.95,
+              "CI_low": 0.925316907654054,
+              "CI_high": 0.99616246802157,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": 58920.9808118707,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 11,
+              "rho_hex": "0x1.f10f86c530b0ap-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.d9c323419eb9fp-1",
+              "CI_high_hex": "0x1.fe0901cb4f82p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0",
+              "BF_hex": "0x1.cc51f62cf9387p+15"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "0x1.56217705f74e7p+16",
+          "log_bf10_hex": "0x1.6c2bfe6a20e28p+3",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.97287122157093,
+              "CI": 0.95,
+              "CI_low": 0.929752012046593,
+              "CI_high": 0.995770639739401,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": 87585.4649347846,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 11,
+              "rho_hex": "0x1.f21c2d3fbbc2p-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.dc0874aa42b8cp-1",
+              "CI_high_hex": "0x1.fdd5a637fed5bp-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0",
+              "BF_hex": "0x1.56217705f74e7p+16"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "0x1.e0a07da29f754p+10",
+          "log_bf10_hex": "0x1.e3edbe3ec3b0ep+2",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "0x1.e0a07da29f754p+10",
+          "log_bf10_hex": "0x1.e3edbe3ec3b0ep+2",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 0.946445267399246,
+              "CI": 0.95,
+              "CI_low": 0.884362277483098,
+              "CI_high": 0.985604799222506,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": 1922.50766816685,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 11,
+              "rho_hex": "0x1.e494795dde12ep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.c4cb21e73643ap-1",
+              "CI_high_hex": "0x1.f8a13136e1f32p-1",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1",
+              "BF_hex": "0x1.e0a07da29f754p+10"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "perfect",
+      "n": 10,
+      "x_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1.cp+2",
+        "0x1p+3",
+        "0x1.2p+3",
+        "0x1.4p+3"
+      ],
+      "y_hex": [
+        "0x1.8p+1",
+        "0x1.4p+2",
+        "0x1.cp+2",
+        "0x1.2p+3",
+        "0x1.6p+3",
+        "0x1.ap+3",
+        "0x1.ep+3",
+        "0x1.1p+4",
+        "0x1.3p+4",
+        "0x1.5p+4"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.fffffffffffffp+26",
+          "parameter": 8,
+          "p_value_hex": "0x1.180000000000cp-206",
+          "conf_int_hex": [
+            "0x1.ffffffffffff7p-1",
+            "0x1p+0"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.fffffffffffffp+26",
+          "parameter": 8,
+          "p_value_hex": "0x1.180000000000cp-206",
+          "conf_int_hex": [
+            "0x1.ffffffffffff9p-1",
+            "0x1.fffffffffffffp-1"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.4ap-45",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.4ap-45",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.4ap-45",
+          "p_value_hex": "0x1.180000000000cp-206",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 1,
+              "CI": 0.95,
+              "CI_low": 0.999999999999999,
+              "CI_high": 1,
+              "t": 134217728,
+              "df_error": 8,
+              "p": 1.0635035875251e-62,
+              "Method": "Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.ffffffffffff7p-1",
+              "CI_high_hex": "0x1p+0",
+              "t_hex": "0x1.fffffffffffffp+26",
+              "p_hex": "0x1.180000000000cp-206"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 1,
+              "CI": 0.9,
+              "CI_low": 0.999999999999999,
+              "CI_high": 1,
+              "t": 134217728,
+              "df_error": 8,
+              "p": 1.0635035875251e-62,
+              "Method": "Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.ffffffffffff9p-1",
+              "CI_high_hex": "0x1.fffffffffffffp-1",
+              "t_hex": "0x1.fffffffffffffp+26",
+              "p_hex": "0x1.180000000000cp-206"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 1,
+              "CI": 0.95,
+              "CI_low": 0.999999999999999,
+              "CI_high": 1,
+              "S": 3.66373598126302e-14,
+              "p": 1.0635035875251e-62,
+              "Method": "Spearman correlation",
+              "n_Obs": 10,
+              "rho_hex": "0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.ffffffffffff7p-1",
+              "CI_high_hex": "0x1p+0",
+              "S_hex": "0x1.4ap-45",
+              "p_hex": "0x1.180000000000cp-206"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 1,
+              "CI": 0.9,
+              "CI_low": 0.999999999999999,
+              "CI_high": 1,
+              "S": 3.66373598126302e-14,
+              "p": 1.0635035875251e-62,
+              "Method": "Spearman correlation",
+              "n_Obs": 10,
+              "rho_hex": "0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "0x1.ffffffffffff9p-1",
+              "CI_high_hex": "0x1.fffffffffffffp-1",
+              "S_hex": "0x1.4ap-45",
+              "p_hex": "0x1.180000000000cp-206"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 1,
+              "CI": 0.95,
+              "CI_low": 0.999999999999999,
+              "CI_high": 1,
+              "t": 134217728,
+              "df_error": 8,
+              "p": 1.0635035875251e-62,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1.ffffffffffff7p-1",
+              "CI_high_hex": "0x1p+0",
+              "t_hex": "0x1.fffffffffffffp+26",
+              "p_hex": "0x1.180000000000cp-206"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.8p+2",
+            "0x1.cp+2",
+            "0x1p+3",
+            "0x1p+3",
+            "0x1p+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.cp+2",
+            "0x1.cp+2",
+            "0x1.cp+2",
+            "0x1.2p+3",
+            "0x1.6p+3",
+            "0x1.ap+3",
+            "0x1.ep+3",
+            "0x1.1p+4",
+            "0x1.1p+4",
+            "0x1.1p+4"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1.ffffffffffffep-1"
+            ],
+            "cov": [
+              "0x1.2e38e38e38e39p+3"
+            ],
+            "test": [
+              "0x1.ffffffffffffep+26"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.4p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": 1,
+              "CI": 0.95,
+              "CI_low": 1,
+              "CI_high": 1,
+              "t": "Inf",
+              "df_error": 8,
+              "p": 0,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1p+0",
+              "CI_high_hex": "0x1p+0",
+              "t_hex": "Inf",
+              "p_hex": "0x0p+0"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.8p+2",
+            "0x1.cp+2",
+            "0x1p+3",
+            "0x1.2p+3",
+            "0x1.2p+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.4p+2",
+            "0x1.4p+2",
+            "0x1.cp+2",
+            "0x1.2p+3",
+            "0x1.6p+3",
+            "0x1.ap+3",
+            "0x1.ep+3",
+            "0x1.1p+4",
+            "0x1.3p+4",
+            "0x1.3p+4"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "0x1p+0"
+            ],
+            "cov": [
+              "0x1.d8e38e38e38e4p+3"
+            ],
+            "test": [
+              "Inf"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.4p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 1,
+              "CI": 0.95,
+              "CI_low": 1,
+              "CI_high": 1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1p+0",
+              "CI_high_hex": "0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 1,
+              "CI": 0.95,
+              "CI_low": 1,
+              "CI_high": 1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1p+0",
+              "CI_high_hex": "0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": 1,
+              "CI": 0.95,
+              "CI_low": 1,
+              "CI_high": 1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "0x1p+0",
+              "CI_high_hex": "0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    },
+    {
+      "name": "perfect_neg",
+      "n": 10,
+      "x_hex": [
+        "0x1p+0",
+        "0x1p+1",
+        "0x1.8p+1",
+        "0x1p+2",
+        "0x1.4p+2",
+        "0x1.8p+2",
+        "0x1.cp+2",
+        "0x1p+3",
+        "0x1.2p+3",
+        "0x1.4p+3"
+      ],
+      "y_hex": [
+        "0x1.bp+4",
+        "0x1.8p+4",
+        "0x1.5p+4",
+        "0x1.2p+4",
+        "0x1.ep+3",
+        "0x1.8p+3",
+        "0x1.2p+3",
+        "0x1.8p+2",
+        "0x1.8p+1",
+        "0x0p+0"
+      ],
+      "pearson": [
+        {
+          "conf": 0.95,
+          "estimate_hex": "-0x1p+0",
+          "statistic_hex": "-Inf",
+          "parameter": 8,
+          "p_value_hex": "0x0p+0",
+          "conf_int_hex": [
+            "-0x1p+0",
+            "-0x1p+0"
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "conf": 0.9,
+          "estimate_hex": "-0x1p+0",
+          "statistic_hex": "-Inf",
+          "parameter": 8,
+          "p_value_hex": "0x0p+0",
+          "conf_int_hex": [
+            "-0x1p+0",
+            "-0x1p+0"
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "spearman": [
+        {
+          "exact": "NULL",
+          "estimate_hex": "-0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.49fffffffffffp+8",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": true,
+          "estimate_hex": "-0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.49fffffffffffp+8",
+          "p_value_hex": "0x0p+0",
+          "error": null,
+          "warnings": []
+        },
+        {
+          "exact": false,
+          "estimate_hex": "-0x1.ffffffffffffep-1",
+          "statistic_hex": "0x1.49fffffffffffp+8",
+          "p_value_hex": "0x1.1800000000032p-202",
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "correlation": [
+        {
+          "method": "pearson",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "t": "-Inf",
+              "df_error": 8,
+              "p": 0,
+              "Method": "Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "-0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "t_hex": "-Inf",
+              "p_hex": "0x0p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "pearson",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -1,
+              "CI": 0.9,
+              "CI_low": -1,
+              "CI_high": -1,
+              "t": "-Inf",
+              "df_error": 8,
+              "p": 0,
+              "Method": "Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "-0x1p+0",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "t_hex": "-Inf",
+              "p_hex": "0x0p+0"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.95,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -0.999999999999999,
+              "S": 330,
+              "p": 1.70160574004017e-61,
+              "Method": "Spearman correlation",
+              "n_Obs": 10,
+              "rho_hex": "-0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1.ffffffffffff7p-1",
+              "S_hex": "0x1.49fffffffffffp+8",
+              "p_hex": "0x1.1800000000032p-202"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        },
+        {
+          "method": "spearman",
+          "ci": 0.9,
+          "row": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -1,
+              "CI": 0.9,
+              "CI_low": -1,
+              "CI_high": -0.999999999999999,
+              "S": 330,
+              "p": 1.70160574004017e-61,
+              "Method": "Spearman correlation",
+              "n_Obs": 10,
+              "rho_hex": "-0x1.ffffffffffffep-1",
+              "CI_hex": "0x1.ccccccccccccdp-1",
+              "CI_low_hex": "-0x1.fffffffffffffp-1",
+              "CI_high_hex": "-0x1.ffffffffffff9p-1",
+              "S_hex": "0x1.49fffffffffffp+8",
+              "p_hex": "0x1.1800000000032p-202"
+            }
+          ],
+          "error": null,
+          "warnings": []
+        }
+      ],
+      "winsorized": [
+        {
+          "tr": 0.2,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "t": -189812531.248503,
+              "df_error": 8,
+              "p": 6.64689742203201e-64,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "-0x1.fffffffffffffp-1",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1.ffffffffffffcp-1",
+              "t_hex": "-0x1.6a09e667f3bccp+27",
+              "p_hex": "0x1.1800000000072p-210"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.8p+2",
+            "0x1.cp+2",
+            "0x1p+3",
+            "0x1p+3",
+            "0x1p+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.5p+4",
+            "0x1.5p+4",
+            "0x1.5p+4",
+            "0x1.2p+4",
+            "0x1.ep+3",
+            "0x1.8p+3",
+            "0x1.2p+3",
+            "0x1.8p+2",
+            "0x1.8p+2",
+            "0x1.8p+2"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "-0x1.fffffffffffffp-1"
+            ],
+            "cov": [
+              "-0x1.c555555555555p+3"
+            ],
+            "test": [
+              "-0x1.6a09e667f3bccp+27"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.4p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        },
+        {
+          "tr": 0.1,
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "r": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "t": "-Inf",
+              "df_error": 8,
+              "p": 0,
+              "Method": "Winsorized Pearson correlation",
+              "n_Obs": 10,
+              "r_hex": "-0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "t_hex": "-Inf",
+              "p_hex": "0x0p+0"
+            }
+          ],
+          "error": null,
+          "warnings": [],
+          "winsorized_x_hex": [
+            "0x1p+1",
+            "0x1p+1",
+            "0x1.8p+1",
+            "0x1p+2",
+            "0x1.4p+2",
+            "0x1.8p+2",
+            "0x1.cp+2",
+            "0x1p+3",
+            "0x1.2p+3",
+            "0x1.2p+3"
+          ],
+          "winsorized_y_hex": [
+            "0x1.8p+4",
+            "0x1.8p+4",
+            "0x1.5p+4",
+            "0x1.2p+4",
+            "0x1.ep+3",
+            "0x1.8p+3",
+            "0x1.2p+3",
+            "0x1.8p+2",
+            "0x1.8p+1",
+            "0x1.8p+1"
+          ],
+          "winsorize_error": null,
+          "winsorize_warnings": [],
+          "wincor": {
+            "cor": [
+              "-0x1p+0"
+            ],
+            "cov": [
+              "-0x1.62aaaaaaaaaabp+4"
+            ],
+            "test": [
+              "-Inf"
+            ],
+            "p.value": [
+              "0x0p+0"
+            ],
+            "n": [
+              "0x1.4p+3"
+            ],
+            "alpha": [
+              "0x1.999999999999ap-5"
+            ]
+          },
+          "wincor_error": null,
+          "wincor_warnings": []
+        }
+      ],
+      "bayes": [
+        {
+          "prior": 0.707,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.41442715700141,
+              "Prior_Scale": 1.41442715700141,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "-0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.6a17e5ede5348p+0",
+              "Prior_Scale_hex": "0x1.6a17e5ede5348p+0"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": 0.8,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 1.25,
+              "Prior_Scale": 1.25,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "-0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.4p+0",
+              "Prior_Scale_hex": "0x1.4p+0"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        },
+        {
+          "prior": "medium",
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": null,
+          "correlation_error": null,
+          "correlation_warnings": null
+        },
+        {
+          "prior": 0.333333333333333,
+          "bf10_hex": "NA",
+          "log_bf10_hex": "NA",
+          "bf_error": 0,
+          "call_error": null,
+          "warnings": [
+            "Series not converged."
+          ],
+          "correlation": [
+            {
+              "Parameter1": "x",
+              "Parameter2": "y",
+              "rho": -1,
+              "CI": 0.95,
+              "CI_low": -1,
+              "CI_high": -1,
+              "pd": 1,
+              "ROPE_Percentage": 0,
+              "Prior_Distribution": "beta",
+              "Prior_Location": 3,
+              "Prior_Scale": 3,
+              "BF": null,
+              "Method": "Bayesian Pearson correlation",
+              "n_Obs": 10,
+              "rho_hex": "-0x1p+0",
+              "CI_hex": "0x1.e666666666666p-1",
+              "CI_low_hex": "-0x1p+0",
+              "CI_high_hex": "-0x1p+0",
+              "pd_hex": "0x1p+0",
+              "ROPE_Percentage_hex": "0x0p+0",
+              "Prior_Location_hex": "0x1.8p+1",
+              "Prior_Scale_hex": "0x1.8p+1"
+            }
+          ],
+          "correlation_error": null,
+          "correlation_warnings": []
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

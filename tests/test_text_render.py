@@ -94,6 +94,9 @@ def render_items() -> tuple[
     sources: dict[str, tx.Node] = {}
     ticks: set[str] = set()
     for case in load_cases():
+        if case.function not in ("ggbetweenstats", "ggwithinstats"):
+            # gghistostats and ggscatterstats join with their text layers (Phase 4).
+            continue
         for _, source, rebuilt in checked_expressions(case):
             sources.setdefault(source, rebuilt)
         if case.type == "parametric":

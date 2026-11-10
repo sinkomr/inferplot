@@ -144,7 +144,8 @@ def _drawn_annotations(case: OracleCase) -> list[str]:
 
 
 def test_every_within_fixture_is_replayed() -> None:
-    assert len(CASES) == 159
+    # 159 Phase 3 cases and edge_rm_some_tied (review T7).
+    assert len(CASES) == 160
     assert {c.type for c in CASES} == set(wc.TYPES)
 
 
