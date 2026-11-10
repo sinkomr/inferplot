@@ -479,7 +479,7 @@ CASES <- c(
   # Phase 3 (withinstats): ggwithinstats, all four types, two conditions and three or
   # more. statsExpressions::complete_subjects() keeps the subjects observed in every
   # condition; the fixture records the subjects-by-conditions data it analyzed
-  # (`paired_data`).
+  # (`within_data`).
   # Two conditions. R's sleep: ten subjects, a zero difference and tied differences.
   within_cases("sleep", x = "group", y = "extra", subject = "ID"),
   # Five subjects.
@@ -1358,35 +1358,37 @@ ANALYSES <- list(
 )
 
 # The subjects-by-conditions data a within-subjects case analyzed, as ggwithinstats
-# analyzed it (within_analysis()): subjects in R's order (numbers numerically, text in
-# the C locale), one value per subject and level; and the subjects that had rows (with
-# x and subject) but were removed for a missing level or value, and the number of rows
-# without x or subject.
-paired_data <- function(data, case, analysis) {
+# analyzed it (within_analysis()): `subjects` in the order ggstatsplot holds them
+# (complete_subjects() sorts by subject: numbers numerically, text in the C locale;
+# within a subject the rows follow the level order), which is the order dep.effect,
+# wmcpAKP and kendalls_w resample; `values`, one row per subject and one column per
+# level; `dropped_subjects`, the subjects with a row (x and subject present) that were
+# left out for a missing level or value; and the number of rows without x or subject.
+within_data <- function(data, case, analysis) {
   x <- case$args$x
   subject <- case$args$subject.id
   levels <- levels(analysis$x)
   subjects <- unique(analysis$.rowid)
-  values <- lapply(levels, function(level) {
+  columns <- lapply(levels, function(level) {
     rows <- analysis$x == level
-    as.list(as.numeric(analysis$y[rows][match(subjects, analysis$.rowid[rows])]))
+    as.numeric(analysis$y[rows][match(subjects, analysis$.rowid[rows])])
   })
-  names(values) <- levels
   usable <- !is.na(data[[x]]) & !is.na(data[[subject]])
   candidates <- sort(unique(data[[subject]][usable]))
   list(
-    subject_column = subject,
-    subjects = as.list(as.character(subjects)),
+    subject_id = subject,
     levels = as.list(levels),
-    values = values,
-    removed_subjects = as.list(as.character(setdiff(candidates, subjects))),
+    subjects = as.list(as.character(subjects)),
+    subject_order = paste(
+      "sorted by subject as complete_subjects() sorts (numbers numerically, text in",
+      "the C locale); the analysis holds the rows subject by subject, levels in order"
+    ),
+    values = lapply(seq_along(subjects), function(i) {
+      as.list(vapply(columns, function(column) column[[i]], numeric(1L)))
+    }),
+    dropped_subjects = as.list(as.character(setdiff(candidates, subjects))),
     rows_without_x_or_subject = sum(!usable)
   )
-}
-for (case in CASES) {
-  if (is.null(ANALYSES[[case$fun]])) {
-    stop("generate.R has no analysis bookkeeping for ", case$fun, "; add it first")
-  }
 }
 
 # Group counts from ggstatsplot's own centrality labels (`n.obs`), named by level.
@@ -1478,7 +1480,7 @@ run_case <- function(case) {
   if (case$fun == "ggwithinstats") {
     # After n_per_level (each level's count is the number of complete subjects).
     at <- match("n_per_level", names(fixture))
-    fixture <- append(fixture, list(paired_data = paired_data(data, case, analysis)), after = at)
+    fixture <- append(fixture, list(within_data = within_data(data, case, analysis)), after = at)
   }
   fixture
 }
