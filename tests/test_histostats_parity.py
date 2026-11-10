@@ -19,7 +19,14 @@ Fixtures inferplot answers differently from ggstatsplot, by name:
   factor are measurably off (D81); R's misses are pinned as the fixture holds
   them (``ONE_SAMPLE_R_MISSES``), and inferplot reports the statistics layer's
   accurate values, which tests/stats/test_one_sample.py checks against 40-digit
-  references.
+  references;
+* edge_one_constant and edge_one_constant-binwidth1 (ten values of 5), types
+  parametric, bayes and robust: inferplot raises (no standard deviation; for
+  robust a winsorized standard deviation of 0, so no interval exists). R's side
+  is pinned as the fixture holds it: for parametric and bayes t.test stops on
+  constant data and ggstatsplot prints no subtitle or caption; for robust it
+  prints t = Inf, p = 2.23e-308 and the interval [NA, NA]
+  (``test_constant_data_is_refused``). Type nonparametric is answered and matches.
 """
 
 from __future__ import annotations
@@ -44,7 +51,16 @@ from tests.tolerances import (
 )
 
 CASES = nl.HISTO
-REFUSED = sorted(n for n in nl.REFUSALS if n.startswith("gghistostats-"))
+REFUSED = sorted(
+    n
+    for n, r in nl.REFUSALS.items()
+    if n.startswith("gghistostats-") and r.replay is not None
+)
+CONSTANT = sorted(
+    n
+    for n, r in nl.REFUSALS.items()
+    if n.startswith("gghistostats-") and r.replay is None
+)
 _METHODS = {
     "one_sample_t": "One Sample t-test",
     "wilcoxon_signed_rank": "Wilcoxon signed rank test",
@@ -66,6 +82,11 @@ _CENTRALITY = {
 INFINITE_RESAMPLES = {
     "gghistostats-edge_one_small-robust": 169,
     "gghistostats-edge_one_ties-robust": 34,
+    # n = 2 and n = 3 (barstats oracle run): a resample repeating one value has a
+    # standard error of 0, about 1/2 and 1/9 of resamples (R's interval is
+    # [-Inf, Inf] too).
+    "gghistostats-edge_one_n2-robust": 967,
+    "gghistostats-edge_one_n3-robust": 215,
 }
 
 
@@ -98,19 +119,66 @@ def _close_or_r_miss(
 
 
 def test_fixture_counts() -> None:
-    assert len(CASES) == 76
+    # 76, and 16 from the barstats oracle run: edge_one_n2, edge_one_n3,
+    # edge_one_constant and edge_one_constant-binwidth1, each in four types.
+    assert len(CASES) == 92
     counts = {
         t: sum(c.type == t for c in CASES)
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
-    assert counts == {"parametric": 22, "nonparametric": 18, "robust": 18, "bayes": 18}
+    assert counts == {"parametric": 26, "nonparametric": 22, "robust": 22, "bayes": 22}
     assert REFUSED == [
         "gghistostats-ToothGrowth-greater-bayes",
         "gghistostats-ToothGrowth-greater-robust",
     ]
+    assert (
+        sorted(
+            f"gghistostats-edge_one_constant{width}-{t}"
+            for width in ("-binwidth1", "")
+            for t in ("bayes", "parametric", "robust")
+        )
+        == CONSTANT
+    )
     assert not [c.name for c in CASES if c.error is not None]
-    # Every answered case on three backends: 74 + 2 replays, times 3.
-    assert len(nl.params(CASES)) == 76 * 3
+    # Every answered case on three backends: 84 + 2 replays, times 3 (the 6
+    # constant-data refusals have no replay).
+    assert len(nl.params(CASES)) == 86 * 3
+
+
+@pytest.mark.parametrize("name", CONSTANT)
+@pytest.mark.parametrize("backend", nl.BACKENDS)
+def test_constant_data_is_refused(name: str, backend: nl.Backend) -> None:
+    case = nl.BY_NAME[name]
+    refusal = nl.REFUSALS[name]
+    with pytest.raises(refusal.error) as info:
+        nl.analyze(case, nl.frame_of(case, backend))
+    assert str(info.value) == refusal.match
+    assert nl.analyzed(name, backend) is None
+    # The remedy works: type nonparametric answers the same data (and matches R:
+    # edge_one_constant-nonparametric, V = 55, r = 1 [1, 1]).
+    answered = nl.analyze(case, nl.frame_of(case, backend), type="nonparametric")
+    assert answered.test is not None
+    assert answered.test.statistic == 55.0
+    assert case.analyzed_values("x") == [5] * 10
+    if case.type in ("parametric", "bayes"):
+        # R's side: t.test stops ("data are essentially constant"); ggstatsplot
+        # swallows it and prints no subtitle (nor, for parametric, a caption).
+        hidden = ("subtitle", "caption") if case.type == "parametric" else ("subtitle",)
+        assert case.expected_hidden_errors == hidden
+        assert (case.subtitle, case.caption, case.subtitle_rows) == (None, None, [])
+        errors = {s["component"]: s["error"] for s in case.suppressed}
+        for component in hidden:
+            assert errors[component] == "data are essentially constant"
+        return
+    # Type robust, R's side: t = Inf, p = 2.23e-308 (the smallest normal double
+    # for a p of 0) and the interval [NA, NA] around the trimmed mean 5.
+    row = case.subtitle_data
+    assert row["statistic"] == "Inf"
+    assert number(row["p.value"]) == 2.2250738585072e-308
+    assert number(row["estimate"]) == 5.0
+    assert (row["conf.low"], row["conf.high"]) == (None, None)
+    assert case.raw["expected_na_values"] == ["subtitle"]
+    assert '"[" * "NA", "NA" * "]"' in str(case.subtitle)
 
 
 @pytest.mark.parametrize("name", REFUSED)
@@ -350,6 +418,8 @@ def test_tv100_reports_the_accurate_values(name: str) -> None:
 
 def test_results_do_not_depend_on_the_backend() -> None:
     for case in CASES:
+        if case.name in CONSTANT:  # refused on every backend (above)
+            continue
         results = {
             backend: nl.analyzed(case.name, backend) for backend in nl.backends(case)
         }
@@ -379,6 +449,23 @@ def test_infinite_bootstrap_resamples_are_reported() -> None:
     assert back.check() == result.check()
 
 
+@pytest.mark.parametrize("backend", nl.BACKENDS)
+def test_two_values_give_hedges_g_of_zero_with_a_warning(backend: nl.Backend) -> None:
+    # edge_one_n2 (3.1 and 4.7 against 3): the small-sample correction J(1) is 0,
+    # so g and both bounds are 0, as R prints them ("0.00 [0.00, 0.00]").
+    case = nl.BY_NAME["gghistostats-edge_one_n2-parametric"]
+    result = _result(case.name, backend)
+    es = result.effect_size
+    assert es is not None
+    assert (es.estimate, es.conf_low, es.conf_high) == (0.0, 0.0, 0.0)
+    row = case.subtitle_data
+    assert (row["estimate"], row["conf.low"], row["conf.high"]) == (0, 0, 0)
+    assert result.warnings[0].startswith(
+        "Hedges' g is 0 by construction with 2 values: its small-sample correction "
+        "J(n - 1) is 0 at 1 degree of freedom"
+    )
+
+
 def test_seed_reaches_the_bootstrap_only() -> None:
     case = nl.BY_NAME["gghistostats-ToothGrowth-robust"]
     frame = nl.frame_of(case)
@@ -396,9 +483,10 @@ def test_seed_reaches_the_bootstrap_only() -> None:
 
 
 def test_every_fixture_is_answered_or_refused_by_name() -> None:
-    # The two one-sided refusals are answered by their replay; nothing is skipped.
+    # The two one-sided refusals are answered by their replay, the six constant-data
+    # refusals are tested above; nothing is skipped.
     answered = {p.values[0] for p in nl.params(CASES)}
-    assert answered == {c.name for c in CASES}
+    assert answered == {c.name for c in CASES} - set(CONSTANT)
     with pytest.raises(ValueError, match="alternative='greater' applies to"):
         ip.analyze.histostats(
             nl.frame_of(nl.BY_NAME[REFUSED[0]]),

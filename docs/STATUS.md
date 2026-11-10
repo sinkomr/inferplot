@@ -310,7 +310,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   bootstrap-t bounds and p 2.3 and 2.6 of 4 Monte Carlo SDs. Lead's check: 60 random
   frames on three backends against SciPy, 1e-14. To do: the figures (in progress),
   then the final texts (the new test names need text templates), image baselines
-- [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
+- [x] oracle for barstats: fixtures from attested run 42878070705 (generator at
+  347c23a): 90 barstats cases (85 ggbarstats, 5 ggpiestats one-way cross-checks), a
+  new probe (probe-contingency), and 25 edge cases for the existing functions (16
+  gghistostats: n = 2, n = 3, constant data; 9 ggscatterstats: n = 3, n = 4, a missing
+  label); 583 cases and 19 probes. Earlier fixtures byte-identical except a moved
+  lme4 message and one v0.2 posterior (8.1e-14). Every chi-square, McNemar-Bowker,
+  goodness-of-fit and Fisher p, Cramér's V, Pearson's C and Cohen's g is reproduced
+  independently, except 9 interval bounds where R's root search stops short (pinned;
+  D99, owner to confirm). SPEC §4 barstats rewritten (D98 to D101). Merged (30e177a):
+  of the 25 edge cases 16 match on three backends (n = 2 and 3 one-sample, constant
+  data nonparametric, 3 pairs bayes, 4 pairs, a missing label) and 9 are refused with
+  R's side pinned (constant data parametric, bayes and robust; 3 pairs parametric,
+  nonparametric, robust; D102, D103). Constant-data histograms draw one 0.1-wide bin
+  (D89 amended). Open: two n = 2 subtitle ties pinned (t 1.13 and 0.68 in R, 1.12
+  and 0.67 in inferplot; the robust one is being fixed)
+- [ ] barstats: foundation and statistics in progress; then analyses, texts, figure
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
@@ -334,7 +349,10 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   backends, 717 results' texts re-derived, about 200 figures measured, 60 saved files,
   49 comparisons of the three forms: sound. Findings, being fixed on
   `fix/phase4-review-visible`:
-  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures): with the
+  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures; the cause is
+    fixed on main since 30e177a: 6.4 in for body temperatures, heights, negative data
+    and Unix timestamps; the layout-bounds tests and the figure-size check are still
+    to come with the fix branch): with the
     test value far outside the bars (the default 0 for data away from zero) the
     histogram's own figure is sized to reach the test value: 100 in wide for body
     temperatures, 25 in for heights, a FreeType crash for Unix timestamps; 118 of 300
@@ -354,7 +372,42 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     FreeType; the test value label prints 15 digits; two messages for too small a bin
     width; layers made invisible by colour not noticed; whitespace-only labels count
     as labels; alt text names layers the caller made invisible; wording slips.
-  Statistics half: in progress.
+  Statistics half done (2026-11-10; scripts in `reviewP4A/`): 260 one-sample and 260
+  pair data sets agree with independent computations on every stored field (worst
+  2e-14; Hedges' g bounds 8e-12); 1 - r^2 exact on 300 of 300 data sets; Bayes factors
+  against 30-digit integration on 432 and 720 settings (worst 1.5e-15 and 8.8e-14);
+  the bootstrap-t against exact enumeration of all resamples; 75 of 82 planted bugs
+  caught; the evidence of D81 and D85 to D88 true as stated. Findings, being fixed on
+  `fix/phase4-review-stats`:
+  - [ ] Z1 (high; reproduced by the lead): the robust one-sample result changes when
+    the same data are written in tenths: 15 ratings against 2.5 give p = .117, CI
+    [2.35, 3.65]; divided by 10, or shifted by 0.1, p = .227, CI [-Inf, Inf]. The 250
+    resamples whose winsorized values all equal the trimmed mean are 0/0 for whole
+    numbers and "infinite" for tenths, because the 0/0 decision is exact on the
+    doubles and the trimmed mean of 0.2, 0.3, 0.4 is not the double 0.3. About 15% of
+    5-point rating data sets at n = 10. D74's rule (equal as written is equal) was
+    not applied there. The same defect exists in betweenstats' robust type (lead: 16
+    of 40 rating data sets in tenths count the resamples differently; an upper bound
+    of 1.20 becomes 1.24): the Phase 3 fix (W1) was incomplete.
+  - [ ] Z2: columns that are collinear as written but hold decimals (Fahrenheit
+    against Celsius) print t = 7e15 and BF10 = 1e228 without a warning; D85's exact
+    result and warning apply only to data a double holds exactly.
+  - [ ] Z3: `type="bayes"` raises a bare ZeroDivisionError when one value is 1e50
+    times the others (the MAP bandwidth; also in betweenstats).
+  - [ ] Z4: the regression band overflows at y of order 1e155 and silently has zero
+    width at 1e-162.
+  - [ ] Z5: seven planted bugs no test notices (the bootstrap p's denominator and
+    its ties with |t|; r exactly 0; the Fisher interval from the exact 1 - r^2; the
+    histogram's fuzz at breaks; a stats-level refusal; the 0/0 decision).
+  - [ ] Z6 (low, six items): unit, shift and negation change the bootstrap draw on
+    discrete data within Monte Carlo noise although SPEC says they do not; raw
+    OverflowError and ValueError at extreme inputs; the "one number as written"
+    refusal advises a test that then ranks the rounding; p equal to alpha with an
+    interval that excludes the test value (R's rule; document); stale statements in
+    tolerances.py and D87, D88; a stats-level message.
+  - For the owner (W9, D88): the same tenths written as k/10 or computed as k x 0.1
+    give a different signed-rank V in 254 of 300 random data sets (p crosses 0.05 in
+    13; largest change V 8.5, p .89 against V 39, p .26). R behaves the same way.
 - [x] histostats, all types: reference data, statistics, analysis, texts, figure
 - [x] scatterstats, all types (line, band, marginals): the same
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)

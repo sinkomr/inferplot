@@ -65,8 +65,15 @@ def test_unknown_argument_fails_loudly() -> None:
 
 
 def test_unknown_function_fails_loudly() -> None:
-    with pytest.raises(KeyError, match="ggpiestats"):
-        translate("ggpiestats", {"x": "a"})
+    with pytest.raises(KeyError, match="ggdotplotstats"):
+        translate("ggdotplotstats", {"x": "a", "y": "b"})
+
+
+def test_piestats_is_barstats() -> None:
+    # The oracle records one-way cases from ggpiestats too; they are barstats calls.
+    call = translate("ggpiestats", {"x": "cyl", "type": "parametric"})
+    assert call.function == "barstats"
+    assert call.args == ("cyl",)
 
 
 def test_keywords_are_r_names_with_dots_as_underscores() -> None:

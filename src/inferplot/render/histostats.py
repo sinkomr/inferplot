@@ -440,6 +440,7 @@ class _HistDrawing(base.BaseDrawing):
             parse_math=False,
             zorder=6.0,
             gid="test-value-label",
+            # Placed in its strip below (put_label), before any layout.
             transform=ax.transAxes,
         )
         self.role(text, "test value label")

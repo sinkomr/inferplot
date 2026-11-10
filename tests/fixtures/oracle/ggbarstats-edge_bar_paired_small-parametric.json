@@ -1,0 +1,658 @@
+{
+  "schema_version": 2,
+  "name": "ggbarstats-edge_bar_paired_small-parametric",
+  "function": "ggbarstats",
+  "call": "ggstatsplot::ggbarstats(data = data, x = before, y = after, type = \"parametric\", paired = TRUE)",
+  "dataset": {
+    "file": "edge_bar_paired_small.csv",
+    "sha256": "65c1cb43a7b21b0450332e5c3da405acdf3f4f654f23763eaf8581f0f46c8890",
+    "rows": 10,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "before",
+    "y": "after",
+    "type": "parametric",
+    "paired": true
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "no",
+    "yes"
+  ],
+  "n_per_level": {
+    "no": 5,
+    "yes": 5
+  },
+  "contingency_data": {
+    "x": "before",
+    "y": "after",
+    "counts": null,
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "rows_dropped": 0,
+    "rule": "rows with x, y and counts present (tidyr::drop_na), each repeated counts times (tidyr::uncount), every column as.factor()",
+    "error": null,
+    "x_levels": [
+      "no",
+      "yes"
+    ],
+    "y_levels": [
+      "no",
+      "yes"
+    ],
+    "table": [
+      [
+        5,
+        0
+      ],
+      [
+        1,
+        4
+      ]
+    ],
+    "n": 10
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [
+        "Chi-squared approximation may be incorrect"
+      ],
+      "messages": []
+    },
+    {
+      "component": "proportion_test",
+      "error": null,
+      "warnings": [
+        "Chi-squared approximation may be incorrect"
+      ],
+      "messages": [],
+      "level": "no"
+    },
+    {
+      "component": "proportion_test",
+      "error": null,
+      "warnings": [
+        "Chi-squared approximation may be incorrect"
+      ],
+      "messages": [],
+      "level": "yes"
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_na_values": [],
+  "expected_null_outputs": [],
+  "subtitle": "list(chi[\"McNemar\"]^2 * \"(\" * 1 * \")\" == \"1.00\", italic(p) == \"0.32\", widehat(italic(\"g\"))[\"Cohen\"] == \"0.50\", CI[\"95%\"] ~ \"[\" * \"-0.29\", \"0.50\" * \"]\", italic(\"n\")[\"pairs\"] == \"10\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 1,
+        "df": 1,
+        "p.value": 0.317310507862914,
+        "method": "McNemar's Chi-squared test",
+        "effectsize": "Cohen's g",
+        "estimate": 0.5,
+        "conf.level": 0.95,
+        "conf.low": -0.293450685622762,
+        "conf.high": 0.5,
+        "conf.method": "binomial",
+        "n.obs": 10,
+        "expression": "list(chi[\"McNemar\"]^2 * \"(\" * 1 * \")\" == \"1.00\", italic(p) == \"0.32\", widehat(italic(\"g\"))[\"Cohen\"] == \"0.50\", CI[\"95%\"] ~ \"[\" * \"-0.29\", \"0.50\" * \"]\", italic(\"n\")[\"pairs\"] == \"10\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": [
+      {
+        "after": "no",
+        "before": "no",
+        "counts": 5,
+        "perc": 83.3333333333333,
+        ".label": "83%"
+      },
+      {
+        "after": "no",
+        "before": "yes",
+        "counts": 1,
+        "perc": 16.6666666666667,
+        ".label": "17%"
+      },
+      {
+        "after": "yes",
+        "before": "no",
+        "counts": 0,
+        "perc": 0,
+        ".label": null
+      },
+      {
+        "after": "yes",
+        "before": "yes",
+        "counts": 4,
+        "perc": 100,
+        ".label": "100%"
+      }
+    ],
+    "one_sample_data": [
+      {
+        "after": "yes",
+        "counts": 4,
+        "perc": 40,
+        "N": "(n = 4)",
+        "statistic": 4,
+        "df": 1,
+        "p.value": 0.0455002638963585,
+        "method": "Chi-squared test for given probabilities",
+        "effectsize": "Pearson's C",
+        "estimate": 0.707106781186547,
+        "conf.level": 0.95,
+        "conf.low": 0,
+        "conf.high": 0.892604325331052,
+        "conf.method": "ncp",
+        "conf.distribution": "chisq",
+        "n.obs": 4,
+        "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"4.00\", italic(p) == \"0.05\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.71\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.89\" * \"]\", italic(\"n\")[\"obs\"] == \"4\")",
+        ".label": "list(~chi['gof']^2~(1)==4.00, ~italic(p)=='0.05', ~italic(n)=='4')",
+        ".p.label": "list(~italic(p)=='0.05')"
+      },
+      {
+        "after": "no",
+        "counts": 6,
+        "perc": 60,
+        "N": "(n = 6)",
+        "statistic": 2.66666666666667,
+        "df": 1,
+        "p.value": 0.102470434859749,
+        "method": "Chi-squared test for given probabilities",
+        "effectsize": "Pearson's C",
+        "estimate": 0.554700196225229,
+        "conf.level": 0.95,
+        "conf.low": 0,
+        "conf.high": 0.826254403179509,
+        "conf.method": "ncp",
+        "conf.distribution": "chisq",
+        "n.obs": 6,
+        "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"2.67\", italic(p) == \"0.10\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.55\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.83\" * \"]\", italic(\"n\")[\"obs\"] == \"6\")",
+        ".label": "list(~chi['gof']^2~(1)==2.67, ~italic(p)=='0.10', ~italic(n)=='6')",
+        ".p.label": "list(~italic(p)=='0.10')"
+      }
+    ],
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_col",
+      "geom": "GeomCol",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "just": 0.5,
+          "lineend": "butt",
+          "linejoin": "mitre"
+        },
+        "aes": {
+          "colour": "black"
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": 1,
+          "fill": "#4285F4FF",
+          "PANEL": "1",
+          "group": 1,
+          "flipped_aes": false,
+          "ymin": 0.166666666666667,
+          "ymax": 1,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.166666666666667,
+          "fill": "#EA4335FF",
+          "PANEL": "1",
+          "group": 2,
+          "flipped_aes": false,
+          "ymin": 0,
+          "ymax": 0.166666666666667,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "fill": "#4285F4FF",
+          "PANEL": "1",
+          "group": 3,
+          "flipped_aes": false,
+          "ymin": 1,
+          "ymax": 1,
+          "xmin": 1.55,
+          "xmax": 2.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "fill": "#EA4335FF",
+          "PANEL": "1",
+          "group": 4,
+          "flipped_aes": false,
+          "ymin": 0,
+          "ymax": 1,
+          "xmin": 1.55,
+          "xmax": 2.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_label",
+      "geom": "GeomLabel",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true
+        },
+        "geom": {
+          "parse": false,
+          "label.padding": 0.25,
+          "label.r": 0.15,
+          "size.unit": "mm",
+          "border.colour": null,
+          "text.colour": null,
+          "na.rm": true
+        },
+        "aes": {
+          "alpha": 1,
+          "fill": "white"
+        }
+      },
+      "built": [
+        {
+          "label": "83%",
+          "group": 1,
+          "x": 1,
+          "y": 0.583333333333333,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.166666666666667,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "17%",
+          "group": 2,
+          "x": 1,
+          "y": 0.0833333333333333,
+          "PANEL": "1",
+          "ymax": 0.166666666666667,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": null,
+          "group": 1,
+          "x": 2,
+          "y": 1,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 2,
+          "xmax": 2,
+          "ymin": 1,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "100%",
+          "group": 2,
+          "x": 2,
+          "y": 0.5,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 2,
+          "xmax": 2,
+          "ymin": 0,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        }
+      ]
+    },
+    {
+      "name": "geom_text",
+      "geom": "GeomText",
+      "data": [
+        {
+          "after": "yes",
+          "counts": 4,
+          "perc": 40,
+          "N": "(n = 4)",
+          "statistic": 4,
+          "df": 1,
+          "p.value": 0.0455002638963585,
+          "method": "Chi-squared test for given probabilities",
+          "effectsize": "Pearson's C",
+          "estimate": 0.707106781186547,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.892604325331052,
+          "conf.method": "ncp",
+          "conf.distribution": "chisq",
+          "n.obs": 4,
+          "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"4.00\", italic(p) == \"0.05\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.71\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.89\" * \"]\", italic(\"n\")[\"obs\"] == \"4\")",
+          ".label": "list(~chi['gof']^2~(1)==4.00, ~italic(p)=='0.05', ~italic(n)=='4')",
+          ".p.label": "list(~italic(p)=='0.05')"
+        },
+        {
+          "after": "no",
+          "counts": 6,
+          "perc": 60,
+          "N": "(n = 6)",
+          "statistic": 2.66666666666667,
+          "df": 1,
+          "p.value": 0.102470434859749,
+          "method": "Chi-squared test for given probabilities",
+          "effectsize": "Pearson's C",
+          "estimate": 0.554700196225229,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.826254403179509,
+          "conf.method": "ncp",
+          "conf.distribution": "chisq",
+          "n.obs": 6,
+          "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"2.67\", italic(p) == \"0.10\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.55\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.83\" * \"]\", italic(\"n\")[\"obs\"] == \"6\")",
+          ".label": "list(~chi['gof']^2~(1)==2.67, ~italic(p)=='0.10', ~italic(n)=='6')",
+          ".p.label": "list(~italic(p)=='0.10')"
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "parse": true,
+          "check_overlap": false,
+          "size.unit": "mm"
+        },
+        "aes": {
+          "size": 2.8
+        }
+      },
+      "built": [
+        {
+          "x": 2,
+          "y": 1.05,
+          "label": "list(~italic(p)=='0.05')",
+          "PANEL": "1",
+          "group": 2,
+          "nudge_x": 0,
+          "nudge_y": 0,
+          "colour": "black",
+          "family": "",
+          "size": 2.8,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2
+        },
+        {
+          "x": 1,
+          "y": 1.05,
+          "label": "list(~italic(p)=='0.10')",
+          "PANEL": "1",
+          "group": 1,
+          "nudge_x": 0,
+          "nudge_y": 0,
+          "colour": "black",
+          "family": "",
+          "size": 2.8,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2
+        }
+      ]
+    },
+    {
+      "name": "geom_text...4",
+      "geom": "GeomText",
+      "data": [
+        {
+          "after": "yes",
+          "counts": 4,
+          "perc": 40,
+          "N": "(n = 4)",
+          "statistic": 4,
+          "df": 1,
+          "p.value": 0.0455002638963585,
+          "method": "Chi-squared test for given probabilities",
+          "effectsize": "Pearson's C",
+          "estimate": 0.707106781186547,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.892604325331052,
+          "conf.method": "ncp",
+          "conf.distribution": "chisq",
+          "n.obs": 4,
+          "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"4.00\", italic(p) == \"0.05\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.71\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.89\" * \"]\", italic(\"n\")[\"obs\"] == \"4\")",
+          ".label": "list(~chi['gof']^2~(1)==4.00, ~italic(p)=='0.05', ~italic(n)=='4')",
+          ".p.label": "list(~italic(p)=='0.05')"
+        },
+        {
+          "after": "no",
+          "counts": 6,
+          "perc": 60,
+          "N": "(n = 6)",
+          "statistic": 2.66666666666667,
+          "df": 1,
+          "p.value": 0.102470434859749,
+          "method": "Chi-squared test for given probabilities",
+          "effectsize": "Pearson's C",
+          "estimate": 0.554700196225229,
+          "conf.level": 0.95,
+          "conf.low": 0,
+          "conf.high": 0.826254403179509,
+          "conf.method": "ncp",
+          "conf.distribution": "chisq",
+          "n.obs": 6,
+          "expression": "list(chi[\"gof\"]^2 * \"(\" * 1 * \")\" == \"2.67\", italic(p) == \"0.10\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.55\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.83\" * \"]\", italic(\"n\")[\"obs\"] == \"6\")",
+          ".label": "list(~chi['gof']^2~(1)==2.67, ~italic(p)=='0.10', ~italic(n)=='6')",
+          ".p.label": "list(~italic(p)=='0.10')"
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "parse": false,
+          "check_overlap": false,
+          "size.unit": "mm"
+        },
+        "aes": {
+          "size": 4
+        }
+      },
+      "built": [
+        {
+          "x": 2,
+          "y": -0.05,
+          "label": "(n = 4)",
+          "PANEL": "1",
+          "group": 2,
+          "nudge_x": 0,
+          "nudge_y": 0,
+          "colour": "black",
+          "family": "",
+          "size": 4,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2
+        },
+        {
+          "x": 1,
+          "y": -0.05,
+          "label": "(n = 6)",
+          "PANEL": "1",
+          "group": 1,
+          "nudge_x": 0,
+          "nudge_y": 0,
+          "colour": "black",
+          "family": "",
+          "size": 4,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2
+        }
+      ]
+    }
+  ],
+  "plot_texts": {
+    "labels": {
+      "fill": "before",
+      "x.sec": null,
+      "x": "after",
+      "y": null,
+      "y.sec": null,
+      "title": null,
+      "subtitle": "list(chi[\"McNemar\"]^2 * \"(\" * 1 * \")\" == \"1.00\", italic(p) == \"0.32\", widehat(italic(\"g\"))[\"Cohen\"] == \"0.50\", CI[\"95%\"] ~ \"[\" * \"-0.29\", \"0.50\" * \"]\", italic(\"n\")[\"pairs\"] == \"10\")",
+      "caption": null,
+      "label": ".label",
+      "group": "before",
+      "alt": ""
+    },
+    "legend_title": "before"
+  },
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

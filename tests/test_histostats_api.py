@@ -510,7 +510,13 @@ GROUP_WORDS = re.compile(r"\b(groups?|levels?|conditions?|pairs?|subjects?)\b", 
 @pytest.mark.parametrize("case", oracle_params("gghistostats"))
 def test_result_contract_of_each_fixture(case: OracleCase) -> None:
     result = nl.analyzed(case.name)
-    assert result is not None  # the two refusals are answered by their replay
+    if result is None:
+        # Constant data with types parametric, bayes and robust (edge_one_constant,
+        # barstats oracle run): refused (tests/test_histostats_parity.py). The two
+        # one-sided refusals are answered by their replay.
+        assert nl.REFUSALS[case.name].replay is None
+        assert "edge_one_constant" in case.name
+        return
     n = case.analyzed_data["n"]
     assert (result.analysis, result.design) == ("histostats", "one-sample")
     assert (result.x, result.y, result.levels) == (case.args["x"], None, ())

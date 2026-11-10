@@ -34,7 +34,7 @@ from inferplot.render.histostats import MAX_BARS, TEST_VALUE_REACH
 from inferplot.result import StatsResult
 from inferplot.stats import histogram_bins
 from inferplot.text import figure_alt_text, figure_texts, r_number_text
-from tests.no_level_cases import analyzed
+from tests.no_level_cases import REFUSALS, analyzed
 from tests.oracle_args import split
 from tests.oracle_fixtures import OracleCase, cases_for, number, require_cases
 from tests.render._helpers import by_gid, gids, numbered_count, numbered_texts, text_of
@@ -117,7 +117,18 @@ def message(error: type[Exception], call: Any) -> str:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("name", [pytest.param(c.name, id=c.name) for c in CASES])
+def drawn_cases() -> list[Any]:
+    """The fixtures inferplot analyzes: all but constant data with types
+    parametric, bayes and robust, which it refuses (``REFUSALS``; edge_one_constant
+    of the barstats oracle run). Their nonparametric cases are drawn: one bar."""
+    return [
+        pytest.param(c.name, id=c.name)
+        for c in CASES
+        if not (c.name in REFUSALS and REFUSALS[c.name].replay is None)
+    ]
+
+
+@pytest.mark.parametrize("name", drawn_cases())
 def test_fixture_figure(name: str) -> None:
     case = BY_NAME[name]
     fig = figure(name)
@@ -198,7 +209,10 @@ def test_fixture_figure(name: str) -> None:
 
 
 def test_fixtures_include_both_test_value_marks() -> None:
-    marks = {by_gid(figure(c.name), "test-value-line") is None for c in CASES}
+    names = [p.values[0] for p in drawn_cases()]
+    # 76, and 10 of the 16 from the barstats oracle run (the 6 refused not drawn).
+    assert len(names) == 86
+    marks = {by_gid(figure(n), "test-value-line") is None for n in names}
     assert marks == {True, False}
 
 
@@ -229,12 +243,48 @@ def test_too_many_bars_are_refused_before_drawing() -> None:
     assert not ax.texts
 
 
-def test_constant_column_needs_a_binwidth() -> None:
+def test_constant_column_draws_one_bar() -> None:
+    # ggstatsplot's default for zero-range data: one bar 0.1 wide centred on the
+    # value (edge_one_constant); a given binwidth sets its width.
     result = hist_result(pd.DataFrame({"v": [3.0] * 6}), "v")
-    text = message(ValueError, lambda: ip.render.histostats(result))
-    assert "binwidth=" in text
-    fig = ip.render.histostats(result, binwidth=0.5)
-    assert [b.get_height() for b in bars(fig)] == [6.0]
+    fig = ip.render.histostats(result)
+    (bar,) = bars(fig)
+    assert bar.get_height() == 6.0
+    assert math.isclose(bar.get_x(), 2.95, rel_tol=1e-13)
+    assert math.isclose(bar.get_width(), 0.1, rel_tol=1e-12)
+    assert figure_codes(fig) == [], fig.check()
+    wide = ip.render.histostats(result, binwidth=0.5)
+    (bar,) = bars(wide)
+    assert (bar.get_height(), bar.get_x(), bar.get_width()) == (6.0, 2.75, 0.5)
+
+
+def test_an_arrow_label_does_not_widen_the_figure() -> None:
+    # The "← test value" label once started at data x = 0 and the own figure grew
+    # to reach it: ten values of 5 against 3 (edge_one_constant, a view 0.2 wide)
+    # drew a figure 239 inches wide, mtcars mpg against 0 one 7.7 inches wide.
+    sizes = [
+        figure(name).figure.get_size_inches().tolist()
+        for name in (
+            "gghistostats-ToothGrowth-parametric",
+            "gghistostats-edge_one_constant-nonparametric",
+            "gghistostats-edge_one_constant-binwidth1-nonparametric",
+            "gghistostats-mtcars-parametric",
+        )
+    ]
+    widths = [w for w, _ in sizes]
+    assert max(widths) - min(widths) < 0.3, sizes
+    for shift in (0.0, 1e4):
+        values = [v + shift for v in (1.0, 2.0, 2.5, 3.0, 4.0, 2.2)]
+        result = ip.analyze.histostats(
+            pd.DataFrame({"v": values}), "v", test_value=shift - 50
+        )
+        fig = ip.render.histostats(result)
+        assert (
+            text_of(fig, "test-value-label")
+            == f"← test value {r_number_text(shift - 50)}"
+        )
+        assert fig.figure.get_size_inches()[0] < 7.0
+        assert figure_codes(fig) == []
 
 
 def test_a_missing_map_draws_no_centrality_line() -> None:

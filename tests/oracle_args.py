@@ -30,6 +30,10 @@ FUNCTIONS: Mapping[str, str] = MappingProxyType(
         "gghistostats": "histostats",
         "ggscatterstats": "scatterstats",
         "ggbarstats": "barstats",
+        # ggpiestats computes the same statistics as ggbarstats (both call
+        # statsExpressions::contingency_table()); the oracle records its one-way
+        # cases next to ggbarstats' as a check that they agree.
+        "ggpiestats": "barstats",
     }
 )
 
@@ -41,6 +45,7 @@ POSITIONAL: Mapping[str, tuple[str, ...]] = MappingProxyType(
         "gghistostats": ("x",),
         "ggscatterstats": ("x", "y"),
         "ggbarstats": ("x", "y"),
+        "ggpiestats": ("x", "y"),
     }
 )
 
