@@ -8,7 +8,6 @@ problems were found.
 from __future__ import annotations
 
 import math
-from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
@@ -103,11 +102,16 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
 
 
 def _pairs_hidden(result: StatsResult) -> Issue | None:
+    """Pairs computed but not drawn. Not for ``pairwise_display="none"``: that is
+    never a default (the default is "significant"), so the setting itself says the
+    caller asked for no brackets."""
+    display = result.settings.pairwise_display
+    if display == "none":
+        return None
     hidden = [pair for pair in result.pairwise if not pair.displayed]
     if not hidden:
         return None
     total = len(result.pairwise)
-    display = result.settings.pairwise_display
     verb = "is" if len(hidden) == 1 else "are"
     return Issue(
         code="pairs_hidden",
@@ -125,21 +129,25 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
     ``HEAVY_TIES`` of the values are ties: values beyond the first of each
     distinct value, n minus the number of distinct values (DECISIONS.md D47).
 
-    Read from ``result.values``; a result read back without its observations
-    (``to_json(include_values=False)``) cannot be checked for ties.
+    Read from ``result.n_tied``, stored at analysis time, so the copy without
+    observations (``to_json(include_values=False)``) gives the same answer. The
+    total is the sum of the levels' n (within designs: complete subjects times
+    levels). Every level's values are pooled, also in within designs, where the
+    signed-rank and Friedman tests rank differences or within-subject values
+    instead.
     """
-    if result.type != "nonparametric" or not result.values:
+    if result.type != "nonparametric":
         return None
-    counts = Counter(v for level in result.values for v in level)
-    total = sum(counts.values())
-    tied = total - len(counts)
+    total = sum(d.n for d in result.descriptives)
+    tied = result.n_tied
+    distinct = total - tied
     if total == 0 or tied / total <= HEAVY_TIES:
         return None
     return Issue(
         code="heavy_ties",
         severity="warning",
         message=(
-            f"{result.y!r} has only {len(counts)} distinct values among {total}, so "
+            f"{result.y!r} has only {distinct} distinct values among {total}, so "
             f"{tied} of them ({tied / total:.0%}) are ties. "
             "The rank tests correct for ties, but with this many their normal "
             "approximations are coarse and the ranks carry less information."

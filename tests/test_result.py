@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.metadata
+import inspect
 import json
 import math
 import re
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import pytest
 
+import inferplot as ip
 from inferplot import text as tx
 from inferplot.check import SMALL_N, Issue, result_issues
 from inferplot.result import (
@@ -25,7 +28,7 @@ from inferplot.result import (
     current_provenance,
     tied_count,
 )
-from tests.oracle_fixtures import OracleCase, load_cases
+from tests.oracle_fixtures import DATASET_DIR, OracleCase, load_cases
 from tests.test_text_expressions import result_from_fixture
 
 
@@ -462,6 +465,83 @@ def test_check_pairs_hidden(anova: StatsResult) -> None:
     assert "pairwise_display='all'" in issues[0].fix
     shown = tuple(dataclasses.replace(p, displayed=True) for p in anova.pairwise)
     assert dataclasses.replace(anova, pairwise=shown).check() == ()
+
+
+def test_check_pairs_hidden_not_for_an_explicit_none(anova: StatsResult) -> None:
+    # pairwise_display="none" is never a default (the default is "significant"),
+    # so the setting itself says the caller asked for no brackets (U11).
+    settings = dataclasses.replace(anova.settings, pairwise_display="none")
+    asked = dataclasses.replace(anova, settings=settings)
+    assert all(not p.displayed for p in asked.pairwise)
+    assert asked.check() == ()
+    assert StatsResult.from_json(asked.to_json(include_values=False)).check() == ()
+
+
+def _check_cases() -> list[Any]:
+    rng = np.random.default_rng(11)
+    likert = pd.DataFrame(
+        {"g": np.repeat(["a", "b", "c"], 30), "y": rng.integers(1, 6, 90) * 1.0}
+    )
+    sparse = pd.DataFrame(
+        {"g": np.repeat(["a", "b"], 4), "y": [1.0, 2, 2, np.nan, 3, 3, 3, 4]}
+    )
+    plants = pd.read_csv(DATASET_DIR / "PlantGrowth.csv")
+    bugs = pd.read_csv(DATASET_DIR / "bugs_long.csv")
+    between = ip.analyze.betweenstats
+    within = ip.analyze.withinstats
+    return [
+        pytest.param(lambda: between(likert, "g", "y", type="np"), id="likert-np"),
+        pytest.param(
+            lambda: between(likert[likert.g != "c"], "g", "y", type="np"),
+            id="likert2-np",
+        ),
+        pytest.param(lambda: between(likert, "g", "y", type="r"), id="likert-robust"),
+        pytest.param(lambda: between(sparse, "g", "y", type="np"), id="small-ties-np"),
+        pytest.param(lambda: between(plants, "group", "weight"), id="plants"),
+        pytest.param(
+            lambda: between(plants, "group", "weight", pairwise_display="none"),
+            id="plants-none",
+        ),
+        pytest.param(
+            lambda: within(bugs, "condition", "desire", subject_id="subject"),
+            id="bugs-within",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("make", _check_cases())
+def test_check_is_the_same_without_values(make: Any) -> None:
+    """The copy save() embeds (no observations) reports the same issues (U11)."""
+    result: StatsResult = make()
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.values == ()
+    assert embedded.check() == result.check()
+
+
+def test_heavy_ties_reads_the_stored_count() -> None:
+    likert = pd.DataFrame(
+        {"g": np.repeat(["a", "b"], 30), "y": np.tile([1.0, 2, 3, 4, 5], 12)}
+    )
+    result = ip.analyze.betweenstats(likert, "g", "y", type="np")
+    assert result.n_tied == 60 - 5 == tied_count(result.values)
+    (issue,) = [i for i in result.check() if i.code == "heavy_ties"]
+    assert "only 5 distinct values among 60, so 55 of them (92%) are ties" in (
+        issue.message
+    )
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.n_tied == 55
+    assert "heavy_ties" in _codes(embedded.check())
+    # The count, not the values, decides.
+    untied = dataclasses.replace(result, n_tied=0)
+    assert "heavy_ties" not in _codes(untied.check())
+
+
+def test_no_check_reads_the_observations() -> None:
+    import inferplot.check
+
+    source = inspect.getsource(inferplot.check)
+    assert "result.values" not in source
+    assert "result.subjects" not in source
 
 
 def test_issue_is_frozen_and_prints() -> None:

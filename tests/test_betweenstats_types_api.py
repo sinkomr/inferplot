@@ -724,7 +724,8 @@ def test_bayes_alt_text_without_brackets(plants: pd.DataFrame) -> None:
     assert hidden.text.alt_text.endswith(
         "; no brackets are drawn (pairwise_display='none')."
     )
-    assert "pairs_hidden" in _codes(hidden)
+    # pairwise_display="none" was asked for: nothing to report (U11).
+    assert "pairs_hidden" not in _codes(hidden)
 
 
 def test_bayes_alt_text_shortens_long_levels() -> None:

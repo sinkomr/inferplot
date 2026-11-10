@@ -601,7 +601,7 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
     case's dataset (``tests.stats.fixture_data.groups``), and no Bayes factor is
     computed. With ``pairwise.display`` "none" ggstatsplot computes no pairs, so they
     come from ``inferplot.stats.games_howell`` with the case's adjustment, every one
-    hidden (``displayed`` False; ``result.check()`` reports ``pairs_hidden``).
+    hidden (``displayed`` False; ``result.check()`` reports nothing for them, U11).
     ``displayed`` follows the case's ``pairwise.display`` and ``pairwise.alpha``;
     the tests compare it with the brackets ggstatsplot drew. ``n_dropped`` is the
     dataset's rows minus the analyzed ones.
@@ -774,6 +774,9 @@ def test_result_texts_equal_fixture(case: OracleCase) -> None:
 
     # result checks follow from the case
     codes = {issue.code for issue in result.check()}
-    assert ("pairs_hidden" in codes) == any(not p.displayed for p in result.pairwise)
+    # An explicit pairwise_display="none" hides every pair without a report.
+    hidden = any(not p.displayed for p in result.pairwise)
+    asked = result.settings.pairwise_display == "none"
+    assert ("pairs_hidden" in codes) == (hidden and not asked)
     assert ("small_n" in codes) == any(n < 5 for n in case.n_per_level.values())
     assert ("rows_dropped" in codes) == (result.n_dropped > 0)

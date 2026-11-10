@@ -616,7 +616,9 @@ def test_pairwise_display(plants: pd.DataFrame, display: str, canonical: str) ->
         }[canonical]
         assert pair.displayed is expected
     codes = {issue.code for issue in result.check()}
-    assert ("pairs_hidden" in codes) == (not all(p.displayed for p in result.pairwise))
+    # An explicit "none" is what was asked for (U11); the others report hidden pairs.
+    hidden = not all(p.displayed for p in result.pairwise)
+    assert ("pairs_hidden" in codes) == (hidden and canonical != "none")
 
 
 def test_pairwise_alpha_is_strict(plants: pd.DataFrame, anova: StatsResult) -> None:
