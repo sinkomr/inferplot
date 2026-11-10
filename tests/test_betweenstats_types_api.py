@@ -855,3 +855,54 @@ def test_robust_infinite_xi_estimate() -> None:
     )
     (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]
     assert issue.message.startswith("The explanatory effect size xi is infinite.")
+
+
+# --------------------------------------------------------------------------- #
+# an estimate outside its own bootstrap interval (U6)
+# --------------------------------------------------------------------------- #
+
+
+def _noise_groups() -> pd.DataFrame:
+    names = [f"grp{i:02d}" for i in range(12)]
+    y = np.random.default_rng(2).normal(size=72)
+    return pd.DataFrame({"g": np.repeat(names, 6), "y": y})
+
+
+@pytest.mark.parametrize(
+    ("kind", "words"),
+    [
+        (
+            "np",
+            "The rank epsilon squared, 0.074, lies outside its own 95% CI "
+            "[0.107, 1.000].",
+        ),
+        (
+            "r",
+            "The explanatory effect size xi, 0.325, lies outside its own 95% CI "
+            "[0.345, 0.786].",
+        ),
+    ],
+)
+def test_estimate_outside_its_interval(kind: str, words: str) -> None:
+    # Twelve groups of six values of pure noise: the effect is small next to the
+    # bootstrap's own bias, and the percentile interval misses the estimate.
+    result = betweenstats(_noise_groups(), "g", "y", type=kind)
+    es = result.effect_size
+    assert not es.conf_low <= es.estimate <= es.conf_high
+    (issue,) = [i for i in result.check() if i.code == "estimate_outside_interval"]
+    assert issue.severity == "warning"
+    assert issue.message.startswith(words)
+    assert "percentile bootstrap" in issue.message
+    assert "small next to the bootstrap's own bias" in issue.message
+    assert "rough range" in issue.fix
+    assert "p-value" in issue.fix
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.check() == result.check()
+
+
+def test_estimate_inside_its_interval(plants: pd.DataFrame) -> None:
+    for kind in ("p", "np", "r"):
+        result = betweenstats(plants, "group", "weight", type=kind)
+        es = result.effect_size
+        assert es.conf_low <= es.estimate <= es.conf_high
+        assert "estimate_outside_interval" not in _codes(result)

@@ -219,6 +219,58 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
     )
 
 
+def _estimate_outside_interval(result: StatsResult) -> Issue | None:
+    """An effect size outside its own CI. Percentile bootstrap intervals (rank
+    epsilon squared, the explanatory effect size xi) are read off the resampled
+    values, which a small effect's bootstrap bias can shift past the estimate
+    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]). Read
+    from stored fields only, so the copy without values reports it too."""
+    es = result.effect_size
+    if es is None:
+        return None
+    numbers = (es.estimate, es.conf_low, es.conf_high)
+    if any(math.isnan(x) for x in numbers):
+        return None
+    if es.conf_low <= es.estimate <= es.conf_high:
+        return None
+    level = _percent(es.conf_level)
+    head = (
+        f"The {es.label}, {_three(es.estimate)}, lies outside its own {level} CI "
+        f"[{_three(es.conf_low)}, {_three(es.conf_high)}]."
+    )
+    if es.bootstrap_resamples is not None:
+        shift = (
+            "resampling adds chance differences between the groups, so the "
+            "resampled effect sizes run larger than the estimate"
+            if es.estimate < es.conf_low
+            else "the resampled effect sizes run smaller than the estimate"
+        )
+        why = (
+            " The CI is a percentile bootstrap interval, read off the effect sizes "
+            "of resampled data. When the effect is small next to the bootstrap's "
+            f"own bias ({shift}), the whole interval can lie on one side of the "
+            "estimate."
+        )
+    else:
+        why = f" The CI ({es.ci_method}) should contain its estimate."
+    return Issue(
+        code="estimate_outside_interval",
+        severity="warning",
+        message=head + why,
+        fix=(
+            "Report the estimate, and the interval only as a rough range of "
+            "plausible values (say that it does not contain the estimate); the "
+            "test's p-value does not come from the bootstrap and is unaffected."
+        ),
+    )
+
+
+def _three(x: float) -> str:
+    if math.isinf(x):
+        return "Inf" if x > 0 else "-Inf"
+    return f"{x:.3f}"
+
+
 def _percent(level: float) -> str:
     return f"{100 * level:g}%"
 
@@ -231,11 +283,13 @@ def _bound(x: float) -> str:
 
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, heavy_ties,
-    infinite_effect_size, rows_dropped, pairs_hidden, pairwise_conf_level."""
+    infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
+    pairwise_conf_level."""
     found = (
         _small_n(result),
         _heavy_ties(result),
         _infinite_effect_size(result),
+        _estimate_outside_interval(result),
         _rows_dropped(result),
         _pairs_hidden(result),
         _pairwise_conf_level(result),
