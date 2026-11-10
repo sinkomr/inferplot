@@ -1881,7 +1881,10 @@ def _provisional_sentence(
         name = (
             f"Bayesian one-sample t-test against {against} (JZS prior, r = {scale})"
             if one_sample
-            else f"Bayesian Pearson correlation (stretched beta prior, scale {scale})"
+            # The beta prior's parameter 1 / bf_prior, to digits as ggstatsplot
+            # prints it (r_beta^JZS = 1.41).
+            else "Bayesian Pearson correlation (stretched beta prior, r = "
+            f"{format_value(bayes.prior_scale, 2)})"
         )
         return (
             f"{name}: BF10 = {_apa_bf(bayes)}, log(BF01) = "

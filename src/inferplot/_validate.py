@@ -367,8 +367,9 @@ def _wrong_kind_of_function(
     """An analysis keyword given to a drawing function, or a drawing keyword given
     to an analysis function: point to the function that takes it."""
     if "result" in valid and key in ANALYSIS_KEYWORDS:
+        columns = "data, x" if fn == "histostats" else "data, x, y"
         return TypeError(
-            f"{arg}= is an argument of the analysis, ip.analyze.{fn}(data, x, y, "
+            f"{arg}= is an argument of the analysis, ip.analyze.{fn}({columns}, "
             f"...); render.{fn}() draws a result that already holds it. Pass {key}= "
             f"to ip.analyze.{fn}() or ip.{fn}() and draw that result. Remove {arg}=."
         )
@@ -394,7 +395,7 @@ def _targeted(
     snake_case spelling of ``arg``) is one of them. ``filled`` names the arguments
     the call already gives."""
     if fn in _NO_LEVEL_FUNCTIONS:
-        own = _no_level_targeted(arg, key, fn, valid)
+        own = _no_level_targeted(arg, key, value, fn, valid)
         if own is not None:
             return own
     if key == "var_equal":
@@ -760,8 +761,48 @@ def _drawing_note(fn: str, valid: frozenset[str]) -> str:
     return f"a drawing option of ip.{fn}(...) and ip.render.{fn}(result, ...)"
 
 
+# Other packages' names of histostats' test_value (R's t.test and wilcox.test,
+# SciPy's ttest_1samp), and what each message says of them.
+_TEST_VALUE_NAMES: Final[dict[str, str]] = {
+    "mu": "R's t.test() and wilcox.test() call it mu",
+    "popmean": "SciPy's ttest_1samp() calls it popmean",
+}
+# pandas' DataFrame.corr(method=...) and SciPy's names of the correlations, and
+# the scatterstats type that computes each.
+_CORRELATION_METHODS: Final[dict[str, tuple[str, str]]] = {
+    "pearson": ("parametric", "Pearson's r"),
+    "spearman": ("nonparametric", "Spearman's rho"),
+}
+
+
+def _correlation_method_hint(value: object, analysis: str) -> str:
+    """scatterstats' message for method= (pandas' DataFrame.corr and SciPy
+    spell the choice of correlation that way): the type that computes it, and for
+    Kendall's tau, which ggscatterstats does not have, the rank correlation it
+    does have."""
+    types = (
+        "'parametric' (Pearson's r), 'nonparametric' (Spearman's rho), 'robust' "
+        "(the winsorized correlation) or 'bayes' (the Bayes factor of Pearson's r)"
+    )
+    given = value.strip().lower() if isinstance(value, str) else None
+    if given in _CORRELATION_METHODS:
+        type_name, coefficient = _CORRELATION_METHODS[given]
+        return (
+            f"scatterstats() chooses the correlation with type={analysis}; "
+            f"{coefficient} is type={type_name!r}. Write type={type_name!r}."
+        )
+    if given == "kendall":
+        return (
+            "Kendall's tau is not available: ggscatterstats has no Kendall "
+            f"correlation either. scatterstats() chooses the correlation with type="
+            f"{analysis}: {types}. For a rank correlation write type='nonparametric' "
+            "(Spearman's rho)."
+        )
+    return f"scatterstats() chooses the correlation with type={analysis}: {types}."
+
+
 def _no_level_targeted(
-    arg: str, key: str, fn: str, valid: frozenset[str]
+    arg: str, key: str, value: object, fn: str, valid: frozenset[str]
 ) -> TypeError | None:
     """The messages of histostats and scatterstats for keywords whose usual
     message would speak of groups or levels, for ggstatsplot's own arguments of
@@ -778,6 +819,36 @@ def _no_level_targeted(
         return TypeError(
             f"{arg}= is not an argument of {fn}(): {reason} Remove {arg}=."
         )
+
+    # In ip.render.<fn>() an analysis argument is already part of the result.
+    analysis = (
+        f", an argument of the analysis: pass it to ip.analyze.{fn}() or ip.{fn}() "
+        f"(render.{fn}() draws a result that already holds it)"
+        if "result" in valid
+        else ""
+    )
+    if key in _TEST_VALUE_NAMES:
+        habit = _TEST_VALUE_NAMES[key]
+        if not histo:
+            return no(
+                f"it names the value a one-sample test compares a column with "
+                f"({habit}): histostats(data, x, test_value=...) tests one column "
+                "against a value; scatterstats() tests whether the correlation of x "
+                "and y is 0."
+            )
+        number = (
+            _show(value)
+            if isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            else "0"
+        )
+        return no(
+            f"the value x is tested against is test_value= ({habit}; ggstatsplot "
+            f"calls it test.value){analysis}. Write test_value={number}."
+        )
+    if key == "method" and not histo:
+        return no(_correlation_method_hint(value, analysis))
 
     if key == "y" and histo:
         return no(

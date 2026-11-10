@@ -118,14 +118,13 @@ def test_analysis_does_not_load_matplotlib() -> None:
         )
         inferplot.analyze.withinstats(paired, "g", "y", subject_id="s")
         pairs = pd.DataFrame({"a": [1.0, 2, 3, 5], "b": [2.0, 1, 4, 3]})
-        for call in (
-            lambda: inferplot.analyze.histostats(pairs, "a", test_value=1),
-            lambda: inferplot.analyze.scatterstats(pairs, "a", "b"),
+        for result in (
+            inferplot.analyze.histostats(pairs, "a", test_value=1),
+            inferplot.analyze.scatterstats(pairs, "a", "b"),
         ):
-            try:  # reads the data, then: no statistics for them yet
-                call()
-            except NotImplementedError:
-                pass
+            result.to_json()
+            result.check()
+            str(result)
         assert "matplotlib" not in sys.modules, "running an analysis"
         """
     )

@@ -1,10 +1,11 @@
 """``ip.histostats``, ``ip.analyze.histostats`` and ``ip.render.histostats``:
 signatures, argument checks and the result a one-sample design returns.
 
-No histostats statistics exist yet: every analysis call that passes the checks and
-reads the data raises ``NotImplementedError`` naming the type. The result contract
-is checked through ``_assemble`` with parts made from each fixture's numbers
-(``tests/no_level_cases.py``), so it is ready for the statistics.
+Every type's analysis returns a complete result; the drawing (``ip.render`` and
+the top-level form after its analysis) raises ``NotImplementedError`` until the
+renderer lands. The result contract is checked on every fixture's real result
+(``tests/no_level_cases.py``); the numbers are compared with R in
+``tests/test_histostats_parity.py``.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import math
+import re
 import subprocess
 import sys
 import textwrap
@@ -25,7 +27,7 @@ import pytest
 import inferplot as ip
 from inferplot import _validate as v
 from inferplot.result import StatsResult
-from tests.no_level_cases import assembled, histostats_parts, prepared
+from tests import no_level_cases as nl
 from tests.oracle_args import split
 from tests.oracle_fixtures import (
     Backend,
@@ -70,17 +72,9 @@ def case_named(name: str) -> OracleCase:
 
 
 def made(name: str, **changes: Any) -> StatsResult:
-    """The assembled result of a fixture, with ``changes`` to its arguments."""
+    """The result of a fixture's call, with ``changes`` to its arguments."""
     case = case_named(name)
-    data, args, digits = prepared(case)
-    if changes:
-        call = split(case.function, case.args)
-        data, args, digits = module._prepare(
-            read_dataset(case), *call.args, **{**call.analysis, **changes}
-        )
-    return module._assemble(
-        data, args, histostats_parts(case, data, args), digits=digits
-    )
+    return nl.analyze(case, nl.frame_of(case), **changes)
 
 
 # --------------------------------------------------------------------------- #
@@ -137,24 +131,21 @@ def test_signatures() -> None:
 @pytest.mark.parametrize(
     "type_name", ["parametric", "nonparametric", "robust", "bayes"]
 )
-def test_each_type_reads_the_data_then_says_it_is_not_implemented(
+def test_each_type_returns_a_result_and_drawing_is_not_implemented(
     tooth: pd.DataFrame, type_name: str
 ) -> None:
+    result = analyze(tooth, "len", type=type_name, test_value=18)
+    assert (result.analysis, result.type, result.n_obs) == (
+        "histostats",
+        type_name,
+        60,
+    )
+    assert result.text.apa.endswith("n = 60.")
+    # ip.histostats analyzes, then stops where the drawing starts.
     text = message(
-        NotImplementedError,
-        lambda: analyze(tooth, "len", type=type_name, test_value=18),
+        NotImplementedError, lambda: top(tooth, "len", type=type_name, test_value=18)
     )
-    assert text.startswith(f"histostats(type={type_name!r}) (")
-    assert "is not implemented yet in this version of inferplot" in text
-    assert "60 values of x='len', to be tested against 18." in text
-    # ip.histostats checks the same and stops at the same place.
-    assert (
-        message(
-            NotImplementedError,
-            lambda: top(tooth, "len", type=type_name, test_value=18),
-        )
-        == text
-    )
+    assert text.startswith("render.histostats(): drawing a histostats result")
 
 
 def test_aliases_are_canonical(tooth: pd.DataFrame) -> None:
@@ -217,10 +208,11 @@ def test_analysis_imports_no_matplotlib() -> None:
         import pandas as pd
         import inferplot
         frame = pd.DataFrame({"v": [1.0, 2.0, 4.0, 3.0, 8.0]})
-        try:
-            inferplot.analyze.histostats(frame, "v", test_value=2)
-        except NotImplementedError:
-            pass
+        for kind in ("parametric", "nonparametric", "robust", "bayes"):
+            result = inferplot.analyze.histostats(frame, "v", type=kind, test_value=2)
+            result.to_json()
+            result.check()
+            str(result)
         assert "matplotlib" not in sys.modules
         """
     )
@@ -472,8 +464,16 @@ def test_arguments_without_effect_warn() -> None:
     )
     result = made("ToothGrowth-bayes", conf_level=0.9)
     assert result.warnings == (
+        "The posterior difference and its credible interval, which ggstatsplot adds "
+        "to the Bayes factor subtitle, arrive in inferplot 0.2.",
         "conf_level=0.9 has no effect: type='bayes' shows no interval in this "
         "version (the posterior credible interval arrives in inferplot 0.2).",
+    )
+    result = made("ToothGrowth-parametric", seed=3)
+    assert result.warnings == (
+        "seed=3 has no effect: type='parametric' draws no random numbers (only "
+        "type='robust' resamples, for its bootstrap-t test), and the histogram is "
+        "drawn from every value.",
     )
     result = made("ToothGrowth-greater-parametric")
     assert result.warnings == (
@@ -505,29 +505,22 @@ def test_fixture_values_and_counts(case: OracleCase, backend: Backend) -> None:
     assert data.values.tolist() == case.analyzed_values("x")
     assert data.n_dropped == case.analyzed_data["rows_dropped"]
     assert args.test_value == float(case.args.get("test.value", 0))
-    text = message(
-        NotImplementedError, lambda: analyze(frame, *call.args, **call.analysis)
-    )
-    assert text.startswith(f"histostats(type={args.type!r})")
+
+
+# Words of the comparison designs that a one-sample result never uses.
+GROUP_WORDS = re.compile(r"\b(groups?|levels?|conditions?|pairs?|subjects?)\b", re.I)
 
 
 @pytest.mark.parametrize("case", oracle_params("gghistostats"))
-def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
-    if case.name in REFUSED_ONE_SIDED:
-        # The same data as the two-sided call, which ggstatsplot computes instead.
-        args = {k: v for k, v in case.args.items() if k != "alternative"}
-        call = split(case.function, args)
-        data, _, _ = module._prepare(read_dataset(case), *call.args, **call.analysis)
-        assert data.values.tolist() == case.analyzed_values("x")
-        return
-    result = assembled(case)
+def test_result_contract_of_each_fixture(case: OracleCase) -> None:
+    result = nl.analyzed(case.name)
+    assert result is not None  # the two refusals are answered by their replay
     n = case.analyzed_data["n"]
     assert (result.analysis, result.design) == ("histostats", "one-sample")
     assert (result.x, result.y, result.levels) == (case.args["x"], None, ())
     assert result.values == (tuple(case.analyzed_values("x")),)
     assert result.n_obs == n
     assert result.n_dropped == case.analyzed_data["rows_dropped"]
-    assert result.n_obs + result.n_dropped == case.raw["dataset"]["rows"]
     (descriptive,) = result.descriptives
     assert (descriptive.level, descriptive.n) == (case.args["x"], n)
     settings = result.settings
@@ -538,18 +531,27 @@ def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
     assert settings.tr == float(case.args.get("tr", 0.2))
     assert result.point_labels == ()
     assert result.label_var is None
+    # The texts stay provisional until the text package: no subtitle or caption.
     assert (result.text.subtitle, result.text.caption) == (None, None)
-    assert result.text.apa
+    assert result.text.apa.endswith(f"n = {n:,}.")
     assert len(result.text.alt_text) <= 400
+    for text in (result.text.apa, result.text.alt_text, *result.warnings):
+        assert not GROUP_WORDS.search(text), text
+    assert str(result).startswith(result.text.apa)
     back = StatsResult.from_json(result.to_json())
+    assert back == result
     assert back.to_json() == result.to_json()
-    if not any(
-        isinstance(x, float) and math.isnan(x)
-        for x in (result.test.statistic if result.test else 0.0,)
-    ):
-        assert back == result
     embedded = StatsResult.from_json(result.to_json(include_values=False))
     assert embedded.values == ()
     assert embedded.check() == result.check()
     frame = result.to_frame()
     assert len(frame) == (0 if result.test is None and result.bayes is None else 1)
+    if result.test is not None:
+        assert frame["test"][0] == result.test.name
+        assert frame["statistic"][0] == result.test.statistic
+        assert frame["ci_sidedness"][0] == (
+            result.effect_size.sidedness if result.effect_size else None
+        )
+    elif result.bayes is not None:
+        assert frame["bf10"][0] == result.bayes.bf10
+    assert len(result.to_frame(backend="polars")) == len(frame)

@@ -1,10 +1,11 @@
 """``ip.scatterstats``, ``ip.analyze.scatterstats`` and ``ip.render.scatterstats``:
 signatures, argument checks and the result a correlation returns.
 
-No scatterstats statistics exist yet: every analysis call that passes the checks
-and reads the data raises ``NotImplementedError`` naming the type. The result
-contract is checked through ``_assemble`` with parts made from each fixture's
-numbers (``tests/no_level_cases.py``), so it is ready for the statistics.
+Every type's analysis returns a complete result; the drawing (``ip.render`` and
+the top-level form after its analysis) raises ``NotImplementedError`` until the
+renderer lands. The result contract is checked on every fixture's real result
+(``tests/no_level_cases.py``); the numbers are compared with R in
+``tests/test_scatterstats_parity.py``.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import math
+import re
 import subprocess
 import sys
 import textwrap
@@ -26,7 +28,7 @@ import inferplot as ip
 from inferplot import _validate as v
 from inferplot._data import ColumnNotFoundError
 from inferplot.result import StatsResult
-from tests.no_level_cases import assembled, prepared, scatterstats_parts
+from tests import no_level_cases as nl
 from tests.oracle_args import split
 from tests.oracle_fixtures import (
     Backend,
@@ -76,17 +78,9 @@ def case_named(name: str) -> OracleCase:
 
 
 def made(name: str, **changes: Any) -> StatsResult:
-    """The assembled result of a fixture, with ``changes`` to its arguments."""
+    """The result of a fixture's call, with ``changes`` to its arguments."""
     case = case_named(name)
-    data, args, digits = prepared(case)
-    if changes:
-        call = split(case.function, case.args)
-        data, args, digits = module._prepare(
-            read_dataset(case), *call.args, **{**call.analysis, **changes}
-        )
-    return module._assemble(
-        data, args, scatterstats_parts(case, data, args), digits=digits
-    )
+    return nl.analyze(case, nl.frame_of(case), **changes)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,22 +138,21 @@ def test_signatures() -> None:
 @pytest.mark.parametrize(
     "type_name", ["parametric", "nonparametric", "robust", "bayes"]
 )
-def test_each_type_reads_the_data_then_says_it_is_not_implemented(
+def test_each_type_returns_a_result_and_drawing_is_not_implemented(
     cars: pd.DataFrame, type_name: str
 ) -> None:
+    result = analyze(cars, "wt", "mpg", type=type_name)
+    assert (result.analysis, result.type, result.n_obs) == (
+        "scatterstats",
+        type_name,
+        32,
+    )
+    assert result.text.apa.endswith("n = 32 pairs.")
     text = message(
-        NotImplementedError, lambda: analyze(cars, "wt", "mpg", type=type_name)
+        NotImplementedError,
+        lambda: top(cars, "wt", "mpg", type=type_name, marginal=False),
     )
-    assert text.startswith(f"scatterstats(type={type_name!r}) (")
-    assert "is not implemented yet in this version of inferplot" in text
-    assert text.endswith("32 complete pairs of x='wt' and y='mpg'.")
-    assert (
-        message(
-            NotImplementedError,
-            lambda: top(cars, "wt", "mpg", type=type_name, marginal=False),
-        )
-        == text
-    )
+    assert text.startswith("render.scatterstats(): drawing a scatterstats result")
 
 
 def test_render_checks_its_arguments_then_says_it_is_not_implemented() -> None:
@@ -207,10 +200,11 @@ def test_analysis_imports_no_matplotlib() -> None:
         import pandas as pd
         import inferplot
         frame = pd.DataFrame({"a": [1.0, 2.0, 4.0, 3.0], "b": [2.0, 1.0, 5.0, 3.0]})
-        try:
-            inferplot.analyze.scatterstats(frame, "a", "b")
-        except NotImplementedError:
-            pass
+        for kind in ("parametric", "nonparametric", "robust", "bayes"):
+            result = inferplot.analyze.scatterstats(frame, "a", "b", type=kind)
+            result.to_json()
+            result.check()
+            str(result)
         assert "matplotlib" not in sys.modules
         """
     )
@@ -366,13 +360,18 @@ def test_arguments_without_effect_warn() -> None:
         "(results_subtitle=False leaves the Bayes factor out).",
     )
     assert made("mtcars-bayes", bf_message=False).warnings == (
+        "The posterior correlation and its credible interval, which ggstatsplot adds "
+        "to the Bayes factor subtitle, arrive in inferplot 0.2.",
         "bf_message=False has no effect: the Bayes factor caption is drawn only for "
         "type='parametric' with the results subtitle (as in ggstatsplot), and "
         "type='bayes' draws none; type='bayes' reports its Bayes factor in the "
         "subtitle.",
     )
     assert made("mtcars-parametric").warnings == ()
-    assert made("mtcars-prior08-bayes").warnings == ()
+    assert made("mtcars-prior08-bayes").warnings == (
+        "The posterior correlation and its credible interval, which ggstatsplot adds "
+        "to the Bayes factor subtitle, arrive in inferplot 0.2.",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -389,15 +388,19 @@ def test_fixture_pairs_and_counts(case: OracleCase, backend: Backend) -> None:
     assert data.x_values.tolist() == case.analyzed_values("x")
     assert data.y_values.tolist() == case.analyzed_values("y")
     assert data.n_dropped == case.analyzed_data["rows_dropped"]
-    text = message(
-        NotImplementedError, lambda: analyze(frame, *call.args, **call.analysis)
-    )
-    assert text.startswith(f"scatterstats(type={args.type!r})")
+    assert args.type == case.type
+
+
+# Words of the comparison designs that a correlation result never uses.
+GROUP_WORDS = re.compile(r"\b(groups?|levels?|conditions?|subjects?)\b", re.I)
 
 
 @pytest.mark.parametrize("case", oracle_params("ggscatterstats"))
-def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
-    result = assembled(case)
+def test_result_contract_of_each_fixture(case: OracleCase) -> None:
+    result = nl.analyzed(case.name)
+    if result is None:  # constant x: refused (tests/test_scatterstats_parity.py)
+        assert case.name in nl.REFUSALS
+        return
     n = case.analyzed_data["n"]
     assert (result.analysis, result.design) == ("scatterstats", "correlation")
     assert (result.x, result.y) == (case.args["x"], case.args["y"])
@@ -414,23 +417,30 @@ def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
     assert settings.conf_level == float(case.args.get("conf.level", 0.95))
     assert settings.digits == int(case.args.get("digits", 2))
     assert settings.tr == float(case.args.get("tr", 0.2))
+    assert settings.bf_prior == float(case.args.get("bf.prior", 0.707))
     label_var = case.args.get("label.var")
     assert result.label_var == label_var
     if label_var is None:
         assert result.point_labels == ()
-    else:
-        ((drawn),) = case.layer_data("GeomLabelRepel")
-        # The labelled points are those ggstatsplot labelled (every point, or
-        # those label.expression selects: mtcars 9 of 32).
-        assert [label for label in result.point_labels if label] == [
-            str(row[label_var]) for row in drawn
-        ]
+    # The texts stay provisional until the text package: no subtitle or caption.
     assert (result.text.subtitle, result.text.caption) == (None, None)
     assert result.text.apa.endswith(f"n = {n:,} pairs.")
     assert len(result.text.alt_text) <= 400
+    for text in (result.text.apa, result.text.alt_text, *result.warnings):
+        assert not GROUP_WORDS.search(text), text
+    assert str(result).startswith(result.text.apa)
     back = StatsResult.from_json(result.to_json())
+    assert back == result
     assert back.to_json() == result.to_json()
     embedded = StatsResult.from_json(result.to_json(include_values=False))
     assert (embedded.values, embedded.point_labels) == ((), ())
     assert embedded.label_var == label_var
     assert embedded.check() == result.check()
+    frame = result.to_frame()
+    assert len(frame) == (0 if result.test is None and result.bayes is None else 1)
+    if result.test is not None:
+        assert frame["test"][0] == result.test.name
+        assert frame["ci_sidedness"][0] == "two-sided"
+    elif result.bayes is not None:
+        assert frame["bf10"][0] == result.bayes.bf10
+    assert len(result.to_frame(backend="polars")) == len(frame)
