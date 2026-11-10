@@ -382,7 +382,7 @@ of complete subjects; the subtitle prints it as n_pairs.
 | --- | --- | --- | --- |
 | parametric | paired t (`stats::t.test`, paired), t signed as first level minus second, df n - 1 | Hedges' g of the differences: d_z x J(n - 1) with d_z = mean(d) / sd(d) (not d_av, which misses every fixture). CI: the noncentral-t interval at the paired t and n - 1 df, each bound divided by sqrt(n) and multiplied by J; it follows `alternative` (sleep-less: [-Inf, -0.50]) | mean |
 | nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired), always `exact = FALSE, correct = TRUE`: zero differences dropped, normal approximation with tie and continuity corrections, V reported (R's own default would be exact for small samples; probe-signrank) | matched-pairs rank-biserial r = (W+ - W-) / (W+ + W-) over the nonzero differences. CI analytic, not bootstrapped: tanh(atanh r -/+ z SE), SE = sqrt(n (n + 1) (2n + 1) / 6) / (n (n + 1) / 2) with n counting every pair, zeros included; \|r\| = 1 gives [r, r] (and a `warnings` entry that the interval has no width); follows `alternative`. All-zero differences raise (R: p NaN) | median |
-| robust | Yuen for dependent samples (`WRS2::yuend`): t = (trimmed mean a - trimmed mean b) / sqrt((n - 1) var(W_a - W_b) / (h (h - 1))), each condition winsorized at its own order statistics with the pairs kept; t signed (unlike `yuen`'s \|t\|), df h - 1, p = 2 (1 - pt) in R (probe-wrs2within, 84 of 84 rows); inferplot reports the accurate tail (D43) | `WRS2::dep.effect`, AKP row: c(tr) x trimmed mean(d) / winsorized SD(d) of the paired differences, with `akp.effect`'s constant (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`). Percentile bootstrap (ggstatsplot: 100 resamples) that resamples subjects, pairs together, with the floor percentile rule; always a 95% interval: `conf.level` does not reach it (sleep-cl90-robust prints CI 95%), and inferplot records 0.95 with a `warnings` entry (D66); bounds can be infinite; 1.1.3 fixed this value | trimmed mean |
+| robust | Yuen for dependent samples (`WRS2::yuend`): t = (trimmed mean a - trimmed mean b) / sqrt((n - 1) var(W_a - W_b) / (h (h - 1))), each condition winsorized at its own order statistics with the pairs kept; t signed (unlike `yuen`'s \|t\|), df h - 1, p = 2 (1 - pt) in R (probe-wrs2within, 84 of 84 rows); inferplot reports the accurate tail (D43) | `WRS2::dep.effect`, AKP row: c(tr) x trimmed mean(d) / winsorized SD(d) of the paired differences, with `akp.effect`'s constant (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`). Percentile bootstrap (ggstatsplot: 100 resamples) that resamples subjects, pairs together, with the rounded percentile rule, the (l + 1)-th and (B - l)-th of B values with l = round(0.025 B) (R's own replicates in probe-bootrules, 6 of 6; the same order statistics as the floor rule at 2,000 resamples); always a 95% interval: `conf.level` does not reach it (sleep-cl90-robust prints CI 95%), and inferplot records 0.95 with a `warnings` entry (D66); bounds can be infinite; 1.1.3 fixed this value | trimmed mean |
 | bayes | paired JZS Bayes factor (`ttestBF(x, y, paired = TRUE)`): the one-sample Bayes factor of the differences. BayesFactor misses the accurate value at large \|t\| (probe-pairedbf); inferplot reports the accurate one (D61) | posterior difference: v0.2 | MAP |
 
 `alternative` has no effect on the robust and bayes types in ggstatsplot (sleep-greater);
@@ -410,11 +410,19 @@ values of x, in file order (rows with a missing x are dropped; bugs_long desire:
 | robust | bootstrap-t test of the trimmed mean (`WRS2::trimcibt(x, nv = test.value, tr, alpha = 1 - conf.level)`, nboot left at its documented default 200; the replay with nboot left out and with nboot = 200 both reproduce every fixture): t = (trimmed mean - mu) / (winsorized SD / ((1 - 2 tr) sqrt(n))) exact; one sample() call draws all n B values and resample b takes draws b, b + B, ...; T*_b = \|trimmed mean*_b - trimmed mean\| / se*_b; CI trimmed mean -/+ c se with c the round((1 - alpha) B)-th smallest T* (alpha = 1 - conf.level as computed; probe-bootrules, exact at B = 39 to 200, 95% and 90%); p = share of T* >= \|t\| (symmetric). `alternative` has no effect (ToothGrowth-greater-robust equals the two-sided case); conf.level and tr reach it. ggstatsplot prints t_bootstrapped, p, the trimmed mean and its CI | trimmed mean with that CI (the effect size row) | trimmed mean (tr) |
 | bayes | one-sample JZS Bayes factor (`BayesFactor::ttestBF(x, mu = test.value, rscale = bf.prior)`), at the one-sample t, N = n, df n - 1; `alternative` has no effect; bf.prior reaches it (ToothGrowth-prior08). BayesFactor misses at large \|t\| as for paired data (probe-onesamplebf: within 5.2e-9 up to \|t\| 8, 2.6e-6 at 12, up to 68% at n 5, \|t\| 1,000; ToothGrowth-tv100 6.1e-4); inferplot reports the accurate value (D61's rule, D81) | posterior difference: v0.2 | MAP |
 
+inferplot (D87, D88): the signed-rank test ranks R's rounded differences x - mu, as R
+does (ranking the differences as written would change V on 6 of the 18 nonparametric
+fixtures: iris-sepal 5288 against R's 5358.5); the bootstrap-t test draws 2,000 seeded
+resamples of the deviations from the trimmed mean in a canonical order (so the result
+does not depend on row order, unit or a common shift of x and mu), keeps an infinite
+T* (edge_one_small: [-Inf, Inf], as R) and leaves a 0/0 T* out, counted (D65); its p
+and critical value are counted over the defined resamples.
+
 The parametric caption is the full one-sample Bayes expression (log BF01, posterior
 difference with its 95% ETI, r_Cauchy^JZS), as the bayes subtitle.
 
 Plot. Histogram (`stat_bin`) of the analyzed values: bin width `binwidth`, else
-(max - min) / sqrt(n) (ggstatsplot's .binwidth(); 0.1 or |x|/1000 for zero range);
+(max - min) / sqrt(n) (ggstatsplot's .binwidth(); when every value is the same inferplot raises and asks for `binwidth`, since no fixture shows ggstatsplot's rule yet, D89);
 bins edge to edge on the grid (k + 1/2) w, every value counted once; the right axis is
 count / n as a percentage. The centrality line (dashed) sits at the type's centrality
 value (mean, median, trimmed mean at tr, MAP) with its label
@@ -441,7 +449,11 @@ t statistic is +-Inf or about 1e8 and p 2.2e-308 (statsExpressions stores a p of
 .Machine$double.xmin) or 1e-62. On constant x every number is NA ("the standard
 deviation is zero") and ggstatsplot prints "NA"; the Bayesian correlation stops and
 ggstatsplot drops the caption (parametric) or subtitle (bayes) silently; the OLS line
-is not drawn.
+is not drawn. inferplot computes r, t, 1 - r^2 and S from exact sums of squares and
+products (D85): exactly collinear data give r = +/-1, t = +/-inf, S = 0, p = 0 and the
+interval [r, r], and the Bayes factor its limit (+inf from n = 5 at prior 0.707;
+D86). A constant variable, also one constant to within the rounding of its values
+(D74), raises; the Fisher interval needs 4 pairs and raises at 3.
 
 Plot: points; `geom_smooth(method = "lm", formula = y ~ x, level = conf.level, na.rm =
 TRUE)`: 80 points from min x to max x, the OLS line and its pointwise band fit -/+
@@ -607,6 +619,11 @@ Statistical and behavioral differences are exactly these:
     (ToothGrowth against 100, t = -82.2: bounds -0.30% and -0.55%, Bayes factor
     +6.1e-4; up to 68% at n 5, |t| 1,000 on probe-onesamplebf). inferplot reports
     the accurate values; both sides are pinned (D81; D31's and D61's rule).
+20. Exactly collinear data: r = +/-1 exactly, t = +/-inf, S = 0, p = 0 and the Bayes
+    factor's limit, where ggstatsplot prints R's rounding (t = 1.34e+08, p =
+    1.06e-62 and S = 3.66e-14 on edge_corr_perfect; t = -1.90e+08 and p = 6.65e-64
+    on the robust negative case) and an empty log BF01, BayesFactor returning NaN
+    there (D85, D86).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -1069,8 +1086,9 @@ again.
 | noncentral t and F distribution functions (`noncentral_cdf`) | rtol 2e-11 | 521 frozen mpmath points (`tests/data/noncentral_reference.json`); measured at most 2.5e-12 (F at SciPy 1.11), 1.6e-14 for t |
 | p-values WRS2 computes as 1 - pt or 1 - pf (`wrs2_p`: Yuen, t1way, lincon), against inferplot's accurate tail (D43) | rtol 1e-10, atol 2^-53 x the factor applied to the one-sided tail afterwards (2 for two-sided, times the number of pairs after Holm) | the one-sided tail rounded to the spacing of doubles just below 1 (2^-53): probe-wrs2p's 420 yuen, t1way and lincon p-values all equal R's 1 - cdf bit for bit; rounding the tail the same way matches all fixtures but iris t1way, which lands one grid step away |
 | noncentral-distribution CIs (`noncentral_ci`) | rtol 1e-6, atol 4e-8 | R's root finding is accurate to about 1e-8 absolute: Hedges' g bounds at most 1.9e-8 absolute and 7.5e-7 relative (ToothGrowth lower bound, -0.0217), omega lower bounds at most 1.5e-8 absolute; an omega bound where effectsize's search stopped early is compared with the accurate root instead (D33) |
-| JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces 75 of the 77 distinct `ttestBF` values in the fixtures to at most 2.3e-9, which is BayesFactor's own integration error; the two it misses are compared with 50-digit values (D50); a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive |
-| other Bayes factors (correlation; v0.2 ANOVA and contingency) | own entry, measured when first implemented | not yet measured |
+| JZS Bayes factors of t tests (`ttest_bayes_factor`) | rtol 1e-8 | measured on two-sample values only: `tools/reference` reproduces 75 of the 77 distinct `ttestBF` values in the fixtures to at most 2.3e-9, which is BayesFactor's own integration error; the two it misses are compared with 50-digit values (D50); a prior of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or more, Welch's t instead of Student's moves every unbalanced pair by 1.5e-4 or more. Measure paired and one-sample values when their fixtures arrive; one-sample: every gghistostats value within 3.3e-9 (edge_one_large_n), ToothGrowth-tv100 pinned (D81), probe-onesamplebf within 5.2e-9 up to \|t\| 8, inferplot within 1e-13 in the log of 40-digit references (`tests/data/onesamplebf_reference.json`) |
+| correlation Bayes factor (`correlation_bayes_factor`) | rtol 5e-12 | measured: the 26 finite fixture values agree within 3.07e-12 (edge_corr_large_n, n 2,000, BF10 1.37e172), probe-corr's 28 values at R's own r within 1.25e-12 (BayesFactor's floating point); inferplot is within 1.8e-12 of 40-digit mpmath values (`tests/data/corrbf_reference.json`) and within 1.3e-15 in the log of the definition integrated numerically (lead's check) |
+| other Bayes factors (v0.2 ANOVA and contingency) | own entry, measured when first implemented | not yet measured |
 | bootstrap CIs and p-values | within 4 Monte Carlo SDs of the 20,000-resample R reference, never less than the closed-form tolerance | randomness; a quantity whose replicate SD is 0 does not depend on the resamples (AKP and rank epsilon squared estimates, an upper bound of 1) and is stored to 15 significant digits |
 | MAP centrality (`MAP_CENTRALITY`) | the same grid point of the 1,024-point grid from min(x) to max(x) (0 steps; the oracle value must lie on the grid within 1e-6 steps) | every fixture label on ggstatsplot's grid point; each method variant tried moves 1 to 14 of the first 30; probe-map's normal_n1e5 is pinned one step away (D55 row) |
 | WRS2's AKP constant (`akp_constant`) | rtol 5e-7 | WRS2's constant against the exact winsorized-normal SD: 1.2e-9 at tr 0.2, 4.6e-9 at 0.1, at most 3.4e-8 up to 0.25, 4.2e-7 at 0.49 (probe-akp). AKP parity itself scales by the probe's constant at the case's tr and uses `closed_form` (D42) |

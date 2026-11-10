@@ -228,8 +228,9 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   - [ ] W6: swapping two conditions negates the AKP estimate exactly but mirrors its
     interval only within Monte Carlo error; Kendall's W's interval depends on the
     condition order when seven or more conditions tie on rank sum and ranks. Document.
-  - [ ] W8: the percentile rules of the within bootstraps are pinned only incidentally
-    (planted bugs P6, P24); the T6 oracle probe covers them.
+  - [x] W8: the percentile rules of the within bootstraps were pinned only
+    incidentally. Now pinned on R's own replicates (probe-bootrules): dep.effect 6 of
+    6, wmcpAKP 6 of 6; the within helpers use R's rounded rule (D66).
   - [ ] W9 (owner's call): the signed-rank test ranks R's rounded differences (D64), so
     differences equal as written but different in binary (0.1 stored two ways) get
     different ranks, as in R. D74's rule would tie them and differ from R.
@@ -286,8 +287,20 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   shapes checked on construction; D82 to D84); every type raises NotImplementedError
   until its statistics land, and the renderers until they are built. Oracle cases
   asked for: n = 2 and 3 (histostats), n = 3 and 4 (scatterstats), a missing label
-- [ ] statistics for both functions (`stats/one_sample.py`, `stats/correlation.py`,
-  histogram bins, OLS band); in progress
+- [x] statistics for both functions (`stats/one_sample.py`, `stats/correlation.py`,
+  `stats/plot_geometry.py`): all 76 gghistostats and 64 ggscatterstats fixtures and
+  probe-corr match R at statistics level. Worst disagreement: 1.3e-12 for closed-form
+  numbers (allowance 1e-10), 2.6 Monte Carlo SDs for bootstrap bounds and p (allowance
+  4), 3.07e-12 for correlation Bayes factors (allowance 5e-12, new kind). Histogram
+  bins, 126 marginal histograms and 59 OLS bands match every built layer. Accurate
+  where R is not: t = -82 (D81); exactly collinear data (D85, D86; owner to
+  confirm). 40-digit references for the noncentral bounds and both Bayes factors.
+  Lead's independent check: about 270 random data sets against SciPy and
+  from-the-definition integrals, 1e-13 or better. Refused where R answers: a
+  constant variable (R prints NA), a correlation interval at n = 3, the default bin
+  width of a constant column (D89)
+- [ ] analyses: each type of both functions through `ip.analyze`, API-level parity;
+  in progress
 - [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
 - [ ] histostats, all types
 - [ ] scatterstats, all types (line, band, marginals)
@@ -390,8 +403,8 @@ held up; scripts in `reviewT/`). To fix:
   trimcibt 12 of 12). New: dep.effect and wmcpAKP use the rounded rule at alpha 0.05,
   not the floor rule D66 documents (the two coincide at inferplot's 2,000 resamples, so
   no number changes), and wmcpAKP takes its two bounds from separate bootstrap runs
-  per pair (D66 said one shared resample). To do in Phase 4: use the rounded rule in
-  the within helpers and pin it on the probe (closes W8).
+  per pair (D66 said one shared resample). Done in Phase 4: the within helpers use
+  the rounded rule, pinned on the probe (W8).
 - [x] T7: the review's oracle cases (run 42829005373). Results:
   - 0/0 AKP resamples (D65): WRS2 leaves them out of the sort but counts the bound
     positions over all resamples, so its upper bound moves up and is NA once more than
@@ -399,8 +412,9 @@ held up; scripts in `reviewT/`). To fix:
     where inferplot gives [0.22, 0.88] with a warning; `edge_akp_undefined2` (2%) has
     R's upper bound at 1.23 against inferplot's 0.94. An accident of R's NaN handling,
     not a method: inferplot keeps D65 (owner to confirm). `edge_akp_undefined` is
-    held out of the parity tests in probe-heldout; a test that reproduces R's printed
-    bound under R's rule is to do in Phase 4.
+    held out of the parity tests in probe-heldout; a test now reproduces R's NA from
+    inferplot's own replicates under R's rule, and on `edge_akp_undefined2` R's rule
+    lands 1.4 SDs above R's reference and D65 2.5 SDs below it.
   - D54 confirmed in R itself: on `edge_tied3_small` 7 to 9% of resamples are fully
     tied and R's lower bound is 0.1458, not 0; inferplot matches.
   - Trim count: R trims 28 from each end at tr 0.29, n 100; inferplot matches.
@@ -409,9 +423,8 @@ held up; scripts in `reviewT/`). To fix:
     afex cannot compute the sphericity correction and ggstatsplot prints the
     uncorrected F(3, 6) = 7.70, p = 0.018 without a word; inferplot applies the
     Greenhouse-Geisser correction it documents, F(1.05, 2.10), p = 0.104. inferplot
-    keeps the correction (owner to confirm); a `warnings` entry naming the
-    difference and a test pinning both sides are to do in Phase 4. Held out in
-    probe-heldout.
+    keeps the correction (owner to confirm), names the difference in `warnings`, and
+    a test pins both sides. Held out in probe-heldout.
   - Friedman: every subject tied, R fails (declared), inferplot raises plainly (D64);
     some subjects tied, R completes and inferplot matches (52 of 2,000 resamples left
     out, with a warning).
