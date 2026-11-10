@@ -65,7 +65,11 @@ def test_reads_the_pairs_r_analyzed(case: OracleCase, backend: str) -> None:
     ((drawn),) = case.layer_data("GeomLabelRepel")
     assert pair.label_var == label_var
     assert len(pair.labels) == pair.n_obs
-    drawn_labels = [str(row[label_var]) for row in drawn]
+    # A missing label (edge_corr_label_missing) keeps its point; R's layer holds NA
+    # for it, inferplot "" (no label).
+    drawn_labels = [
+        "" if row[label_var] is None else str(row[label_var]) for row in drawn
+    ]
     if "label.expression" in case.args:
         assert set(drawn_labels) < set(pair.labels)  # mtcars: 9 of 32
     else:

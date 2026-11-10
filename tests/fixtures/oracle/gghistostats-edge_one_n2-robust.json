@@ -1,0 +1,333 @@
+{
+  "schema_version": 2,
+  "name": "gghistostats-edge_one_n2-robust",
+  "function": "gghistostats",
+  "call": "ggstatsplot::gghistostats(data = data, x = value, type = \"robust\", test.value = 3)",
+  "dataset": {
+    "file": "edge_one_n2.csv",
+    "sha256": "9a2984f3a23244b0ec3535b6ee9f539ebdb5f2bb88d2b54ddbe053fa96c7b5d8",
+    "rows": 2,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "value",
+    "type": "robust",
+    "test.value": 3
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "analyzed_data": {
+    "x": "value",
+    "rows": [
+      1,
+      2
+    ],
+    "x_values": [
+      3.1,
+      4.7
+    ],
+    "n": 2,
+    "rows_dropped": 0,
+    "rule": "rows with x present, in file order (tidyr::drop_na on x alone)"
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_empty_layers": [],
+  "expected_na_values": [],
+  "subtitle": "list(italic(\"t\")[\"bootstrapped\"] == \"0.68\", italic(p) == \"0.49\", widehat(mu)[\"trimmed\"] == \"3.90\", CI[\"95%\"] ~ \"[\" * \"-Inf\", \"Inf\" * \"]\", italic(\"n\")[\"obs\"] == \"2\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 0.675,
+        "p.value": 0.49,
+        "n.obs": 2,
+        "method": "Bootstrap-t method for one-sample test",
+        "effectsize": "Trimmed mean",
+        "estimate": 3.9,
+        "conf.level": 0.95,
+        "conf.low": "-Inf",
+        "conf.high": "Inf",
+        "expression": "list(italic(\"t\")[\"bootstrapped\"] == \"0.68\", italic(p) == \"0.49\", widehat(mu)[\"trimmed\"] == \"3.90\", CI[\"95%\"] ~ \"[\" * \"-Inf\", \"Inf\" * \"]\", italic(\"n\")[\"obs\"] == \"2\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_bar",
+      "geom": "GeomBar",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false,
+          "orientation": null,
+          "binwidth": 1.13137084989848,
+          "bins": null,
+          "center": null,
+          "boundary": null,
+          "closed": ["right", "left"],
+          "pad": false,
+          "breaks": null,
+          "drop": "none"
+        },
+        "geom": {
+          "na.rm": false,
+          "orientation": null
+        },
+        "aes": {
+          "colour": "black",
+          "fill": "grey50",
+          "alpha": 0.7
+        }
+      },
+      "built": [
+        {
+          "count": 1,
+          "x": 3.39411254969543,
+          "xmin": 2.82842712474619,
+          "xmax": 3.95979797464467,
+          "density": 0.441941738241592,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 1,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 1,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 1,
+          "x": 4.5254833995939,
+          "xmin": 3.95979797464467,
+          "xmax": 5.09116882454314,
+          "density": 0.441941738241592,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 1,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 1,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_vline",
+      "geom": "GeomVline",
+      "data": [
+        {
+          "xintercept": 3.9
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed"
+        }
+      },
+      "built": [
+        {
+          "xintercept": 3.9,
+          "PANEL": "1",
+          "group": -1,
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed",
+          "alpha": null
+        }
+      ]
+    }
+  ],
+  "centrality": [
+    {
+      ".x": ".x",
+      "var": 3.9,
+      "std.dev": 1.13137084989848,
+      "iqr": 1.6,
+      "conf.low": 3.1,
+      "conf.high": 4.7,
+      "min": 3.1,
+      "max": 4.7,
+      "skewness": -8.67361737988403e-16,
+      "kurtosis": -2,
+      "n.obs": 2,
+      "missing.obs": 0,
+      "expression": "list(widehat(mu)[trimmed] == \"3.90\")",
+      "n.expression": ".x\n(n = 2)"
+    }
+  ],
+  "bootstrap_reference": {
+    "quantity": "bootstrap-t trimmed-mean test: confidence interval and p-value",
+    "call": "WRS2::trimcibt(x, nv = 3, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+    "data_order": "the values of x in file order, missing values dropped, as statsExpressions passes them",
+    "conf_level": 0.95,
+    "ggstatsplot": {
+      "estimate": 3.9,
+      "conf_low": "-Inf",
+      "conf_high": "Inf",
+      "p_value": 0.49,
+      "resamples": 200,
+      "seed": 20261107
+    },
+    "replay": {
+      "matches": true,
+      "candidates": [
+        {
+          "call": "WRS2::trimcibt(x, nv = 3, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+          "replay_resamples": "default",
+          "values": [
+            3.9,
+            "-Inf",
+            "Inf",
+            0.49
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::trimcibt(x, nv = 3, tr = 0.2, alpha = 0.05, nboot = R)",
+          "replay_resamples": "default",
+          "values": [
+            3.9,
+            "-Inf",
+            "Inf",
+            0.49
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::trimcibt(x, nv = 3, tr = 0.2, alpha = 1 - 0.95, nboot = R)",
+          "replay_resamples": 200,
+          "values": [
+            3.9,
+            "-Inf",
+            "Inf",
+            0.49
+          ],
+          "matches": true
+        },
+        {
+          "call": "WRS2::trimcibt(x, nv = 3, tr = 0.2, alpha = 0.05, nboot = R)",
+          "replay_resamples": 200,
+          "values": [
+            3.9,
+            "-Inf",
+            "Inf",
+            0.49
+          ],
+          "matches": true
+        }
+      ]
+    },
+    "seed": 1,
+    "resamples": 20000,
+    "estimate": 3.9,
+    "conf_low": "-Inf",
+    "conf_high": "Inf",
+    "p_value": 0.50125,
+    "raw": {
+      "estimate": 3.9,
+      "ci": [
+        "-Inf",
+        "Inf"
+      ],
+      "test.stat": 0.675,
+      "tr": 0.2,
+      "p.value": 0.50125,
+      "n": 2,
+      "alpha": 0.05
+    },
+    "replicates": {
+      "count": 50,
+      "resamples": 2000,
+      "first_seed": 2,
+      "estimate_mean": 3.9,
+      "estimate_sd": 0,
+      "conf_low_mean": "-Inf",
+      "conf_low_sd": "NaN",
+      "conf_high_mean": "Inf",
+      "conf_high_sd": "NaN",
+      "p_value_mean": 0.49849,
+      "p_value_sd": 0.00955888837359112
+    },
+    "r_warnings": []
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
