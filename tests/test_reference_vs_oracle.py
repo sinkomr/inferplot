@@ -1727,3 +1727,374 @@ def test_paired_jzs_bayes_factor_pairwise(case: OracleCase) -> None:
             prior=JZS_PRIOR,
             what=f"{case.name} {g1}-{g2}",
         )
+
+
+# One sample (gghistostats) -----------------------------------------------------------
+#
+# Read from the CSV (missing values dropped, file order), against `test.value`:
+#     parametric     one-sample t (SciPy); Hedges' g = (mean - mu) / sd x J(n - 1)
+#                    with the noncentral-t CI (inline); the Bayes caption's JZS
+#                    Bayes factor (reference)
+#     nonparametric  Wilcoxon signed-rank on x - mu, normal approximation with the tie
+#                    and continuity corrections (inline); rank-biserial r (inline)
+#     robust         trimcibt's statistic, (trimmed mean - mu) / its standard error
+#                    (inline); its p-value and CI are bootstrap quantities, checked in
+#                    test_oracle_fixtures against the 20,000-resample reference
+#     bayes          one-sample JZS Bayes factor (reference)
+
+
+# Where R misses the accurate value at a large |t| (mean 18.8 against 100 in
+# ToothGrowth-tv100: t = -82.2 on 59 df): (case, quantity) -> R's relative miss,
+# R's value / accurate value - 1. The accurate values here are SciPy's noncentral t
+# and the reference quadrature, which inferplot's own noncentral t
+# (`t_ncp_interval`) and JZS integral (`jzs_log_bf10`) reproduce within 1e-14; R's
+# misses are effectsize's noncentral-t inversion through R's pt(ncp = ), documented
+# as less accurate for large ncp, and BayesFactor's quadrature (as D61 for paired
+# data). Each miss is checked to within 1% of the recorded one, so a stale entry
+# fails instead of hiding a difference.
+ONE_SAMPLE_R_MISSES: dict[tuple[str, str], float] = {
+    ("gghistostats-ToothGrowth-tv100-parametric", "g CI low"): -2.964e-3,
+    ("gghistostats-ToothGrowth-tv100-parametric", "g CI high"): -5.485e-3,
+    ("gghistostats-ToothGrowth-tv100-parametric", "caption BF10"): 6.115e-4,
+    ("gghistostats-ToothGrowth-tv100-bayes", "BF10"): 6.115e-4,
+}
+
+
+def _close_or_pinned_miss(
+    kind: str, accurate: float, oracle: float, *, case: OracleCase, what: str
+) -> None:
+    """``assert_close``, or, for a pinned R miss, R's recorded relative miss."""
+    miss = ONE_SAMPLE_R_MISSES.get((case.name, what))
+    if miss is None:
+        assert_close(kind, accurate, oracle, what=f"{case.name} {what}")
+        return
+    measured = oracle / accurate - 1
+    assert abs(measured - miss) <= 0.01 * abs(miss), (case.name, what, measured, miss)
+
+
+def test_one_sample_r_misses_name_existing_cases() -> None:
+    names = {case.name for case in cases_for("gghistostats")}
+    assert {name for name, _ in ONE_SAMPLE_R_MISSES} <= names
+
+
+def _histo_params(type_: str, *, needs: Output = "subtitle") -> list[Any]:
+    cases = [
+        case
+        for case in cases_for("gghistostats")
+        if case.type == type_
+        and _draws(case, needs)
+        and needs not in case.expected_hidden_errors
+    ]
+    require_cases(cases, f"gghistostats {type_} with {needs}")
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+def _sample(case: OracleCase) -> FloatArray:
+    frame = read_dataset(case)
+    x = frame[case.args["x"]].dropna().to_numpy(dtype=np.float64)
+    assert x.tolist() == [number(v) for v in case.raw["analyzed_data"]["x_values"]]
+    return x
+
+
+def _test_value(case: OracleCase) -> float:
+    return float(case.args.get("test.value", 0.0))
+
+
+@pytest.mark.parametrize("case", _histo_params("parametric"))
+def test_one_sample_t(case: OracleCase) -> None:
+    x, mu = _sample(case), _test_value(case)
+    result = stats.ttest_1samp(x, mu, alternative=SCIPY_ALTERNATIVE[_alternative(case)])
+    row = case.subtitle_data
+    assert _value(row, "mu") == mu
+    assert row["alternative"] == _alternative(case)
+    assert_close(
+        "closed_form", float(result.statistic), _value(row, "statistic"), what="t"
+    )
+    assert_close("closed_form", x.size - 1.0, _value(row, "df.error"), what="df")
+    assert_close("closed_form", float(result.pvalue), _value(row, "p.value"), what="p")
+
+
+@pytest.mark.parametrize("case", _histo_params("parametric"))
+def test_one_sample_hedges_g(case: OracleCase) -> None:
+    # effectsize::hedges_g(x, mu = test.value): d = (mean - mu) / sd times Hedges' J
+    # at n - 1 df; the CI is the noncentral-t interval at the one-sample t and n - 1
+    # df, each bound / sqrt(n) x J, one-sided with a one-sided `alternative`.
+    x, mu = _sample(case), _test_value(case)
+    n = x.size
+    sd = float(x.std(ddof=1))
+    j = ref.hedges_j(n - 1.0)
+    difference = float(x.mean()) - mu
+    row = case.subtitle_data
+    assert row["effectsize"] == "Hedges' g"
+    assert_close("closed_form", difference / sd * j, _value(row, "estimate"), what="g")
+    assert not is_close("closed_form", difference / sd, _value(row, "estimate"))
+    alpha = 1 - _value(row, "conf.level")
+    side = _alternative(case)
+    tail = alpha / 2 if side == "two.sided" else alpha
+    t = difference / (sd / math.sqrt(n))
+    scale = j / math.sqrt(n)
+    low = -math.inf if side == "less" else _ncp_at(t, n - 1.0, 1 - tail) * scale
+    high = math.inf if side == "greater" else _ncp_at(t, n - 1.0, tail) * scale
+    for what, bound, column in (
+        ("g CI low", low, "conf.low"),
+        ("g CI high", high, "conf.high"),
+    ):
+        _close_or_pinned_miss(
+            "noncentral_ci", bound, _value(row, column), case=case, what=what
+        )
+
+
+@pytest.mark.parametrize("case", _histo_params("nonparametric"))
+def test_one_sample_wilcoxon(case: OracleCase) -> None:
+    # stats::wilcox.test(x, mu = test.value, exact = FALSE): zeros of x - mu dropped,
+    # always the normal approximation with tie and continuity corrections.
+    x, mu = _sample(case), _test_value(case)
+    v, p = _signed_rank(x - mu, _alternative(case))
+    row = case.subtitle_data
+    assert_close("closed_form", v, _value(row, "statistic"), what="V")
+    assert_close("closed_form", p, _value(row, "p.value"), what="p")
+
+
+@pytest.mark.parametrize("case", _histo_params("nonparametric"))
+def test_one_sample_rank_biserial(case: OracleCase) -> None:
+    # effectsize::rank_biserial(x, mu = test.value): (W+ - W-) / (W+ + W-) over the
+    # nonzero x - mu; CI tanh(atanh(r) -/+ z SE) with the null SE at n counting only
+    # the nonzero x - mu. Unlike the paired version (n counts every pair, zeros
+    # included): edge_one_ties (6 zeros) and edge_one_outlier (1) miss with every
+    # value counted.
+    x, mu = _sample(case), _test_value(case)
+    d = x - mu
+    nonzero = d[d != 0]
+    ranks = stats.rankdata(np.abs(nonzero))
+    plus, minus = float(ranks[nonzero > 0].sum()), float(ranks[nonzero < 0].sum())
+    r = (plus - minus) / (plus + minus)
+    row = case.subtitle_data
+    assert row["effectsize"] == "r (rank biserial)"
+    assert_close("closed_form", r, _value(row, "estimate"), what="r")
+
+    def se_at(n: int) -> float:
+        return math.sqrt(n * (n + 1) * (2 * n + 1) / 6) / (n * (n + 1) / 2)
+
+    se = se_at(nonzero.size)
+    q = _one_sided_quantile(case, row)
+    side = _alternative(case)
+    if abs(r) < 1:
+        low, high = math.tanh(math.atanh(r) - q * se), math.tanh(math.atanh(r) + q * se)
+        if nonzero.size < d.size and side != "less":
+            every = math.tanh(math.atanh(r) - q * se_at(d.size))
+            assert not is_close("closed_form", every, _value(row, "conf.low"))
+    else:
+        low = high = r
+    low = -1.0 if side == "less" else low
+    high = 1.0 if side == "greater" else high
+    assert_close("closed_form", low, _value(row, "conf.low"), what="r CI low")
+    assert_close("closed_form", high, _value(row, "conf.high"), what="r CI high")
+
+
+@pytest.mark.parametrize("case", _histo_params("robust"))
+def test_one_sample_trimmed_statistic(case: OracleCase) -> None:
+    # WRS2::trimcibt: the trimmed mean of x and t = (trimmed mean - mu) / (winsorized
+    # SD / ((1 - 2 tr) sqrt(n))), both exact; `alternative` has no effect.
+    x, mu = _sample(case), _test_value(case)
+    tm, t, _ = _trimmed_one_sample(x - mu, _tr(case))
+    row = case.subtitle_data
+    assert row["effectsize"] == "Trimmed mean"
+    assert_close("closed_form", tm + mu, _value(row, "estimate"), what="trimmed mean")
+    assert_close("closed_form", t, _value(row, "statistic"), what="t")
+
+
+def _check_one_sample_jzs(case: OracleCase, row: Row, *, what: str) -> None:
+    """BayesFactor::ttestBF(x, mu = test.value): the JZS Bayes factor of the
+    one-sample t at n - 1 df, Cauchy scale bf.prior."""
+    x, mu = _sample(case), _test_value(case)
+    prior = _prior(case)
+    assert number(row["prior.scale"]) == prior, f"{what}: {row['prior.scale']}"
+    t = float(stats.ttest_1samp(x, mu).statistic)
+    n = float(x.size)
+    got = ref.jzs_bf10_t(t, n, n - 1.0, r=prior)
+    _close_or_pinned_miss(
+        "ttest_bayes_factor", got, _value(row, "bf10"), case=case, what=what
+    )
+    other = math.sqrt(2) / 2 if prior == JZS_PRIOR else JZS_PRIOR
+    wrong = ref.jzs_bf10_t(t, n, n - 1.0, r=other)
+    assert not is_close("ttest_bayes_factor", wrong, _value(row, "bf10")), what
+
+
+@pytest.mark.parametrize("case", _histo_params("bayes"))
+def test_one_sample_jzs_bayes_factor(case: OracleCase) -> None:
+    _check_one_sample_jzs(case, case.subtitle_data, what="BF10")
+
+
+@pytest.mark.parametrize("case", _histo_params("parametric", needs="caption"))
+def test_one_sample_jzs_bayes_factor_caption(case: OracleCase) -> None:
+    caption = case.caption_data
+    assert caption is not None, "no Bayes caption"
+    _check_one_sample_jzs(case, caption, what="caption BF10")
+
+
+# Correlation (ggscatterstats) ---------------------------------------------------------
+#
+# Read from the CSV (complete pairs, file order):
+#     parametric     Pearson's r, t = r sqrt((n - 2) / (1 - r^2)) on n - 2 df, CI
+#                    tanh(atanh(r) -/+ z / sqrt(n - 3)) (inline, Fisher 1915)
+#     nonparametric  Spearman's rho (Pearson's r of mid-ranks), S = (n^3 - n)(1 - rho)
+#                    / 6, p from the t approximation on n - 2 df also without ties,
+#                    CI tanh(atanh(rho) -/+ z sqrt(1.06 / (n - 3))) (Fieller, Hartley
+#                    & Pearson 1957) (inline)
+#     robust         the Pearson correlation of x and y each winsorized at its
+#                    floor(tr n)-th order statistics, with Pearson's t, df n - 2 and
+#                    CI (inline)
+#     bayes          v0.1 has no reference for the correlation Bayes factor
+
+
+def _scatter_params(type_: str) -> list[Any]:
+    cases = [
+        case
+        for case in cases_for("ggscatterstats")
+        if case.type == type_
+        and _draws(case, "subtitle")
+        and "subtitle" not in case.expected_hidden_errors
+    ]
+    require_cases(cases, f"ggscatterstats {type_} with subtitle")
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+def _pairs(case: OracleCase) -> tuple[FloatArray, FloatArray]:
+    frame = read_dataset(case)
+    used = frame[[case.args["x"], case.args["y"]]].dropna()
+    x = used[case.args["x"]].to_numpy(dtype=np.float64)
+    y = used[case.args["y"]].to_numpy(dtype=np.float64)
+    data = case.raw["analyzed_data"]
+    assert x.tolist() == [number(v) for v in data["x_values"]]
+    assert y.tolist() == [number(v) for v in data["y_values"]]
+    return x, y
+
+
+def _pearson(x: FloatArray, y: FloatArray) -> float:
+    dx, dy = x - x.mean(), y - y.mean()
+    return float((dx @ dy) / math.sqrt(float(dx @ dx) * float(dy @ dy)))
+
+
+def _check_correlation(
+    row: Row, r: float, n: int, *, se_z: float, what: str, t_test: bool = True
+) -> None:
+    """r, its t on n - 2 df with the two-sided p, and the Fisher-z CI with the
+    standard error ``se_z`` of atanh(r). An r of +-1 (to rounding) is compared
+    only by its estimate."""
+    assert_close("closed_form", r, _value(row, "estimate"), what=f"{what} r")
+    if abs(r) > 1 - 1e-12:
+        return
+    t = r * math.sqrt((n - 2) / (1 - r * r))
+    if t_test:
+        assert_close("closed_form", t, _value(row, "statistic"), what=f"{what} t")
+        assert_close("closed_form", n - 2.0, _value(row, "df.error"), what=f"{what} df")
+    p = 2 * float(stats.t.sf(abs(t), n - 2))
+    assert_close("closed_form", p, _value(row, "p.value"), what=f"{what} p")
+    q = float(stats.norm.isf((1 - _value(row, "conf.level")) / 2))
+    low = math.tanh(math.atanh(r) - q * se_z)
+    high = math.tanh(math.atanh(r) + q * se_z)
+    assert_close("closed_form", low, _value(row, "conf.low"), what=f"{what} CI low")
+    assert_close("closed_form", high, _value(row, "conf.high"), what=f"{what} CI high")
+
+
+@pytest.mark.parametrize("case", _scatter_params("parametric"))
+def test_pearson_correlation(case: OracleCase) -> None:
+    x, y = _pairs(case)
+    n = x.size
+    row = case.subtitle_data
+    if math.isnan(_value(row, "estimate")):
+        # Constant x: r is undefined, and R reports NA for r, t, p and the CI.
+        assert float(x.std()) == 0.0 or float(y.std()) == 0.0
+        return
+    _check_correlation(
+        row, _pearson(x, y), n, se_z=1 / math.sqrt(n - 3), what=case.name
+    )
+
+
+@pytest.mark.parametrize("case", _scatter_params("nonparametric"))
+def test_spearman_correlation(case: OracleCase) -> None:
+    x, y = _pairs(case)
+    n = x.size
+    row = case.subtitle_data
+    if math.isnan(_value(row, "estimate")):
+        assert float(x.std()) == 0.0 or float(y.std()) == 0.0
+        return
+    rho = _pearson(stats.rankdata(x), stats.rankdata(y))
+    s = (n**3 - n) * (1 - rho) / 6
+    if abs(rho) < 1 - 1e-12:
+        assert_close("closed_form", s, _value(row, "statistic"), what="S")
+    se = math.sqrt(1.06 / (n - 3))
+    _check_correlation(row, rho, n, se_z=se, what=case.name, t_test=False)
+    # Negative control: Fisher's 1 / sqrt(n - 3) misses the CI.
+    q = float(stats.norm.isf((1 - _value(row, "conf.level")) / 2))
+    if abs(rho) < 1 - 1e-12:
+        plain = math.tanh(math.atanh(rho) - q / math.sqrt(n - 3))
+        assert not is_close("closed_form", plain, _value(row, "conf.low"))
+
+
+def _winsorize(v: FloatArray, tr: float) -> FloatArray:
+    """Each value clipped to the floor(tr n)-th smallest and largest values."""
+    n = v.size
+    g = math.floor(tr * n)
+    ordered = np.sort(v)
+    return np.clip(v, ordered[g], ordered[n - g - 1])
+
+
+def _corr_probe_designs() -> list[Any]:
+    return [
+        pytest.param(design, id=str(design["name"]))
+        for design in probe("probe-corr").rows("designs")
+    ]
+
+
+def _probe_value(row: Row, key: str) -> float:
+    value = r_double(str(row[key]))
+    assert value is not None, key
+    return value
+
+
+@pytest.mark.parametrize("design", _corr_probe_designs())
+def test_correlation_probe_rules(design: Row) -> None:
+    # What correlation::correlation() runs underneath, on probe-corr's data:
+    # Spearman's p is cor.test(exact = FALSE)'s (the t approximation), never the
+    # exact one cor.test gives by default for small n without ties (edge_corr_small:
+    # 0.037 against 0.083); the winsorized correlation is WRS2::wincor's r, tested as
+    # Pearson's r on n - 2 df rather than wincor's own test (its p differs); the
+    # Bayes factor is BayesFactor::correlationBF(rscale = bf.prior) exactly, reported
+    # with the beta prior's parameter 1 / bf.prior (ggstatsplot prints it as
+    # r_beta^JZS = 1.41 for 0.707), not the "medium" scale 1/3.
+    rows = {(c["method"], c["ci"]): c for c in design["correlation"]}
+    spearman = {str(s["exact"]): s for s in design["spearman"]}
+    row = rows[("spearman", 0.95)]["row"]
+    if row is not None and spearman["False"]["p_value_hex"] is not None:
+        assert row[0]["p_hex"] == spearman["False"]["p_value_hex"]
+    for entry in design["winsorized"]:
+        if entry["correlation"] is None or entry["wincor"] is None:
+            continue
+        (corr,) = entry["correlation"]
+        r = _probe_value(corr, "r_hex")
+        assert r == r_double(entry["wincor"]["cor"][0])
+        assert corr["df_error"] == design["n"] - 2
+    for entry in design["bayes"]:
+        if entry["correlation"] is None:
+            continue
+        (corr,) = entry["correlation"]
+        bf = r_double(str(entry["bf10_hex"]))
+        if bf is not None and math.isfinite(bf):
+            assert _probe_value(corr, "BF_hex") == bf
+        assert math.isclose(
+            number(corr["Prior_Scale"]), 1 / float(entry["prior"]), rel_tol=1e-14
+        )
+
+
+@pytest.mark.parametrize("case", _scatter_params("robust"))
+def test_winsorized_correlation(case: OracleCase) -> None:
+    x, y = _pairs(case)
+    n = x.size
+    row = case.subtitle_data
+    if math.isnan(_value(row, "estimate")):
+        assert float(x.std()) == 0.0 or float(y.std()) == 0.0
+        return
+    tr = _tr(case)
+    r = _pearson(_winsorize(x, tr), _winsorize(y, tr))
+    _check_correlation(row, r, n, se_z=1 / math.sqrt(n - 3), what=case.name)

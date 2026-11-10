@@ -290,6 +290,8 @@ def checked_expressions(case: OracleCase) -> list[tuple[str, str, tx.Node]]:
                 (f"annotation{pair}", str(ann), rebuild_pair(case, by_pair[pair]))
             )
     for layer in case.plot_layers:
+        if layer["geom"] != "GeomSignif":
+            continue  # gghistostats and ggscatterstats record other layers built too
         for j, built in enumerate(layer["built"] or []):
             # group "setosa-versicolor-1": the bracket's 1-based comparison index
             index = int(str(built["group"]).rsplit("-", 1)[1]) - 1

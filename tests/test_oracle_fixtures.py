@@ -11,7 +11,9 @@ from collections.abc import Sequence
 from typing import Any
 
 import narwhals.stable.v2 as nw
+import numpy as np
 import pytest
+from scipy import stats as sp_stats
 
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
@@ -20,6 +22,7 @@ from tests.oracle_fixtures import (
     SIMULATED_LINCON_CRITICAL_VALUES,
     Backend,
     OracleCase,
+    Row,
     cases_for,
     integrity_problems,
     load_cases,
@@ -178,6 +181,92 @@ SHUFFLED_TWINS = {
     "edge_within2_shuffled": "edge_within2_outliers",
     "edge_within_shuffled": "edge_within_outliers",
 }
+# Review of Phases 0-3, T7: small cases that decide open rules (see generate.R).
+T7_CASES = frozenset(
+    {
+        "ggbetweenstats-edge_akp_undefined2-robust",
+        "ggbetweenstats-edge_tied3_small-nonparametric",
+        "ggbetweenstats-edge_tr029-robust",
+        "ggbetweenstats-edge_n2_vs50-parametric",
+        "ggwithinstats-edge_rm_all_tied-nonparametric",
+        "ggwithinstats-edge_rm_some_tied-nonparametric",
+    }
+)
+# Cases generate.R runs into probe-heldout instead of a fixture (see there).
+HELD_OUT_CASES = frozenset(
+    {
+        "ggbetweenstats-edge_akp_undefined-robust",
+        "ggwithinstats-edge_rm_n3k4-parametric",
+    }
+)
+# Phase 4 (histostats): gghistostats cases, label -> types (see generate.R).
+HISTO_LABELS: dict[str, tuple[str, ...]] = {
+    **dict.fromkeys(
+        (
+            "mtcars",
+            "mtcars-tv20",
+            "iris-sepal",
+            "ToothGrowth",
+            "ToothGrowth-tv100",
+            "bugs_long",
+            "edge_one_small",
+            "edge_one_ties",
+            "edge_one_negative",
+            "edge_one_outlier",
+            "edge_one_null",
+            "edge_one_large_n",
+            "edge_one_missing",
+            "ToothGrowth-cl90",
+            "ToothGrowth-digits3",
+            "ToothGrowth-nosubtitle",
+            "ToothGrowth-greater",
+        ),
+        TYPES,
+    ),
+    "ToothGrowth-tr01": ("robust",),
+    "ToothGrowth-less": ("parametric", "nonparametric"),
+    "ToothGrowth-prior08": ("parametric", "bayes"),
+    "ToothGrowth-nobf": ("parametric",),
+    "ToothGrowth-binwidth2": ("parametric",),
+    "ToothGrowth-nocentrality": ("parametric",),
+}
+# Phase 4 (scatterstats): ggscatterstats cases, label -> types (see generate.R).
+SCATTER_LABELS: dict[str, tuple[str, ...]] = {
+    **dict.fromkeys(
+        (
+            "mtcars",
+            "iris",
+            "edge_corr_small",
+            "edge_corr_ties",
+            "edge_corr_perfect",
+            "edge_corr_perfect-neg",
+            "edge_corr_null",
+            "edge_corr_outlier",
+            "edge_corr_large_n",
+            "edge_corr_missing",
+            "edge_corr_constant_x",
+            "mtcars-cl90",
+            "mtcars-digits3",
+            "mtcars-nosubtitle",
+        ),
+        TYPES,
+    ),
+    "mtcars-tr01": ("robust",),
+    "mtcars-prior08": ("parametric", "bayes"),
+    "mtcars-nobf": ("parametric",),
+    "mtcars-nomarginal": ("parametric",),
+    "mtcars-loess": ("parametric",),
+    "mtcars-labels": ("parametric",),
+    "mtcars-labelexpr": ("parametric",),
+}
+HISTO_CASES = frozenset(
+    f"gghistostats-{label}-{t}" for label, types in HISTO_LABELS.items() for t in types
+)
+SCATTER_CASES = frozenset(
+    f"ggscatterstats-{label}-{t}"
+    for label, types in SCATTER_LABELS.items()
+    for t in types
+)
 EXPECTED_CASES = frozenset(
     {f"ggbetweenstats-{label}-{t}" for label in ALL_TYPE_LABELS for t in TYPES}
     | {"ggbetweenstats-mtcars-am-drat-parametric"}
@@ -198,6 +287,9 @@ EXPECTED_CASES = frozenset(
         for label, types in WITHIN_LABELS.items()
         for t in types
     }
+    | T7_CASES
+    | HISTO_CASES
+    | SCATTER_CASES
 )
 # Cases where ggstatsplot 1.1.4 itself fails, as generate.R declares them.
 EXPECTED_FAILURES = frozenset(
@@ -205,6 +297,9 @@ EXPECTED_FAILURES = frozenset(
         "ggbetweenstats-edge_n2-parametric",
         "ggbetweenstats-edge_n2-robust",
         "ggbetweenstats-edge_n2-bayes",
+        # Every subject constant across conditions: the subtitle fails silently and
+        # the Durbin-Conover table has no rows (T7).
+        "ggwithinstats-edge_rm_all_tied-nonparametric",
     }
 )
 EXPECTED_PROBES = frozenset(
@@ -223,6 +318,10 @@ EXPECTED_PROBES = frozenset(
         "probe-friedman",
         "probe-rmanova",
         "probe-wrs2within",
+        "probe-bootrules",
+        "probe-corr",
+        "probe-onesamplebf",
+        "probe-heldout",
     }
 )
 
@@ -240,6 +339,9 @@ def test_case_list_is_what_the_generator_writes() -> None:
     assert len(PARAMETRIC_LABELS) == 28
     assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
     assert sum(len(types) for types in WITHIN_LABELS.values()) == 159
+    assert len(T7_CASES) == 6
+    assert len(HISTO_CASES) == 76
+    assert len(SCATTER_CASES) == 64
 
 
 ALL_CASES = [
@@ -264,6 +366,24 @@ def _failed_params() -> list[Any]:
 
 
 COMPLETED = _completed_params()
+# gghistostats and ggscatterstats: designs without groups (analyzed_data).
+NO_LEVEL = ("gghistostats", "ggscatterstats")
+
+
+def _no_level_params() -> list[Any]:
+    """Every completed gghistostats and ggscatterstats case."""
+    return [param for function in NO_LEVEL for param in oracle_params(function)]
+
+
+def _no_level_all() -> list[Any]:
+    """Every gghistostats and ggscatterstats case, failed ones included."""
+    return [
+        pytest.param(case, id=case.name)
+        for case in load_cases()
+        if case.function in NO_LEVEL
+    ]
+
+
 WITHIN_ALL = [
     pytest.param(case, id=case.name)
     for case in load_cases()
@@ -291,13 +411,20 @@ def test_failed_case_fails_where_declared(case: OracleCase) -> None:
     *before, last = case.suppressed
     assert last["component"] == expected["component"]
     assert last["error"] is not None
-    assert all(entry["error"] is None for entry in before)
+    # A call before the failure failed only where the case declares that
+    # ggstatsplot swallows its error (edge_rm_all_tied: the subtitle); such a call
+    # returned nothing.
+    declared = set(case.expected_hidden_errors)
+    assert {e["component"] for e in before if e["error"] is not None} == declared
     assert case.raw["subtitle"] is None
     assert case.raw["stats"] is None
     assert case.raw["plot_layers"] is None
     for entry in before:
         value = case.partial(entry["component"])
-        assert value, f"{entry['component']} returned nothing"
+        if entry["component"] in declared:
+            assert value is None, entry["component"]
+        else:
+            assert value, f"{entry['component']} returned nothing"
     # The failing call is recorded too, with no value: it returned nothing.
     components = [entry["component"] for entry in case.raw["partial"]]
     assert components.count(expected["component"]) == 1
@@ -626,6 +753,31 @@ DECLARED_R_NOISE: dict[tuple[str, str, str], str] = {
         "afex computes the Huynh-Feldt epsilon alongside; ggstatsplot reports the "
         "Greenhouse-Geisser correction, which the warning does not concern"
     ),
+    # ggscatterstats on constant x (edge_corr_constant_x), where no correlation is
+    # defined: R's cor() warns and returns NA, and ggstatsplot prints NA for r, the
+    # statistic, p and the CI (parametric, nonparametric, robust); the Bayesian
+    # correlation then stops ("No valid values found"), which ggstatsplot swallows
+    # (the parametric caption, the bayes subtitle). A finding, not noise: inferplot
+    # must refuse such data with a plain error instead (CLAUDE.md rule 3).
+    ("warning", "subtitle", "the standard deviation is zero"): (
+        "constant x: R's correlation is NA and ggstatsplot prints NA "
+        "(edge_corr_constant_x)"
+    ),
+    ("warning", "caption", "the standard deviation is zero"): (
+        "constant x: the Bayesian caption's correlation, before it fails"
+    ),
+    ("warning", "correlation record", "the standard deviation is zero"): (
+        "constant x: the correlation record replays the subtitle's call"
+    ),
+    ("message", "subtitle", "`ci` is too small or x does not contain enough data"): (
+        "constant x: bayestestR finds no posterior draws for the interval"
+    ),
+    ("message", "caption", "`ci` is too small or x does not contain enough data"): (
+        "constant x: as for the bayes subtitle, in the parametric caption"
+    ),
+    ("message", "correlation record", "`ci` is too small or x does not contain"): (
+        "constant x: the correlation record replays the bayes subtitle's call"
+    ),
 }
 
 
@@ -659,6 +811,10 @@ def test_r_warnings_and_messages_are_declared() -> None:
         reference = raw["bootstrap_reference"]
         if reference is not None:
             read(case, "warning", "bootstrap reference", reference["r_warnings"])
+        if case.function == "ggscatterstats":  # its replay of the subtitle's call
+            record = raw["correlation"]
+            read(case, "warning", "correlation record", record["warnings"])
+            read(case, "message", "correlation record", record["messages"])
     assert undeclared == []
     assert seen == set(DECLARED_R_NOISE)
     # Only the repeated-measures cases are noisy; ggbetweenstats ran silently.
@@ -799,13 +955,21 @@ def test_brackets_are_the_displayed_pairs(case: OracleCase) -> None:
     assert drawn == expected
 
 
-@pytest.mark.parametrize("case", COMPLETED)
+@pytest.mark.parametrize("case", [*COMPLETED, *_no_level_params()])
 def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     ref = case.bootstrap_reference
     k = len(case.analysis_levels)
     # Bootstrapped designs (SPEC.md section 9), and only when ggstatsplot computed the
     # effect size: without a subtitle (results.subtitle = FALSE) there is no CI.
-    bootstrapped = (case.type == "robust") or (case.type == "nonparametric" and k > 2)
+    # gghistostats bootstraps only its robust test (trimcibt); ggscatterstats nothing.
+    if case.function == "ggscatterstats":
+        bootstrapped = False
+    elif case.function == "gghistostats":
+        bootstrapped = case.type == "robust"
+    else:
+        bootstrapped = (case.type == "robust") or (
+            case.type == "nonparametric" and k > 2
+        )
     # A subtitle ggstatsplot swallowed an error for has no effect size either
     # (edge_within_small, nonparametric).
     with_subtitle = (
@@ -843,12 +1007,32 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
         f"no candidate call reproduces ggstatsplot {ref['ggstatsplot']}: "
         f"{ref['replay']['candidates']}"
     )
-    assert ref["ggstatsplot"]["resamples"] == 100
+    keys: tuple[str, ...] = ("estimate", "conf_low", "conf_high")
+    if case.function == "gghistostats":
+        # trimcibt: statsExpressions passes no nboot, so ggstatsplot uses WRS2's
+        # documented default of 200; the replay with nboot left out and the one with
+        # nboot = 200 both reproduce it, at alpha = 1 - conf.level as computed. Its
+        # p-value is a bootstrap quantity too.
+        keys = (*keys, "p_value")
+        assert ref["ggstatsplot"]["resamples"] == 200
+        candidates = ref["replay"]["candidates"]
+        by_mode = {(c["replay_resamples"], c["call"]): c for c in candidates}
+        computed = candidates[0]["call"]
+        assert "alpha = 1 - " in computed, computed
+        assert by_mode[("default", computed)]["matches"]
+        assert by_mode[(200, computed)]["matches"]
+        assert (
+            by_mode[("default", computed)]["values"]
+            == by_mode[(200, computed)]["values"]
+        )
+        assert f"nv = {case.args.get('test.value', 0):g}," in ref["call"], ref["call"]
+    else:
+        assert ref["ggstatsplot"]["resamples"] == 100
     estimate = number(ref["estimate"])
     low, high = number(ref["conf_low"]), number(ref["conf_high"])
     assert low <= estimate <= high
     # The 20,000-resample reference lies within the spread of 2,000-resample runs.
-    for key in ("estimate", "conf_low", "conf_high"):
+    for key in keys:
         assert_within_monte_carlo(
             number(ref[key]),
             number(reps[f"{key}_mean"]),
@@ -1054,3 +1238,340 @@ def test_probe_wrs2within_covers_its_grid() -> None:
     assert all(len(row["pairs"]) == 3 and len(row["rmmcp"]) == 3 for row in rm)
     assert len(wrs2.rows("dep_effect")) == 4 * 2
     assert len(wrs2.rows("wmcp_akp")) == 4 * 2
+
+
+def test_probe_bootrules_covers_its_grid() -> None:
+    # The rules themselves are tested in tests/stats/test_probe_bootrules.py.
+    bootrules = probe("probe-bootrules")
+    rules = {rule["name"]: rule for rule in bootrules.rows("rules")}
+    assert list(rules) == [
+        "akp.effect",
+        "t1way",
+        "rank_epsilon_squared",
+        "dep.effect",
+        "wmcpAKP",
+        "kendalls_w",
+        "trimcibt",
+    ]
+    for name, rule in rules.items():
+        levels = 1 if name in ("dep.effect", "wmcpAKP") else 2
+        assert len(rule["rows"]) == 6 * levels, name
+        for row in rule["rows"]:
+            assert row["error"] is None, (name, row["B"])
+            assert row["unbalanced_traces"] == 0
+            assert row["traced"] or row["boots"], (name, row["B"])
+    undefined = [entry["name"] for entry in bootrules.rows("undefined")]
+    assert undefined == [
+        "edge_akp_undefined",
+        "edge_akp_undefined2",
+        "edge_tied3_small",
+        "edge_rm_some_tied",
+    ]
+
+
+def test_probe_corr_covers_its_designs() -> None:
+    # The rules are tested in tests/test_reference_vs_oracle.py.
+    designs = probe("probe-corr").rows("designs")
+    assert [d["name"] for d in designs] == [
+        "mtcars",
+        "iris",
+        "small",
+        "ties",
+        "null",
+        "outlier",
+        "missing",
+        "perfect",
+        "perfect_neg",
+    ]
+    for design in designs:
+        assert len(design["x_hex"]) == len(design["y_hex"]) == design["n"]
+        assert len(design["pearson"]) == 2
+        assert [s["exact"] for s in design["spearman"]] == ["NULL", True, False]
+        assert len(design["correlation"]) == 4
+        assert [w["tr"] for w in design["winsorized"]] == [0.2, 0.1]
+        assert [b["prior"] for b in design["bayes"]][:3] == [0.707, 0.8, "medium"]
+
+
+def test_probe_heldout_holds_the_held_out_cases() -> None:
+    # Cases R completes but inferplot computes differently by a rule the lead has
+    # yet to decide: each is a whole fixture, kept out of the parity tests.
+    entries = {entry["name"]: entry for entry in probe("probe-heldout").rows("cases")}
+    assert set(entries) == HELD_OUT_CASES
+    for name, entry in entries.items():
+        fixture = entry["fixture"]
+        assert fixture["name"] == name
+        assert fixture["error"] is None
+        assert fixture["versions"]["packages"]["ggstatsplot"] == PARITY_VERSION
+    # edge_rm_n3k4: with 3 subjects and 4 conditions afex computes no sphericity
+    # correction and warns; ggstatsplot prints the uncorrected F(3, 6).
+    n3k4 = entries["ggwithinstats-edge_rm_n3k4-parametric"]["fixture"]
+    (row,) = n3k4["stats"]["subtitle_data"]
+    assert (number(row["df"]), number(row["df.error"])) == (3.0, 6.0)
+    # edge_akp_undefined: about 17% of the AKP resamples are 0/0, and WRS2's upper
+    # bound is NA (positions counted over all B after the 0/0 values are dropped);
+    # ggstatsplot prints CI [0.22, NA], at 100 resamples and in the 20,000-resample
+    # reference alike, which the exact replay reproduces.
+    akp = entries["ggbetweenstats-edge_akp_undefined-robust"]["fixture"]
+    (row,) = akp["stats"]["subtitle_data"]
+    assert row["conf.high"] is None
+    assert '"NA" * "]"' in akp["subtitle"]
+    reference = akp["bootstrap_reference"]
+    assert reference["replay"]["matches"]
+    assert reference["conf_high"] is None
+    assert number(reference["conf_low"]) == number(row["conf.low"])
+    (subtitle,) = [e for e in n3k4["suppressed"] if e["component"] == "subtitle"]
+    assert any(
+        "non-sphericity tests and corrections not available" in w
+        for w in subtitle["warnings"]
+    )
+
+
+# One-sample and correlation designs (gghistostats, ggscatterstats) ------------------
+
+# R arguments of these cases that inferplot has no keyword for (SPEC.md section 2):
+# ggscatterstats' label.expression (which points get labels) and smooth.line.args
+# (any geom_smooth method and its arguments; inferplot draws the OLS line).
+NO_INFERPLOT_KEYWORD = frozenset({"label.expression", "smooth.line.args"})
+# The numbers of a subtitle or caption row that generate.R checks for NA.
+NUMBER_COLUMNS = ("statistic", "p.value", "estimate", "conf.low", "conf.high", "bf10")
+
+
+def _hidden_calls(case: OracleCase) -> list[str]:
+    """The hidden calls generate.R expects, in order, for these functions."""
+    calls: list[str] = []
+    if case.args.get("results.subtitle", True) is not False:
+        calls.append("subtitle")
+        if case.type == "parametric" and case.args.get("bf.message", True) is not False:
+            calls.append("caption")
+    if case.function == "ggscatterstats":
+        if case.args.get("marginal", True) is not False:
+            calls += ["xsidehistogram", "ysidehistogram"]
+    elif case.args.get("centrality.plotting", True) is not False:
+        calls.append("centrality_description")
+    return calls
+
+
+@pytest.mark.parametrize("case", _no_level_params())
+def test_no_level_fixture_contents(case: OracleCase) -> None:
+    versions = case.raw["versions"]
+    assert versions["packages"]["ggstatsplot"] == PARITY_VERSION
+    assert case.error is None, case.error
+    # No levels: an empty level list and count map; the values are in analyzed_data.
+    assert case.analysis_levels == ()
+    assert case.n_per_level == {}
+    assert [entry["component"] for entry in case.suppressed] == _hidden_calls(case)
+    swallowed = {e["component"] for e in case.suppressed if e["error"] is not None}
+    declared = set(case.expected_hidden_errors)
+    assert swallowed == declared
+    with_subtitle = case.args.get("results.subtitle", True) is not False
+    if "caption" in _hidden_calls(case) and "caption" not in declared:
+        assert case.caption, "no Bayes caption"
+        assert case.caption_data is not None
+    else:
+        assert case.caption is None
+        assert case.caption_data is None
+    n = case.analyzed_data["n"]
+    assert n == len(case.analyzed_values("x")) == len(case.analyzed_data["rows"])
+    if not with_subtitle or "subtitle" in declared:
+        assert case.subtitle is None
+        assert case.subtitle_rows == []
+    else:
+        assert case.subtitle
+        row = case.subtitle_data
+        assert int(number(row["n.obs"])) == n
+    # NA numbers (printed as "NA" or "") only where the case declares them: constant
+    # x, and the Bayes factor at r = +-1.
+    declared_na = set(case.raw["expected_na_values"])
+    for table in ("subtitle", "caption"):
+        rows = case.table(f"{table}_data")
+        has_na = any(
+            math.isnan(number(row[column]))
+            for row in rows
+            for column in NUMBER_COLUMNS
+            if column in row
+        )
+        assert has_na == (table in declared_na), table
+    args = {k: v for k, v in case.args.items() if k not in NO_INFERPLOT_KEYWORD}
+    call = translate(case.function, args)
+    assert call.function == case.function.removeprefix("gg")
+    positional = ("x",) if case.function == "gghistostats" else ("x", "y")
+    assert call.args == tuple(case.args[name] for name in positional)
+    assert call.kwargs["type"] == case.type
+
+
+def _is_missing(value: object) -> bool:
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+def _present_rows(
+    frame: Any, columns: Sequence[str]
+) -> tuple[list[int], dict[str, list[float]]]:
+    """1-based rows where every column is present, and those columns' values."""
+    df = nw.from_native(frame, eager_only=True)
+    lists = {column: df[column].to_list() for column in columns}
+    keep = [
+        i
+        for i in range(len(df))
+        if not any(_is_missing(lists[column][i]) for column in columns)
+    ]
+    values = {column: [float(lists[column][i]) for i in keep] for column in columns}
+    return [i + 1 for i in keep], values
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("case", _no_level_all())
+def test_backends_see_the_values_r_analyzed(case: OracleCase, backend: Backend) -> None:
+    # gghistostats drops rows without x; ggscatterstats keeps the complete pairs. Each
+    # backend reads the same rows, in file order, with the same values.
+    data = case.analyzed_data
+    columns = [case.args["x"]]
+    if case.function == "ggscatterstats":
+        columns.append(case.args["y"])
+    rows, values = _present_rows(read_dataset(case, backend), columns)
+    assert rows == list(data["rows"])
+    assert values[case.args["x"]] == case.analyzed_values("x")
+    if case.function == "ggscatterstats":
+        assert values[case.args["y"]] == case.analyzed_values("y")
+    assert data["rows_dropped"] == case.raw["dataset"]["rows"] - len(rows)
+
+
+@pytest.mark.parametrize("case", oracle_params("gghistostats"))
+def test_histogram_bins_and_centrality_line(case: OracleCase) -> None:
+    # gghistostats' bin width: `binwidth`, else (max - min) / sqrt(n) of the analyzed
+    # values (ggstatsplot's .binwidth()); stat_bin lays the bins edge to edge on the
+    # grid (k + 1/2) w, and every value is counted once.
+    x = case.analyzed_values("x")
+    n = len(x)
+    (params,) = case.layer_params("GeomBar")
+    width = float(params["stat"]["binwidth"])
+    given = case.args.get("binwidth")
+    expected = float(given) if given is not None else (max(x) - min(x)) / math.sqrt(n)
+    assert math.isclose(width, expected, rel_tol=1e-13), (width, expected)
+    (bins,) = case.layer_built("GeomBar")
+    assert sum(int(b["count"]) for b in bins) == n
+    for b in bins:
+        assert math.isclose(number(b["xmax"]) - number(b["xmin"]), width, rel_tol=1e-9)
+        k = number(b["xmin"]) / width - 0.5
+        assert abs(k - round(k)) < 1e-6, (b["xmin"], width)
+    assert number(bins[0]["xmin"]) <= min(x)
+    assert max(x) <= number(bins[-1]["xmax"])
+    # The centrality line sits at the value centrality_description() labels: the
+    # mean, median, trimmed mean (at the case's tr) or MAP.
+    centrality = case.centrality
+    lines = case.layer_built("GeomVline")
+    if case.args.get("centrality.plotting", True) is False:
+        assert centrality is None
+        assert lines == []
+        return
+    assert centrality is not None
+    (row,) = centrality
+    assert int(row["n.obs"]) == n
+    ((line,),) = lines
+    assert number(line["xintercept"]) == number(row["var"])
+    values = sorted(x)
+    if case.type == "parametric":
+        assert math.isclose(number(row["var"]), math.fsum(x) / n, rel_tol=1e-14)
+    elif case.type == "nonparametric":
+        middle = (values[(n - 1) // 2] + values[n // 2]) / 2
+        assert math.isclose(number(row["var"]), middle, rel_tol=1e-14)
+    elif case.type == "robust":
+        g = math.floor(float(case.args.get("tr", 0.2)) * n)
+        trimmed = values[g : n - g]
+        assert math.isclose(
+            number(row["var"]), math.fsum(trimmed) / len(trimmed), rel_tol=1e-14
+        )
+    kind = {
+        "parametric": "mean",
+        "nonparametric": "median",
+        "robust": "trimmed",
+        "bayes": "MAP",
+    }[case.type]
+    expression = str(row["expression"])
+    assert expression.startswith(f"list(widehat(mu)[{kind}] == "), expression
+
+
+@pytest.mark.parametrize("case", oracle_params("ggscatterstats"))
+def test_scatter_smooth_band_and_marginals(case: OracleCase) -> None:
+    x = np.array(case.analyzed_values("x"))
+    y = np.array(case.analyzed_values("y"))
+    n = x.size
+    empty = set(case.raw["expected_empty_layers"])
+    (params,) = case.layer_params("GeomSmooth")
+    level = float(case.args.get("conf.level", 0.95))
+    assert float(params["stat"]["level"]) == level
+    smooth = case.args.get("smooth.line.args")
+    method = "lm" if smooth is None else smooth["method"]
+    assert params["stat"]["method"] == method
+    (built,) = case.layer_built("GeomSmooth")
+    if "GeomSmooth" in empty:
+        assert built == []
+    else:
+        assert len(built) == 80
+        assert number(built[0]["x"]) == x.min()
+        assert number(built[-1]["x"]) == x.max()
+        if method == "lm":
+            _check_ols_band(built, x, y, level)
+    # Marginal histograms: 30 bins of each variable, every value counted once.
+    for geom, values in {"GeomXsidebar": x, "GeomYsidebar": y}.items():
+        layers = [layer["built"] for layer in case.plot_layers if layer["geom"] == geom]
+        if case.args.get("marginal", True) is False:
+            assert layers == []
+            continue
+        (side,) = layers
+        assert len(side) == 30
+        assert sum(int(b["count"]) for b in side) == values.size
+    # Point labels: every analyzed point, or those label.expression selects.
+    labelled = [
+        layer for layer in case.plot_layers if layer["geom"] == "GeomLabelRepel"
+    ]
+    label = case.args.get("label.var")
+    if label is None:
+        assert labelled == []
+        return
+    (layer,) = labelled
+    rows = layer["data"]
+    assert all(label in row for row in rows)
+    if "label.expression" not in case.args:
+        assert len(rows) == n
+
+
+def _check_ols_band(built: list[Row], x: Any, y: Any, level: float) -> None:
+    """The OLS line and its pointwise confidence band at ``level``: fit -/+
+    t(1 - (1 - level) / 2, n - 2) x the fit's standard error."""
+    n = x.size
+    slope, intercept = np.polyfit(x, y, 1)
+    residual = y - (intercept + slope * x)
+    s2 = float(residual @ residual) / (n - 2)
+    centre = float(x.mean())
+    sxx = float(((x - centre) ** 2).sum())
+    q = float(sp_stats.t.ppf(1 - (1 - level) / 2, n - 2))
+    for row in built:
+        at = number(row["x"])
+        fit = intercept + slope * at
+        se = math.sqrt(s2 * (1 / n + (at - centre) ** 2 / sxx))
+        assert math.isclose(number(row["y"]), fit, rel_tol=1e-9, abs_tol=1e-9)
+        assert math.isclose(number(row["se"]), se, rel_tol=1e-8, abs_tol=1e-12)
+        assert math.isclose(
+            number(row["ymin"]), fit - q * se, rel_tol=1e-8, abs_tol=1e-9
+        )
+        assert math.isclose(
+            number(row["ymax"]), fit + q * se, rel_tol=1e-8, abs_tol=1e-9
+        )
+
+
+@pytest.mark.parametrize("case", oracle_params("ggscatterstats"))
+def test_correlation_row_replays_the_subtitle(case: OracleCase) -> None:
+    # correlation::correlation() as corr_test() calls it, after set.seed(seed): its
+    # row is ggstatsplot's subtitle row (the Bayes type's posterior too).
+    record = case.correlation
+    method = "spearman" if case.type == "nonparametric" else "pearson"
+    assert f'method = "{method}"' in record["call"]
+    assert f"bayesian = {'TRUE' if case.type == 'bayes' else 'FALSE'}" in record["call"]
+    tr = case.args.get("tr", 0.2)
+    winsorize = f"winsorize = {tr:g}" if case.type == "robust" else "winsorize = FALSE"
+    assert winsorize in record["call"]
+    if case.subtitle_rows:
+        assert record["matches_subtitle"] is True
+    if record["error"] is None:
+        (row,) = record["value"]
+        assert int(row["n_Obs"]) == case.analyzed_data["n"]

@@ -177,10 +177,16 @@ edge_within <- function(dataset, ...) {
 # Phase 4: gghistostats cases (one numeric column `x` against `test.value`) and
 # ggscatterstats cases (a correlation of `x` and `y`), one per type in `types`, with
 # `expect_error` and `expect_hidden_errors` mapping a type to what the case declares,
-# as above. `columns` names the arguments that are column names (label.var too).
+# as above, and `expect_empty_layers` the geoms ggplot2 builds no rows for (a smooth
+# line on constant x). `columns` names the arguments that are column names
+# (label.var too).
 phase4_cases <- function(fun, dataset, args, label, types, extra_args, expect_error,
-                         expect_hidden_errors) {
-  unknown <- setdiff(c(names(expect_error), names(expect_hidden_errors)), types)
+                         expect_hidden_errors, expect_empty_layers, expect_na_values) {
+  declared <- c(
+    names(expect_error), names(expect_hidden_errors), names(expect_empty_layers),
+    names(expect_na_values)
+  )
+  unknown <- setdiff(declared, types)
   if (length(unknown) > 0L) stop(label, ": expectations for types without a case: ", unknown)
   lapply(types, function(type) {
     all_args <- c(args, list(type = type), extra_args)
@@ -192,24 +198,32 @@ phase4_cases <- function(fun, dataset, args, label, types, extra_args, expect_er
       args = all_args,
       columns = intersect(c("x", "y", "label.var"), names(all_args)),
       expect_error = expect_error[[type]],
-      expect_hidden_errors = expect_hidden_errors[[type]] %||% character()
+      expect_hidden_errors = expect_hidden_errors[[type]] %||% character(),
+      expect_empty_layers = expect_empty_layers[[type]] %||% character(),
+      expect_na_values = expect_na_values[[type]] %||% character()
     )
   })
 }
 
+# `expect_na_values` maps a type to the tables (subtitle, caption) where R reports a
+# statistic, p-value, estimate, bound or Bayes factor as NA: ggstatsplot prints such a
+# number as "NA" or as an empty string, with at most a warning, so an NA no case
+# declares stops the run.
 histo_cases <- function(dataset, x, label = dataset, types = TYPES, extra_args = list(),
-                        expect_error = list(), expect_hidden_errors = list()) {
+                        expect_error = list(), expect_hidden_errors = list(),
+                        expect_empty_layers = list(), expect_na_values = list()) {
   phase4_cases(
     "gghistostats", dataset, list(x = x), label, types, extra_args, expect_error,
-    expect_hidden_errors
+    expect_hidden_errors, expect_empty_layers, expect_na_values
   )
 }
 
 scatter_cases <- function(dataset, x, y, label = dataset, types = TYPES, extra_args = list(),
-                          expect_error = list(), expect_hidden_errors = list()) {
+                          expect_error = list(), expect_hidden_errors = list(),
+                          expect_empty_layers = list(), expect_na_values = list()) {
   phase4_cases(
     "ggscatterstats", dataset, list(x = x, y = y), label, types, extra_args, expect_error,
-    expect_hidden_errors
+    expect_hidden_errors, expect_empty_layers, expect_na_values
   )
 }
 
@@ -675,9 +689,9 @@ CASES <- c(
 
   # Review of Phases 0-3 (STATUS.md T7): small hand-written cases that decide open
   # rules, each with its bootstrap reference where it has one.
-  # About 17% (a) and 2% (b2) of AKP resamples are 0/0: group a's resample is all 5
-  # after winsorizing (winsorized SD 0) and its trimmed mean equals b's (D65).
-  phase2_cases("edge_akp_undefined", x = "group", y = "value", types = "robust"),
+  # About 2% of AKP resamples are 0/0: group a's resample is all 5 after winsorizing
+  # (winsorized SD 0) and its trimmed mean equals b's (D65). (edge_akp_undefined,
+  # about 17%: in HELD_OUT_CASES below.)
   phase2_cases("edge_akp_undefined2", x = "group", y = "value", types = "robust"),
   # Three groups of three sharing the value 1: about 8.8% of the stratified resamples
   # of rank epsilon squared have every value tied (D54 in R itself).
@@ -691,12 +705,24 @@ CASES <- c(
   # Two values against fifty (b: round(10 + 2 sin(1.3 i), 2), i = 1..50): Welch's df
   # about 1.002, Hedges' g at a df just above 1.
   parametric_case("edge_n2_vs50", x = "group", y = "value"),
-  # Three subjects, four conditions: fewer subjects than conditions, so the covariance
-  # of the three contrasts is singular; afex's Greenhouse-Geisser epsilon there (D62).
-  edge_within("edge_rm_n3k4", types = "parametric"),
+  # (Three subjects, four conditions: in HELD_OUT_CASES below.)
   # Friedman with every subject constant across conditions (0/0), and with five of
   # eight subjects constant (Kendall's W bootstrap draws resamples of only those).
-  edge_within("edge_rm_all_tied", types = "nonparametric"),
+  # All tied: the subtitle fails ("missing value where TRUE/FALSE needed") and
+  # ggstatsplot swallows that; then Durbin-Conover's table has no rows and
+  # pairwise_comparisons() stops.
+  edge_within(
+    "edge_rm_all_tied", types = "nonparametric",
+    expect_hidden_errors = list(nonparametric = "subtitle"),
+    expect_error = list(nonparametric = list(
+      component = "pairwise_comparisons",
+      message = "arguments imply differing number of rows: 0, 1",
+      reason = paste(
+        "every subject constant across conditions: Friedman's statistic is 0/0, the",
+        "subtitle fails silently, and the Durbin-Conover table has no rows"
+      )
+    ))
+  ),
   edge_within("edge_rm_some_tied", types = "nonparametric"),
 
   # Phase 4 (histostats): gghistostats, all four types. The fixture records the
@@ -784,9 +810,16 @@ CASES <- c(
   scatter_cases("iris", x = "Sepal.Length", y = "Petal.Length"),
   edge_corr("edge_corr_small"),
   edge_corr("edge_corr_ties"),
-  # r = 1 and r = -1.
-  edge_corr("edge_corr_perfect"),
-  scatter_cases("edge_corr_perfect", x = "x", y = "y_neg", label = "edge_corr_perfect-neg"),
+  # r = 1 and r = -1: BayesFactor's correlation Bayes factor is NaN there, and
+  # ggstatsplot prints log(BF01) as an empty string.
+  edge_corr(
+    "edge_corr_perfect",
+    expect_na_values = list(parametric = "caption", bayes = "subtitle")
+  ),
+  scatter_cases(
+    "edge_corr_perfect", x = "x", y = "y_neg", label = "edge_corr_perfect-neg",
+    expect_na_values = list(parametric = "caption", bayes = "subtitle")
+  ),
   edge_corr("edge_corr_null"),
   # One point that turns a strong positive correlation negative.
   edge_corr("edge_corr_outlier"),
@@ -795,8 +828,22 @@ CASES <- c(
   edge_corr("edge_corr_large_n"),
   # Missing x, missing y and both.
   edge_corr("edge_corr_missing"),
-  # Constant x: no correlation is defined.
-  edge_corr("edge_corr_constant_x"),
+  # Constant x: no correlation is defined. Pearson's r is NA ("the standard deviation
+  # is zero") and the parametric subtitle prints NA; the Bayesian correlation stops
+  # ("No valid values found"), which ggstatsplot swallows (the parametric caption, the
+  # bayes subtitle). The OLS line has no slope, and geom_smooth(na.rm = TRUE) draws
+  # nothing.
+  edge_corr(
+    "edge_corr_constant_x",
+    expect_hidden_errors = list(parametric = "caption", bayes = "subtitle"),
+    expect_na_values = list(
+      parametric = "subtitle", nonparametric = "subtitle", robust = "subtitle"
+    ),
+    expect_empty_layers = list(
+      parametric = "GeomSmooth", nonparametric = "GeomSmooth", robust = "GeomSmooth",
+      bayes = "GeomSmooth"
+    )
+  ),
   # Arguments, on mtcars wt and mpg.
   scatter_cases(
     "mtcars", x = "wt", y = "mpg", label = "mtcars-cl90", extra_args = list(conf.level = 0.90)
@@ -840,8 +887,27 @@ CASES <- c(
   )
 )
 
+# Cases run like the others but written into probe-heldout instead of a fixture of
+# their own: R's result differs from what inferplot computes today by a rule the
+# lead has yet to decide, so they must not enter the parity tests (which collect
+# every fixture of a function) until then (review of Phases 0-3, T7).
+HELD_OUT_CASES <- c(
+  # About 17% of AKP resamples are 0/0 (a: 5,5,5,5,5,5,6,7,8,9; b: ten 5s). WRS2 drops
+  # them when it sorts but keeps the bound positions of all B, so the upper bound is
+  # NA (probe-bootrules) and ggstatsplot prints CI [0.22, NA]; inferplot leaves them
+  # out and counts positions over the rest (D65), a finite bound.
+  phase2_cases("edge_akp_undefined", x = "group", y = "value", types = "robust"),
+  # Three subjects, four conditions: fewer subjects than conditions, so the covariance
+  # of the three contrasts is singular. afex then computes no sphericity correction
+  # ("corresponding non-sphericity tests and corrections not available") and
+  # ggstatsplot prints the uncorrected F(3, 6); inferplot applies the
+  # Greenhouse-Geisser epsilon of the singular matrix (D62).
+  edge_within("edge_rm_n3k4", types = "parametric")
+)
+
 case_names <- vapply(CASES, function(case) case$name, character(1L))
-if (anyDuplicated(case_names)) stop("duplicate case names: ", case_names[duplicated(case_names)])
+all_names <- c(case_names, vapply(HELD_OUT_CASES, function(case) case$name, character(1L)))
+if (anyDuplicated(all_names)) stop("duplicate case names: ", all_names[duplicated(all_names)])
 
 # Arguments whose consequences the bookkeeping below knows (which hidden calls
 # ggbetweenstats and ggwithinstats make, which outputs they draw). Fail closed on any
@@ -869,7 +935,7 @@ KNOWN_ARGS_BY_FUNCTION <- list(
     "tr", "marginal", "smooth.line.args", "label.var", "label.expression"
   )
 )
-for (case in CASES) {
+for (case in c(CASES, HELD_OUT_CASES)) {
   known <- KNOWN_ARGS_BY_FUNCTION[[case$fun]]
   if (is.null(known)) stop(case$name, ": generate.R has no bookkeeping for ", case$fun)
   unknown <- setdiff(names(case$args), known)
@@ -1860,7 +1926,10 @@ correlation_record <- function(case, analysis, subtitle_row) {
     theirs <- c(subtitle_row$estimate, subtitle_row$conf.low, subtitle_row$conf.high)
     if (type != "bayes") {
       statistic <- intersect(c("t", "S"), names(value))
-      mine <- c(mine, value[[statistic[[1L]]]], value$p)
+      # statsExpressions' add_expression_col() stores a p of exactly 0 as
+      # .Machine$double.xmin (r = -1: correlation's p is 0, the subtitle's 2.2e-308).
+      p <- if (isTRUE(value$p == 0)) .Machine$double.xmin else value$p
+      mine <- c(mine, value[[statistic[[1L]]]], p)
       theirs <- c(theirs, subtitle_row$statistic, subtitle_row$p.value)
     } else {
       mine <- c(mine, value$BF)
@@ -2030,6 +2099,15 @@ run_case <- function(case) {
     fixture <- append(
       fixture, list(analyzed_data = analyzed_data(data, case, analysis)), after = at
     )
+    at <- match("expected_hidden_errors", names(fixture))
+    fixture <- append(
+      fixture,
+      list(
+        expected_empty_layers = as.list(case$expect_empty_layers),
+        expected_na_values = as.list(case$expect_na_values)
+      ),
+      after = at
+    )
     extra <- if (case$fun == "gghistostats") {
       # The centrality line's value and its label (drawn on a secondary x axis, not a
       # layer): what centrality_description() returned; null without the line.
@@ -2095,10 +2173,34 @@ no_level_problems <- function(case, fixture) {
       out <- c(out, "point labels do not follow label.var")
     }
   }
-  # Every layer but the raw points was built.
+  # No number in the subtitle or caption table is NA unless the case declares it:
+  # ggstatsplot prints such a number as "NA" or "", with at most a warning.
+  for (table in c("subtitle", "caption")) {
+    rows <- fixture$stats[[paste0(table, "_data")]]
+    numbers <- c("statistic", "p.value", "estimate", "conf.low", "conf.high", "bf10")
+    missing_value <- function(v) {
+      is.null(v) || identical(v, "NaN") || (length(v) == 1L && is.atomic(v) && is.na(v))
+    }
+    has_na <- any(vapply(rows, function(row) {
+      any(vapply(intersect(numbers, names(row)), function(column) {
+        missing_value(row[[column]])
+      }, logical(1L)))
+    }, logical(1L)))
+    if (has_na != (table %in% case$expect_na_values)) {
+      out <- c(out, sprintf(
+        "%s table %s", table, if (has_na) "holds NA" else "holds no NA as declared"
+      ))
+    }
+  }
+  # Every layer but the raw points was built, with rows unless the case declares
+  # that ggplot2 builds none.
   for (layer in fixture$plot_layers) {
-    if (layer$geom != "GeomPoint" && length(layer$built) == 0L) {
-      out <- c(out, sprintf("layer %s has no built data", layer$geom))
+    if (layer$geom == "GeomPoint") next
+    empty <- length(layer$built) == 0L
+    if (empty != (layer$geom %in% case$expect_empty_layers)) {
+      out <- c(out, sprintf(
+        "layer %s %s", layer$geom, if (empty) "has no built data" else "is not empty as declared"
+      ))
     }
   }
   out
@@ -2122,9 +2224,14 @@ outcome_problems <- function(case, fixture) {
     errors <- lapply(fixture$suppressed, function(entry) entry$error)
     last <- length(calls)
     planned <- expected_hidden_calls(case, unlist(fixture$analysis_levels))
+    # A call before the failing one may have failed only where the case declares
+    # that ggstatsplot swallows its error (edge_rm_all_tied: the subtitle).
+    earlier_failed <- !vapply(errors[-last], is.null, logical(1L))
+    undeclared <- earlier_failed & !(calls[-last] %in% case$expect_hidden_errors)
     if (last == 0L || calls[[last]] != expected$component || is.null(errors[[last]]) ||
       !identical(unname(calls), planned[seq_len(min(last, length(planned)))]) ||
-      any(!vapply(errors[-last], is.null, logical(1L)))) {
+      any(undeclared) ||
+      !setequal(calls[-last][earlier_failed], case$expect_hidden_errors)) {
       out <- c(out, sprintf(
         "expected %s to fail after %s; hidden calls were %s",
         expected$component, paste(planned, collapse = ", "), paste(calls, collapse = ", ")
@@ -4343,6 +4450,30 @@ onesamplebf_probe <- function() {
   )
 }
 
+# probe-heldout: the HELD_OUT_CASES, each run exactly as a case is (run_case(),
+# bootstrap reference included) and checked the same way (outcome_problems(), which
+# must find nothing), its would-be fixture kept whole under `fixture`.
+heldout_probe <- function() {
+  entries <- lapply(HELD_OUT_CASES, function(case) {
+    message("== (held out) ", case$name)
+    fixture <- run_case(case)
+    problems <- outcome_problems(case, fixture)
+    if (length(problems) > 0L) {
+      stop("held-out case ", case$name, ": ", paste(problems, collapse = "; "))
+    }
+    list(name = case$name, fixture = fixture)
+  })
+  datasets <- unique(lapply(entries, function(entry) {
+    list(file = entry$fixture$dataset$file, sha256 = entry$fixture$dataset$sha256)
+  }))
+  probe_file(
+    "probe-heldout",
+    "cases whose R result differs from inferplot's by a rule not yet decided, run as cases are",
+    list(cases = entries),
+    datasets = datasets
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -4372,7 +4503,8 @@ PROBE_BUILDERS <- list(
   "probe-wrs2within" = wrs2within_probe,
   "probe-bootrules" = bootrules_probe,
   "probe-corr" = corr_probe,
-  "probe-onesamplebf" = onesamplebf_probe
+  "probe-onesamplebf" = onesamplebf_probe,
+  "probe-heldout" = heldout_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
