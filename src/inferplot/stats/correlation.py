@@ -20,8 +20,9 @@ rationals, rounded once. r, t and the Fisher-z interval therefore keep their
 accuracy at any scale and for nearly collinear data, where R's ``cor`` (rounded
 deviations, a rounded r and 1 - r^2 formed from it) does not: exactly collinear
 data give r = +/-1, t = +/-inf and p = 0 (R: 1 - 2^-53 or so, t = 1.34e8 and
-p = 1.06e-62 on edge_corr_perfect). Exact up to products of deviations below about
-2^-1000 times the largest, whose rounding is far below every printed digit.
+p = 1.06e-62 on edge_corr_perfect). Exact at any range of magnitudes: where the
+deviations span more than about 2^480, the products of their parts would leave the
+doubles' range, and the sums are formed from the values as integers instead.
 
 Pairs that lie on one straight line as written (Fahrenheit against one-decimal
 Celsius) are collinear too, although their doubles are not: ``pair_moments``
@@ -178,13 +179,62 @@ class CrossMoments:
         return math.copysign(math.sqrt(float(self.r2)), float(self.sxy)) + 0.0
 
 
+# Dekker's TwoProduct is exact while a product of two parts is at least about
+# 2^-969 (its rounding error is then a double); below this, products of the
+# deviations' parts could lose bits, and the sums are formed from integers.
+_SMALLEST_EXACT_PRODUCT: Final = 2.0**-960
+
+
+def _smallest_part(*parts: FloatArray) -> float:
+    magnitudes = np.abs(np.concatenate(parts))
+    nonzero = magnitudes[magnitudes > 0.0]
+    return float(nonzero.min()) if nonzero.size else 1.0
+
+
+def _as_integers(x: FloatArray) -> tuple[list[int], int]:
+    """The doubles x as integers X_i times 2^e (one e for all), exactly."""
+    mantissa, exponent = np.frexp(x)
+    whole = (mantissa * 2.0**53).astype(np.int64).tolist()
+    shifts = (exponent - 53).tolist()
+    low = min(shifts)
+    return [int(m) << (k - low) for m, k in zip(whole, shifts, strict=True)], low
+
+
+def _integer_moments(x: FloatArray, y: FloatArray) -> tuple[Fraction, ...]:
+    """S_xx, S_yy and S_xy of the doubles x and y exactly, from integers: n sum
+    X^2 - (sum X)^2 over n, at any range of magnitudes."""
+    xi, ex = _as_integers(x)
+    yi, ey = _as_integers(y)
+    n = len(xi)
+    sx, sy = sum(xi), sum(yi)
+    sxx = n * sum(v * v for v in xi) - sx * sx
+    syy = n * sum(v * v for v in yi) - sy * sy
+    sxy = n * sum(a * b for a, b in zip(xi, yi, strict=True)) - sx * sy
+    two = Fraction(2)
+    return (
+        Fraction(sxx, n) * two ** (2 * ex),
+        Fraction(syy, n) * two ** (2 * ey),
+        Fraction(sxy, n) * two ** (ex + ey),
+    )
+
+
 def cross_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
     """``CrossMoments`` of two float64 arrays of the same length (at least one
     value each, finite), from the exact deviations and products (module
-    docstring)."""
+    docstring). Exact at any range of magnitudes: where the deviations span so
+    many orders of magnitude (about 2^480 between the largest and the smallest
+    part) that a product of their parts would leave the doubles' range, the
+    sums are formed from the values as integers instead (Phase 4 review, Z6:
+    from a range of 2^537 Cauchy-Schwarz failed and log raised)."""
     sx, ex, tx, kx = _deviations(x)
     sy, ey, ty, ky = _deviations(y)
     n = x.size
+    small_x, small_y = _smallest_part(sx, ex), _smallest_part(sy, ey)
+    if min(small_x * small_x, small_y * small_y, small_x * small_y) < (
+        _SMALLEST_EXACT_PRODUCT
+    ):
+        sxx, syy, sxy = _integer_moments(x * kx, y * ky)
+        return CrossMoments(n=n, sxx=sxx, syy=syy, sxy=sxy, x_scale=kx, y_scale=ky)
     return CrossMoments(
         n=n,
         sxx=_exact_dot((sx, ex), (sx, ex)) - tx * tx / n,

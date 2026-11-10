@@ -381,3 +381,65 @@ def test_nearly_collinear_data_are_not_swallowed() -> None:
     f = np.round(c * 1.8 + 32 + rng.choice([-0.0001, 0.0, 0.0001], c.size), 4)
     assert math.isfinite(pearson(c, f).t)
     assert 0.0 < 1 - abs(pearson(c, f).estimate) < 1e-6
+
+
+# ------------------------------------------------------------ review Z5 (mutants)
+
+
+def test_r_exactly_zero_gives_t_zero_and_p_one() -> None:
+    # Planted bug N51 (t = NaN at S_xy = 0) survived the suite.
+    x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    y = np.array([1.0, -1.0, 0.0, -1.0, 1.0])  # S_xy = 0 exactly
+    for result in (pearson(x, y), spearman(x, y)):
+        assert result.estimate == 0.0
+        assert result.t == 0.0
+        assert result.p_value == 1.0
+        assert result.conf_low == -result.conf_high
+
+
+def test_fisher_interval_from_the_exact_one_minus_r2() -> None:
+    # Planted bug N28 (1 - r^2 from the rounded r) survived: at 1 - r^2 of about
+    # 1e-21, r rounds to 1 and 1 - r * r is 0, so the interval collapsed to [1, 1].
+    # With 4 pairs at a level of 1 - 1e-12 the lower bound is 1 - 1.1e-15.
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    y = np.array([2.0, 4.0, 6.0 + 2e-10, 8.0])
+    om = float(cross_moments(x, y).one_minus_r2)
+    assert 1e-22 < om < 1e-20
+    result = pearson(x, y, conf_level=1 - 1e-12)
+    assert result.estimate == 1.0  # r itself rounds to 1
+    q = 7.130506848  # the standard normal quantile at 1 - 0.5e-12
+    w = math.log1p(1.0) - 0.5 * math.log(om) - q  # se = 1 at n = 4
+    assert 1.0 - result.conf_low == pytest.approx(
+        2.0 / (math.exp(2.0 * w) + 1.0), rel=0.1
+    )
+
+
+def test_spearman_refuses_a_column_constant_as_written() -> None:
+    # Planted bug N44 (no constant check before ranking) survived: 0.1 + 0.2 and
+    # 0.3 are two doubles but one number, and ranking them gives rho for a column
+    # that does not vary.
+    x = np.array([0.1 + 0.2, 0.3, 0.3, 0.1 + 0.2, 0.3])
+    y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    with pytest.raises(ValueError, match="every value of x is the same"):
+        spearman(x, y)
+
+
+@pytest.mark.parametrize("power", [400, 500, 537, 600, 800, 1000])
+def test_moments_are_exact_at_any_range(power: int) -> None:
+    # Review Z6 (7): the exact sums held only up to a range of about 2^500; from
+    # 2^537 the products of the deviations' parts underflowed, Cauchy-Schwarz
+    # failed and math.log raised a bare ValueError.
+    a = 2.0**power
+    x = np.array([a, -a, 1, 2, 3, 4, 5.0])
+    y = np.array([a, -a, 1, 2, 3.5, 4, 5.0])
+    xs = [Fraction(v) for v in x.tolist()]
+    ys = [Fraction(v) for v in y.tolist()]
+    mx, my = sum(xs, Fraction(0)) / 7, sum(ys, Fraction(0)) / 7
+    sxx = sum(((v - mx) ** 2 for v in xs), Fraction(0))
+    syy = sum(((v - my) ** 2 for v in ys), Fraction(0))
+    sxy = sum(((u - mx) * (v - my) for u, v in zip(xs, ys, strict=True)), Fraction(0))
+    assert cross_moments(x, y).one_minus_r2 == (sxx * syy - sxy * sxy) / (sxx * syy)
+    result = pearson(x, y)
+    assert math.isfinite(result.t)
+    t_squared = 5 * sxy * sxy / (sxx * syy - sxy * sxy)
+    assert float(Fraction(result.t) ** 2 / t_squared) == pytest.approx(1.0, rel=1e-14)
