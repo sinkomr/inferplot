@@ -54,6 +54,9 @@ Row = Mapping[str, Any]
 # R functions whose design has no groups: a one-sample test and a correlation. Their
 # fixtures record the analyzed values (`analyzed_data`) instead of levels.
 NO_LEVEL_FUNCTIONS = frozenset({"gghistostats", "ggscatterstats"})
+# R functions that count categories (barstats): their fixtures record the table they
+# analyzed (`contingency_data`). ggpiestats computes what ggbarstats computes.
+BAR_FUNCTIONS = frozenset({"ggbarstats", "ggpiestats"})
 
 
 class FixtureIntegrityError(AssertionError):
@@ -179,6 +182,46 @@ class OracleCase:
         if self.function != "ggscatterstats":
             raise ValueError(f"{self.name}: only ggscatterstats records correlation")
         return self.raw["correlation"]
+
+    @property
+    def contingency_data(self) -> Mapping[str, Any]:
+        """The table a ggbarstats or ggpiestats case analyzed.
+
+        As ggstatsplot's ``.pie_bar_data_prep()`` left it: ``x``, ``y`` and
+        ``counts`` (column names; ``y`` and ``counts`` null when not given),
+        ``rows`` (the 1-based CSV rows kept: x, y and counts present, in file
+        order), ``rows_dropped``, ``x_levels`` and ``y_levels`` (as ggstatsplot holds
+        them: declared order with empty declared levels, else sorted; no y levels
+        without y), ``table`` (one row per level of x, one column per level of y, or
+        a single column without y), ``n`` (rows after repeating each by its count)
+        and ``error`` (R's message when the data could not be prepared).
+        """
+        if self.function not in BAR_FUNCTIONS:
+            raise ValueError(
+                f"{self.name}: only {sorted(BAR_FUNCTIONS)} record contingency_data"
+            )
+        return self.raw["contingency_data"]
+
+    def counts_table(self) -> list[list[int]]:
+        """``contingency_data``'s table as integers, rows x and columns y."""
+        return [[int(v) for v in row] for row in self.contingency_data["table"]]
+
+    @property
+    def one_sample(self) -> list[Row]:
+        """ggbarstats' per-bar proportion tests (``one_sample_data``), one row per
+        level of y that holds data; empty without y."""
+        return self.table("one_sample_data")
+
+    @property
+    def plot_texts(self) -> Mapping[str, Any]:
+        """ggbarstats and ggpiestats: the plot's ``labels`` (``ggplot2::get_labs``)
+        and the fill legend's title (``legend_title``)."""
+        if self.function not in BAR_FUNCTIONS:
+            raise ValueError(f"{self.name}: only {sorted(BAR_FUNCTIONS)} record plot_texts")
+        texts = self.raw["plot_texts"]
+        if texts is None:
+            raise ValueError(f"{self.name}: ggstatsplot failed ({self.error})")
+        return texts
 
     def within_columns(self) -> dict[str, list[float]]:
         """Each level's values in subject order, as floats (``within_data``)."""
@@ -320,7 +363,7 @@ class OracleCase:
         ``KeyError``. Empty when this plot draws no brackets. gghistostats and
         ggscatterstats record them for every layer but the raw points.
         """
-        if self.function in NO_LEVEL_FUNCTIONS:
+        if self.function in NO_LEVEL_FUNCTIONS | BAR_FUNCTIONS:
             _check_geom(geom)
             return [
                 layer["params"]

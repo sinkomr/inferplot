@@ -1231,7 +1231,9 @@ for (case in c(CASES, HELD_OUT_CASES)) {
   if (!is.null(case$args$label.expression) && is.null(case$args$label.var)) {
     stop(case$name, ": label.expression has no effect without label.var")
   }
-  if (!is.null(case$args$label) && !(case$args$label %in% c("percentage", "counts", "both"))) {
+  # [[ ]], not $: `$` would match label.var and label.expression partially.
+  label <- case$args[["label"]]
+  if (!is.null(label) && !(label %in% c("percentage", "counts", "both"))) {
     # ggstatsplot matches label by regular expression ("perc|prop", "count|n|N");
     # the cases use its three documented values.
     stop(case$name, ": label must be percentage, counts or both")
