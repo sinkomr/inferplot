@@ -509,6 +509,15 @@ Statistical and behavioral differences are exactly these:
     of the variance) gets a `warnings` entry: the small-sample correction is then
     between 0 and 0.56, so g is far below the uncorrected standardized difference.
     The number is effectsize's; at df exactly 1 it is 0, with its own warning.
+16. Paired differences that are the same as written are the same (D74): withinstats
+    refuses, for types parametric, bayes and robust, data in which every subject
+    changes by one amount to within the rounding of the values in double precision
+    (each subject 0.1 lower in one-decimal data), where an exact computation on the
+    stored doubles gives a t of about 1e15; the robust effect sizes of paired
+    differences treat such differences as tied in their bootstrap, and a bootstrap
+    resample whose winsorized values are all one number is 0/0 or infinite exactly.
+    R's `t.test` stops on such data ("data are essentially constant"); WRS2 computes
+    in floating point. The signed-rank test still ranks R's rounded differences (D64).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default

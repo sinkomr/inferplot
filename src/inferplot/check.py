@@ -271,6 +271,11 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
         return None
     if es.conf_low <= es.estimate <= es.conf_high:
         return None
+    # Outside by less than the three decimals the message prints (a bound that is
+    # the estimate up to its last digits): nothing a reader could see or act on.
+    crossed = es.conf_low if es.estimate < es.conf_low else es.conf_high
+    if _three(es.estimate) == _three(crossed):
+        return None
     level = _percent(es.conf_level)
     head = (
         f"The {es.label}, {_three(es.estimate)}, lies outside its own {level} CI "

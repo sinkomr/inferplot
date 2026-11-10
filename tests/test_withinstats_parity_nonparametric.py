@@ -510,5 +510,13 @@ def test_resamples_of_tied_subjects_are_left_out() -> None:
 
 
 def test_extreme_conf_level_raises_plainly() -> None:
-    with pytest.raises(ValueError, match="The bootstrap interval of Kendall's W"):
+    # The remedy is a lower level, not other data (the message used to advise
+    # another type or more subjects).
+    with pytest.raises(ValueError, match="too close to 1") as error:
         _within(THREE_FRAME, conf_level=0.9999)
+    assert str(error.value).startswith(
+        "conf_level=0.9999 is too close to 1 for the bootstrap confidence interval "
+        "of Kendall's W"
+    )
+    assert "Pass conf_level=0.999 or lower" in str(error.value)
+    assert _within(THREE_FRAME, conf_level=0.9995).effect_size is not None

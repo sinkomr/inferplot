@@ -22,6 +22,7 @@ from inferplot.stats import (
     rm_partial_omega_squared,
     t_ncp_interval,
 )
+from inferplot.stats.descriptive import differences_same_within_rounding
 from tests.tolerances import assert_close
 
 RNG = np.random.Generator(np.random.PCG64(31))
@@ -372,3 +373,27 @@ def test_paired_t_pairs_match_scipy_and_p_adjust() -> None:
         paired_t_pairs(TABLE, p_adjust_method="Holm")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="at least two"):
         paired_t_pairs([A])
+
+
+def test_differences_same_within_rounding() -> None:
+    same = differences_same_within_rounding
+    pre = np.array([1.1, 2.3, 3.1, 4.7, 5.2, 6.3])
+    # Every subject 0.1 lower: several different doubles, one number as written.
+    assert len(set((pre - (pre - 0.1)).tolist())) > 1
+    assert same(pre, pre - 0.1)
+    assert same(pre - 0.1, pre)
+    assert same(pre * 2.0**300, (pre - 0.1) * 2.0**300)  # any units
+    # Whole numbers are exact: equal differences only.
+    whole = np.array([3.0, 5.0, 8.0, 13.0])
+    assert same(whole, whole - 2.0)
+    assert not same(whole, whole - np.array([2.0, 2.0, 2.0, 3.0]))
+    big = np.array([2.0**31, 2.0**31 + 1.0, 2.0**31 + 5.0])
+    assert not same(big, big - np.array([1.0, 2.0, 1.0]))
+    assert not same(
+        whole * 2.0**-300, (whole - np.array([2.0, 2.0, 2.0, 3.0])) * 2.0**-300
+    )
+    assert not same(whole * 1e-150, (whole - np.array([2.0, 2.0, 2.0, 3.0])) * 1e-150)
+    # A real difference of one part in 10^12 is not rounding.
+    assert not same(pre, pre - np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1 + 1e-12]))
+    # 0.3 against 0.1 + 0.2: indistinguishable from no difference at all.
+    assert same(np.array([0.3, 1.5]), np.array([0.1 + 0.2, 1.5]))

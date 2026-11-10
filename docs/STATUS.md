@@ -200,7 +200,40 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   D72); `heavy_ties` counts what the paired tests rank (D71). Every fixture drawn,
   checked and saved as SVG, PDF and PNG; three within image baselines. 20,864 tests
   pass on the newest and on the oldest supported versions
-- [ ] end-of-phase fresh-context review of the Phase 3 diff against SPEC.md
+- [ ] end-of-phase fresh-context review of the Phase 3 diff against SPEC.md.
+  Statistics half done (2026-11-10; 28 of 29 planted bugs caught; test statistics, df,
+  p-values, closed-form effect sizes and the paired Bayes factor right to about 1e-15
+  on hostile data; scripts in `reviewW/`). Findings:
+  - [x] W1 (high): the robust bootstraps misclassified resamples whose winsorized
+    values are all equal (0/0 or infinite came out as arbitrary numbers): a bound wrong
+    on 31 of 83 rating-scale and 38 of 110 one-decimal data sets within subjects, and
+    between groups on decimal data with a nearly constant first group. Fixed (D74);
+    now 0 of 282 against an exact decimal replay.
+  - [x] W2 (high): every subject changing by the same decimal amount gave
+    t = 1,007,035,491,024,313 (parametric), BF10 = 1e58 and a robust t of 6e14 without a
+    warning. Fixed (D74): refused like exactly constant differences.
+  - [x] W5: robust with two subjects and three or more conditions silently used a
+    sphericity correction of 1 where the formula is 0/0. Fixed: refused.
+  - [x] W7: wrong remedy in the message for a conf_level too close to 1 (Kendall's W,
+    rank epsilon squared); `estimate_outside_interval` fired when estimate and bound
+    print the same. Fixed.
+  - [ ] W3 (as in R): Kendall's W's interval can exclude W under no effect (3 to 8 of
+    60 data sets); `estimate_outside_interval` reports it.
+  - [ ] W4 (as in R): the average AKP's interval (D66) covers 99 to 100% where 95% is
+    nominal and is 1.3 to 2 times wider than the percentile interval of the averaged
+    resamples; say so in the docs. "One shared resample for all pairs" is pinned by no
+    test (planted bug P15 survived) and D66's evidence for it is weak.
+  - [ ] W6: swapping two conditions negates the AKP estimate exactly but mirrors its
+    interval only within Monte Carlo error; Kendall's W's interval depends on the
+    condition order when seven or more conditions tie on rank sum and ranks. Document.
+  - [ ] W8: the percentile rules of the within bootstraps are pinned only incidentally
+    (planted bugs P6, P24); the T6 oracle probe covers them.
+  - [ ] W9 (owner's call): the signed-rank test ranks R's rounded differences (D64), so
+    differences equal as written but different in binary (0.1 stored two ways) get
+    different ranks, as in R. D74's rule would tie them and differ from R.
+  - Leads: what WRS2 does with 0/0 resamples within subjects and with two subjects;
+    seeded intervals depend on NumPy's `Generator.integers` stream across versions.
+  Second half (texts, warnings, checks, drawing) in progress
 
 ## Phase 4 — histostats, scatterstats, barstats
 

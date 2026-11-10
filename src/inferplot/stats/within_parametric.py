@@ -33,6 +33,7 @@ from inferplot.stats.descriptive import (
     as_sample,
     common_scale,
     deviations_from_weighted_mean,
+    differences_same_within_rounding,
     exact_mean,
     mean,
 )
@@ -136,34 +137,31 @@ def _exact_differences(
     return xs, ys, s, e
 
 
-def _constant(s: FloatArray, e: FloatArray) -> bool:
-    """Every exact difference s_i + e_i is the same (the pair (s, e) is unique to
-    each exact value, s being its rounding)."""
-    return bool((s == s[0]).all()) and bool((e == e[0]).all())
-
-
 def paired_differences_constant(a: SampleLike, b: SampleLike) -> bool:
-    """Whether every difference a_i - b_i is the same exact number (all zero
-    included): the paired t-test then has no standard error.
+    """Whether every difference a_i - b_i is the same number (all zero included),
+    exactly or to within the rounding of the values in double precision
+    (``differences_same_within_rounding``): the paired t-test then has no standard
+    error. Decimal data in which every subject changes by 0.1 are constant in this
+    sense, although the differences of the stored doubles vary in their 16th digit.
 
     Raises:
         ValueError: a sample has fewer than two values or a non-finite value, or
             the samples differ in length.
     """
     x, y = _paired_samples(a, b)
-    _, _, s, e = _exact_differences(x, y)
-    return _constant(s, e)
+    return differences_same_within_rounding(x, y)
 
 
 def _paired_t_value(x: FloatArray, y: FloatArray) -> float:
     """t = mean(d) / (sd(d) / sqrt(n)) of the exact differences d = x - y."""
-    xs, ys, s, e = _exact_differences(x, y)
-    if _constant(s, e):
+    if differences_same_within_rounding(x, y):
         raise ValueError(
-            "every difference between the paired values is the same, so the paired "
+            "every difference between the paired values is the same (exactly, or to "
+            "within the rounding of the values in double precision), so the paired "
             "t-test has no standard error (the standard deviation of the differences "
             "is 0)"
         )
+    xs, ys, s, e = _exact_differences(x, y)
     n = x.size
     # The exact mean difference, rounded once.
     m = float(exact_mean(xs) - exact_mean(ys))
@@ -391,7 +389,16 @@ def _decompose(conditions: Sequence[SampleLike]) -> _Decomposition:
         ss_subjects=ss_subjects,
         ss_error=ss_error,
         cross=residuals.T @ residuals,
-        additive=not bool((residuals != 0.0).any()),
+        # No residual is exactly nonzero, or every condition differs from the
+        # first by one amount for every subject to within the rounding of the
+        # values: then the residuals are rounding, not data.
+        additive=not bool((residuals != 0.0).any())
+        or all(
+            differences_same_within_rounding(
+                np.ascontiguousarray(raw[:, j]), np.ascontiguousarray(raw[:, 0])
+            )
+            for j in range(1, k)
+        ),
     )
 
 
@@ -401,7 +408,8 @@ def _checked_decomposition(conditions: Sequence[SampleLike]) -> _Decomposition:
     if parts.additive:
         raise ValueError(
             "the conditions differ by the same amounts for every subject (each "
-            "subject's values are the condition means plus a constant), so the "
+            "subject's values are the condition means plus a constant, exactly or to "
+            "within the rounding of the values in double precision), so the "
             "repeated-measures ANOVA has no error variance"
         )
     if not parts.ss_error / df_error >= TINY:

@@ -39,7 +39,9 @@ from inferplot.stats.descriptive import (
     as_sample,
     common_scale,
     deviations_from_weighted_mean,
+    differences_same_within_rounding,
     exact_mean,
+    rounding_tolerance,
 )
 from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.nonparametric import (
@@ -71,10 +73,15 @@ __all__ = [
     "YuenDependentT",
     "average_dependent_akp",
     "dependent_akp",
+    "paired_differences_winsorize_to_constant",
     "rmmcp",
     "trimmed_rm_anova",
     "yuen_dependent_t",
 ]
+
+# With two subjects the Huynh-Feldt estimate of the trimmed-means repeated-measures
+# ANOVA is 0 / 0 in exact arithmetic for any data.
+_MIN_SUBJECTS_HUYNH_FELDT: Final = 3
 
 # Upper bound on the values one bootstrap chunk draws (2^22 indices, 32 MiB).
 _CHUNK_VALUES: Final = 1 << 22
@@ -220,8 +227,65 @@ class _Differences:
     constant: bool  # every winsorized difference is the same exact number
 
 
-def _differences(x: FloatArray, y: FloatArray, g: int) -> _Differences:
+def _tolerances(y: FloatArray, scale: float) -> FloatArray:
+    """``rounding_tolerance`` of every value of the scaled table ``y``, in its
+    scale (whole numbers are judged on the unscaled values)."""
+    return rounding_tolerance(y / scale) * scale
+
+
+def _snapped_differences(
+    x: FloatArray, y: FloatArray, tolerance: FloatArray
+) -> tuple[FloatArray, FloatArray]:
+    """The exact differences x_i - y_i as (s, e), s_i + e_i exactly, in subject
+    order, with the differences that the rounding of the values cannot tell apart
+    made the same number, and those it cannot tell from 0 made 0.
+
+    ``tolerance`` is how far each exact difference of the doubles may lie from the
+    difference of the numbers that were written (``rounding_tolerance`` of x_i plus
+    that of y_i). Going through the differences in order, one joins the group
+    before it while a single number lies within every member's tolerance; a group
+    becomes its smallest member, or 0 when 0 is such a number. For decimal data this
+    restores the ties the data have (37.3 - 37.2 and 36.6 - 36.5 are different
+    doubles, 0.09999999999999432 and 0.10000000000000142): without it a resample in
+    which every winsorized difference is "0.1" would have a winsorized variance of
+    about 1e-29 instead of 0, and an AKP of about 1e13 instead of an infinite one.
+    Whole-number data and data without such neighbours are returned as they are.
+    """
     s, e = _two_sum(x, -y)
+    order = _lexical_order(s, e)
+    ss, ee, tt = s[order], e[order], tolerance[order]
+    gaps: FloatArray = (ss[1:] - ss[:-1]) + (ee[1:] - ee[:-1])
+    near: NDArray[np.bool_] = (gaps > 0.0) & (gaps <= tt[1:] + tt[:-1])
+    dust: NDArray[np.bool_] = (np.abs(ss) <= tt) & ((ss != 0.0) | (ee != 0.0))
+    if not bool(near.any()) and not bool(dust.any()):
+        return s, e
+    s_list, e_list, t_list = ss.tolist(), ee.tolist(), tt.tolist()
+    n = len(s_list)
+    start = 0
+    low, high = -t_list[0], t_list[0]  # the numbers every member is close to,
+    for j in range(1, n + 1):  # relative to the group's first member
+        if j < n:
+            offset = (s_list[j] - s_list[start]) + (e_list[j] - e_list[start])
+            lo, hi = offset - t_list[j], offset + t_list[j]
+            if lo <= high and hi >= low:
+                low, high = max(low, lo), min(high, hi)
+                continue
+        zero = -s_list[start] - e_list[start]
+        value = (0.0, 0.0) if low <= zero <= high else (s_list[start], e_list[start])
+        for member in range(start, j):
+            s_list[member], e_list[member] = value
+        if j < n:
+            start = j
+            low, high = -t_list[j], t_list[j]
+    out_s = np.empty_like(s)
+    out_e = np.empty_like(e)
+    out_s[order] = s_list
+    out_e[order] = e_list
+    return out_s, out_e
+
+
+def _differences(s: FloatArray, e: FloatArray, g: int) -> _Differences:
+    """``_Differences`` of the differences s_i + e_i (``_snapped_differences``)."""
     order = _lexical_order(s, e)
     s, e = s[order], e[order]
     n = s.size
@@ -266,6 +330,24 @@ def _no_spread(what: str, method: str) -> ValueError:
     )
 
 
+def paired_differences_winsorize_to_constant(
+    a: SampleLike, b: SampleLike, *, tr: float = 0.2
+) -> bool:
+    """Whether winsorizing the paired differences a_i - b_i leaves one number
+    (exactly, or to within the rounding of the values in double precision:
+    ``_snapped_differences``), so that their winsorized standard deviation is 0 and
+    the AKP effect size and rmmcp's standard error are undefined.
+
+    Raises:
+        ValueError: as ``dependent_akp`` for unusable samples or ``tr``.
+    """
+    t_trim = check_trim(tr)
+    x, y, scale = _paired(a, b)
+    g, _ = _trimmed_size(x.size, t_trim, "the AKP effect size of paired differences")
+    tolerance = _tolerances(x, scale) + _tolerances(y, scale)
+    return _differences(*_snapped_differences(x, y, tolerance), g).constant
+
+
 # ------------------------------------------------------------------ yuend
 
 
@@ -301,12 +383,13 @@ def yuen_dependent_t(
     method = "Yuen's test for dependent samples"
     g, h = _trimmed_size(n, t_trim, method)
     wx, wy = _winsorize_column(x, g), _winsorize_column(y, g)
-    s, e = _two_sum(wx, -wy)
-    if bool((s == s[0]).all()) and bool((e == e[0]).all()):
+    if differences_same_within_rounding(wx / scale, wy / scale):
         raise ValueError(
-            "after winsorizing each sample, every pair differs by the same amount, "
+            "after winsorizing each sample, every pair differs by the same amount "
+            "(exactly, or to within the rounding of the values in double precision), "
             f"so {method} has no standard error"
         )
+    s, e = _two_sum(wx, -wy)
     variance = _variance_about(s, e, exact_mean(wx) - exact_mean(wy))
     squared_se = (n - 1) * variance / (h * (h - 1))
     if not squared_se >= TINY:
@@ -348,8 +431,9 @@ def trimmed_rm_anova(
     epsilon~ (read off probe-wrs2within's 84 rows: F to 1.5e-15, the df exactly
     (J - 1) and (J - 1)(h - 1) where epsilon~ exceeds 1, and the fixtures' fractional
     df where it does not). A denominator n - 1 - (J - 1) epsilon^ at or below 0,
-    possible only with n <= J where it is 0 in exact arithmetic, is the limit
-    epsilon~ -> infinity, capped at 1.
+    possible only with n <= J, means an estimate beyond 1 and is capped at 1 like
+    any other. With two subjects epsilon^ is exactly 1 / (J - 1) and epsilon~ is
+    0 / 0 for any data: refused (what WRS2 returns there is not known).
 
     The p-value is the upper tail P(F_{df1, df2} > F), computed directly; WRS2
     computes 1 - pf (all 84 probe rows equal it); DECISIONS.md D43, ``wrs2_p``.
@@ -374,7 +458,7 @@ def trimmed_rm_anova(
         raise ValueError(
             f"{method} needs at least two conditions; got {len(conditions)}"
         )
-    y, _ = _matrix(conditions, method)
+    y, scale = _matrix(conditions, method)
     n, k = y.shape
     g, h = _trimmed_size(n, t_trim, method)
     tmeans = [exact_trimmed_mean(_sorted(y[:, j]), t_trim) for j in range(k)]
@@ -386,10 +470,15 @@ def trimmed_rm_anova(
     residuals = _double_centred(w)
     q_e = math.fsum((residuals * residuals).ravel().tolist())
     df_e = (h - 1) * (k - 1)
-    if not bool((residuals != 0.0).any()):
+    first = np.ascontiguousarray(w[:, 0]) / scale
+    if not bool((residuals != 0.0).any()) or all(
+        differences_same_within_rounding(np.ascontiguousarray(w[:, j]) / scale, first)
+        for j in range(1, k)
+    ):
         raise ValueError(
             "after winsorizing, every subject's values are the condition means plus a "
-            f"constant of its own, so {method} has no error variance"
+            "constant of its own (exactly, or to within the rounding of the values in "
+            f"double precision), so {method} has no error variance"
         )
     if not q_e / df_e >= TINY:
         raise _no_spread("the winsorized residuals", method)
@@ -407,8 +496,18 @@ def trimmed_rm_anova(
     trace = math.fsum(cross[i][i] for i in range(k))
     frobenius = math.fsum(v * v for row in cross for v in row)
     epsilon_gg = min(1.0, max(1.0 / (k - 1), trace * trace / ((k - 1) * frobenius)))
+    if n < _MIN_SUBJECTS_HUYNH_FELDT:
+        # epsilon_gg is then exactly 1 / (k - 1), and the Huynh-Feldt estimate
+        # (n (k - 1) eps - 2) / ((k - 1) (n - 1 - (k - 1) eps)) is 0 / 0.
+        raise ValueError(
+            f"{method} corrects its degrees of freedom by the Huynh-Feldt epsilon, "
+            f"which is undefined (0 / 0) with {n} subjects; it needs at least "
+            f"{_MIN_SUBJECTS_HUYNH_FELDT}"
+        )
     denominator = (k - 1) * (n - 1 - (k - 1) * epsilon_gg)
     numerator = n * (k - 1) * epsilon_gg - 2.0
+    # A non-positive denominator (few subjects next to the conditions) means an
+    # estimate beyond 1, which is capped at 1 like any other.
     epsilon = 1.0 if denominator <= 0.0 else min(1.0, numerator / denominator)
     if not epsilon > 0.0:
         raise ValueError(
@@ -497,9 +596,15 @@ def rmmcp(
     # P(|T| > c) = alpha / C, so P(T > c) = alpha / (2C).
     critical = smm_quantile(1, df, conf_level=1.0 - (1.0 - level) / n_pairs)
     rows: list[tuple[int, int, float, float, float, float]] = []
+    tolerances = _tolerances(y, scale)
     for i in range(k):
         for j in range(i + 1, k):
-            diffs = _differences(y[:, i], y[:, j], g)
+            diffs = _differences(
+                *_snapped_differences(
+                    y[:, i], y[:, j], tolerances[:, i] + tolerances[:, j]
+                ),
+                g,
+            )
             if diffs.constant:
                 raise ValueError(
                     f"conditions {i + 1} and {j + 1}: after winsorizing, every "
@@ -551,12 +656,19 @@ class _PairAkp:
     estimate: float
     centre: float
     deviations: FloatArray  # in the canonical subject order
+    signs: FloatArray  # of each subject's exact difference: -1.0, 0.0 or 1.0
 
 
 def _pair_akp(
-    x: FloatArray, y: FloatArray, tr: float, g: int, constant: float, names: str
+    x: FloatArray,
+    y: FloatArray,
+    tolerance: FloatArray,
+    g: int,
+    constant: float,
+    names: str,
 ) -> _PairAkp:
-    diffs = _differences(x, y, g)
+    s, e = _snapped_differences(x, y, tolerance)
+    diffs = _differences(s, e, g)
     method = "the AKP effect size of the paired differences"
     if diffs.constant:
         raise ValueError(
@@ -566,11 +678,12 @@ def _pair_akp(
     if not diffs.wvar >= TINY:
         raise _no_spread(f"{names}: the differences", method)
     centre = float(diffs.tmean)
-    s, e = _two_sum(x, -y)
+    # s is the exact difference rounded, so it has the difference's sign.
     return _PairAkp(
         estimate=constant * centre / math.sqrt(diffs.wvar),
         centre=centre,
         deviations=(s - centre) + e,
+        signs=np.sign(s),
     )
 
 
@@ -596,9 +709,18 @@ def _akp_replicates(
         for values, pair in zip(out, pairs, strict=True):
             tmeans, wvars = rows_trimmed(pair.deviations[index], tr)
             with np.errstate(divide="ignore", invalid="ignore"):
-                values[start : start + rows] = (
-                    c * (pair.centre + tmeans) / np.sqrt(wvars)
-                )
+                chunk: NDArray[np.float64] = c * (pair.centre + tmeans) / np.sqrt(wvars)
+            # A winsorized variance of 0: every winsorized difference of the
+            # resample is one subject's difference d, and AKP* is +/-inf with the
+            # sign of d, or 0 / 0 when d is 0. Decided from the exact difference
+            # of a subject whose deviation is the row's trimmed mean (the
+            # deviations are centred on a rounded mean, so centre + deviation
+            # does not say whether d is 0).
+            for row in (wvars == 0.0).nonzero()[0].tolist():
+                subject = int((pair.deviations == tmeans[row]).nonzero()[0][0])
+                sign = float(pair.signs[subject])
+                chunk[row] = math.nan if sign == 0.0 else sign * math.inf
+            values[start : start + rows] = chunk
         start += rows
     return out
 
@@ -617,14 +739,20 @@ def _akp_bootstrap(
     t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
-    y, _ = _matrix(conditions, method)
+    y, scale = _matrix(conditions, method)
     y = _canonical_rows(y)
     n = y.shape[0]
     g, _ = _trimmed_size(n, t_trim, method)
     constant = math.sqrt(winsorized_normal_variance(t_trim))
+    tolerances = _tolerances(y, scale)
     fitted = [
         _pair_akp(
-            y[:, i], y[:, j], t_trim, g, constant, f"conditions {i + 1} and {j + 1}"
+            y[:, i],
+            y[:, j],
+            tolerances[:, i] + tolerances[:, j],
+            g,
+            constant,
+            f"conditions {i + 1} and {j + 1}",
         )
         for i, j in pairs
     ]

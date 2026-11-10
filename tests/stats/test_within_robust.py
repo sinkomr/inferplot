@@ -295,6 +295,48 @@ def test_rmmcp_definition() -> None:
         rmmcp(flat)
 
 
+def test_degenerate_resamples_are_classified_exactly() -> None:
+    # Rating-scale data: many resamples have every winsorized difference equal.
+    # Such a resample is 0 / 0 when that difference is 0 and infinite otherwise;
+    # computed in floating point, the variance of equal values is about 1e-33, not
+    # 0, and the resample came out as an arbitrary finite number or as +inf
+    # (Phase 3 review). Counts and bounds are those of the documented rule in
+    # exact rational arithmetic on the same random stream.
+    post = np.array([2.0, 2, 4, 1, 2, 3, 5, 4, 5])
+    pre = np.array([2.0, 2, 3, 1, 2, 3, 4, 3, 4])
+    result = dependent_akp(post, pre)
+    assert (result.undefined_resamples, result.infinite_resamples) == (86, 16)
+    assert result.conf_low == pytest.approx(0.2079689520546899, rel=1e-12)
+    assert result.conf_high == pytest.approx(1.2478137123281394, rel=1e-12)
+    # Eight of eleven subjects unchanged: 795 resamples are 0 / 0, none infinite.
+    a = np.array([3.0, 3, 2, 4, 5, 1, 2, 3, 4, 5, 2])
+    b = np.array([3.0, 3, 2, 4, 5, 1, 2, 3, 3, 4, 1])
+    unchanged = dependent_akp(a, b)
+    assert unchanged.undefined_resamples > 0
+    assert unchanged.infinite_resamples == 0
+    assert math.isfinite(unchanged.conf_low)
+    assert math.isfinite(unchanged.conf_high)
+
+
+def test_differences_equal_as_written_are_ties() -> None:
+    # 37.3 - 37.2 and 36.6 - 36.5 are different doubles; as written both are 0.1.
+    # A resample whose winsorized differences are all "0.1" has no spread: its
+    # AKP is infinite, not the 1.7e13 that the doubles' variance of 1e-29 gives.
+    a = np.array([36.5, 36.7, 37.3, 37.4, 36.3, 37.0])
+    b = np.array([36.5, 36.8, 37.3, 37.4, 36.5, 37.1])
+    assert len({x - y for x, y in zip(a.tolist(), b.tolist(), strict=True)}) == 4
+    result = dependent_akp(a, b)
+    # The rule replayed in exact decimal arithmetic: 195 undefined, 116 infinite.
+    assert (result.undefined_resamples, result.infinite_resamples) == (195, 116)
+    assert result.conf_low == -math.inf
+    assert result.conf_high == pytest.approx(-0.3107777768305904, rel=1e-12)
+    # A difference that the rounding of the values cannot tell from 0 is 0.
+    c = np.array([0.3, 0.6, 1.2, 2.0, 2.5, 3.1])
+    d = np.array([0.1 + 0.2, 0.5, 1.0, 2.2, 2.4, 3.3])
+    assert c[0] != d[0]
+    assert dependent_akp(c, d) == dependent_akp(np.r_[d[0], c[1:]], d)
+
+
 # ------------------------------------------------------------------ wmcpAKP
 
 

@@ -683,6 +683,7 @@ def _nonparametric(
         citations = [_MANN_WHITNEY_1947, _KERBY_2014]
     else:
         kw = stats.kruskal_wallis(values)
+        check_one_sided_bootstrap_level(level, "rank epsilon squared")
         try:
             epsilon = stats.rank_epsilon_squared(
                 values, conf_level=level, seed=args.seed
@@ -738,6 +739,22 @@ def _nonparametric(
         warnings=tuple(warnings),
         citations=tuple(citations),
     )
+
+
+def check_one_sided_bootstrap_level(conf_level: float, what: str) -> None:
+    """Raise when ``conf_level`` is too close to 1 for the one-sided percentile
+    bound of ``what`` (rank epsilon squared, Kendall's W): ``boot.ci``'s rule needs
+    order statistic (B + 1)(1 - conf_level) of the B resamples, which must be at
+    least the first. The remedy is a lower level, not other data."""
+    resamples = stats.BOOTSTRAP_RESAMPLES
+    if (resamples + 1) * (1.0 - conf_level) < 1.0:
+        raise ValueError(
+            f"conf_level={conf_level!r} is too close to 1 for the bootstrap "
+            f"confidence interval of {what}: its lower bound is the "
+            f"(1 - conf_level) quantile of {resamples:,} resamples, which needs at "
+            "least one resample below it. Pass conf_level=0.999 or lower, or use "
+            "type='parametric', whose intervals are not resampled."
+        )
 
 
 def _tied_resamples_warning(epsilon: stats.BootstrapEffectSizeCI) -> str:

@@ -234,6 +234,25 @@ def test_infinite_resamples_are_kept_and_counted() -> None:
     assert rank_epsilon_squared(_draw([10, 10, 10], 4)).infinite_resamples == 0
 
 
+def test_resamples_with_equal_winsorized_values_are_classified_exactly() -> None:
+    # One-decimal data with a nearly constant first group: in 686 of 2,000
+    # resamples every winsorized value of a is 0.9, so AKP is infinite. In floating
+    # point the variance of equal values is about 1e-33, not 0, and all but 3 of
+    # them came out as finite numbers near 4e15 (Phase 3 review). Counts and bounds
+    # are those of the rule in exact rational arithmetic on the same stream.
+    a = np.array([1.0, 0.9, 0.9, 0.9, 0.9, 1.3])
+    b = np.array([0.7] * 10 + [0.8])
+    akp = akp_effect(a, b)
+    assert (akp.undefined_resamples, akp.infinite_resamples) == (0, 686)
+    assert akp.conf_high == math.inf
+    assert akp.conf_low == pytest.approx(0.9323, abs=5e-5)
+    # 0 / 0 against infinite is decided exactly: equal trimmed means only.
+    mixed = akp_effect(
+        np.array([0.9, 0.9, 0.9, 0.9, 1.0, 1.3, 1.1]), np.array([0.9] * 6 + [1.0, 0.8])
+    )
+    assert (mixed.undefined_resamples, mixed.infinite_resamples) == (131, 106)
+
+
 # ------------------------------------------------------------------ SMM table
 
 

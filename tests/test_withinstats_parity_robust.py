@@ -426,6 +426,16 @@ def test_tr_reaches_every_statistic() -> None:
     )
 
 
+def test_two_subjects_and_three_conditions_are_refused() -> None:
+    # The Huynh-Feldt correction of the trimmed-means ANOVA is 0 / 0 with two
+    # subjects for any data; it was silently taken as 1 (Phase 3 review).
+    frame = _long({"a": [1.0, 2.5], "b": [2.0, 2.0], "c": [4.0, 1.0]})
+    with pytest.raises(ValueError, match="needs at least 3") as error:
+        _within(frame)
+    assert "Collect more subjects" in str(error.value)
+    assert "smaller tr" not in str(error.value)
+
+
 def test_seed_reaches_the_bootstrap() -> None:
     first, again, other = (_within(TWO_FRAME, seed=s) for s in (3, 3, 4))
     assert first.effect_size == again.effect_size
@@ -442,11 +452,18 @@ def test_data_errors_name_the_levels() -> None:
         _within(same)
     assert str(error.value) == (
         "After winsorizing 20% at each end, every subject's difference between the "
-        "levels 'post' and 'pre' of x='condition' is the same, so the AKP effect "
-        "size of the paired differences (their trimmed mean over their winsorized "
-        "standard deviation) is undefined. Pass a smaller tr, or use "
-        "type='nonparametric'."
+        "levels 'post' and 'pre' of x='condition' is the same (exactly, or to "
+        "within the rounding of y in double precision), so the AKP effect size of "
+        "the paired differences (their trimmed mean over their winsorized standard "
+        "deviation) is undefined. Pass a smaller tr, or use type='nonparametric'."
     )
+    # Every subject 0.1 lower, in decimals: the stored differences vary in their
+    # 16th digit only. Refused like the exactly constant case, where an exact
+    # computation on the doubles reported t = 6.4e14 and an AKP of 2.6e14.
+    pre = [1.1, 2.3, 3.1, 4.7, 5.2, 6.3]
+    decimal = _long({"pre": pre, "post": [v - 0.1 for v in pre]})
+    with pytest.raises(ValueError, match="is the same \\(exactly, or to within"):
+        _within(decimal)
     one_pair = _long(
         {
             "a": [1.0, 2.0, 4.0, 3.0, 9.0, 4.0],

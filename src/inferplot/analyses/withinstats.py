@@ -71,6 +71,7 @@ from inferplot._validate import (
     describe_value,
     subject_id_required,
 )
+from inferplot.analyses.betweenstats import check_one_sided_bootstrap_level
 from inferplot.result import (
     BayesFactor,
     Descriptive,
@@ -90,6 +91,10 @@ FloatArray = npt.NDArray[np.float64]
 
 # ggstatsplot's default trimming; another value is allowed only where it is used.
 _DEFAULT_TR: Final = 0.2
+# From three conditions the omnibus test is an ANOVA; the trimmed-means one needs
+# three subjects (with two its sphericity correction is 0 / 0 for any data).
+_MIN_CONDITIONS_ANOVA: Final = 3
+_MIN_SUBJECTS_TRIMMED_ANOVA: Final = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,7 +331,8 @@ def _checked_paired_t(
             f"Every subject has the same value at {first!r} as at {second!r}"
             if bool((a == b).all())
             else f"Every subject's value at {first!r} differs from its value at "
-            f"{second!r} by the same amount"
+            f"{second!r} by the same amount (exactly, or to within the rounding of "
+            "y in double precision)"
         )
         raise ValueError(
             f"{what} (x={x!r}), so the paired differences have no variability and "
@@ -578,6 +584,7 @@ def _friedman_parts(data: WithinData, args: _Args) -> _NonparametricParts:
             "data for entry errors."
         )
     friedman = stats.friedman(columns)
+    check_one_sided_bootstrap_level(args.conf_level, "Kendall's W")
     try:
         w = stats.kendalls_w(columns, conf_level=args.conf_level, seed=args.seed)
     except ValueError as error:
@@ -897,27 +904,27 @@ def _check_within_robust(data: WithinData, args: _Args) -> None:
         )
     columns = data.by_level()
     levels = data.levels
+    if len(levels) >= _MIN_CONDITIONS_ANOVA and n < _MIN_SUBJECTS_TRIMMED_ANOVA:
+        raise ValueError(
+            f"The trimmed-means repeated-measures ANOVA corrects its degrees of "
+            f"freedom by the Huynh-Feldt epsilon, which is undefined (0 / 0) with "
+            f"{n} complete subjects at the levels of x={args.x!r}; it needs at "
+            f"least {_MIN_SUBJECTS_TRIMMED_ANOVA}. Collect more subjects, or use "
+            "type='parametric' or type='nonparametric'."
+        )
     for i, j in itertools.combinations(range(len(levels)), 2):
-        d = columns[i] - columns[j]
-        if _winsorized_constant(d, tr):
+        if stats.paired_differences_winsorize_to_constant(
+            columns[i], columns[j], tr=tr
+        ):
             raise ValueError(
                 f"After winsorizing {_trim_percent(tr)}% at each end, every "
                 f"subject's difference between the levels {levels[i]!r} and "
-                f"{levels[j]!r} of x={args.x!r} is the same, so the AKP effect size "
+                f"{levels[j]!r} of x={args.x!r} is the same (exactly, or to within "
+                "the rounding of y in double precision), so the AKP effect size "
                 "of the paired differences (their trimmed mean over their winsorized "
                 "standard deviation) is undefined. Pass a smaller tr, or use "
                 "type='nonparametric'."
             )
-
-
-def _winsorized_constant(values: FloatArray, tr: float) -> bool:
-    """Whether winsorizing g = floor(tr n) values at each end leaves one distinct
-    value (on the rounded differences; the statistics layer decides on the exact
-    ones and raises in the rare case they disagree)."""
-    ordered = values.copy()
-    ordered.sort()
-    g = math.floor(tr * ordered.size)
-    return bool(ordered[g] == ordered[ordered.size - g - 1])
 
 
 def _rmmcp_pairs(
