@@ -310,7 +310,16 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   bootstrap-t bounds and p 2.3 and 2.6 of 4 Monte Carlo SDs. Lead's check: 60 random
   frames on three backends against SciPy, 1e-14. To do: the figures (in progress),
   then the final texts (the new test names need text templates), image baselines
-- [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
+- [x] oracle for barstats: fixtures from attested run 42878070705 (generator at
+  347c23a): 90 barstats cases (85 ggbarstats, 5 ggpiestats one-way cross-checks), a
+  new probe (probe-contingency), and 25 edge cases for the existing functions (16
+  gghistostats: n = 2, n = 3, constant data; 9 ggscatterstats: n = 3, n = 4, a missing
+  label); 583 cases and 19 probes. Earlier fixtures byte-identical except a moved
+  lme4 message and one v0.2 posterior (8.1e-14). Every chi-square, McNemar-Bowker,
+  goodness-of-fit and Fisher p, Cramér's V, Pearson's C and Cohen's g is reproduced
+  independently, except 9 interval bounds where R's root search stops short (pinned;
+  D99, owner to confirm). SPEC §4 barstats rewritten (D98 to D101). Being merged
+  into main with the 25 edge cases handled (branch `phase4/oracle-barstats-merge`)
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
