@@ -115,6 +115,12 @@ def text_extents(fig: StatsFigure) -> list[tuple[Text, str, Bbox]]:
     # With the secondary axes of each (histostats' percent axis).
     panels += [child for panel in panels for child in _children(panel)]
     for axes in panels:
+        if not axes.axison:  # set_axis_off(): no axis text is drawn
+            hidden |= {
+                id(t) for t in [*axes.xaxis.findobj(Text), *axes.yaxis.findobj(Text)]
+            }
+            roles |= _axis_roles(axes)
+            continue
         if axes.xaxis.get_visible():
             hidden |= _hidden_tick_labels(axes.xaxis)
         else:
@@ -149,6 +155,8 @@ def _children(axes: Axes) -> list[Axes]:
 
 def _axes_hidden(axes: Axes) -> set[int]:
     """ids of an Axes' axis texts that are not drawn."""
+    if not axes.axison:
+        return {id(t) for t in [*axes.xaxis.findobj(Text), *axes.yaxis.findobj(Text)]}
     hidden: set[int] = set()
     for axis in (axes.xaxis, axes.yaxis):
         if axis.get_visible():
