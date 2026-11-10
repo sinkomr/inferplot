@@ -41,6 +41,10 @@ METADATA_KEYS: Final[dict[Format, str]] = {
     "pdf": "Subject",
     "png": "Description",
 }
+# The largest dpi save() accepts, and the most pixels it writes as PNG (an RGBA
+# buffer of 400 MB).
+MAX_DPI: Final = 2_400
+MAX_PNG_PIXELS: Final = 100_000_000
 SAVE_RC: Final[dict[str, object]] = {
     "svg.fonttype": "none",
     "pdf.fonttype": 42,
@@ -89,9 +93,13 @@ def save(
 ) -> None:
     """Write ``fig`` to ``path``; the extension (.svg, .pdf, .png) picks the format.
 
+    The figure is not pyplot's, so ``plt.savefig()`` after an inferplot call writes
+    pyplot's own, empty figure; save with this function or ``fig.save(path)``.
+
     Raises:
-        ValueError: the extension is not .svg, .pdf or .png, or ``dpi`` is not a
-            positive number.
+        ValueError: the extension is not .svg, .pdf or .png, ``dpi`` is not a
+            positive number or is above MAX_DPI, or a PNG would have more than
+            MAX_PNG_PIXELS pixels.
         TypeError: ``path`` is not a string or path, or ``transparent`` not a bool.
     """
     if not isinstance(path, str | os.PathLike):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -106,7 +114,34 @@ def save(
         )
     dots = v.check_positive(dpi, "dpi", example="300")
     clear = v.check_bool(transparent, "transparent")
+    _check_dpi(fig, dots, dpi, FORMATS[suffix])
     _write(fig, path, FORMATS[suffix], dpi=dots, transparent=clear)
+
+
+def _check_dpi(fig: StatsFigure, dots: float, given: object, fmt: Format) -> None:
+    """``dpi`` at most MAX_DPI, and a PNG of at most MAX_PNG_PIXELS pixels.
+
+    Larger values make matplotlib allocate an image of gigabytes and fail with a
+    MemoryError (or Agg's size error) after a long wait.
+    """
+    if dots > MAX_DPI:
+        raise ValueError(
+            f"dpi={given!r} is more than {MAX_DPI:,}, the most save() writes; "
+            "journals ask for 300 to 1,200. Pass a smaller dpi, or save as .svg or "
+            ".pdf, whose text and lines do not depend on dpi."
+        )
+    if fmt != "png":
+        return
+    width, height = (float(s) for s in root_figure(fig.figure).get_size_inches())
+    pixels = width * dots * height * dots
+    if pixels > MAX_PNG_PIXELS:
+        most = int((MAX_PNG_PIXELS / (width * height)) ** 0.5)
+        raise ValueError(
+            f"At dpi={given!r} this {width:.1f} x {height:.1f} in figure would be a "
+            f"PNG of {pixels / 1e6:,.0f} million pixels, more than the "
+            f"{MAX_PNG_PIXELS / 1e6:,.0f} million save() writes. Pass dpi={most} or "
+            "less, or save as .svg or .pdf, which do not depend on dpi."
+        )
 
 
 def png_bytes(fig: StatsFigure, *, dpi: float = 100) -> bytes:

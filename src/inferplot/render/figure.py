@@ -144,7 +144,13 @@ class StatsFigure:
 
         Text stays editable (SVG text elements, PDF TrueType fonts) and the result's
         JSON goes into the file's metadata: the PNG text chunk and SVG metadata
-        "Description", the PDF "Subject".
+        "Description", the PDF "Subject". ``dpi`` is at most 2,400, and a PNG at
+        most 100 million pixels.
+
+        The figure is not pyplot's, so ``plt.savefig()`` after an inferplot call
+        writes pyplot's own, empty figure. Save with ``fig.save(path)``; the
+        figure's own ``fig.figure.savefig(path)`` also works, but writes text as
+        paths and embeds no result.
         """
         from inferplot.export import save
 
