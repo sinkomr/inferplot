@@ -810,7 +810,9 @@ def _complete_subjects(case: OracleCase, frame: Any) -> dict[str, Any]:
         missing = value is None or (isinstance(value, float) and math.isnan(value))
         row[key] = None if missing else float(value)
     complete = [
-        sid for sid, row in cells.items() if all(row.get(lv) is not None for lv in levels)
+        sid
+        for sid, row in cells.items()
+        if all(row.get(lv) is not None for lv in levels)
     ]
     kept = sorted(complete, key=_r_order_key)
     dropped = sorted(set(cells) - set(complete), key=_r_order_key)
@@ -829,7 +831,9 @@ def _within_values(case: OracleCase) -> list[list[float]]:
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("case", WITHIN_ALL)
-def test_backends_see_the_subjects_r_analyzed(case: OracleCase, backend: Backend) -> None:
+def test_backends_see_the_subjects_r_analyzed(
+    case: OracleCase, backend: Backend
+) -> None:
     # The subjects-by-conditions table ggstatsplot analyzed (within_data), rebuilt
     # from the CSV by subject id on every backend: the same levels, the subjects in
     # R's order, the same values and the same dropped subjects.
@@ -842,7 +846,9 @@ def test_backends_see_the_subjects_r_analyzed(case: OracleCase, backend: Backend
     assert mine["dropped_subjects"] == list(data["dropped_subjects"])
     assert mine["rows_without_x_or_subject"] == data["rows_without_x_or_subject"]
     # Every level counts each complete subject once.
-    assert case.n_per_level == dict.fromkeys(case.analysis_levels, len(mine["subjects"]))
+    assert case.n_per_level == dict.fromkeys(
+        case.analysis_levels, len(mine["subjects"])
+    )
 
 
 @pytest.mark.parametrize("case", WITHIN_ALL)

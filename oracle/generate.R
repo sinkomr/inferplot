@@ -1042,9 +1042,18 @@ akp_candidate <- function(analysis, eqvar, alpha, tr) {
       } else {
         as.numeric(ci)[1:2]
       }
+      # jsonlite writes non-finite doubles as null: an infinite bound is kept as text
+      # (row by row for a matrix), finite output exactly as before.
+      ci_raw <- if (all(is.finite(ci))) {
+        ci
+      } else if (is.matrix(ci)) {
+        lapply(seq_len(nrow(ci)), function(i) encode_doubles(ci[i, ]))
+      } else {
+        encode_doubles(ci)
+      }
       list(
         values = c(effect[[1L]], as.numeric(pair)),
-        raw = list(AKPeffect = r$AKPeffect, AKPci = r$AKPci, AKPci_dim = dim(r$AKPci))
+        raw = list(AKPeffect = r$AKPeffect, AKPci = ci_raw, AKPci_dim = dim(r$AKPci))
       )
     }
   )
@@ -1283,7 +1292,7 @@ bootstrap_reference <- function(case, analysis, stats) {
     values <- unname(replay$value$values)
     matches <- isTRUE(all.equal(values, gg_values, tolerance = 1e-10))
     tried[[length(tried) + 1L]] <- list(
-      call = candidate$call, values = as.list(values), matches = matches
+      call = candidate$call, values = as.list(encode_doubles(values)), matches = matches
     )
     if (matches && is.null(chosen)) chosen <- candidate
   }
@@ -1306,8 +1315,12 @@ bootstrap_reference <- function(case, analysis, stats) {
     value = t(vapply(runs, function(run) run$values, numeric(3L))),
     warnings = unlist(lapply(runs, function(run) run$warnings))
   )
-  ref <- unname(reference$value$values)
+  # Infinite bounds (an effect size whose winsorized variance is 0 in enough
+  # resamples) are written as "Inf" and "-Inf", like every other fixture double.
+  ref <- encode_doubles(unname(reference$value$values))
   reps <- replicates$value
+  spread <- function(column, f) encode_doubles(f(reps[, column]))
+  gg_values <- encode_doubles(gg_values)
   out <- list(
     quantity = "effect size confidence interval",
     call = chosen$call,
@@ -1345,12 +1358,12 @@ bootstrap_reference <- function(case, analysis, stats) {
       count = BOOT_REPLICATES,
       resamples = BOOT_REPLICATE_RESAMPLES,
       first_seed = BOOT_SEED + 1L,
-      estimate_mean = mean(reps[, 1L]),
-      estimate_sd = stats::sd(reps[, 1L]),
-      conf_low_mean = mean(reps[, 2L]),
-      conf_low_sd = stats::sd(reps[, 2L]),
-      conf_high_mean = mean(reps[, 3L]),
-      conf_high_sd = stats::sd(reps[, 3L])
+      estimate_mean = spread(1L, mean),
+      estimate_sd = spread(1L, stats::sd),
+      conf_low_mean = spread(2L, mean),
+      conf_low_sd = spread(2L, stats::sd),
+      conf_high_mean = spread(3L, mean),
+      conf_high_sd = spread(3L, stats::sd)
     ),
     r_warnings = as.list(unique(c(reference$warnings, replicates$warnings)))
   )
