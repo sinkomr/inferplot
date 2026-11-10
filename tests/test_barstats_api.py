@@ -366,6 +366,15 @@ def test_arguments_without_effect_warn(mtcars: pd.DataFrame) -> None:
         "conf_level" in w for w in warnings_of(mtcars, "cyl", conf_level=0.9)
     )
     assert (
+        "conf_level=0.9 has no effect: results_subtitle=False computes no main test "
+        "and no pairs; the proportion test of each bar reports a 95% interval "
+        "whatever conf_level says (as in ggstatsplot)."
+    ) in warnings_of(mtcars, "cyl", "am", conf_level=0.9, results_subtitle=False)
+    assert (
+        "conf_level=0.9 has no effect: results_subtitle=False computes no main test "
+        "and no pairs."
+    ) in warnings_of(mtcars, "cyl", conf_level=0.9, results_subtitle=False)
+    assert (
         "digits_perc=1 has no effect: label='counts' shows no percentages."
     ) in warnings_of(mtcars, "cyl", "am", label="counts", digits_perc=1)
     assert (

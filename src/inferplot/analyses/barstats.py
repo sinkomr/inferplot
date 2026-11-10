@@ -302,21 +302,26 @@ def _no_effect_warnings(table: TableData, args: _Args) -> list[str]:
             "adjusts the pairwise Fisher tests between the levels of x, and "
             f"{why}."
         )
-    if args.y is not None and args.conf_level != _DEFAULT_CONF_LEVEL:
+    level = passed.get("conf_level")
+    if args.conf_level == _DEFAULT_CONF_LEVEL:
+        pass
+    elif not args.results_subtitle:
+        bars = (
+            "; the proportion test of each bar reports a 95% interval whatever "
+            "conf_level says (as in ggstatsplot)"
+            if args.y is not None
+            else ""
+        )
+        out.append(
+            f"conf_level={level!r} has no effect: results_subtitle=False computes "
+            f"no main test and no pairs{bars}."
+        )
+    elif args.y is not None:
         out.append(
             "The proportion test of each bar reports Pearson's C with a 95% "
             f"interval whatever conf_level says (as in ggstatsplot): "
-            f"conf_level={passed.get('conf_level')!r} applies to the main effect "
-            "size and the pairs only."
-        )
-    elif (
-        args.y is None
-        and not args.results_subtitle
-        and args.conf_level != _DEFAULT_CONF_LEVEL
-    ):
-        out.append(
-            f"conf_level={passed.get('conf_level')!r} has no effect: "
-            "results_subtitle=False computes no interval without y."
+            f"conf_level={level!r} applies to the main effect size and the pairs "
+            "only."
         )
     if args.digits_perc != _DEFAULT_DIGITS_PERC and args.label == "counts":
         out.append(
