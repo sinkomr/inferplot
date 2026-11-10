@@ -61,6 +61,7 @@ from inferplot.result import (
 __all__ = [
     "ALT_TEXT_MAX_CHARS",
     "APA_NAME_LIMIT",
+    "DEFAULT_PAIRWISE_ALPHA",
     "DOUBLE_XMIN",
     "EFFECT_SIZE_SYMBOLS",
     "N_BIG_MARK",
@@ -985,21 +986,32 @@ _CENTRALITY_WORDS: Final[dict[str, str]] = {
 
 ALT_TEXT_MAX_CHARS: Final = 400
 
+# ggstatsplot's pairwise.alpha; the caption states any other threshold.
+DEFAULT_PAIRWISE_ALPHA: Final = 0.05
+
 
 def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
 def pairwise_caption_line(
-    pairwise: Sequence[PairwiseComparison], *, display: str, adjust_method: str
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    display: str,
+    adjust_method: str,
+    alpha: float,
 ) -> str | None:
     """The caption line naming the pairwise test, adjustment and drawn pairs.
 
     "Pairwise: Games-Howell, Holm adjusted; showing 1 of 3 pairs (significant
     only)." None when there are no pairs or ``display`` is "none". It also states how
-    many pairs were tested when only some are drawn (SPEC section 5 item 3). Bayes
-    factor pairs (type "bayes", every pair drawn): "Pairwise: Bayes factors
-    (Student's t, JZS prior 0.707), unadjusted; showing all 3 pairs." (D41).
+    many pairs were tested when only some are drawn (SPEC section 5 item 3). When
+    ``alpha`` (``pairwise_alpha``) is not 0.05 and the pairs drawn depend on it, the
+    note states the threshold: "(significant only, adjusted p < 0.1)", "(non-
+    significant only, adjusted p >= 0.1)", "p" alone when the p-values are not
+    adjusted. Bayes factor pairs (type "bayes", every pair drawn): "Pairwise: Bayes
+    factors (Student's t, JZS prior 0.707), unadjusted; showing all 3 pairs."
+    (D41).
     """
     if not pairwise or display == "none":
         return None
@@ -1025,6 +1037,10 @@ def pairwise_caption_line(
         note = _DISPLAY_NOTES[display]
     except KeyError:
         raise ValueError(f"unknown pairwise_display {display!r}") from None
+    if alpha != DEFAULT_PAIRWISE_ALPHA:
+        p = "p" if adjust_method == "none" else "adjusted p"
+        relation = "<" if display == "significant" else ">="
+        note = f"{note}, {p} {relation} {r_number_text(alpha)}"
     drawn = sum(1 for pair in pairwise if pair.displayed)
     return f"Pairwise: {method}; showing {drawn} of {_plural(total, 'pair')} ({note})."
 
@@ -1439,6 +1455,7 @@ def _expressions(
         pairwise,
         display=settings.pairwise_display,
         adjust_method=settings.p_adjust_method,
+        alpha=settings.pairwise_alpha,
     )
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
 

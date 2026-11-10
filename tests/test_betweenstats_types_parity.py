@@ -716,6 +716,7 @@ def test_caption(name: str, backend: Backend) -> None:
         result.pairwise,
         display=result.settings.pairwise_display,
         adjust_method=result.settings.p_adjust_method,
+        alpha=result.settings.pairwise_alpha,
     )
     expected = () if line is None else (line,)
     assert figure.caption_lines == expected

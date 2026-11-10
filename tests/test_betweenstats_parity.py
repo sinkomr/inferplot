@@ -386,6 +386,7 @@ def test_texts(name: str, backend: Backend) -> None:
         result.pairwise,
         display=result.settings.pairwise_display,
         adjust_method=result.settings.p_adjust_method,
+        alpha=result.settings.pairwise_alpha,
     )
     extra = () if pairwise_line is None else (pairwise_line,)
     assert figure.caption_lines == bayes_lines + extra

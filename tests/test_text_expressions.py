@@ -694,6 +694,9 @@ def expected_pairwise_line(case: OracleCase, n_pairs: int) -> str | None:
     if n_pairs == 0 or display == "none":
         return None
     adjusted = ADJUSTED[str(case.args.get("p.adjust.method", "holm"))]
+    # Every fixture uses ggstatsplot's pairwise.alpha 0.05, where the caption has
+    # no threshold note (U5; test_text covers the others).
+    assert float(case.args.get("pairwise.alpha", 0.05)) == 0.05, case.name
     if display == "all":
         return f"Pairwise: {adjusted}; showing all {n_pairs} pairs."
     drawn = len(comparisons(case))

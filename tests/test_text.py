@@ -608,6 +608,60 @@ def test_caption_lines(display: str, method: str) -> None:
     assert texts.pairwise_labels[0] == f"{want} = 0.01"
 
 
+@pytest.mark.parametrize(
+    ("display", "method", "alpha", "tail"),
+    [
+        ("significant", "holm", 0.05, "showing 1 of 3 pairs (significant only)."),
+        (
+            "significant",
+            "holm",
+            0.5,
+            "showing 1 of 3 pairs (significant only, adjusted p < 0.5).",
+        ),
+        (
+            "non-significant",
+            "BH",
+            0.1,
+            "showing 2 of 3 pairs (non-significant only, adjusted p >= 0.1).",
+        ),
+        (
+            "significant",
+            "none",
+            0.01,
+            "showing 1 of 3 pairs (significant only, p < 0.01).",
+        ),
+        ("all", "holm", 0.5, "showing all 3 pairs."),
+    ],
+)
+def test_caption_states_a_non_default_threshold(
+    display: str, method: str, alpha: float, tail: str
+) -> None:
+    """U5: which pairs "significant only" draws depends on pairwise_alpha, so the
+    caption names any threshold but ggstatsplot's 0.05."""
+    line = tx.pairwise_caption_line(
+        _pairs(display, method), display=display, adjust_method=method, alpha=alpha
+    )
+    assert line is not None
+    assert line.endswith("; " + tail)
+
+
+def test_caption_threshold_end_to_end() -> None:
+    plants = read_csv("PlantGrowth.csv")
+    analyze: Any = ip.analyze.betweenstats
+    default = analyze(plants, "group", "weight")
+    assert default.text.caption == (
+        "Pairwise: Games-Howell, Holm adjusted; showing 0 of 3 pairs (significant "
+        "only)."
+    )
+    loose = analyze(plants, "group", "weight", pairwise_alpha=0.5)
+    drawn = sum(p.displayed for p in loose.pairwise)
+    assert loose.text.caption == (
+        f"Pairwise: Games-Howell, Holm adjusted; showing {drawn} of 3 pairs "
+        "(significant only, adjusted p < 0.5)."
+    )
+    assert tx.figure_texts(loose).caption_lines == (loose.text.caption,)
+
+
 def test_no_subtitle_and_no_bayes_line_without_results_subtitle() -> None:
     base = result_from_fixture(_case("ToothGrowth-parametric"))
     settings = dataclasses.replace(base.settings, results_subtitle=False)
