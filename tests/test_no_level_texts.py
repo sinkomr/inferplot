@@ -127,8 +127,9 @@ DIFFERING_SUBTITLES: Mapping[str, tuple[str, str, str]] = {
         "CI_95% [1.00, 1.00], n_pairs = 10",
         _COLLINEAR,
     ),
-    # n = 2 (barstats oracle run: 3.1 and 4.7 against 3): both t's are rounding
-    # ties for the data as written; open with the lead.
+    # n = 2 (barstats oracle run: 3.1 and 4.7 against 3): t is a rounding tie for
+    # the data as written. (The robust case, t = 0.675 also a tie, now prints
+    # R's 0.68: its t is formed from exact quantities and rounded once.)
     "gghistostats-edge_one_n2-parametric": (
         "t_Student(1) = 1.13, p = 0.46, g_Hedges = 0.00, CI_95% [0.00, 0.00], "
         "n_obs = 2",
@@ -139,19 +140,6 @@ DIFFERING_SUBTITLES: Mapping[str, tuple[str, str, str]] = {
         "prints 1.12 (ties to even); R's arithmetic gives 1.1250000000000004, "
         "printed 1.13. The exact t of the stored doubles is 1.125 + 1.04e-16, so "
         "1.13 is its correct decimal rounding",
-    ),
-    "gghistostats-edge_one_n2-robust": (
-        "t_bootstrapped = 0.68, p = 0.49, μ_trimmed = 3.90, CI_95% [-Inf, Inf], "
-        "n_obs = 2",
-        "t_bootstrapped = 0.67, p = 0.48, μ_trimmed = 3.90, CI_95% [-Inf, Inf], "
-        "n_obs = 2",
-        "the bootstrap t is 0.9 / (1.6 / (0.6 x 2)) = 0.675 exactly for the decimal "
-        "data, a tie at 2 digits, and 0.675 + 3.7e-17 for the stored doubles, whose "
-        "correctly rounded double (0.67500000000000004) prints 0.68 as R's does; "
-        "inferplot's t is one unit in the last place lower (0.6749999999999999: "
-        "its standard error is rounded several times) and prints 0.67. The p "
-        "differs by resampling (2,000 against ggstatsplot's 200; within 4 Monte "
-        "Carlo SDs of the 20,000-resample reference)",
     ),
 }
 
