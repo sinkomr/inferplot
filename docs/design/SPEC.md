@@ -1197,12 +1197,29 @@ Every other subtitle number is compared as the exact string inferplot produces.
 
 - **Reference cross-checks:** where `tools/reference/stats_reference.py` covers a method,
   production code must agree with it too.
-- **Simulation (marker `slow`):** 2,000 seeded replications each, unequal variances and
-  unequal n, every rate inside the binomial 99% band of its nominal value: Type I error
-  at alpha 0.05 under the null; coverage of the 95% Hedges' g interval at nonzero true
-  standardized differences delta = (mu1 - mu2) / sqrt((s1^2 + s2^2) / 2) (0.263, 0.788
-  and -0.525). At delta = 0 the interval covers 0 exactly when the Welch p is at least
-  alpha, so coverage there repeats the Type I error test and is kept only as that.
+- **Simulation (marker `slow`; `tests/test_simulation*.py`, settings in
+  `tests/simulation_settings.py`):** every test, pairwise family and interval that
+  betweenstats, withinstats, histostats and scatterstats report is simulated under
+  the null and, for intervals, at a nonzero true value (57 settings, 89 rates). Data
+  come from `numpy.random.Generator(numpy.random.PCG64(seed))`; 2,000 replications
+  (1,000 or 400 for the bootstrap methods, which keep their 2,000 resamples). Each
+  rate is one of two kinds, set from theory before any run. Kind 1, exact or
+  Welch-type (Welch t and ANOVA, raw Games-Howell, paired and one-sample t, Pearson's
+  t, the Hedges' g interval at delta 0, Fisher's interval for Pearson's r): the rate
+  must lie in the central 99% binomial band of the nominal rate. Kind 2, R's method
+  where it does not hold its level by construction or at the simulated n: the rate
+  must lie in the 99% band of the established rate, which is exact where the null
+  distribution is known (Mann-Whitney and signed-rank by enumeration; Hedges' g at a
+  nonzero delta by noncentral-t quadrature) and otherwise comes from
+  `tools/reference/simulation_rates.py` (10,000 or 20,000 replications on another
+  seed, recorded with the setting's parameters in
+  `tests/data/simulation_reference.json`). A rate is never moved to kind 2 because a
+  test failed. True values are the estimators' probability limits (delta; 2P(X > Y) -
+  1 for the rank-biserial r; (6/pi) asin(rho/2) for Spearman's rho, Kruskal 1958; the
+  winsorized correlation and xi of normal data by quadrature), confirmed by Monte
+  Carlo in the reference file. Bayes factors have no error rate; one sanity rate each
+  is pinned. The measured rates of the methods that do not hold their level are in
+  the user documentation (`docs/intervals.md`).
 - **Scale:** the data times 2^k give bit-identical statistics, intervals, Bayes factors
   and Games-Howell rows for every k that keeps them normal doubles; times 10^k (k =
   -300..300) they agree within `closed_form` (`noncentral_ci` for interval bounds)

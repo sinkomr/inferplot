@@ -219,8 +219,9 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   - [x] W7: wrong remedy in the message for a conf_level too close to 1 (Kendall's W,
     rank epsilon squared); `estimate_outside_interval` fired when estimate and bound
     print the same. Fixed.
-  - [ ] W3 (as in R): Kendall's W's interval can exclude W under no effect (3 to 8 of
-    60 data sets); `estimate_outside_interval` reports it.
+  - [x] W3 (as in R): Kendall's W's interval can exclude W under no effect (3 to 8 of
+    60 data sets); `estimate_outside_interval` reports it. Measured by simulation (4%
+    of data sets) and documented in `docs/intervals.md`.
   - [ ] W4 (as in R): the average AKP's interval (D66) covers 99 to 100% where 95% is
     nominal and is 1.3 to 2 times wider than the percentile interval of the averaged
     resamples; say so in the docs. "One shared resample for all pairs" is pinned by no
@@ -334,7 +335,21 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
 - [ ] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples
-- [ ] simulation tests (`slow` marker); started in Phase 1: Welch t and ANOVA Type I error under the null (0.0475, 0.0515) and Hedges' g CI coverage at nonzero standardized differences (0.9445, 0.9480, 0.9515), with unequal variances and n (`tests/test_simulation.py`)
+- [x] simulation tests (`slow`): 57 settings and 89 rates over every test, pairwise
+  family and interval of the four implemented functions (kind-2 rates established at
+  10,000 to 20,000 replications by `tools/reference/simulation_rates.py`). No inferplot
+  bug found: every far-off rate was reproduced by an independent implementation and is
+  a property of R's method; the lead's own spot check of three rates agrees
+  (rank-biserial 90.4% against 90.9%, winsorized r 89.4% against 89.6%, Games-Howell
+  with Holm 1.0% against 1.55%). Hold: Welch, paired, one-sample and Pearson tests,
+  Hedges' g, Fisher's interval, the rank tests, the trimmed-means tests, the
+  bootstrap-t, the between AKP. Conservative: Holm families (Games-Howell with Holm
+  1.55% where 5% is allowed), within omega squared (99.8 to 100%), average AKP (99.6%,
+  W4). Do not hold: between omega squared at an effect (91.6%; its estimate
+  converges to 0.20 for a true 1/7), rank-biserial intervals (88 to 94%), rank
+  epsilon squared, Kendall's W and xi (never cover 0; 85%, 68% and 92% at an effect),
+  winsorized r at rho 0.8 (89.6%), Yuen with a small, more variable group (6%). User
+  documentation: `docs/intervals.md`. barstats' simulations follow with barstats
 - [ ] agent evaluation harness (ask the human before running it)
 - [ ] release workflow; human publishes to TestPyPI, then PyPI
 
