@@ -427,12 +427,17 @@ def _check_discordant(table: TableData, args: _Args) -> None:
             "results_subtitle=False to draw the bars without a test."
         )
     if quiet:
-        listed = _levels_text([f"{a!r} and {b!r}" for a, b in quiet], quote=False)
+        between = [f"between {a!r} and {b!r}" for a, b in quiet]
+        listed = (
+            between[0]
+            if len(between) == 1
+            else ", ".join(between[:-1]) + " or " + between[-1]
+        )
         many = len(quiet) > 1
         raise ValueError(
             f"Bowker's test of symmetry (McNemar's test beyond two levels) needs "
             f"pairs that change between every two levels, and no pair changes "
-            f"between {listed}, in either direction: "
+            f"{listed}, in either direction: "
             f"{'those terms are' if many else 'that term is'} 0/0, so the test is "
             "not defined (R's statistic is NaN, and ggstatsplot leaves out its "
             "subtitle silently). Merge levels so that every two exchange some "
@@ -666,10 +671,9 @@ def _bayes_caption_possible(args: _Args) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _levels_text(levels: Sequence[str], *, quote: bool = True) -> str:
-    """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'`` (unquoted with
-    ``quote=False``)."""
-    quoted = [repr(level) if quote else level for level in levels]
+def _levels_text(levels: Sequence[str]) -> str:
+    """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'``."""
+    quoted = [repr(level) for level in levels]
     if len(quoted) == 1:
         return quoted[0]
     return ", ".join(quoted[:-1]) + " and " + quoted[-1]
