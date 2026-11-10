@@ -18,6 +18,7 @@ from inferplot.result import (
     EffectSize,
     PairwiseComparison,
     Settings,
+    StatsResult,
     TestResult,
 )
 from tests.oracle_fixtures import OracleCase, load_cases, read_csv
@@ -747,12 +748,97 @@ def test_alt_text_on_every_parametric_fixture() -> None:
         assert 2 <= _sentences(alt) <= 4, (case.name, alt)
         assert result.y in alt
         assert result.x in alt
-        assert result.text.apa in alt
+        # Only what the figure shows (U12): the test when the subtitle is drawn,
+        # the pair count when brackets are.
+        if result.settings.results_subtitle:
+            assert result.text.apa in alt
+        else:
+            n = tx.format_n(result.n_obs)
+            assert f"No test result is shown (results_subtitle=False), n = {n}." in alt
+            assert result.text.apa not in alt
         for d in result.descriptives:
             assert f"{d.level} (n = {tx.format_n(d.n)}, mean " in alt
-        if result.pairwise:
+        if result.pairwise and result.settings.pairwise_display != "none":
             significant = sum(1 for p in result.pairwise if p.significant)
             assert f"{significant} of {len(result.pairwise)} pairwise" in alt
+        else:
+            assert "pairwise comparison" not in alt
+
+
+@pytest.mark.parametrize("kind", ["parametric", "nonparametric", "robust"])
+def test_alt_text_describes_only_what_is_drawn(kind: str) -> None:
+    """U12: without the results subtitle the figure shows no test, and with
+    pairwise_display="none" no brackets; the alt text says neither. Brackets are
+    drawn with results_subtitle=False, so their count stays."""
+    plants = read_csv("PlantGrowth.csv")
+    analyze: Any = ip.analyze.betweenstats
+    full = analyze(plants, "group", "weight", type=kind)
+    hidden = "No test result is shown (results_subtitle=False), n = 30."
+    pairs = " pairwise comparisons "
+    assert full.text.apa in full.text.alt_text
+    assert pairs in full.text.alt_text
+
+    quiet = analyze(plants, "group", "weight", type=kind, results_subtitle=False)
+    assert quiet.text.apa == full.text.apa  # the result still reports the test
+    assert quiet.text.alt_text == full.text.alt_text.replace(full.text.apa, hidden)
+    assert pairs in quiet.text.alt_text
+
+    for subtitle in (True, False):
+        bare = analyze(
+            plants,
+            "group",
+            "weight",
+            type=kind,
+            results_subtitle=subtitle,
+            pairwise_display="none",
+        )
+        assert "pairwise" not in bare.text.alt_text
+        assert (full.text.apa in bare.text.alt_text) == subtitle
+        assert (hidden in bare.text.alt_text) == (not subtitle)
+        assert 2 <= _sentences(bare.text.alt_text) <= 4
+
+
+def test_alt_text_without_subtitle_two_groups_and_within() -> None:
+    analyze: Any = ip.analyze.betweenstats
+    teeth = read_csv("ToothGrowth.csv")
+    for kind, words in (
+        ("parametric", "No test result is shown (results_subtitle=False), n = 60."),
+        ("bayes", "No test was computed (results_subtitle=False), n = 60."),
+    ):
+        result = analyze(teeth, "supp", "len", type=kind, results_subtitle=False)
+        assert result.text.alt_text.endswith(words)
+    sleep = read_csv("sleep.csv")
+    within: Any = ip.analyze.withinstats
+    result = within(sleep, "group", "extra", subject_id="ID", results_subtitle=False)
+    assert result.text.alt_text.endswith(
+        "No test result is shown (results_subtitle=False), n = 10."
+    )
+    assert result.text.apa.startswith("Paired t-test: ")
+
+
+def test_non_ascii_level_names_stay_as_they_are() -> None:
+    """U12: level names are the user's data; the APA sentence prints them
+    unchanged, and JSON, str() and the embedded copy carry them."""
+    plants = read_csv("PlantGrowth.csv")
+    plants["group"] = plants["group"].replace(
+        {"ctrl": "Kontrolle", "trt1": "Behandlung ä", "trt2": "处理"}
+    )
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(plants, "group", "weight", type="bayes", results_subtitle=False)
+    assert "Behandlung ä vs 处理, BF10 = " in result.text.apa
+    assert not result.text.apa.isascii()
+    text = result.to_json(include_values=False)
+    assert text.isascii()  # escaped, as strict JSON allows
+    assert StatsResult.from_json(text).text.apa == result.text.apa
+    assert StatsResult.from_json(result.to_json()) == result
+    assert str(result).startswith(result.text.apa)
+    long = "Behandlungsgruppe mit einer sehr langen Bezeichnung ä"
+    two = plants[plants["group"] != "处理"].replace({"Behandlung ä": long})
+    one_sided = analyze(two, "group", "weight", alternative="greater")
+    assert one_sided.levels == (long, "Kontrolle")
+    assert one_sided.text.apa.startswith(
+        f"Welch's t-test (one-sided: {long[:39]}… greater than Kontrolle): "
+    )
 
 
 def test_alt_text_plant_growth() -> None:

@@ -1148,8 +1148,9 @@ def apa_sentence(
     order: "greater" tests whether the first is greater than the second), each
     shortened to ``name_limit`` characters with an ellipsis: "Welch's t-test
     (one-sided: OJ greater than VC): ..."; ``levels`` is required then. The
-    sentence is ASCII except where a level name is not (level names are the
-    user's data and are printed as they are, apart from that shortening).
+    sentence is ASCII except for the level names of a one-sided test, which are
+    the user's data and printed as they are, and the ellipsis (U+2026) that
+    shortens a long one.
     """
     heading = _test_heading(test, levels, name_limit)
     return (
@@ -1169,7 +1170,8 @@ def _prior_text(bayes: BayesFactor) -> str:
 
 
 def bayes_sentence(bayes: BayesFactor, *, n_obs: int) -> str:
-    """The results sentence of a two-group Bayes factor (type "bayes"), ASCII.
+    """The results sentence of a two-group Bayes factor (type "bayes"), ASCII
+    (it names no level).
 
     "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18,
     n = 60." BF10 to two decimals (scientific from 1e5 and below 0.01, as
@@ -1185,7 +1187,8 @@ def pairwise_bayes_sentence(
     pairwise: Sequence[PairwiseComparison], *, n_obs: int
 ) -> str:
     """The results sentence of type "bayes" with three or more groups, which has no
-    omnibus test in v0.1 (D41): each pair's Bayes factor, ASCII.
+    omnibus test in v0.1 (D41): each pair's Bayes factor. The level names are
+    printed as they are, so the sentence is ASCII only when they are.
 
     "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 =
     0.65; ctrl vs trt2, BF10 = 1.77; trt1 vs trt2, BF10 = 6.36; n = 30."
@@ -1337,6 +1340,15 @@ def alt_text(
     count of significant pairs. Type "bayes" with three or more groups gives the
     range of the pairs' Bayes factors instead.
 
+    It describes only what the figure shows. With ``results_subtitle=False`` the
+    figure shows no test, so the result sentence reads "No test result is shown
+    (results_subtitle=False), n = <n>." (type "bayes" with two groups computes
+    none: "No test was computed ..."), while the APA sentence still reports a
+    computed test. The pair sentence follows the brackets: it is there whenever
+    brackets are drawn (also with ``results_subtitle=False``) and left out with
+    ``pairwise_display="none"``. A one-sided test's direction names the levels
+    as the APA sentence does, shortened with them.
+
     Level names, x and y are shortened (40, 20, then 12 characters) until the text
     fits. If it still does not, the group description is left out; the result
     sentence is never cut, so a result sentence too long by itself (a statistic
@@ -1351,6 +1363,12 @@ def alt_text(
             return _alt_bayes_pairs(
                 pairwise, limit=limit, display=settings.pairwise_display
             )
+        if not settings.results_subtitle and (test is not None or bayes is not None):
+            # Computed, but the figure does not show it (U12).
+            return (
+                "No test result is shown (results_subtitle=False), "
+                f"n = {format_n(n_obs)}."
+            )
         return results_sentence(
             test,
             effect_size,
@@ -1361,7 +1379,9 @@ def alt_text(
             name_limit=limit,
         )
 
-    if pairwise and not bayes_pairs:
+    if pairwise and not bayes_pairs and settings.pairwise_display != "none":
+        # Brackets and the caption's pairwise line are drawn (also with
+        # results_subtitle=False); with pairwise_display="none" neither is.
         significant = sum(1 for pair in pairwise if pair.significant)
         verb = "is" if significant == 1 else "are"
         method = settings.p_adjust_method
