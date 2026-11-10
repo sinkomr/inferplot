@@ -68,7 +68,11 @@ from inferplot.stats.robust import (
 from inferplot.stats.smm import smm_cdf, smm_quantile
 from inferplot.stats.srange import srange_logsf, srange_sf
 from inferplot.stats.within_nonparametric import (
+    DurbinConoverPair,
+    Friedman,
     SignedRank,
+    durbin_conover,
+    friedman,
     paired_rank_biserial,
     signed_rank,
 )
@@ -91,7 +95,9 @@ __all__ = [
     "Alternative",
     "BootstrapEffectSizeCI",
     "DunnPair",
+    "DurbinConoverPair",
     "EffectSizeCI",
+    "Friedman",
     "KruskalWallis",
     "LinconPair",
     "MannWhitney",
@@ -113,8 +119,10 @@ __all__ = [
     "bw_sj",
     "common_scale",
     "dunn",
+    "durbin_conover",
     "explanatory_effect",
     "f_ncp_bound",
+    "friedman",
     "games_howell",
     "hedges_g",
     "hedges_j",

@@ -1,7 +1,10 @@
-"""inferplot.stats' signed-rank test and matched-pairs rank-biserial r against
-every nonparametric ggwithinstats fixture with two conditions and against
-probe-signrank (``stats::wilcox.test(paired = TRUE)`` by exact, correct and
-alternative, ``effectsize::rank_biserial(paired = TRUE)`` by ci and alternative).
+"""inferplot.stats' signed-rank test and matched-pairs rank-biserial r (two
+conditions), Friedman's test and Durbin-Conover's pairs (three or more) against
+every nonparametric ggwithinstats fixture, against probe-signrank
+(``stats::wilcox.test(paired = TRUE)`` by exact, correct and alternative,
+``effectsize::rank_biserial(paired = TRUE)`` by ci and alternative) and against
+probe-friedman (``stats::friedman.test`` and the unadjusted
+``PMCMRplus::durbinAllPairsTest`` on 11 designs).
 
 The statistics run on the subjects-by-conditions table each fixture records
 (``within_data``), not through the data layer, so a failure here is a method
@@ -15,7 +18,12 @@ from typing import Any
 import numpy as np
 import pytest
 
-from inferplot.stats import paired_rank_biserial, signed_rank
+from inferplot.stats import (
+    durbin_conover,
+    friedman,
+    paired_rank_biserial,
+    signed_rank,
+)
 from tests.oracle_fixtures import (
     OracleCase,
     cases_for,
@@ -37,7 +45,14 @@ CASES = require_cases(
     "nonparametric ggwithinstats fixtures with a subtitle",
 )
 TWO = [pytest.param(c, id=c.name) for c in CASES if len(c.analysis_levels) == 2]
+MORE = [pytest.param(c, id=c.name) for c in CASES if len(c.analysis_levels) >= 3]
+PAIRS = [
+    pytest.param(c, id=c.name)
+    for c in cases_for("ggwithinstats")
+    if c.type == "nonparametric" and c.pairwise
+]
 SIGNRANK = probe("probe-signrank").rows("pairs")
+DESIGNS = probe("probe-friedman").rows("designs")
 
 
 def _columns(case: OracleCase) -> list[FloatArray]:
@@ -156,3 +171,85 @@ def test_probe_rank_biserial_se_counts_zero_differences() -> None:
     expected = r_double(row["conf_low_hex"])
     assert expected is not None
     assert abs(wrong.conf_low - expected) > 0.03
+
+
+# --------------------------------------------------------------------------- #
+# three or more conditions
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("case", MORE)
+def test_friedman(case: OracleCase) -> None:
+    row = case.subtitle_data
+    result = friedman(_columns(case))
+    assert row["method"] == "Friedman rank sum test"
+    assert_close("closed_form", result.statistic, number(row["statistic"]), what="chi")
+    assert_close("closed_form", result.df, number(row["df.error"]), what="df")
+    assert_close("closed_form", result.p_value, number(row["p.value"]), what="p")
+
+
+@pytest.mark.parametrize("case", PAIRS)
+def test_durbin_conover_pairs(case: OracleCase) -> None:
+    method = str(case.args.get("p.adjust.method", "holm"))
+    levels = case.analysis_levels
+    rows = {(str(r["group1"]), str(r["group2"])): r for r in case.pairwise}
+    pairs = durbin_conover(_columns(case), p_adjust_method=method)  # type: ignore[arg-type]
+    assert len(pairs) == len(rows)
+    for pair in pairs:
+        row = rows[(levels[pair.i], levels[pair.j])]
+        what = f"{case.name} {levels[pair.i]}-{levels[pair.j]}"
+        assert row["test"] == "Durbin-Conover"
+        assert row["distribution"] == "t"
+        t, p = number(row["statistic"]), number(row["p.value"])
+        assert_close("closed_form", pair.statistic, t, what=what)
+        assert_close("closed_form", pair.p_adjusted, p, what=what)
+
+
+def _design(design: Any) -> list[FloatArray]:
+    out = []
+    for level in design["levels"]:
+        values = [r_double(v) for v in design["values_hex"][level]]
+        assert all(v is not None for v in values)
+        out.append(np.array(values, dtype=np.float64))
+    return out
+
+
+def test_friedman_probe_covers_the_designs() -> None:
+    names = {d["name"] for d in DESIGNS}
+    assert len(names) == len(DESIGNS) == 11
+    assert {"bugs_long", "edge_within_small", "tied_rows", "untied"} <= names
+
+
+@pytest.mark.parametrize("design", DESIGNS, ids=[d["name"] for d in DESIGNS])
+def test_probe_friedman(design: Any) -> None:
+    columns = _design(design)
+    assert design["friedman_error"] is None
+    result = friedman(columns)
+    for got, column in ((result.statistic, "statistic"), (result.p_value, "p_value")):
+        expected = r_double(design[f"friedman_{column}_hex"])
+        assert expected is not None
+        assert_close("closed_form", got, expected, what=f"{design['name']} {column}")
+    assert result.df == number(design["friedman_parameter"])
+
+
+@pytest.mark.parametrize("design", DESIGNS, ids=[d["name"] for d in DESIGNS])
+def test_probe_durbin_conover(design: Any) -> None:
+    """The unadjusted pairs; R's statistics are never negative (|t|)."""
+    columns = _design(design)
+    levels = design["levels"]
+    assert design["durbin_error"] is None
+    assert design["durbin_dist"] == "t"
+    rows = {(r["group1"], r["group2"]): r for r in design["durbin_pairs"]}
+    pairs = durbin_conover(columns, p_adjust_method="none")
+    assert len(pairs) == len(rows)
+    for pair in pairs:
+        row = rows[(levels[pair.i], levels[pair.j])]
+        what = f"{design['name']} {levels[pair.i]}-{levels[pair.j]}"
+        statistic = r_double(row["statistic_hex"])
+        p = r_double(row["p_value_hex"])
+        assert statistic is not None
+        assert p is not None
+        assert statistic >= 0.0
+        assert_close("closed_form", pair.statistic, statistic, what=f"{what} t")
+        assert_close("closed_form", pair.p_value, p, what=f"{what} p")
+        assert pair.p_adjusted == pair.p_value

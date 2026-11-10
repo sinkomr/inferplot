@@ -10,7 +10,13 @@ import numpy as np
 import pytest
 from scipy import stats as scipy_stats
 
-from inferplot.stats import paired_rank_biserial, signed_rank
+from inferplot.stats import (
+    durbin_conover,
+    friedman,
+    p_adjust,
+    paired_rank_biserial,
+    signed_rank,
+)
 from tests.tolerances import assert_close
 
 FloatArray = np.ndarray[Any, np.dtype[np.float64]]
@@ -19,6 +25,9 @@ RNG = np.random.default_rng(20261110)
 A = np.round(RNG.normal(10.0, 2.0, 25), 1)
 B = np.round(A + RNG.normal(0.4, 1.0, 25), 1)
 SIDES = ("two-sided", "less", "greater")
+# Twelve subjects, four conditions, rounded to whole numbers: ties within subjects.
+TABLE = np.round(RNG.normal([5.0, 5.5, 6.5, 6.0], 1.2, (12, 4)))
+COLUMNS = [TABLE[:, j].copy() for j in range(4)]
 
 
 # --------------------------------------------------------------------------- #
@@ -223,3 +232,159 @@ def test_rank_biserial_conf_level_errors() -> None:
 @pytest.mark.parametrize("factor", [2.0**-700, 2.0**700])
 def test_rank_biserial_scale_invariance(factor: float) -> None:
     assert paired_rank_biserial(A * factor, B * factor) == paired_rank_biserial(A, B)
+
+
+# --------------------------------------------------------------------------- #
+# Friedman's test and Durbin-Conover pairs
+# --------------------------------------------------------------------------- #
+
+
+def _within_ranks(columns: list[FloatArray]) -> FloatArray:
+    return np.apply_along_axis(scipy_stats.rankdata, 1, np.column_stack(columns))
+
+
+def test_friedman_by_hand() -> None:
+    # Three subjects, three conditions; subject 3 ties conditions 2 and 3.
+    columns = [
+        np.array([1.0, 2.0, 3.0]),
+        np.array([2.0, 3.0, 5.0]),
+        np.array([3.0, 1.0, 5.0]),
+    ]
+    # Ranks: (1, 2, 3), (2, 3, 1), (1, 2.5, 2.5); R = (4, 7.5, 6.5).
+    # chi^2 = 12 sum (R_j - 6)^2 / (3 * 3 * 4 - 6 / 2) = 12 * 6.5 / 33.
+    result = friedman(columns)
+    assert result.statistic == pytest.approx(12 * 6.5 / 33, rel=1e-15)
+    assert (result.df, result.n, result.k) == (2.0, 3, 3)
+    assert result.p_value == pytest.approx(
+        scipy_stats.chi2.sf(12 * 6.5 / 33, 2), rel=1e-14
+    )
+
+
+def test_friedman_matches_scipy() -> None:
+    ours = friedman(COLUMNS)
+    theirs = scipy_stats.friedmanchisquare(*COLUMNS)
+    assert_close("closed_form", ours.statistic, float(theirs.statistic), what="chi2")
+    assert_close("closed_form", ours.p_value, float(theirs.pvalue), what="p")
+
+
+def test_friedman_invariances() -> None:
+    base = friedman(COLUMNS)
+    order = RNG.permutation(TABLE.shape[0])
+    assert friedman([c[order] for c in COLUMNS]) == base
+    assert friedman(COLUMNS[::-1]) == base
+    # Ranks within subjects only: any increasing transform of each subject's
+    # values, and any scale, leaves the test unchanged.
+    assert friedman([np.exp(c) for c in COLUMNS]) == base
+    for factor in (1e-300, 1e-150, 1e150, 1e300):
+        assert friedman([c * factor for c in COLUMNS]) == base
+
+
+def test_tied_subjects_add_nothing() -> None:
+    tied = [np.append(c, 7.0) for c in COLUMNS]
+    base, more = friedman(COLUMNS), friedman(tied)
+    # A fully tied subject adds (k + 1) / 2 to every rank sum and to their null
+    # mean, and k^3 - k to both terms of the denominator: chi^2 is unchanged.
+    assert more.statistic == base.statistic
+    assert more.n == base.n + 1
+
+
+def test_friedman_all_tied_raises() -> None:
+    same = [np.array([1.0, 2.0, 3.0])] * 3
+    with pytest.raises(ValueError, match="same value in all 3 conditions"):
+        friedman(same)
+    with pytest.raises(ValueError, match="same value in all 3 conditions"):
+        durbin_conover(same)
+
+
+def test_friedman_input_errors() -> None:
+    with pytest.raises(ValueError, match="at least two conditions"):
+        friedman([np.array([1.0, 2.0])])
+    with pytest.raises(ValueError, match="same number of values"):
+        friedman([np.array([1.0, 2.0]), np.array([1.0, 2.0, 3.0])])
+    with pytest.raises(ValueError, match="at least 2 value"):
+        friedman([np.array([1.0]), np.array([2.0])])
+
+
+def _durbin_reference(columns: list[FloatArray]) -> list[tuple[float, float]]:
+    """Conover's (1999, section 5.8) form with the Friedman statistic T1."""
+    ranks = _within_ranks(columns)
+    b, k = ranks.shape
+    sums = ranks.sum(axis=0)
+    a = float((ranks**2).sum())
+    c = b * k * (k + 1) ** 2 / 4
+    t1 = (k - 1) * float(((sums - b * (k + 1) / 2) ** 2).sum()) / (a - c)
+    df = (b - 1) * (k - 1)
+    se = math.sqrt(2 * b * (a - c) / df * (1 - t1 / (b * (k - 1))))
+    out = []
+    for i in range(k):
+        for j in range(i + 1, k):
+            t = abs(float(sums[i] - sums[j])) / se
+            out.append((t, float(2 * scipy_stats.t.sf(t, df))))
+    return out
+
+
+def test_durbin_conover_matches_conover() -> None:
+    pairs = durbin_conover(COLUMNS, p_adjust_method="none")
+    reference = _durbin_reference(COLUMNS)
+    assert [(p.i, p.j) for p in pairs] == [
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (1, 2),
+        (1, 3),
+        (2, 3),
+    ]
+    for pair, (t, p) in zip(pairs, reference, strict=True):
+        assert pair.df == 33.0
+        assert_close("closed_form", pair.statistic, t, what="t")
+        assert_close("closed_form", pair.p_value, p, what="p")
+        assert pair.p_adjusted == pair.p_value
+
+
+@pytest.mark.parametrize("method", ["holm", "BH", "bonferroni", "hommel", "BY"])
+def test_durbin_conover_adjusts_over_all_pairs(method: Any) -> None:
+    pairs = durbin_conover(COLUMNS, p_adjust_method=method)
+    raw = [p.p_value for p in pairs]
+    assert [p.p_adjusted for p in pairs] == list(p_adjust(raw, method))
+
+
+def test_durbin_conover_is_unsigned_and_order_free() -> None:
+    forward = durbin_conover(COLUMNS)
+    backward = durbin_conover(COLUMNS[::-1])
+    k = len(COLUMNS)
+    by_pair = {(p.i, p.j): p for p in backward}
+    for pair in forward:
+        mirrored = by_pair[(k - 1 - pair.j, k - 1 - pair.i)]
+        assert mirrored.statistic == pair.statistic >= 0.0
+        assert mirrored.p_value == pair.p_value
+    order = RNG.permutation(TABLE.shape[0])
+    assert durbin_conover([c[order] for c in COLUMNS]) == forward
+
+
+def test_identical_rankings_give_infinite_t() -> None:
+    # Every subject ranks the conditions a < b < c (edge_within_small): no error
+    # variance, t = inf and p = 0 as R reports them.
+    columns = [
+        np.array([1.0, 5.0, 2.0]),
+        np.array([2.0, 6.0, 3.5]),
+        np.array([3.0, 7.0, 9.0]),
+    ]
+    pairs = durbin_conover(columns)
+    assert [(p.statistic, p.p_value, p.p_adjusted) for p in pairs] == [
+        (math.inf, 0.0, 0.0)
+    ] * 3
+    assert friedman(columns).statistic == 6.0  # n (k - 1) W with W = 1
+
+
+def test_identical_rankings_with_a_tied_pair_raise() -> None:
+    # Every subject ranks a < b = c: the pair (b, c) has t = 0/0.
+    columns = [np.array([1.0, 5.0]), np.array([2.0, 6.0]), np.array([2.0, 6.0])]
+    with pytest.raises(ValueError, match="conditions 2 and 3 share their rank"):
+        durbin_conover(columns)
+
+
+def test_two_subjects() -> None:
+    columns = [np.array([1.0, 2.0]), np.array([3.0, 1.0]), np.array([2.0, 3.0])]
+    pairs = durbin_conover(columns)
+    assert {p.df for p in pairs} == {2.0}
+    assert all(math.isfinite(p.statistic) for p in pairs)

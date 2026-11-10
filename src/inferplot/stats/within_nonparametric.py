@@ -5,7 +5,8 @@
 nonparametric).
 
 Two conditions: Wilcoxon's signed-rank test of the paired differences with the
-matched-pairs rank-biserial r.
+matched-pairs rank-biserial r. Three or more: Friedman's test with Kendall's W
+(percentile bootstrap CI over subjects) and Durbin-Conover's pairwise t.
 
 Every rank here is a mid-rank, and twice a mid-rank is an integer, so rank sums,
 tie corrections and sums of squares of ranks are computed exactly (Python integers
@@ -15,8 +16,10 @@ and fractions) and each statistic is rounded once.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,10 +28,15 @@ from scipy import special
 from inferplot.stats.descriptive import FloatArray, SampleLike, as_sample
 from inferplot.stats.effect_sizes import EffectSizeCI
 from inferplot.stats.noncentral import check_conf_level
+from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import Alternative, check_alternative
 
 __all__ = [
+    "DurbinConoverPair",
+    "Friedman",
     "SignedRank",
+    "durbin_conover",
+    "friedman",
     "paired_rank_biserial",
     "signed_rank",
 ]
@@ -53,6 +61,36 @@ class SignedRank:
     n: int
     n_nonzero: int
     alternative: Alternative
+
+
+@dataclass(frozen=True, slots=True)
+class Friedman:
+    """Friedman's rank sum test of k conditions measured on n subjects (R:
+    ``stats::friedman.test``)."""
+
+    statistic: float
+    df: float
+    p_value: float
+    n: int
+    k: int
+
+
+@dataclass(frozen=True, slots=True)
+class DurbinConoverPair:
+    """Durbin-Conover's test of conditions ``i`` < ``j`` (input order).
+
+    ``statistic`` is |t| (unsigned, as ggstatsplot reports it) on ``df`` degrees
+    of freedom, ``p_value`` the raw two-sided p and ``p_adjusted`` the p after the
+    multiplicity adjustment over all pairs. When every subject ranks the
+    conditions alike the error variance is 0: |t| is inf and both p are 0.
+    """
+
+    i: int
+    j: int
+    statistic: float
+    df: float
+    p_value: float
+    p_adjusted: float
 
 
 # --------------------------------------------------------------------------- #
@@ -224,4 +262,190 @@ def paired_rank_biserial(
     high = 1.0 if side == "greater" else math.tanh(z + q * se)
     return EffectSizeCI(
         estimate=r, conf_low=low, conf_high=high, conf_level=level, sidedness=side
+    )
+
+
+# --------------------------------------------------------------------------- #
+# ranks within subjects (three or more conditions)
+# --------------------------------------------------------------------------- #
+
+# Subjects ranked together in one block: bounds the (subjects x k x k) comparison
+# arrays to about this many elements.
+_RANK_BLOCK_ELEMENTS: Final = 4_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class _Blocks:
+    """The subjects-by-conditions table ranked within each subject.
+
+    ``ranks2[i, j]`` is twice the mid-rank of condition j within subject i (an
+    integer from 2 to 2k), ``ties[i]`` subject i's sum(t^3 - t) over its tied
+    sets; ``rank_sums2`` the column sums of ``ranks2`` (twice the rank sums R_j),
+    and ``spread`` = n k (k^2 - 1) - sum(t^3 - t), 12 times the total
+    within-subject sum of squares of the ranks (0 exactly when every subject has
+    the same value in every condition).
+    """
+
+    ranks2: IntArray
+    ties: IntArray
+    n: int
+    k: int
+    rank_sums2: tuple[int, ...]
+    spread: int
+
+    @property
+    def ss2(self) -> int:
+        """sum_j (2 R_j - n (k + 1))^2: four times the sum of squares of the rank
+        sums about their null mean."""
+        centre = self.n * (self.k + 1)
+        return sum((r - centre) ** 2 for r in self.rank_sums2)
+
+
+def _table(conditions: Sequence[SampleLike], method: str) -> FloatArray:
+    """The conditions as the columns of an n x k matrix (complete subjects)."""
+    if len(conditions) < 2:
+        raise ValueError(
+            f"{method} needs at least two conditions; got {len(conditions)}"
+        )
+    columns = [
+        as_sample(c, name=f"condition {i + 1}", min_size=2)
+        for i, c in enumerate(conditions)
+    ]
+    sizes = {c.size for c in columns}
+    if len(sizes) != 1:
+        raise ValueError(
+            "every condition needs one value per subject (the same number of values); "
+            f"got {[c.size for c in columns]}"
+        )
+    return np.column_stack(columns)
+
+
+def _rank_rows(values: FloatArray) -> tuple[IntArray, IntArray]:
+    """Twice the within-row mid-ranks, 2 (#below) + #equal + 1, and each row's
+    sum(t^3 - t), which is the sum over its entries of #equal^2 - 1."""
+    n, k = values.shape
+    ranks2 = np.empty((n, k), dtype=np.int64)
+    ties = np.empty(n, dtype=np.int64)
+    step = max(1, _RANK_BLOCK_ELEMENTS // (k * k))
+    for first in range(0, n, step):
+        v = values[first : first + step]
+        # Entry [i, a, b] compares value b of row i with value a.
+        below = (v[:, np.newaxis, :] < v[:, :, np.newaxis]).sum(axis=2)
+        equal = (v[:, np.newaxis, :] == v[:, :, np.newaxis]).sum(axis=2)
+        ranks2[first : first + step] = 2 * below + equal + 1
+        ties[first : first + step] = (equal * equal - 1).sum(axis=1)
+    return ranks2, ties
+
+
+def _blocks(conditions: Sequence[SampleLike], method: str) -> _Blocks:
+    """Rank the table within subjects; ValueError when every subject has the same
+    value in every condition (no within-subject variation to rank)."""
+    ranks2, ties = _rank_rows(_table(conditions, method))
+    n, k = ranks2.shape
+    spread = n * k * (k * k - 1) - int(ties.sum())
+    if spread == 0:
+        raise ValueError(
+            f"every one of the {n} subjects has the same value in all {k} "
+            f"conditions, so {method} has nothing to rank (its statistic is 0/0)"
+        )
+    return _Blocks(
+        ranks2=ranks2,
+        ties=ties,
+        n=n,
+        k=k,
+        rank_sums2=tuple(int(v) for v in ranks2.sum(axis=0).tolist()),
+        spread=spread,
+    )
+
+
+def friedman(conditions: Sequence[SampleLike]) -> Friedman:
+    """Friedman's (1937, Journal of the American Statistical Association 32:
+    675-701) rank sum test for k conditions measured on the same n subjects.
+
+    The values are ranked within each subject (mid-ranks for ties) and R_j is the
+    rank sum of condition j. With the tie correction (Conover 1999, Practical
+    Nonparametric Statistics, 3rd ed., section 5.8; Hollander, Wolfe & Chicken
+    2014, section 7.1): chi^2 = 12 sum_j (R_j - n (k + 1) / 2)^2 /
+    (n k (k + 1) - sum(t^3 - t) / (k - 1)), the sum over every tied set of every
+    subject, on k - 1 df; p = P(chi^2_(k-1) > chi^2), the upper tail directly.
+    A subject whose values are all tied adds nothing to either sum. Computed from
+    exact integers (twice the mid-ranks) and rounded once. Matches R's
+    ``stats::friedman.test`` as statsExpressions 2.2.1 calls it for ggwithinstats
+    (probe-friedman: 11 designs, among them tied rows and ties within subjects).
+
+    Raises:
+        ValueError: fewer than two conditions or two subjects, conditions of
+            unequal length or with a non-finite value, or every subject has the
+            same value in every condition (R: NaN).
+    """
+    blocks = _blocks(conditions, "Friedman's test")
+    k = blocks.k
+    # chi^2 = 3 (k - 1) sum (2 R_j - n (k + 1))^2 / (n k (k^2 - 1) - sum(t^3 - t)).
+    statistic = float(Fraction(3 * (k - 1) * blocks.ss2, blocks.spread))
+    df = float(k - 1)
+    return Friedman(
+        statistic=statistic,
+        df=df,
+        p_value=float(special.chdtrc(df, statistic)),
+        n=blocks.n,
+        k=k,
+    )
+
+
+def durbin_conover(
+    conditions: Sequence[SampleLike], *, p_adjust_method: PAdjustMethod = "holm"
+) -> tuple[DurbinConoverPair, ...]:
+    """Durbin-Conover all-pairs comparisons after Friedman's test, then
+    ``p_adjust`` over all k (k - 1) / 2 raw p-values.
+
+    Conover (1999, Practical Nonparametric Statistics, 3rd ed., section 5.8,
+    complete block designs; Durbin 1951, British Journal of Statistical
+    Psychology 4: 85-90): with the within-subject mid-ranks r_ij, their sum of
+    squares A = sum r_ij^2 and the condition rank sums R_j, conditions i and j
+    differ by t = |R_i - R_j| / sqrt(2 (n A - sum_j R_j^2) / ((n - 1)(k - 1))) on
+    (n - 1)(k - 1) df, two-sided p = 2 P(T > t). This is Durbin's form for a
+    balanced incomplete block design, (A - C)(1 - T / (n (k - 1))) with Durbin's
+    T, when every condition is in every block, as R's
+    ``PMCMRplus::durbinAllPairsTest`` computes it for ggwithinstats (statsExpressions
+    2.2.1; probe-friedman). t is unsigned, as ggstatsplot reports it, and computed
+    from exact integers, rounded once.
+
+    When every subject ranks the conditions alike (Kendall's W = 1),
+    n A = sum_j R_j^2: the error variance is 0, so t = inf and p = 0 for every pair
+    of conditions with different rank sums, as R reports them (edge_within_small).
+
+    Raises:
+        ValueError: as ``friedman``; or every subject ranks the conditions alike
+            and two conditions share their rank in every subject (t = 0/0); or an
+            unknown ``p_adjust_method``.
+    """
+    p_adjust([], p_adjust_method)  # an unknown method fails before any work
+    blocks = _blocks(conditions, "the Durbin-Conover test")
+    n, k = blocks.n, blocks.k
+    sums = blocks.rank_sums2
+    a4 = int(np.square(blocks.ranks2).sum())
+    # 4 (n A - sum R_j^2), in twice-ranks.
+    error4 = n * a4 - sum(r * r for r in sums)
+    df_int = (n - 1) * (k - 1)
+    df = float(df_int)
+    rows: list[tuple[int, int, float, float]] = []
+    for i in range(k):
+        for j in range(i + 1, k):
+            diff2 = sums[i] - sums[j]
+            if error4 == 0:
+                if diff2 == 0:
+                    raise ValueError(
+                        "every subject ranks the conditions alike and conditions "
+                        f"{i + 1} and {j + 1} share their rank in every subject, so "
+                        "the Durbin-Conover t of that pair is 0/0"
+                    )
+                rows.append((i, j, math.inf, 0.0))
+                continue
+            # t^2 = (2 R_i - 2 R_j)^2 (n - 1)(k - 1) / (2 * 4 (n A - sum R^2)).
+            t = math.sqrt(float(Fraction(diff2 * diff2 * df_int, 2 * error4)))
+            rows.append((i, j, t, min(1.0, 2.0 * float(special.stdtr(df, -t)))))
+    adjusted = p_adjust([row[3] for row in rows], p_adjust_method)
+    return tuple(
+        DurbinConoverPair(i=i, j=j, statistic=t, df=df, p_value=p, p_adjusted=adj)
+        for (i, j, t, p), adj in zip(rows, adjusted, strict=True)
     )
