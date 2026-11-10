@@ -274,6 +274,50 @@ held up; scripts in `reviewT/`). To fix:
   edited together, and main is not protected, so it is advisory. Making it a required
   check is a repository setting.
 
+Data, arguments, result and text review (no wrong number: 60 random between and 60
+within frames on up to seven column types matched plain-Python grouping, 40 random
+results matched SciPy field by field, 108 results round-trip through JSON; scripts in
+`reviewU/`). Reproduced by the lead; to fix:
+
+- [ ] U1: a pyarrow dictionary column (`dictionary_encode()`, `auto_dict_encode`) and
+  a pandas categorical made by polars `.to_pandas()` hold their categories in order of
+  first appearance, which inferplot takes as the declared order: shuffling the rows
+  swaps the levels (t 4.32, p .0001 against t -4.32, p .9999 with
+  `alternative="greater"`) and, in withinstats, the subject order. SPEC §3's "does
+  not depend on the input row order" is false for these columns.
+- [ ] U2: nothing says which way a one-sided test points (`alternative="greater"` is
+  first level greater than second, and "control" sorts before "treatment").
+- [ ] U3: hints that lead to another valid analysis: "benjamini-hochberg" suggests
+  'hochberg', "holm-bonferroni" suggests 'bonferroni', "one-sided" suggests
+  'two-sided', `tail=` suggests `title=`, `conf_level=5` suggests 0.05, `levels=`
+  suggests `conf_level=`; `paired=` and `alpha=` in betweenstats get no pointer.
+- [ ] U4: a text level whose y is all missing disappears without a warning (Welch's
+  ANOVA becomes a t-test); the same data as a categorical does warn.
+- [ ] U5: the caption says "significant only" without the threshold when
+  `pairwise_alpha` is not 0.05.
+- [ ] U6: an effect size outside its own bootstrap interval is printed without a
+  check (12 noise groups: rank epsilon squared 0.074, interval [0.107, 1]).
+- [ ] U7: result contract: `effect_size.undefined_resamples` is in SPEC §6 but not
+  in the result; the JSON has no schema version and `from_json` refuses a result
+  saved before `subjects` existed; `to_frame()` has no column saying an interval is
+  one-sided; the rows of dropped subjects are not in a within result, so its counts
+  do not add up to the input rows.
+- [ ] U8: sign and df conventions differ between tests in the same columns (Welch t
+  signed, Yuen t absolute, Games-Howell q as group2 minus group1, Dunn z unsigned)
+  and are documented only in SPEC §4.
+- [ ] U9: messages: integer column labels have no way forward; a datetime or binned x
+  is told to convert to a categorical, which fails too; a positional subject column
+  gets a `pairwise_display` example; a Series passed as x is printed whole; swapped x
+  and y; duplicate column names raise narwhals' own error.
+- [ ] U10: `type="bayes"` with levels named like "group 7" and a pair that cannot be
+  computed raises a bare IndexError (the inner message is renamed twice).
+- [ ] U11: `pairs_hidden` fires for an explicit `pairwise_display="none"`; the copy
+  embedded in a saved figure loses the `heavy_ties` check.
+- [ ] U12: minor: `digits` has no upper limit; NumPy float32 arguments print as
+  0.899999976158142; the alt text reports a test with `results_subtitle=False`; level
+  names that differ only in surrounding whitespace become separate groups silently;
+  the APA sentence is not ASCII when level names are not.
+
 - Decided (D31, D37): Games-Howell p is computed from an accurate studentized range
   tail (`inferplot.stats.srange_sf`), not R's ptukey, whose error grows as the df falls
   (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, about 4.7e-10 in the
