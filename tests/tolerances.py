@@ -230,9 +230,14 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "itself misses large |t| (probe-pairedbf: within 2.6e-6 up to "
                 "|t| 12, -0.78% at n 30 and t 50); those misses are pinned in "
                 "tests/stats/test_bayes_paired.py and inferplot is within 1.1e-13 "
-                "of 40-digit references there (D61). Measure one-sample values when "
-                "their fixtures arrive; other Bayes factor families need their own "
-                "entry."
+                "of 40-digit references there (D61). One-sample: 39 of the 41 "
+                "one-sample Bayes factors in the gghistostats fixtures are within "
+                "3.26e-9 relative of 30-digit values (edge_one_large_n, t 0.04; "
+                "mtcars 1.6e-9), BayesFactor's own integration error; the other "
+                "two, ToothGrowth against 100 (t -82.2), BayesFactor misses by "
+                "6.1e-4 and they are compared with accurate values (D81). inferplot "
+                "is within 2.8e-14 in log BF10 on all 41 (Phase 4 review). Other "
+                "Bayes factor families need their own entry."
             ),
         ),
         "correlation_bayes_factor": Tolerance(

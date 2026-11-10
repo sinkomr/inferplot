@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 from typing import Final
@@ -331,3 +332,122 @@ def test_degenerate_inputs() -> None:
     # n = 3: the Bayes factor exists (only the Fisher interval needs n > 3).
     bf10, _ = correlation_bf10(x[:3], np.array([1.0, 3.0, 2.0]), prior_scale=0.707)
     assert math.isfinite(bf10)
+
+
+# ------------------------------------------------------------ collinear as written
+
+
+def _celsius() -> NDArray[np.float64]:
+    return np.round(np.random.default_rng(1).normal(20, 5, 20), 1)
+
+
+@pytest.mark.parametrize(
+    ("make_y", "sign"),
+    [
+        (lambda c: c * 1.8 + 32, 1.0),  # Fahrenheit
+        (lambda c: c * 2.54, 1.0),  # inches to centimetres
+        (lambda c: c / 10, 1.0),
+        (lambda c: 100 - c, -1.0),
+    ],
+)
+def test_collinear_as_written_is_collinear(
+    make_y: Callable[[float], float], sign: float
+) -> None:
+    # Review Z2: decimal columns collinear as written printed t of order 1e15 and
+    # BF10 of 1e228 without a warning; as in binary-exact data (D85) they now give
+    # r = +/-1, t = +/-inf, p = 0, [r, r] and the Bayes factor's limit.
+    x = _celsius()
+    y = np.array([make_y(v) for v in x.tolist()])
+    result = pearson(x, y)
+    assert (result.estimate, result.t, result.p_value) == (sign, sign * math.inf, 0.0)
+    assert (result.conf_low, result.conf_high) == (sign, sign)
+    assert winsorized_correlation(x, y).t == sign * math.inf
+    assert correlation_bf10(x, y, prior_scale=1 / 0.707)[0] == math.inf
+
+
+def test_nearly_collinear_data_are_not_swallowed() -> None:
+    # Measured data with real noise far below the printed digits: 1 - r^2 of about
+    # 1e-12, finite t, as computed from the doubles.
+    rng = np.random.default_rng(3)
+    x = rng.normal(0, 1, 50)
+    y = 2 * x + 1 + 1e-6 * rng.normal(0, 1, 50)
+    result = pearson(x, y)
+    om = float(cross_moments(x, y).one_minus_r2)
+    assert 1e-14 < om < 1e-10
+    assert math.isfinite(result.t)
+    assert result.t == pytest.approx(math.sqrt(48 / om), rel=1e-9)
+    # Decimals with real noise in their last written digit: not collinear either.
+    c = _celsius()
+    f = np.round(c * 1.8 + 32 + rng.choice([-0.0001, 0.0, 0.0001], c.size), 4)
+    assert math.isfinite(pearson(c, f).t)
+    assert 0.0 < 1 - abs(pearson(c, f).estimate) < 1e-6
+
+
+# ------------------------------------------------------------ review Z5 (mutants)
+
+
+def test_r_exactly_zero_gives_t_zero_and_p_one() -> None:
+    # Planted bug N51 (t = NaN at S_xy = 0) survived the suite.
+    x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    y = np.array([1.0, -1.0, 0.0, -1.0, 1.0])  # S_xy = 0 exactly
+    for result in (pearson(x, y), spearman(x, y)):
+        assert result.estimate == 0.0
+        assert result.t == 0.0
+        assert result.p_value == 1.0
+        assert result.conf_low == -result.conf_high
+
+
+def test_fisher_interval_from_the_exact_one_minus_r2() -> None:
+    # Planted bug N28 (1 - r^2 from the rounded r) survived: at 1 - r^2 of about
+    # 1e-21, r rounds to 1 and 1 - r * r is 0, so the interval collapsed to [1, 1].
+    # With 4 pairs at a level of 1 - 1e-12 the lower bound is 1 - 1.1e-15.
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    y = np.array([2.0, 4.0, 6.0 + 2e-10, 8.0])
+    om = float(cross_moments(x, y).one_minus_r2)
+    assert 1e-22 < om < 1e-20
+    result = pearson(x, y, conf_level=1 - 1e-12)
+    assert result.estimate == 1.0  # r itself rounds to 1
+    q = 7.130506848  # the standard normal quantile at 1 - 0.5e-12
+    w = math.log1p(1.0) - 0.5 * math.log(om) - q  # se = 1 at n = 4
+    expected = 2.0 / (math.exp(2.0 * w) + 1.0)  # 1.09e-15
+    assert 1.0 - result.conf_low == pytest.approx(expected, rel=0.1, abs=0.0)
+
+
+def test_spearman_refuses_a_column_constant_as_written() -> None:
+    # Planted bug N44 (no constant check before ranking) survived: 0.1 + 0.2 and
+    # 0.3 are two doubles but one number, and ranking them gives rho for a column
+    # that does not vary.
+    x = np.array([0.1 + 0.2, 0.3, 0.3, 0.1 + 0.2, 0.3])
+    y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    with pytest.raises(ValueError, match="every value of x is the same"):
+        spearman(x, y)
+
+
+@pytest.mark.parametrize("power", [400, 500, 537, 600, 800, 1000])
+def test_moments_are_exact_at_any_range(power: int) -> None:
+    # Review Z6 (7): the exact sums held only up to a range of about 2^500; from
+    # 2^537 the products of the deviations' parts underflowed, Cauchy-Schwarz
+    # failed and math.log raised a bare ValueError.
+    a = 2.0**power
+    x = np.array([a, -a, 1, 2, 3, 4, 5.0])
+    y = np.array([a, -a, 1, 2, 3.5, 4, 5.0])
+    xs = [Fraction(v) for v in x.tolist()]
+    ys = [Fraction(v) for v in y.tolist()]
+    mx, my = sum(xs, Fraction(0)) / 7, sum(ys, Fraction(0)) / 7
+    sxx = sum(((v - mx) ** 2 for v in xs), Fraction(0))
+    syy = sum(((v - my) ** 2 for v in ys), Fraction(0))
+    sxy = sum(((u - mx) * (v - my) for u, v in zip(xs, ys, strict=True)), Fraction(0))
+    assert cross_moments(x, y).one_minus_r2 == (sxx * syy - sxy * sxy) / (sxx * syy)
+    result = pearson(x, y)
+    assert math.isfinite(result.t)
+    t_squared = 5 * sxy * sxy / (sxx * syy - sxy * sxy)
+    assert float(Fraction(result.t) ** 2 / t_squared) == pytest.approx(1.0, rel=1e-14)
+
+
+def test_a_t_beyond_the_largest_double_is_explained() -> None:
+    # Review Z6 (7): values near the largest double on nearly one line; 1 - r^2 is
+    # about 1e-617 and t about 1e308 too large for a double.
+    x = np.array([1.7e308, -1.7e308, 1e308, 3.0, 5.0, 1, 2, 3, 4, 5, 6, 7.5])
+    y = np.array([1.7e308, -1.7e308, 1e308, 3.0, 5.0, 1, 2, 3, 4, 5, 6, 7.0])
+    with pytest.raises(ValueError, match="1 - r\\^2 is below about 1e-616"):
+        pearson(x, y)

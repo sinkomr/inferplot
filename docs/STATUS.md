@@ -332,7 +332,19 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   fixtures answerable and 21 refused by design (D101, D104). The statistics join must
   raise for no discordant pair and for a Fisher pair with one column; the texts
   package must confirm the percent formula on edge_bar_rounding
-- [ ] barstats: statistics in progress; then analyses, texts, figure
+- [x] barstats statistics (`stats/contingency.py`; a noncentral chi-square in
+  `noncentral.py`): all 89 completed fixtures and probe-contingency match (273 parity
+  tests; worst 6.3e-11, R's own error in a Fisher p); all 22 pinned interval bounds
+  (D99) exercised; exact Fisher test for 2 x c tables with cost limits that raise
+  rather than approximate (D107). Lead's check: 300 random tables against SciPy and
+  221 brute-force enumerations, 1e-11 or better
+- [x] barstats texts: ggbarstats' subtitle for the three designs, the bar p, n and
+  cell labels, pair labels, APA sentence and alt text (D108). Rebuilt from the
+  fixtures' numbers they equal ggstatsplot's on all 89 fixtures with output (71
+  subtitles, 158 bar p labels, 175 n labels, 485 cell labels, 152 pair labels); on
+  results, 69 of 70 subtitles (one pinned: D99 at three digits). To do when the
+  analysis lands: run the text tests on real results
+- [ ] barstats: analyses and figure in progress
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
@@ -386,32 +398,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   the bootstrap-t against exact enumeration of all resamples; 75 of 82 planted bugs
   caught; the evidence of D81 and D85 to D88 true as stated. Findings, being fixed on
   `fix/phase4-review-stats`:
-  - [ ] Z1 (high; reproduced by the lead): the robust one-sample result changes when
-    the same data are written in tenths: 15 ratings against 2.5 give p = .117, CI
-    [2.35, 3.65]; divided by 10, or shifted by 0.1, p = .227, CI [-Inf, Inf]. The 250
-    resamples whose winsorized values all equal the trimmed mean are 0/0 for whole
-    numbers and "infinite" for tenths, because the 0/0 decision is exact on the
-    doubles and the trimmed mean of 0.2, 0.3, 0.4 is not the double 0.3. About 15% of
-    5-point rating data sets at n = 10. D74's rule (equal as written is equal) was
-    not applied there. The same defect exists in betweenstats' robust type (lead: 16
-    of 40 rating data sets in tenths count the resamples differently; an upper bound
-    of 1.20 becomes 1.24): the Phase 3 fix (W1) was incomplete.
-  - [ ] Z2: columns that are collinear as written but hold decimals (Fahrenheit
-    against Celsius) print t = 7e15 and BF10 = 1e228 without a warning; D85's exact
-    result and warning apply only to data a double holds exactly.
-  - [ ] Z3: `type="bayes"` raises a bare ZeroDivisionError when one value is 1e50
-    times the others (the MAP bandwidth; also in betweenstats).
-  - [ ] Z4: the regression band overflows at y of order 1e155 and silently has zero
-    width at 1e-162.
-  - [ ] Z5: seven planted bugs no test notices (the bootstrap p's denominator and
-    its ties with |t|; r exactly 0; the Fisher interval from the exact 1 - r^2; the
-    histogram's fuzz at breaks; a stats-level refusal; the 0/0 decision).
-  - [ ] Z6 (low, six items): unit, shift and negation change the bootstrap draw on
-    discrete data within Monte Carlo noise although SPEC says they do not; raw
-    OverflowError and ValueError at extreme inputs; the "one number as written"
-    refusal advises a test that then ranks the rounding; p equal to alpha with an
-    interval that excludes the test value (R's rule; document); stale statements in
-    tolerances.py and D87, D88; a stats-level message.
+  - [x] Z1 (high): fixed (D105). Every robust bootstrap decides 0/0, infinite, zero
+    and ties with |t| on the numbers as written. Before: ratings in tenths gave p .227
+    and [-Inf, Inf] where whole numbers give p .117 and [2.35, 3.65]; 24 of 60 rating
+    data sets differed for the between-groups AKP. After: an exact-decimal replay
+    agrees on every resample of 60 rating and 60 one-decimal data sets per method in
+    seven writings; the lead's own check finds 0 of 200 data sets changing with the
+    writing and agrees with an exact enumeration of all resamples. No pinned value
+    moved; one fixture moved closer to R's reference.
+  - [x] Z2: fixed (D106): decimal columns collinear as written give r = +/-1, t = Inf
+    and the warning; nearly collinear measured data stay finite.
+  - [x] Z3, Z4: fixed: one far value gives the "no MAP estimate" warning; the
+    regression band is correct from 1e-300 to 1e300.
+  - [x] Z5: all seven planted bugs are now caught by a test each.
+  - [x] Z6: the bootstrap draw follows the values as written (negation documented);
+    raw errors replaced by explained ones, correlation sums exact at any range; values
+    equal to the test value as written are zeros; stale statements corrected.
   - For the owner (W9, D88): the same tenths written as k/10 or computed as k x 0.1
     give a different signed-rank V in 254 of 300 random data sets (p crosses 0.05 in
     13; largest change V 8.5, p .89 against V 39, p .26). R behaves the same way.

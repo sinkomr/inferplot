@@ -20,8 +20,13 @@ rationals, rounded once. r, t and the Fisher-z interval therefore keep their
 accuracy at any scale and for nearly collinear data, where R's ``cor`` (rounded
 deviations, a rounded r and 1 - r^2 formed from it) does not: exactly collinear
 data give r = +/-1, t = +/-inf and p = 0 (R: 1 - 2^-53 or so, t = 1.34e8 and
-p = 1.06e-62 on edge_corr_perfect). Exact up to products of deviations below about
-2^-1000 times the largest, whose rounding is far below every printed digit.
+p = 1.06e-62 on edge_corr_perfect). Exact at any range of magnitudes: where the
+deviations span more than about 2^480, the products of their parts would leave the
+doubles' range, and the sums are formed from the values as integers instead.
+
+Pairs that lie on one straight line as written (Fahrenheit against one-decimal
+Celsius) are collinear too, although their doubles are not: ``pair_moments``
+decides it exactly on the values as written (DECISIONS.md D74, D85).
 """
 
 from __future__ import annotations
@@ -49,12 +54,14 @@ from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.parametric import t_p_value
 from inferplot.stats.robust import check_trim, trim_count
 from inferplot.stats.srange import stirlerr
+from inferplot.stats.written import written_values
 
 __all__ = [
     "Correlation",
     "CorrelationMethod",
     "correlation_bf10",
     "correlation_log_bf10",
+    "pair_moments",
     "pearson",
     "spearman",
     "winsorized_correlation",
@@ -172,13 +179,62 @@ class CrossMoments:
         return math.copysign(math.sqrt(float(self.r2)), float(self.sxy)) + 0.0
 
 
+# Dekker's TwoProduct is exact while a product of two parts is at least about
+# 2^-969 (its rounding error is then a double); below this, products of the
+# deviations' parts could lose bits, and the sums are formed from integers.
+_SMALLEST_EXACT_PRODUCT: Final = 2.0**-960
+
+
+def _smallest_part(*parts: FloatArray) -> float:
+    magnitudes = np.abs(np.concatenate(parts))
+    nonzero = magnitudes[magnitudes > 0.0]
+    return float(nonzero.min()) if nonzero.size else 1.0
+
+
+def _as_integers(x: FloatArray) -> tuple[list[int], int]:
+    """The doubles x as integers X_i times 2^e (one e for all), exactly."""
+    mantissa, exponent = np.frexp(x)
+    whole = (mantissa * 2.0**53).astype(np.int64).tolist()
+    shifts = (exponent - 53).tolist()
+    low = min(shifts)
+    return [int(m) << (k - low) for m, k in zip(whole, shifts, strict=True)], low
+
+
+def _integer_moments(x: FloatArray, y: FloatArray) -> tuple[Fraction, ...]:
+    """S_xx, S_yy and S_xy of the doubles x and y exactly, from integers: n sum
+    X^2 - (sum X)^2 over n, at any range of magnitudes."""
+    xi, ex = _as_integers(x)
+    yi, ey = _as_integers(y)
+    n = len(xi)
+    sx, sy = sum(xi), sum(yi)
+    sxx = n * sum(v * v for v in xi) - sx * sx
+    syy = n * sum(v * v for v in yi) - sy * sy
+    sxy = n * sum(a * b for a, b in zip(xi, yi, strict=True)) - sx * sy
+    two = Fraction(2)
+    return (
+        Fraction(sxx, n) * two ** (2 * ex),
+        Fraction(syy, n) * two ** (2 * ey),
+        Fraction(sxy, n) * two ** (ex + ey),
+    )
+
+
 def cross_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
     """``CrossMoments`` of two float64 arrays of the same length (at least one
     value each, finite), from the exact deviations and products (module
-    docstring)."""
+    docstring). Exact at any range of magnitudes: where the deviations span so
+    many orders of magnitude (about 2^480 between the largest and the smallest
+    part) that a product of their parts would leave the doubles' range, the
+    sums are formed from the values as integers instead (Phase 4 review, Z6:
+    from a range of 2^537 Cauchy-Schwarz failed and log raised)."""
     sx, ex, tx, kx = _deviations(x)
     sy, ey, ty, ky = _deviations(y)
     n = x.size
+    small_x, small_y = _smallest_part(sx, ex), _smallest_part(sy, ey)
+    if min(small_x * small_x, small_y * small_y, small_x * small_y) < (
+        _SMALLEST_EXACT_PRODUCT
+    ):
+        sxx, syy, sxy = _integer_moments(x * kx, y * ky)
+        return CrossMoments(n=n, sxx=sxx, syy=syy, sxy=sxy, x_scale=kx, y_scale=ky)
     return CrossMoments(
         n=n,
         sxx=_exact_dot((sx, ex), (sx, ex)) - tx * tx / n,
@@ -186,6 +242,67 @@ def cross_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
         sxy=_exact_dot((sx, ex), (sy, ey)) - tx * ty / n,
         x_scale=kx,
         y_scale=ky,
+    )
+
+
+# Pairs whose exact 1 - r^2 is at most this may lie on one line as written and are
+# checked exactly (``pair_moments``). A reading lies within 2 units in the last
+# place of its double and its decimal unit is at least 2^20 such units, while two
+# different readings differ by at least that unit; so pairs collinear as written
+# leave at most about 2 n 2^-38 (7e-12 n) of 1 - r^2 in the doubles. Checking from
+# 1e-4 on covers that up to n = 1e7 and costs one exact pass, only for |r| above
+# 0.99995.
+_AS_WRITTEN_CHECK: Final = 1e-4
+
+
+def _written_moments(x: FloatArray, y: FloatArray) -> tuple[Fraction, ...]:
+    """S_xx, S_yy and S_xy of the values as written (``written_values``), exact."""
+    wx, wy = written_values(x), written_values(y)
+    n = len(wx)
+    mx = sum(wx, Fraction(0)) / n
+    my = sum(wy, Fraction(0)) / n
+    dx = [v - mx for v in wx]
+    dy = [v - my for v in wy]
+    return (
+        sum((d * d for d in dx), Fraction(0)),
+        sum((d * d for d in dy), Fraction(0)),
+        sum((a * b for a, b in zip(dx, dy, strict=True)), Fraction(0)),
+    )
+
+
+def pair_moments(x: FloatArray, y: FloatArray) -> CrossMoments:
+    """``cross_moments`` of the pairs, except that pairs which lie on one straight
+    line as written get the moments of the values as written (DECISIONS.md D74,
+    D85): S_xx S_yy = S_xy^2 exactly, so r = +/-1, t = +/-inf, p = 0, the interval
+    [r, r] and the Bayes factor's limit, as for data collinear in binary.
+
+    Decimal data that are collinear as written (Fahrenheit and one-decimal
+    Celsius, inches and centimetres, y = x / 10, y = 100 - x) are not collinear
+    in binary: each stored value is off by up to half a unit in its last place,
+    and r computed exactly from the doubles is 1 - 1e-30 or so, which made t
+    about 1e15 and BF10 about 1e228 (Phase 4 review, Z2). Each value is read as
+    the decimal it stands for (``written_values``: within 2 units in its last
+    place, the decimal at least 2^20 units coarse, else the double itself) and
+    collinearity is decided exactly on the readings. Nearly collinear measured
+    data are not swallowed: values measured to many digits are read as their
+    doubles, and decimals with real noise are not collinear as written, however
+    small 1 - r^2 is (1e-12 from noise in the 7th digit stays 1e-12).
+    """
+    moments = cross_moments(x, y)
+    om = moments.one_minus_r2
+    if om == 0 or float(om) > _AS_WRITTEN_CHECK:
+        return moments
+    sxx, syy, sxy = _written_moments(x, y)
+    if sxx == 0 or syy == 0 or sxx * syy != sxy * sxy:
+        return moments
+    kx, ky = Fraction(moments.x_scale), Fraction(moments.y_scale)
+    return CrossMoments(
+        n=moments.n,
+        sxx=sxx * kx * kx,
+        syy=syy * ky * ky,
+        sxy=sxy * kx * ky,
+        x_scale=moments.x_scale,
+        y_scale=moments.y_scale,
     )
 
 
@@ -211,7 +328,7 @@ def _moments(x: FloatArray, y: FloatArray, what: str = "") -> CrossMoments:
     for name, values in (("x", x), ("y", y)):
         if differences_same_within_rounding(values, np.zeros_like(values)):
             raise _constant_error(name, what)
-    return cross_moments(x, y)
+    return pair_moments(x, y)
 
 
 # ------------------------------------------------------------------ the tests
@@ -231,8 +348,12 @@ def _t(m: CrossMoments) -> float:
     ratio = numerator / denominator
     log_t = 0.5 * (math.log(ratio.numerator) - math.log(ratio.denominator))
     if log_t > 709.0:
-        raise ValueError(  # pragma: no cover - needs 1 - r^2 below about 1e-616
-            "the correlation's t statistic exceeds the largest double"
+        raise ValueError(
+            "the correlation's t statistic exceeds the largest double (about "
+            "1.8e308): 1 - r^2 is below about 1e-616, so the pairs lie on one "
+            "straight line to within 1e-308 of their spread without lying on it "
+            "exactly (values near the largest double, or a column computed from "
+            "the other). Check the data for entry or unit errors"
         )
     return sign * math.sqrt(float(ratio)) if log_t < 300.0 else sign * math.exp(log_t)
 

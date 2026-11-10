@@ -40,7 +40,9 @@ from inferplot.stats.descriptive import (
     common_scale,
     differences_same_within_rounding,
     exact_mean,
+    ordinal,
     scaled_variance,
+    sqrt_rounded,
 )
 from inferplot.stats.effect_sizes import EffectSizeCI, hedges_j
 from inferplot.stats.noncentral import check_conf_level, t_ncp_interval
@@ -51,10 +53,9 @@ from inferplot.stats.nonparametric import (
 )
 from inferplot.stats.parametric import TINY, Alternative, check_alternative, t_p_value
 from inferplot.stats.robust import (
-    bootstrap_replicates,
+    bootstrap_indices,
     check_trim,
     exact_trimmed_mean,
-    exact_zero_sum,
     rows_trimmed,
     split_replicates,
     trim_count,
@@ -64,6 +65,12 @@ from inferplot.stats.within_nonparametric import (
     SignedRank,
     _signed_ranks,  # pyright: ignore[reportPrivateUsage]
     signed_rank,
+)
+from inferplot.stats.written import (
+    equal_as_written,
+    written_trim,
+    written_value,
+    written_values,
 )
 
 __all__ = [
@@ -157,6 +164,18 @@ def _all_mu_error(n: int, mu: float) -> ValueError:
     )
 
 
+def _zeros_as_written(arr: FloatArray, mu: float) -> FloatArray:
+    """x with every value that equals mu as written replaced by mu itself, so its
+    difference is an exact 0 and the signed-rank test drops it (D74: 0.1 + 0.2
+    against 0.3, whose rounded difference 5.6e-17 R's ``wilcox.test`` would rank);
+    every other difference is R's rounded x - mu (D88). Raises when every value
+    equals mu as written."""
+    same = equal_as_written(arr, mu)
+    if bool(same.all()):
+        raise _all_mu_error(arr.size, mu)
+    return np.where(same, mu, arr)
+
+
 def _one_sample_t_value(arr: FloatArray, mu: float) -> float:
     """t = (mean - mu) / (sd / sqrt(n)) on x times its common scale: the exact mean
     minus mu rounded once, the corrected two-pass variance (``scaled_variance``)."""
@@ -174,8 +193,12 @@ def _one_sample_t_value(arr: FloatArray, mu: float) -> float:
             "data for entry or unit errors; rescaling does not help, since it keeps "
             "their ratio"
         )
-    # scale is a power of two, so the product is exact before the one rounding.
-    difference = float((exact_mean(arr) - Fraction(mu)) * Fraction(scale))
+    # scale is a power of two, so the product is exact before the one rounding;
+    # a difference beyond the largest double means a t beyond it too.
+    try:
+        difference = float((exact_mean(arr) - Fraction(mu)) * Fraction(scale))
+    except OverflowError:
+        difference = math.inf
     t = difference / math.sqrt(term)
     if not math.isfinite(t):
         raise ValueError(
@@ -314,9 +337,12 @@ def one_sample_signed_rank(
     approximation: ``signed_rank`` of x and mu, i.e. of the differences x - mu.
 
     The differences are R's: x - mu rounded to the nearest double, as
-    ``stats::wilcox.test(x, mu = mu)`` forms them; those that are 0 (x equal to
-    mu) are dropped, the others ranked by |x - mu| with mid-ranks, and V is the
-    sum of the ranks of the positive ones. Ties are ties of these rounded
+    ``stats::wilcox.test(x, mu = mu)`` forms them; those that are 0 are dropped,
+    and so are values that equal mu as written (``equal_as_written``: 0.1 + 0.2
+    against 0.3, whose rounded difference 5.6e-17 R's exact comparison with 0
+    would keep and rank; no fixture has such a value, D74), the others ranked
+    by |x - mu| with mid-ranks, and V is the sum of the ranks of the positive
+    ones. Ties are ties of these rounded
     differences (D64's rule for the paired test): two values equally far from mu
     as written can get different ranks (iris Sepal.Length against 5.8: |5.7 - 5.8|
     is 0.09999999999999964 and |5.9 - 5.8| is 0.10000000000000053; six such pairs
@@ -330,11 +356,11 @@ def one_sample_signed_rank(
 
     Raises:
         ValueError: x is empty or has a non-finite value, mu is not finite, every
-            value equals mu (R: V = 0 and p = NaN), or ``alternative`` is unknown.
+            value equals mu as written (R: V = 0 and p = NaN), or ``alternative``
+            is unknown.
     """
     arr, value = _sample(x, mu, 1)
-    if bool((arr == value).all()):
-        raise _all_mu_error(arr.size, value)
+    arr = _zeros_as_written(arr, value)
     return signed_rank(arr, np.full(arr.size, value), alternative=alternative)
 
 
@@ -369,8 +395,7 @@ def one_sample_rank_biserial(
     side = check_alternative(alternative)
     level = check_conf_level(conf_level)
     arr, value = _sample(x, mu, 1)
-    if bool((arr == value).all()):
-        raise _all_mu_error(arr.size, value)
+    arr = _zeros_as_written(arr, value)
     ranks = _signed_ranks(arr, np.full(arr.size, value))
     r = float(Fraction(ranks.plus2 - ranks.minus2, ranks.plus2 + ranks.minus2))
     m = ranks.n_nonzero
@@ -430,6 +455,30 @@ def bootstrap_t_critical_value(
     return float(ordered[k - 1])
 
 
+def _trimmed_t(
+    winsorized: FloatArray, tmean: Fraction, mu: Fraction, tr: float
+) -> float:
+    """t = (trimmed mean - mu) / (s_w / ((1 - 2 tr) sqrt(n))) from exact
+    quantities, rounded once: t^2 = (trimmed mean - mu)^2 (1 - 2 tr)^2 n (n - 1)
+    / SS_w with SS_w the winsorized sum of squares of the (scaled) doubles, the
+    trimmed mean, mu and tr exact (D49's rule). Rounding the standard error first
+    left t one unit low in its last place on x = [3.1, 4.7] against 3 (0.675
+    printed "0.67", R "0.68")."""
+    values, counts = np.unique(winsorized, return_counts=True)
+    exact = [Fraction(v) for v in values.tolist()]
+    weights = counts.tolist()
+    n = int(winsorized.size)
+    total = sum((c * v for c, v in zip(weights, exact, strict=True)), Fraction(0))
+    squares = sum((c * v * v for c, v in zip(weights, exact, strict=True)), Fraction(0))
+    ss = squares - total * total / n
+    difference = tmean - mu
+    shrink = 1 - 2 * Fraction(tr)
+    magnitude = sqrt_rounded(
+        difference * difference * shrink * shrink * n * (n - 1) / ss
+    )
+    return math.copysign(magnitude, 1.0 if difference > 0 else -1.0) + 0.0
+
+
 def trimmed_mean_bootstrap_t(
     x: SampleLike,
     *,
@@ -459,19 +508,27 @@ def trimmed_mean_bootstrap_t(
     references). ``alternative`` is not an argument: it has no effect in
     ggstatsplot (ToothGrowth-greater-robust equals the two-sided case).
 
-    The resamples are drawn from the deviations of x from its rounded trimmed
-    mean, in the order of their absolute value (then their value), so the row
-    order of x does not matter, the scale of x does not either, and x and mu
-    shifted together, or both negated, give the same T* (a negated sample draws
-    the mirror images, except where two values lie exactly as far above as below
-    the trimmed mean).
+    The exact questions are decided on the numbers as written (``written_values``,
+    D74): t is 0 when the trimmed mean equals mu as written (p = 1); a T* equal
+    to |t| as written counts toward p; and the resamples are drawn from the
+    deviations of x from its trimmed mean in the order (|d|, d) of the deviations
+    as written (ties in the order of the values). So the row order of x does not
+    matter, nor does writing x and mu in another decimal unit (tenths, times 2.54)
+    or shifting both by a decimal: the same resamples are drawn and classified
+    alike (tools/reference/decimal_replay.py replays every resample in exact
+    decimal arithmetic). Negating x and mu draws the mirror images, except where
+    two values lie as far above as below the trimmed mean: their order (|d|, d)
+    puts the one below first either way, so the negated sample draws them
+    swapped. A power of two keeps the draw for whole numbers and for decimals
+    that stay short (0.3 x 1024); a decimal that does not (0.3 / 2^30, 24
+    significant digits) is read as its double.
 
-    A resample whose winsorized values are all one number has s_w* = 0 exactly:
-    T* is 0 / 0 when that number is the sample's trimmed mean and infinite
-    otherwise, decided exactly (``exact_zero_sum``, D74's rule). An infinite T* is
-    kept (it counts toward p, and c is infinite when it falls among them); a 0 / 0
-    one is left out and c and p come from the others (D65's rule), counted in
-    ``undefined_resamples``.
+    A resample whose winsorized values are all one number (as written) has
+    s_w* = 0: T* is 0 / 0 when that number is the sample's trimmed mean and
+    infinite otherwise. An infinite T* is kept (it counts toward p, and c is
+    infinite when it falls among them); a 0 / 0 one is left out and c and p come
+    from the others (D65's rule), counted in ``undefined_resamples``. t itself is
+    formed from exact quantities and rounded once (D49).
 
     Raises:
         ValueError: fewer than two values left after trimming (n - 2 floor(tr n)
@@ -496,13 +553,16 @@ def trimmed_mean_bootstrap_t(
             "least 2 values after trimming (use more values or a smaller tr)"
         )
     scale = common_scale(arr)
-    ordered = np.sort(arr * scale)
+    raw = np.sort(arr)
+    ordered = raw * scale  # a power of two: exact, and in the same order
     winsorized = winsorize_sorted(ordered, g)
-    if _constant(winsorized / scale):
+    written = written_values(raw)
+    tm_w, wss_w = written_trim(written, g)
+    if wss_w == 0 or _constant(winsorized / scale):
         raise ValueError(
-            f"x has a winsorized variance of 0 (its values from the {g + 1}-th "
-            f"smallest to the {g + 1}-th largest are all the same, exactly or to "
-            "within the rounding of the values in double precision), so "
+            f"x has a winsorized variance of 0 (its values from the {ordinal(g + 1)} "
+            f"smallest to the {ordinal(g + 1)} largest are all the same, exactly or "
+            "to within the rounding of the values in double precision), so "
             f"{method} is undefined"
         )
     wvar = scaled_variance(winsorized)
@@ -516,33 +576,88 @@ def trimmed_mean_bootstrap_t(
         )
     se = math.sqrt(wvar) / shrink
     tmean = exact_trimmed_mean(ordered, t_trim)
-    t = float(tmean - Fraction(value) * Fraction(scale)) / se
+    # The numbers as written decide every exact question (D74; ``written_values``):
+    # whether t is 0, the order of the draw, which resamples are 0 / 0 and which
+    # T* equal |t|.
+    mu_w = written_value(value)
+    t = (
+        0.0
+        if tm_w == mu_w
+        else _trimmed_t(winsorized, tmean, Fraction(value) * Fraction(scale), t_trim)
+    )
     if not math.isfinite(t):
         raise ValueError(
             "the bootstrap-t statistic exceeds the largest double (about 1.8e308): "
             "the test value lies too far from the values of x next to their spread"
         )
+    # t^2 / ((n - 1) shrink^2) as written, the target T*^2 is compared with.
+    target = (tm_w - mu_w) ** 2 / wss_w
+    abs_t = abs(t)
     centre = float(tmean)
-    deviations = ordered - centre
-    deviations = deviations[np.lexsort((deviations, np.abs(deviations)))]
+    # The draw: the deviations from the trimmed mean in the order (|d|, d) of the
+    # deviations as written (ties in the order of the sorted values), so a
+    # decimal unit or a shift of x and mu draws the same resamples.
+    gaps = [v - tm_w for v in written]
+    order = np.array(sorted(range(n), key=lambda i: (abs(gaps[i]), gaps[i])))
+    deviations = (ordered - centre)[order]
+    source: list[Fraction] = [written[int(i)] for i in order]
     middle = np.sort(deviations)[g : n - g]
-    middle_list = middle.tolist()
     offset = float(exact_mean(middle))  # trimmed mean of the deviations
+    # Rows whose winsorized values span at most this many units in the last
+    # place of the data may be one number as written, and are decided exactly.
+    near = 8.0 * float(np.spacing(np.max(np.abs(ordered)))) + 8.0 * float(
+        np.spacing(np.max(np.abs(deviations)))
+    )
+    reach = float(np.max(np.abs(deviations)))
+    rounding = 64.0 * n * float(np.finfo(np.float64).eps)
+    cache: dict[bytes, float] = {}
 
-    def t_stars(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
-        tmeans, wvars = rows_trimmed(draws[0], t_trim)
+    def exact_t_star(positions: NDArray[np.int64], row_value: float) -> float:
+        """T* of one resample from the values as written: NaN for 0 / 0, inf, or
+        a value on the right side of |t| (|t| itself on a tie)."""
+        key = np.sort(positions).tobytes()
+        if key in cache:
+            return cache[key]
+        tm_s, wss_s = written_trim([source[int(i)] for i in positions], g)
+        if wss_s == 0:
+            value_ = math.nan if tm_s == tm_w else math.inf
+        else:
+            ratio = (tm_s - tm_w) ** 2 / wss_s
+            value_ = row_value
+            if not math.isfinite(value_):  # one number in binary, not as written
+                value_ = shrink * sqrt_rounded(ratio * (n - 1))
+            if t != 0.0:
+                if ratio == target:
+                    value_ = abs_t
+                elif ratio > target and not value_ > abs_t:
+                    value_ = math.nextafter(abs_t, math.inf)
+                elif ratio < target and not value_ < abs_t:
+                    value_ = math.nextafter(abs_t, 0.0)
+        cache[key] = value_
+        return value_
+
+    def t_stars(positions: list[NDArray[np.int64]]) -> NDArray[np.float64]:
+        index = positions[0]
+        draws = deviations[index]
+        tmeans, wvars = rows_trimmed(draws, t_trim)
+        spread = draws[:, n - g - 1] - draws[:, g]
         with np.errstate(divide="ignore", invalid="ignore"):
             out: NDArray[np.float64] = np.abs(tmeans - offset) * shrink / np.sqrt(wvars)
-        # A winsorized variance of 0: every winsorized value of the resample is one
-        # deviation v (the row's trimmed mean, exactly); T* is 0 / 0 when v is the
-        # sample's trimmed mean of the deviations, else infinite, decided exactly.
-        for row in (wvars == 0.0).nonzero()[0].tolist():
-            sign = exact_zero_sum([float(tmeans[row])] * h, middle_list)
-            out[row] = math.nan if sign == 0.0 else math.inf
+            # Within the rounding of |t|: the numerator's rounding (relative to
+            # the largest deviation) and T*'s own, generously.
+            band = rounding * (abs_t + out + shrink * reach / np.sqrt(wvars))
+        # Exactly from the values as written: a resample whose winsorized values
+        # may be one number (0 / 0 when it is the sample's trimmed mean, else
+        # infinite), and one whose T* may equal |t|.
+        candidates = spread <= near
+        if t != 0.0:
+            candidates |= np.abs(out - abs_t) <= band
+        for row in candidates.nonzero()[0].tolist():
+            out[row] = exact_t_star(index[row], float(out[row]))
         return out
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
-    replicates = split_replicates(bootstrap_replicates(rng, [deviations], [n], t_stars))
+    replicates = split_replicates(bootstrap_indices(rng, [n], [n], t_stars))
     defined = replicates.defined
     if defined.size == 0:
         raise ValueError(

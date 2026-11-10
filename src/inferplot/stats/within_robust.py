@@ -42,7 +42,6 @@ from inferplot.stats.descriptive import (
     deviations_from_weighted_mean,
     differences_same_within_rounding,
     exact_mean,
-    rounding_tolerance,
 )
 from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.nonparametric import (
@@ -67,6 +66,7 @@ from inferplot.stats.robust import (
     winsorized_normal_variance,
 )
 from inferplot.stats.smm import smm_quantile
+from inferplot.stats.written import written_values
 
 __all__ = [
     "RmmcpPair",
@@ -228,60 +228,38 @@ class _Differences:
     constant: bool  # every winsorized difference is the same exact number
 
 
-def _tolerances(y: FloatArray, scale: float) -> FloatArray:
-    """``rounding_tolerance`` of every value of the scaled table ``y``, in its
-    scale (whole numbers are judged on the unscaled values)."""
-    return rounding_tolerance(y / scale) * scale
-
-
 def _snapped_differences(
-    x: FloatArray, y: FloatArray, tolerance: FloatArray
+    x: FloatArray, y: FloatArray, scale: float
 ) -> tuple[FloatArray, FloatArray]:
-    """The exact differences x_i - y_i as (s, e), s_i + e_i exactly, in subject
-    order, with the differences that the rounding of the values cannot tell apart
-    made the same number, and those it cannot tell from 0 made 0.
+    """The exact differences x_i - y_i of the scaled values as (s, e), s_i + e_i
+    exactly, in subject order, with the differences that are equal as written
+    made the same number, and those that are 0 as written made 0.
 
-    ``tolerance`` is how far each exact difference of the doubles may lie from the
-    difference of the numbers that were written (``rounding_tolerance`` of x_i plus
-    that of y_i). Going through the differences in order, one joins the group
-    before it while a single number lies within every member's tolerance; a group
-    becomes its smallest member, or 0 when 0 is such a number. For decimal data this
-    restores the ties the data have (37.3 - 37.2 and 36.6 - 36.5 are different
-    doubles, 0.09999999999999432 and 0.10000000000000142): without it a resample in
-    which every winsorized difference is "0.1" would have a winsorized variance of
-    about 1e-29 instead of 0, and an AKP of about 1e13 instead of an infinite one.
-    Whole-number data and data without such neighbours are returned as they are.
+    "As written" is ``written_values`` of the unscaled values (DECISIONS.md D74):
+    two subjects whose readings differ by the same amount get one difference, the
+    smallest of their exact differences, and a subject whose readings are equal
+    gets 0. For decimal data this restores the ties the data have (37.3 - 37.2
+    and 36.6 - 36.5 are different doubles, 0.09999999999999432 and
+    0.10000000000000142): without it a resample in which every winsorized
+    difference is "0.1" would have a winsorized variance of about 1e-29 instead
+    of 0, and an AKP of about 1e13 instead of an infinite one. Values measured to
+    many digits are read as their doubles, so their differences are kept as they
+    are; so are differences that no other subject shares.
     """
     s, e = _two_sum(x, -y)
-    order = _lexical_order(s, e)
-    ss, ee, tt = s[order], e[order], tolerance[order]
-    gaps: FloatArray = (ss[1:] - ss[:-1]) + (ee[1:] - ee[:-1])
-    near: NDArray[np.bool_] = (gaps > 0.0) & (gaps <= tt[1:] + tt[:-1])
-    dust: NDArray[np.bool_] = (np.abs(ss) <= tt) & ((ss != 0.0) | (ee != 0.0))
-    if not bool(near.any()) and not bool(dust.any()):
-        return s, e
-    s_list, e_list, t_list = ss.tolist(), ee.tolist(), tt.tolist()
-    n = len(s_list)
-    start = 0
-    low, high = -t_list[0], t_list[0]  # the numbers every member is close to,
-    for j in range(1, n + 1):  # relative to the group's first member
-        if j < n:
-            offset = (s_list[j] - s_list[start]) + (e_list[j] - e_list[start])
-            lo, hi = offset - t_list[j], offset + t_list[j]
-            if lo <= high and hi >= low:
-                low, high = max(low, lo), min(high, hi)
-                continue
-        zero = -s_list[start] - e_list[start]
-        value = (0.0, 0.0) if low <= zero <= high else (s_list[start], e_list[start])
-        for member in range(start, j):
-            s_list[member], e_list[member] = value
-        if j < n:
-            start = j
-            low, high = -t_list[j], t_list[j]
-    out_s = np.empty_like(s)
-    out_e = np.empty_like(e)
-    out_s[order] = s_list
-    out_e[order] = e_list
+    read_x = written_values(x / scale)
+    read_y = written_values(y / scale)
+    groups: dict[Fraction, list[int]] = {}
+    for i, (a, b) in enumerate(zip(read_x, read_y, strict=True)):
+        groups.setdefault(a - b, []).append(i)
+    out_s, out_e = s.copy(), e.copy()
+    for difference, members in groups.items():
+        if difference == 0:
+            out_s[members], out_e[members] = 0.0, 0.0
+        elif len(members) > 1:
+            index = np.array(members)
+            first = int(index[_lexical_order(s[index], e[index])[0]])
+            out_s[index], out_e[index] = s[first], e[first]
     return out_s, out_e
 
 
@@ -345,8 +323,7 @@ def paired_differences_winsorize_to_constant(
     t_trim = check_trim(tr)
     x, y, scale = _paired(a, b)
     g, _ = _trimmed_size(x.size, t_trim, "the AKP effect size of paired differences")
-    tolerance = _tolerances(x, scale) + _tolerances(y, scale)
-    return _differences(*_snapped_differences(x, y, tolerance), g).constant
+    return _differences(*_snapped_differences(x, y, scale), g).constant
 
 
 # ------------------------------------------------------------------ yuend
@@ -597,15 +574,9 @@ def rmmcp(
     # P(|T| > c) = alpha / C, so P(T > c) = alpha / (2C).
     critical = smm_quantile(1, df, conf_level=1.0 - (1.0 - level) / n_pairs)
     rows: list[tuple[int, int, float, float, float, float]] = []
-    tolerances = _tolerances(y, scale)
     for i in range(k):
         for j in range(i + 1, k):
-            diffs = _differences(
-                *_snapped_differences(
-                    y[:, i], y[:, j], tolerances[:, i] + tolerances[:, j]
-                ),
-                g,
-            )
+            diffs = _differences(*_snapped_differences(y[:, i], y[:, j], scale), g)
             if diffs.constant:
                 raise ValueError(
                     f"conditions {i + 1} and {j + 1}: after winsorizing, every "
@@ -683,12 +654,12 @@ class _PairAkp:
 def _pair_akp(
     x: FloatArray,
     y: FloatArray,
-    tolerance: FloatArray,
+    scale: float,
     g: int,
     constant: float,
     names: str,
 ) -> _PairAkp:
-    s, e = _snapped_differences(x, y, tolerance)
+    s, e = _snapped_differences(x, y, scale)
     diffs = _differences(s, e, g)
     method = "the AKP effect size of the paired differences"
     if diffs.constant:
@@ -767,12 +738,11 @@ def _akp_bootstrap(
     n = y.shape[0]
     g, _ = _trimmed_size(n, t_trim, method)
     constant = math.sqrt(winsorized_normal_variance(t_trim))
-    tolerances = _tolerances(y, scale)
     fitted = [
         _pair_akp(
             y[:, i],
             y[:, j],
-            tolerances[:, i] + tolerances[:, j],
+            scale,
             g,
             constant,
             f"conditions {i + 1} and {j + 1}",

@@ -415,10 +415,16 @@ values of x, in file order (rows with a missing x are dropped; bugs_long desire:
 inferplot (D87, D88): the signed-rank test ranks R's rounded differences x - mu, as R
 does (ranking the differences as written would change V on 6 of the 18 nonparametric
 fixtures: iris-sepal 5288 against R's 5358.5); the bootstrap-t test draws 2,000 seeded
-resamples of the deviations from the trimmed mean in a canonical order (so the result
-does not depend on row order, unit or a common shift of x and mu), keeps an infinite
+resamples of the deviations from the trimmed mean in the order (|d|, d) of the
+deviations as written (D105), so row order, a decimal unit (tenths, x 2.54) and a
+decimal shift of x and mu draw the same resamples (negating x and mu does not when two
+values lie as far above as below the trimmed mean); 0/0, infinite and T* = |t| are
+decided on the numbers as written, t is 0 when the trimmed mean equals mu as written,
+and t is formed exactly and rounded once. It keeps an infinite
 T* (edge_one_small: [-Inf, Inf], as R) and leaves a 0/0 T* out, counted (D65); its p
-and critical value are counted over the defined resamples.
+and critical value are counted over the defined resamples. p is the share of T* >= |t|
+and the interval uses the round((1 - alpha) B)-th T*, so at the boundary a p equal to
+alpha can go with an interval that excludes the test value, as in R.
 
 Refused before the method runs, with the column named: values that are one number
 (exactly or to within their rounding, D74) for types parametric, robust and bayes
@@ -520,7 +526,7 @@ every table equal); bayes replaces the subtitle (v0.2).
 | Design | Test | Effect size + CI |
 | --- | --- | --- |
 | two-way | Pearson's chi-square of independence, `chisq.test(correct = FALSE)`: never Yates' correction, also for 2 x 2 (mtcars am x vs, edge_bar_2x2_one), never a simulated p; expected counts below 5 or 1 only raise R's warning, which ggstatsplot mutes. Empty rows and columns (declared empty levels) are dropped first; df (r - 1)(c - 1); exactly independent tables give 0, p = 1 (edge_bar_independent) | Cramér's V with Bergsma's (2013) bias correction (effectsize's `adjust = TRUE`; R's label "Cramer's V (adj.)"): phi^2 = max(0, chi^2 / n - (r - 1)(c - 1) / (n - 1)), V = sqrt(phi^2 / (min(r~, c~) - 1)), r~ = r - (r - 1)^2 / (n - 1). CI: the noncentral chi-square interval of the noncentrality lambda ("ncp"; P(X <= chi^2; df, lambda) = 1 - alpha/2 and alpha/2), each bound put through the same adjusted formula with lambda for chi^2, capped at 1; lower bound 0 where no lambda > 0 solves. **Two-sided** by default (ggbarstats passes its `alternative = "two.sided"`, not effectsize's default "greater"): mtcars cyl x am V 0.46, CI [0.00, 0.82]; `alternative` "greater" gives [low, 1], "less" [0, high]. The adjusted upper bound can be 0 where phi^2 at the upper lambda is below the correction (edge_bar_rounding: V 0, CI [0, 0]). Perfect association: V 1 (edge_bar_perfect, CI [0.60, 1]) |
-| two-way, `paired=True` | McNemar, `mcnemar.test(correct = FALSE)` on the table with every declared level (no level dropped): (b - c)^2 / (b + c) on 1 df; beyond 2 x 2 Bowker's test of symmetry, sum over i < j of (n_ij - n_ji)^2 / (n_ij + n_ji) on r(r - 1)/2 df (edge_bar_paired3: 4.00 on 3 df). A table that is not square (the two variables have different levels: edge_bar_paired_unequal) stops ("'x' must be square") and ggstatsplot drops the subtitle silently; declaring both on the same levels makes it square (edge_bar_paired_unequal-declared: 10.00 on 3 df). No discordant pair: statistic 0/0 and Cohen's g stops ("not enough data"); no subtitle (edge_bar_paired_agree) | Cohen's g = P - 0.5 with P the share of discordant pairs on the more frequent side, max(b, c) / (b + c); beyond 2 x 2 the sum over the pairs of cells of max(n_ij, n_ji) over all discordant pairs (paired3: 13 / 18, g 0.22). CI: the Wilson score interval of P **without** continuity correction (`prop.test(correct = FALSE)`, not the corrected default the effectsize help page suggests) minus 0.5, so the lower bound can be negative (paired3 [-0.0087, 0.38]; one discordant pair: [-0.29, 0.50]); follows `alternative` ("less": [-0.5, high]); `conf_level` reaches it. n_pairs is the number of rows (subjects). No Bayes caption, no pairwise tests, no McNemar continuity correction |
+| two-way, `paired=True` | McNemar, `mcnemar.test(correct = FALSE)` on the table with every declared level (no level dropped): (b - c)^2 / (b + c) on 1 df; beyond 2 x 2 Bowker's test of symmetry, sum over i < j of (n_ij - n_ji)^2 / (n_ij + n_ji) on r(r - 1)/2 df (edge_bar_paired3: 4.00 on 3 df); a pair of levels that never disagree (n_ij + n_ji = 0) gives NaN in R with the df unchanged, and inferplot raises (D107). A table that is not square (the two variables have different levels: edge_bar_paired_unequal) stops ("'x' must be square") and ggstatsplot drops the subtitle silently; declaring both on the same levels makes it square (edge_bar_paired_unequal-declared: 10.00 on 3 df). No discordant pair: statistic 0/0 and Cohen's g stops ("not enough data"); no subtitle (edge_bar_paired_agree) | Cohen's g = P - 0.5 with P the share of discordant pairs on the more frequent side, max(b, c) / (b + c); beyond 2 x 2 the sum over the pairs of cells of max(n_ij, n_ji) over all discordant pairs (paired3: 13 / 18, g 0.22). CI: the Wilson score interval of P **without** continuity correction (`prop.test(correct = FALSE)`, not the corrected default the effectsize help page suggests) minus 0.5, so the lower bound can be negative (paired3 [-0.0087, 0.38]; one discordant pair: [-0.29, 0.50]); follows `alternative` ("less": [-0.5, high]); `conf_level` reaches it. n_pairs is the number of rows (subjects). No Bayes caption, no pairwise tests, no McNemar continuity correction |
 | one-way (`y=None`) | chi-square goodness of fit, `chisq.test(x, p = ratio, correct = FALSE)`: `ratio` in the order of x's levels, default equal; never rescaled: a `ratio` that does not sum to 1 (within sqrt(machine epsilon)) stops ("probabilities must sum to 1.") and one of the wrong length stops ("'x' and 'p' must have the same number of elements"); ggstatsplot drops the subtitle silently either way. Every level is kept: a declared empty level is a category with count 0 (edge_bar_zero_cell-oneway-declared: chi^2(2) = 14.00). One level: "'x' must at least have 2 elements", no subtitle | Pearson's C = sqrt(chi^2 / (chi^2 + n)); CI: the noncentral chi-square interval, each bound sqrt(lambda / (lambda + n)); two-sided by default, follows `alternative` and `conf_level` |
 | any | bayes | v0.2: two-way (also with `paired=True`, which the Bayes test ignores) `BayesFactor::contingencyTableBF(sampleType = "indepMulti", fixedMargin = "rows", priorConcentration = 1)`, subtitle log_e(BF01), posterior Cramér's V (median, 95% ETI) and a_Gunel-Dickey = 1.00; one-way a Monte Carlo estimate from 100,000 Dirichlet(ratio) draws (random; seeded by the case), subtitle log_e(BF01) and a only; a one-level table gives no output and no error |
 
@@ -532,7 +538,7 @@ them) and **never adjusted**: `p_adjust_method` does not reach them (the seven
 Titanic padj fixtures have identical per-bar tables). They are computed whenever
 `y` is given, even with `results_subtitle=False` (they give the n under each bar);
 a bar where the test fails (one level of x) becomes a row of NA, which ggstatsplot
-prints as "NA" (declared `proportion_test` errors: edge_bar_degenerate one-row,
+prints as an empty p (`format_value(NA)` is "") (declared `proportion_test` errors: edge_bar_degenerate one-row,
 one-cell). The label above each bar is `p = <p>` (`list(~italic(p)=='0.09')`,
 `format_value(p, digits)`), not significance stars, with no threshold; ggpiestats
 draws the whole result beside each pie (`chi_gof^2(df) = <statistic>, p = <p>, n =
@@ -578,7 +584,7 @@ bounds stops at its own tolerance: on 22 of the bounds read (9 fixture bounds ov
 fixture rows, 13 probe bounds) R misses the accurate root by more than
 `noncentral_ci`, up to 0.00096 absolute in a pairwise V (edge_bar_rounding a-c), 0.00026
 in a subtitle (mtcars cyl, Pearson's C upper bound 0.4987 for 0.4984; both print
-0.50) and 12% in a probe lower bound; R's own `pchisq` at its bound misses the tail
+0.50 at two digits, and at three digits R prints 0.499 where the accurate bound prints 0.498) and 12% in a probe lower bound; R's own `pchisq` at its bound misses the tail
 probability by as much (0.02487 for 0.025). inferplot reports the accurate bound;
 both are pinned (`CHISQ_ROOT_MISSES`).
 
@@ -729,7 +735,14 @@ Statistical and behavioral differences are exactly these:
     factor's limit, where ggstatsplot prints R's rounding (t = 1.34e+08, p =
     1.06e-62 and S = 3.66e-14 on edge_corr_perfect; t = -1.90e+08 and p = 6.65e-64
     on the robust negative case) and an empty log BF01, BayesFactor returning NaN
-    there (D85, D86).
+    there (D85, D86). Decimal columns that are
+    collinear as written (Fahrenheit against Celsius) are collinear too (D106).
+21. Robust bootstraps on decimal data: every resample is classified as the numbers
+    as written classify it (D105), so ratings written as 0.1 to 0.5 give the result
+    of the same ratings written as 1 to 5; WRS2 classifies on rounded doubles, so
+    its counts of undefined and infinite resamples, and with them p and the bounds,
+    can differ between the two writings. A value equal to `test_value` as written is
+    a zero of the signed-rank test (R ranks 0.1 + 0.2 against 0.3).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -1001,6 +1014,39 @@ Designs without levels (histostats, scatterstats; D91, D92):
   `figure_alt_text` what it drew: `centrality`, `test_value_line`, `bins`
   (histostats); `smooth`, `marginal`, `labelled_points`, `points_shown`
   (scatterstats).
+
+barstats (D108):
+
+- **Subtitle and labels:** the subtitle of each design as ggbarstats prints it
+  (`chi_Pearson^2(df)`, `chi_McNemar^2(df)`, `chi_gof^2(df)` with Cramér's V, Cohen's g
+  or Pearson's C, the interval and n_obs or n_pairs); above each bar `p = <p>` with
+  `digits` (an exact 0 prints 2.23e-308, as in ggstatsplot; a bar without a test has
+  an empty label); under each bar `(n = <n>)`; in each cell the percentage, count or
+  both (`digits_perc`; R's `round()` of the double (count / bar n) x 100, printed
+  without trailing zeros; no label for a zero cell). `result.text` holds them plain in
+  `bar_labels`, `n_labels` (one per bar) and `cell_labels` (one per cell), empty in the
+  other designs; `pairwise_labels` holds the Fisher pairs' labels, never drawn. No
+  caption in v0.1. Compared with ggstatsplot on all 89 fixtures with output: 71 of 71
+  subtitles, 158 of 158 bar p labels, 175 of 175 n labels, 485 of 485 cell labels and
+  152 of 152 pair labels are rebuilt from the fixtures' numbers; on results, one
+  subtitle differs (mtcars-cyl-digits3: 0.498 for R's 0.499, D99). The percent formula
+  is pinned on probe-contingency's 927 labels (100 x count / n would differ in 3).
+- **APA sentence:** "Pearson's chi-square test (shares of cyl across the levels of am):
+  chi2(2, N = 32) = 8.74, p = .013, Cramer's V = .46, 95% CI [.00, .82]. Goodness-of-fit
+  tests within each level of am (shares of cyl against equal shares, unadjusted): p <
+  .05 in 1 of 2 bars; Fisher's exact tests between the levels of cyl (Holm adjusted):
+  adjusted p < .05 in 1 of 3 pairs."; "McNemar's test (before and after, the same
+  units measured twice): chi2(1, N = 40) = 4.00, ..., Cohen's g = .25, ..."; "Chi-square
+  goodness-of-fit test (shares of cyl against equal shares): chi2(2, N = 32) = 2.31,
+  ..., Pearson's C = .26, ..." (with `ratio`: "against expected shares 0.5, 0.25 and
+  0.25"). A one-sided `alternative` shows as "95% one-sided CI".
+- **Alt text:** "Stacked bar chart of cyl within each level of am, each bar summing to
+  100%: 0 (n = 19): 4 16%, 6 21%, 8 63%; 1 (n = 13): ... Labels show percentages; the
+  p-value above each bar tests its shares against equal shares (0: p = 0.02, 1: p =
+  0.09); a legend names the 3 levels of cyl. <result>". Shortening, at each name length:
+  the legend clause, the list of bar p-values, all but each bar's largest share, the
+  second sentence, the shares, each bar's n. The figure tells `figure_alt_text` what
+  it drew: `cell_labels`, `bar_tests`, `legend`.
 
 ## 8. `check()`
 

@@ -425,3 +425,15 @@ def test_undefined_bootstrap_t_is_left_out_and_counted() -> None:
     assert es.conf_low < es.estimate < es.conf_high
     assert StatsResult.from_json(result.to_json()) == result
     assert result.check() == ()
+
+
+@pytest.mark.parametrize("type_", ["parametric", "bayes", "robust", "nonparametric"])
+def test_every_value_equal_to_the_test_value_as_written(type_: str) -> None:
+    # Review Z6 (8): values that are 0.3 as written (one stored as 0.1 + 0.2) were
+    # refused with the advice type='nonparametric', which then ranked a
+    # difference of 5.6e-17. Every value equals test_value as written: no type
+    # has a difference to test, and no message sends the caller to another type.
+    frame = pd.DataFrame({"x": [0.3, 0.3, 0.1 + 0.2, 0.3, 0.3]})
+    with pytest.raises(ValueError, match=r"equals test_value=0\.3") as info:
+        ip.analyze.histostats(frame, "x", type=type_, test_value=0.3)
+    assert "type='nonparametric'" not in str(info.value)

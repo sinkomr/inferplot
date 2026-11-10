@@ -135,9 +135,10 @@ def _same_within_rounding(values: FloatArray) -> bool:
 
 
 def _all_test_value(data: OneData, args: _Args) -> bool:
-    """Every value equals test_value exactly: the signed-rank test drops every
-    value, so no type has a difference to test."""
-    return bool((data.values == args.test_value).all())
+    """Every value equals test_value as written (D74: 0.1 + 0.2 against 0.3 too):
+    the signed-rank test drops every value, so no type has a difference to
+    test."""
+    return stats.all_equal_as_written(data.values, args.test_value)
 
 
 def _no_spread_text(data: OneData) -> str:

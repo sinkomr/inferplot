@@ -8,6 +8,27 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_paired, jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.contingency import (
+    BarTest,
+    CountTable,
+    CountVector,
+    FisherExact,
+    GoodnessOfFit,
+    IndependenceTest,
+    PairComparison,
+    Probabilities,
+    SymmetryTest,
+    chisq_independence,
+    cohens_g,
+    column_percentages,
+    cramers_v,
+    fisher_exact,
+    goodness_of_fit,
+    mcnemar,
+    pairwise_fisher,
+    pearsons_c,
+    proportion_tests,
+)
 from inferplot.stats.correlation import (
     Correlation,
     CorrelationMethod,
@@ -15,6 +36,7 @@ from inferplot.stats.correlation import (
     correlation_bf10,
     correlation_log_bf10,
     cross_moments,
+    pair_moments,
     pearson,
     spearman,
     winsorized_correlation,
@@ -35,7 +57,13 @@ from inferplot.stats.effect_sizes import (
     hedges_j,
     partial_omega_squared,
 )
-from inferplot.stats.noncentral import f_ncp_bound, t_ncp_interval
+from inferplot.stats.noncentral import (
+    chi2_ncp_bound,
+    chi2_ncp_interval,
+    f_ncp_bound,
+    noncentral_chi2_logcdf,
+    t_ncp_interval,
+)
 from inferplot.stats.nonparametric import (
     BOOTSTRAP_RESAMPLES,
     BootstrapEffectSizeCI,
@@ -133,6 +161,12 @@ from inferplot.stats.within_robust import (
     trimmed_rm_anova,
     yuen_dependent_t,
 )
+from inferplot.stats.written import (
+    all_equal_as_written,
+    equal_as_written,
+    written_value,
+    written_values,
+)
 
 __all__ = [
     "ALTERNATIVES",
@@ -174,6 +208,7 @@ __all__ = [
     "YuenDependentT",
     "YuenT",
     "akp_effect",
+    "all_equal_as_written",
     "average_dependent_akp",
     "bootstrap_t_critical_value",
     "bw_sj",
@@ -185,6 +220,7 @@ __all__ = [
     "differences_same_within_rounding",
     "dunn",
     "durbin_conover",
+    "equal_as_written",
     "explanatory_effect",
     "f_ncp_bound",
     "friedman",
@@ -211,6 +247,7 @@ __all__ = [
     "one_sample_signed_rank",
     "one_sample_t",
     "p_adjust",
+    "pair_moments",
     "paired_differences_constant",
     "paired_differences_winsorize_to_constant",
     "paired_hedges_g",
@@ -247,6 +284,34 @@ __all__ = [
     "winsorized_correlation",
     "winsorized_normal_variance",
     "winsorized_variance",
+    "written_value",
+    "written_values",
     "yuen_dependent_t",
     "yuen_t",
+]
+
+# barstats: count tables and the noncentral chi-square behind their intervals.
+__all__ += [
+    "BarTest",
+    "CountTable",
+    "CountVector",
+    "FisherExact",
+    "GoodnessOfFit",
+    "IndependenceTest",
+    "PairComparison",
+    "Probabilities",
+    "SymmetryTest",
+    "chi2_ncp_bound",
+    "chi2_ncp_interval",
+    "chisq_independence",
+    "cohens_g",
+    "column_percentages",
+    "cramers_v",
+    "fisher_exact",
+    "goodness_of_fit",
+    "mcnemar",
+    "noncentral_chi2_logcdf",
+    "pairwise_fisher",
+    "pearsons_c",
+    "proportion_tests",
 ]
