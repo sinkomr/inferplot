@@ -27,6 +27,7 @@ EXPECTED_KINDS = {
     "noncentral_cdf",
     "studentized_range_tail",
     "ttest_bayes_factor",
+    "correlation_bayes_factor",
     "akp_constant",
     "smm_quantile",
 }
@@ -49,7 +50,7 @@ def test_spec_values() -> None:
     # atol are pinned: a nonzero atol would make every small p-value "close".
     # noncentral_ci's atol, noncentral_cdf and studentized_range_tail were
     # measured in Phase 1; wrs2_xi_constant, akp_constant and smm_quantile in
-    # Phase 2.
+    # Phase 2; correlation_bayes_factor in Phase 4.
     expected = {
         "closed_form": (1e-10, 0.0),
         "games_howell_p": (1e-6, 3e-9),
@@ -59,6 +60,7 @@ def test_spec_values() -> None:
         "noncentral_cdf": (2e-11, 0.0),
         "studentized_range_tail": (4e-13, 0.0),
         "ttest_bayes_factor": (1e-8, 0.0),
+        "correlation_bayes_factor": (5e-12, 0.0),
         "akp_constant": (5e-7, 0.0),
         "smm_quantile": (3e-14, 0.0),
     }
