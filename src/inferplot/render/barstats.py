@@ -73,7 +73,7 @@ from inferplot.text import drawable, figure_alt_text, figure_texts
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
 
-__all__ = ["barstats", "check_drawing"]
+__all__ = ["barstats", "check_axes", "check_drawing"]
 
 # inferplot's own figure, in inches: the least distance between the centres of
 # two bars, the least width of a bar, and the height of 0% to 100% (taller when
@@ -192,29 +192,28 @@ def barstats(
     )
     base.check_subtitle(result, options.subtitle)
     _check_legend_title(options.legend_title)
-    _check_axes(ax)
+    check_axes(ax)
     _check_contents(result)
     return base.draw(
         lambda colors, warning: _BarDrawing(result, options, colors, warning, ax),
         palette=palette,
         k=len(result.levels),
         options=options,
+        # The segments lie on the background: a colour that cannot be told
+        # from it leaves them invisible, as for histostats' bars.
         artist_args=lambda: base.check_artist_args(
-            [(_BAR_ARGS, options.bar_args, None)]
+            [(_BAR_ARGS, options.bar_args, None)], ax=ax, colors=True
         ),
     )
 
 
-def _check_axes(ax: object) -> None:
-    """``ax`` is None or a plain rectangular 2D Axes whose x axis is not shared:
-    the tick labels carry each bar's n, as betweenstats' carry each level's."""
-    if ax is None:
-        return
-    if not isinstance(ax, Axes):
-        raise TypeError(
-            f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
-        )
-    base.check_axes(ax)
+def check_axes(ax: object) -> None:
+    """``ax`` is None or a plain rectangular 2D Axes with linear, upright axes
+    (``base.check_given_axes``) whose x axis is not shared: the tick labels
+    carry each bar's n, as betweenstats' carry each level's."""
+    base.check_given_axes(ax)
+    if isinstance(ax, Axes):
+        base.check_axes(ax)
 
 
 def _check_legend_title(title: str | None) -> None:

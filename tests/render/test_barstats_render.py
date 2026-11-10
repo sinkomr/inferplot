@@ -55,6 +55,7 @@ FIGURE_CODES = frozenset(
         "paths_crowded",
         "point_labels_crowded",
         "cell_labels_hidden",
+        "figure_oversized",
     }
 )
 draw: Any = ip.render.barstats  # for calls with wrong argument types
@@ -721,3 +722,53 @@ def test_alt_text_describes_the_figure() -> None:
         tiny, cell_labels=False, bar_tests=True, legend=True
     )
     assert "Labels show" not in fig.result.text.alt_text
+
+
+def test_given_axes_with_a_log_or_inverted_axis_is_refused() -> None:
+    for change in ("log", "invert"):
+        figure_ = Figure()
+        FigureCanvasAgg(figure_)
+        ax = figure_.add_subplot()
+        if change == "log":
+            ax.set_yscale("log")
+        else:
+            ax.invert_xaxis()
+        error = message(ValueError, lambda ax=ax: ip.render.barstats(mtcars(), ax=ax))
+        assert "Undo it before the call" in error
+        assert not ax.patches  # nothing drawn
+    figure_ = Figure()
+    FigureCanvasAgg(figure_)
+    ax = figure_.add_subplot()
+    ax.set_yscale("log")
+    frame = pd.DataFrame({"a": ["x", "y"], "b": ["p", "q"]})
+    # The one-call form refuses it before the analysis.
+    assert "Undo it before the call" in message(
+        ValueError, lambda: ip.barstats(frame, "a", "b", ax=ax)
+    )
+    assert "results_subtitle=False in this call" in message(
+        ValueError, lambda: ip.barstats(frame, "a", "b", subtitle="mine")
+    )
+
+
+def test_segments_the_colour_of_the_background_are_named() -> None:
+    fig = ip.render.barstats(mtcars(), bar_args={"facecolor": "white"})
+    (warning,) = [w for w in fig.result.warnings if "bar_args=" in w]
+    assert "makes the bar segments invisible" in warning
+    assert "cannot be told apart" in warning
+
+
+def test_unused_palette_colours_are_named() -> None:
+    fig = ip.render.barstats(mtcars(), palette=["red", "green", "blue", "black"])
+    assert any("uses the first 3, not the other 1" in w for w in fig.result.warnings)
+
+
+def test_forty_bars_widen_the_figure_within_its_bounds() -> None:
+    """40 bars: a slot of at least 0.8 in each, and no figure_oversized."""
+    counts = [
+        [(j * 7) % 13 + 1 for j in range(40)],
+        [(j * 5) % 11 + 2 for j in range(40)],
+    ]
+    fig = ip.render.barstats(table_result(counts, ["a", "b"]))
+    width, _height = fig.figure.get_size_inches()
+    assert 40 * 0.8 <= width <= 4.0 + 1.25 * 40
+    assert figure_codes(fig) == []

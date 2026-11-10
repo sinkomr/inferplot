@@ -37,6 +37,7 @@ CODES = frozenset(
         "axis_changed",
         "data_outside_view",
         "flat_data",
+        "figure_oversized",
     }
 )
 # inferplot's own figure (inches): at most WIDTH_FIXED + WIDTH_PER_BAR per bar
