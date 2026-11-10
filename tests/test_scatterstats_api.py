@@ -50,6 +50,8 @@ WRONG_WORDS = (
     "colors already follow x",
     "first level",
     "Welch",
+    "boxplot_args",
+    "violin_args",
 )
 
 
@@ -282,6 +284,8 @@ def test_label_var_reads_any_column(cars: pd.DataFrame) -> None:
         ("ysidehistogram.args", "ysidehistogram.args= is not an argument of"),
         ("test.value", "test.value= is not an argument of scatterstats(): it is an"),
         ("ggtheme", "ggtheme= is a ggstatsplot argument that inferplot does not"),
+        ("centrality.type", "centrality.type= is a ggstatsplot argument that"),
+        ("centrality.label.args", "centrality.label.args= is a ggstatsplot"),
         ("ggplot.component", "ggplot.component= is a ggstatsplot argument"),
         ("subject_id", "subject_id= is not an argument of scatterstats(): "),
         ("pairwise_alpha", "pairwise_alpha= is not an argument of scatterstats()"),

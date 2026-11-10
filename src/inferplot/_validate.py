@@ -934,6 +934,14 @@ def _no_level_targeted(
             "point labels come from a column, label_var='name'; the axis labels and "
             f"the title are xlab=, ylab= and title=, {drawing}."
         )
+    if key in {"centrality_point_args", "centrality_label_args", "ggsignif_args"} or (
+        key == "centrality_type" and not histo
+    ):
+        return TypeError(
+            f"{arg}= is a ggstatsplot argument that inferplot does not have: it "
+            "styles a part of ggbetweenstats' and ggwithinstats' plots that "
+            f"{fn}() does not draw. Remove {arg}=."
+        )
     if key == "var_equal":
         test = "the one-sample t-test" if histo else "a correlation"
         return TypeError(

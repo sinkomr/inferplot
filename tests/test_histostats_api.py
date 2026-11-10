@@ -356,6 +356,8 @@ WRONG_WORDS = (
     "colors already follow x",
     "first level",
     "Welch",
+    "boxplot_args",
+    "violin_args",
 )
 
 
@@ -373,6 +375,8 @@ WRONG_WORDS = (
         ("bin.args", "bin.args= is not an argument of histostats(): the bars are"),
         ("centrality.line.args", "centrality.line.args= is not an argument of"),
         ("centrality.type", "centrality.type= is a ggstatsplot argument that"),
+        ("centrality.point.args", "centrality.point.args= is a ggstatsplot argument"),
+        ("ggsignif.args", "ggsignif.args= is a ggstatsplot argument that inferplot"),
         ("normal.curve", "normal.curve= is not an argument of ggstatsplot 1.1.4's"),
         ("normal.curve.args", "normal.curve.args= is not an argument of ggstatsplot"),
         ("label.var", "label.var= is not an argument of histostats(): it is an"),
