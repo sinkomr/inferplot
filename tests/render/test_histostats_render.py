@@ -277,7 +277,10 @@ def test_an_arrow_label_does_not_widen_the_figure() -> None:
             pd.DataFrame({"v": values}), "v", test_value=shift - 50
         )
         fig = ip.render.histostats(result)
-        assert text_of(fig, "test-value-label") == f"← test value {r_number_text(shift - 50)}"
+        assert (
+            text_of(fig, "test-value-label")
+            == f"← test value {r_number_text(shift - 50)}"
+        )
         assert fig.figure.get_size_inches()[0] < 7.0
         assert figure_codes(fig) == []
 

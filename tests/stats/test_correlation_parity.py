@@ -60,7 +60,8 @@ REFUSED: Final = frozenset(
 # [NA, NA], or [-1, 1] for Spearman's rho. The Bayes factor (type bayes and the
 # parametric caption) is answered and compared.
 THREE_PAIRS: Final = frozenset(
-    f"ggscatterstats-edge_corr_n3-{t}" for t in ("parametric", "nonparametric", "robust")
+    f"ggscatterstats-edge_corr_n3-{t}"
+    for t in ("parametric", "nonparametric", "robust")
 )
 
 # Exactly collinear data (y = 2x + 1 and y = 27 - 3x on x = 1..10): inferplot's
@@ -253,7 +254,7 @@ def test_constant_x_is_refused(case: OracleCase) -> None:
     "case", [pytest.param(c, id=c.name) for c in CASES if c.name in THREE_PAIRS]
 )
 def test_three_pairs_are_refused(case: OracleCase) -> None:
-    x, y = _pairs(case)
+    x, _ = _pairs(case)
     assert x.size == 3
     with pytest.raises(ValueError, match="needs at least 4 pairs"):
         _run(case)

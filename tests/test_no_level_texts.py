@@ -494,7 +494,9 @@ def test_robust_bootstrap_strings_follow_the_formatter() -> None:
         assert isinstance(mine, tx.Call)
         # the bootstrap t, the trimmed mean and n are exact (edge_one_n2: t is a
         # rounding tie, DIFFERING_SUBTITLES)
-        assert (mine.args[0] == theirs.args[0]) == (case.name not in DIFFERING_SUBTITLES)
+        assert (mine.args[0] == theirs.args[0]) == (
+            case.name not in DIFFERING_SUBTITLES
+        )
         assert mine.args[2] == theirs.args[2]
         assert mine.args[-1] == theirs.args[-1]
         if number(row["p.value"]) < 1e-300:  # stored as .Machine$double.xmin

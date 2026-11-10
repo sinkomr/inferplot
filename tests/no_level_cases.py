@@ -100,7 +100,9 @@ _CONSTANT_ONE = {
         None,
     ),
 }
-_THREE_PAIRS_ADVICE = " Collect more pairs, or use type='bayes', whose Bayes factor needs 3."
+_THREE_PAIRS_ADVICE = (
+    " Collect more pairs, or use type='bayes', whose Bayes factor needs 3."
+)
 _THREE_PAIRS = {
     t: Refusal(
         ValueError,

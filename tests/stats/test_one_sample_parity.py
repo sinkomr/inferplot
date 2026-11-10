@@ -264,7 +264,10 @@ def test_constant_data_is_refused(case: OracleCase) -> None:
             trimmed_mean_bootstrap_t(x, mu=mu, tr=tr(case))
         # R: t = Inf, p = 2.23e-308, the trimmed mean 5 and the interval [NA, NA].
         row = case.subtitle_data
-        assert (row["statistic"], value(row, "p.value")) == ("Inf", 2.2250738585072e-308)
+        assert (row["statistic"], value(row, "p.value")) == (
+            "Inf",
+            2.2250738585072e-308,
+        )
         assert (value(row, "estimate"), row["conf.low"], row["conf.high"]) == (
             5.0,
             None,
@@ -275,7 +278,7 @@ def test_constant_data_is_refused(case: OracleCase) -> None:
         one_sample_t(x, mu=mu)
     with pytest.raises(ValueError, match="no standard deviation"):
         one_sample_hedges_g(x, mu=mu)
-    with pytest.raises(ValueError, match="no standard deviation|the same"):
+    with pytest.raises(ValueError, match="has no standard deviation"):
         jzs_bf10_one_sample(x, mu=mu, prior_scale=bf_prior(case))
     # R: t.test stops ("data are essentially constant"); no subtitle or caption.
     assert (case.subtitle_rows, case.caption_data) == ([], None)

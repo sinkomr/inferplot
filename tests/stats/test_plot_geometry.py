@@ -155,7 +155,9 @@ def test_constant_x_gets_one_bin_a_tenth_wide() -> None:
         assert (one.counts, one.binwidth) == ((3,), 0.1)
         assert math.isclose(one.edges[0], value - 0.05, rel_tol=1e-13, abs_tol=1e-13)
         assert math.isclose(one.edges[1], value + 0.05, rel_tol=1e-13, abs_tol=1e-13)
-    (case,) = [c for c in HISTO if c.name == "gghistostats-edge_one_constant-parametric"]
+    (case,) = [
+        c for c in HISTO if c.name == "gghistostats-edge_one_constant-parametric"
+    ]
     _assert_edges(histogram_bins(case.analyzed_values("x")).edges, [4.95, 5.05])
 
 

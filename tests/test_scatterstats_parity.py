@@ -48,7 +48,9 @@ CASES = nl.SCATTER
 CONSTANT_X = sorted(
     n for n in nl.REFUSALS if n.startswith("ggscatterstats-edge_corr_constant_x-")
 )
-THREE_PAIRS = sorted(n for n in nl.REFUSALS if n.startswith("ggscatterstats-edge_corr_n3-"))
+THREE_PAIRS = sorted(
+    n for n in nl.REFUSALS if n.startswith("ggscatterstats-edge_corr_n3-")
+)
 COLLINEAR = sorted(c.name for c in CASES if "edge_corr_perfect" in c.name)
 _METHODS = {
     "pearson_correlation": "Pearson correlation",
@@ -100,10 +102,10 @@ def test_fixture_counts() -> None:
     }
     assert counts == {"parametric": 23, "nonparametric": 16, "robust": 17, "bayes": 17}
     assert len(CONSTANT_X) == 4
-    assert THREE_PAIRS == [
+    assert [
         f"ggscatterstats-edge_corr_n3-{t}"
         for t in ("nonparametric", "parametric", "robust")
-    ]
+    ] == THREE_PAIRS
     assert set(nl.REFUSALS) & {c.name for c in CASES} == {*CONSTANT_X, *THREE_PAIRS}
     assert len(COLLINEAR) == 8
     assert not [c.name for c in CASES if c.error is not None]

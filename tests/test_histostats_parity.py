@@ -131,10 +131,13 @@ def test_fixture_counts() -> None:
         "gghistostats-ToothGrowth-greater-bayes",
         "gghistostats-ToothGrowth-greater-robust",
     ]
-    assert CONSTANT == sorted(
-        f"gghistostats-edge_one_constant{width}-{t}"
-        for width in ("-binwidth1", "")
-        for t in ("bayes", "parametric", "robust")
+    assert (
+        sorted(
+            f"gghistostats-edge_one_constant{width}-{t}"
+            for width in ("-binwidth1", "")
+            for t in ("bayes", "parametric", "robust")
+        )
+        == CONSTANT
     )
     assert not [c.name for c in CASES if c.error is not None]
     # Every answered case on three backends: 84 + 2 replays, times 3 (the 6
