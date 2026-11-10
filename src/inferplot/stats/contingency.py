@@ -890,6 +890,9 @@ def _fisher_2x2(a: int, r1: int, c0: int, c1: int, side: Alternative) -> float:
 
     left = _first_true(lo, mode, lambda v: not rarer(v)) - 1
     right = _first_true(mode + 1, hi, rarer)
+    if left >= mode:
+        # The most probable table counts, so every table does: p is 1 exactly.
+        return 1.0
     parts: list[float] = []
     if left >= lo:
         parts.append(_tail_log_sum(f, left, lo))
@@ -981,6 +984,9 @@ def _fisher_2xc(first: list[int], cols: list[int]) -> float:
     logs = [_log_dbinom(np.arange(c + 1, dtype=np.float64), c, p, q) for c in cols]
     log_total = float(_log_dbinom(np.array([float(r1)]), n, p, q)[0])
     threshold = math.fsum(float(logs[j][first[j]]) for j in range(k)) + _LOG_TIE
+    if threshold >= float(_suffix_max(logs)[r1]):
+        # The most probable table counts, so every table does: p is 1 exactly.
+        return 1.0
     margin = _FISHER_MARGIN * (1.0 + abs(threshold))
     # Suffix j + 1 .. k - 1: the largest and smallest log mass of a completion and
     # the log mass of all completions (a sum of binomials with one p is binomial),
