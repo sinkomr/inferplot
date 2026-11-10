@@ -29,6 +29,7 @@ from inferplot.stats.robust import (
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
     floor_percentile_bounds,
 )
+from inferplot.stats.within_robust import dep_effect_percentile_bounds
 from tests.oracle_fixtures import Row, probe, r_double
 
 FloatArray = NDArray[np.float64]
@@ -171,8 +172,12 @@ def test_dep_effect_takes_the_rounded_rule_at_alpha_005(row: Row) -> None:
     ordered = _sorted_inputs(row)[0]
     _, low, high = _bounds(row)
     assert _round_rule(ordered, 0.05) == (low, high)
-    # inferplot applies the floor rule to dep.effect (D66). The two pick the same
-    # order statistics at inferplot's 2,000 resamples, not at every B.
+    assert dep_effect_percentile_bounds(ordered, 0.95) == (low, high)
+    # t1way's alpha (1 - 0.95 in floating point) is another rule at B = 100.
+    t1way = _rounded_percentile_bounds(ordered, 0.95)
+    assert (t1way == (low, high)) == (row["B"] != 100)
+    # D66 used to apply the floor rule to dep.effect. The two pick the same order
+    # statistics at inferplot's 2,000 resamples, not at every B.
     floor = _floor_rule(ordered, 0.95)
     differs = DEP_EFFECT_FLOOR_DIFFERS.get(row["B"])
     assert (floor[0] != low) == (differs == "low")
@@ -182,6 +187,20 @@ def test_dep_effect_takes_the_rounded_rule_at_alpha_005(row: Row) -> None:
 def test_dep_effect_rules_agree_at_inferplots_resample_count() -> None:
     ordered = np.arange(INFERPLOT_RESAMPLES, dtype=np.float64)
     assert floor_percentile_bounds(ordered, 0.95) == _round_rule(ordered, 0.05)
+    assert dep_effect_percentile_bounds(ordered, 0.95) == _round_rule(ordered, 0.05)
+
+
+def test_dep_effect_rule_counts_the_defined_resamples() -> None:
+    # With 0/0 resamples left out (D65) B is the number of the others, where the
+    # rules can differ: B = 1,990 gives l = round(49.75) = 50 (the 51st and
+    # 1,940th), the floor rule the 50th and 1,940th. Rounding is half to even, as
+    # R's round: B = 100 gives 2.5, rounded to 2; B = 140 gives 3.5, rounded to 4.
+    ordered = np.arange(1990, dtype=np.float64)
+    assert dep_effect_percentile_bounds(ordered, 0.95) == (50.0, 1939.0)
+    assert floor_percentile_bounds(ordered, 0.95) == (49.0, 1939.0)
+    assert dep_effect_percentile_bounds(np.arange(100.0), 0.95) == (2.0, 97.0)
+    assert dep_effect_percentile_bounds(np.arange(140.0), 0.95) == (4.0, 135.0)
+    assert dep_effect_percentile_bounds(np.arange(100.0), 0.9) == (5.0, 94.0)
 
 
 @pytest.mark.parametrize("row", _ids("wmcpAKP"))
@@ -194,8 +213,10 @@ def test_wmcpakp_averages_pair_bounds_from_separate_runs(row: Row) -> None:
     ordered = _sorted_inputs(row)
     assert len(ordered) == 27
     _, low, high = _bounds(row)
-    lows = [_round_rule(ordered[9 * p + 3], 0.05)[0] for p in range(3)]
-    highs = [_round_rule(ordered[9 * p + 6], 0.05)[1] for p in range(3)]
+    lows = [dep_effect_percentile_bounds(ordered[9 * p + 3], 0.95)[0] for p in range(3)]
+    highs = [
+        dep_effect_percentile_bounds(ordered[9 * p + 6], 0.95)[1] for p in range(3)
+    ]
     assert math.isclose(math.fsum(lows) / 3, low, rel_tol=1e-15, abs_tol=1e-15)
     assert math.isclose(math.fsum(highs) / 3, high, rel_tol=1e-15, abs_tol=1e-15)
 

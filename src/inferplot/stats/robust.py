@@ -757,20 +757,30 @@ def _level_too_extreme(conf_level: float, count: int) -> ValueError:
     )
 
 
-def _rounded_percentile_bounds(
-    ordered: NDArray[np.float64], conf_level: float
+def rounded_percentile_bounds(
+    ordered: NDArray[np.float64], conf_level: float, alpha: float
 ) -> tuple[float, float]:
-    """t1way's percentile interval (Wilcox 2017, section 3.1): with
-    l = round(alpha / 2 B), alpha = 1 - conf_level computed in floating point and
-    R's rounding half to even, the (l + 1)-th and (B - l)-th smallest values
-    (oracle replay: the 4th and 97th of 100, because alpha / 2 B is
-    2.5000000000000022 there; the 501st and 19,500th of 20,000)."""
+    """The rounded percentile rule (Wilcox 2017, section 3.1): with
+    l = round(alpha / 2 B), rounded half to even on the binary value as R's
+    ``round`` does (Python's ``round`` does the same), the (l + 1)-th and
+    (B - l)-th smallest of the B sorted values. ``conf_level`` names the level in
+    the message when l would be 0 (the bounds would be the most extreme values at
+    any level)."""
     count = ordered.size
-    alpha = 1.0 - conf_level
     low = round(alpha / 2.0 * count)
     if low < 1:
         raise _level_too_extreme(conf_level, count)
     return float(ordered[low]), float(ordered[count - low - 1])
+
+
+def _rounded_percentile_bounds(
+    ordered: NDArray[np.float64], conf_level: float
+) -> tuple[float, float]:
+    """t1way's percentile interval (``rounded_percentile_bounds``) with
+    alpha = 1 - conf_level computed in floating point (oracle replay: the 4th and
+    97th of 100, because alpha / 2 B is 2.5000000000000022 there; the 501st and
+    19,500th of 20,000; probe-bootrules: 12 of 12 at B = 39 to 200)."""
+    return rounded_percentile_bounds(ordered, conf_level, 1.0 - conf_level)
 
 
 def akp_effect(
