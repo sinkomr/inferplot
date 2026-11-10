@@ -684,6 +684,9 @@ def test_constant_and_zero_winsorized_variance() -> None:
         lincon([constant, varying, flat])
     with pytest.raises(ValueError, match="0 / 0"):
         explanatory_effect([constant, constant, constant])
+    # Review Z6 (11): ordinals, not "the 2-th smallest".
+    with pytest.raises(ValueError, match="the 2nd smallest to the 2nd largest"):
+        akp_effect(flat, varying)
 
 
 def test_undefined_resamples_are_left_out_and_counted() -> None:

@@ -47,6 +47,7 @@ from inferplot.stats.descriptive import (
     exact_mean,
     exact_variance,
     mean,
+    ordinal,
     scaled_variance,
     variance,
 )
@@ -271,7 +272,8 @@ def _zero_spread_message(name: str, raw: FloatArray, tr: float, method: str) -> 
     if float(ordered[ordered.size - g - 1] - ordered[g]) == 0.0:
         return (
             f"{name} has a winsorized variance of 0 (its values from the "
-            f"{g + 1}-th smallest to the {g + 1}-th largest are all equal), so "
+            f"{ordinal(g + 1)} smallest to the {ordinal(g + 1)} largest are all "
+            "equal), so "
             f"{method} is undefined"
         )
     return (
