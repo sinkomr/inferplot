@@ -180,7 +180,7 @@ def histostats(
     base.check_subtitle(result, options.subtitle)
     base.check_given_axes(ax)
     values = result.values[0]
-    base.check_scale([*values, _test_value(result)], result.x, "x")
+    base.check_scale(values, result.x, "x")
     bins = _bins(values, options.binwidth)
     return base.draw(
         lambda colors, warning: _HistDrawing(

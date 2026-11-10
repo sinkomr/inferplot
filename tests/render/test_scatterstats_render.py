@@ -1,7 +1,7 @@
 """``ip.render.scatterstats``: every ggscatterstats fixture drawn, and every argument.
 
-Each fixture's result is assembled from its recorded numbers
-(``tests/no_level_cases.py``) and drawn with the fixture's drawing arguments
+Each fixture's call is analyzed by ``ip.analyze.scatterstats``
+(``tests/no_level_cases.analyzed``) and drawn with the fixture's drawing arguments
 (``marginal``). For each figure: the points are the result's pairs, the line and
 band are ``ols_band``'s and ggstatsplot's built smooth layer, the marginal
 histograms are ggside's built layers in panels that share the plot's axes exactly,
@@ -34,7 +34,7 @@ from inferplot.render.comparison import MAX_POINTS, SUBSAMPLE_SIZE
 from inferplot.render.scatterstats import MAX_LABELS
 from inferplot.result import StatsResult
 from inferplot.stats import marginal_bins, ols_band
-from tests.no_level_cases import assembled
+from tests.no_level_cases import REFUSALS, analyzed
 from tests.oracle_args import split
 from tests.oracle_fixtures import OracleCase, cases_for, number, require_cases
 from tests.render._helpers import by_gid, gids, numbered_count, svg_description
@@ -67,7 +67,21 @@ def drawing(case: OracleCase) -> dict[str, Any]:
 
 @functools.cache
 def result_of(name: str) -> StatsResult:
-    return assembled(BY_NAME[name])
+    """``ip.analyze.scatterstats`` on the fixture's call
+    (``tests/no_level_cases.analyzed``)."""
+    result = analyzed(name)
+    assert result is not None, name
+    return result
+
+
+def drawn_cases() -> list[Any]:
+    """The fixtures inferplot analyzes: all but a constant x, which it refuses
+    (``REFUSALS``; ggstatsplot prints NA for every number)."""
+    return [
+        pytest.param(c.name, id=c.name)
+        for c in CASES
+        if not (c.name in REFUSALS and REFUSALS[c.name].replay is None)
+    ]
 
 
 @functools.cache
@@ -84,9 +98,10 @@ def codes(fig: StatsFigure) -> list[str]:
 
 
 def mtcars(**kwargs: Any) -> StatsResult:
-    return result_of("ggscatterstats-mtcars-parametric") if not kwargs else (
-        scatter_result(_mtcars(), "wt", "mpg", **kwargs)
-    )  # fmt: skip
+    """mtcars' mpg by wt, or ``ip.analyze.scatterstats`` with ``kwargs``."""
+    if not kwargs:
+        return result_of("ggscatterstats-mtcars-parametric")
+    return ip.analyze.scatterstats(_mtcars(), "wt", "mpg", **kwargs)
 
 
 @functools.cache
@@ -130,7 +145,7 @@ def _close(a: float, b: float) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("name", [pytest.param(c.name, id=c.name) for c in CASES])
+@pytest.mark.parametrize("name", drawn_cases())
 def test_fixture_figure(name: str) -> None:
     case = BY_NAME[name]
     fig = figure(name)
@@ -145,36 +160,27 @@ def test_fixture_figure(name: str) -> None:
     line = by_gid(fig, "smooth-line")
     band = by_gid(fig, "smooth-band")
     built = case.layer_built("GeomSmooth")
-    if built == [[]]:  # constant x: no line, and warnings says so
-        assert line is None
-        assert band is None
-        assert any(
-            w.startswith("No least-squares line is drawn") for w in result.warnings
-        )
-    else:
-        assert isinstance(line, Line2D)
-        assert isinstance(band, PolyCollection)
-        level = result.settings.conf_level
-        mine = ols_band(x, y, conf_level=level)
-        assert list(line.get_xdata()) == list(mine.x)  # pyright: ignore[reportArgumentType]
-        assert list(line.get_ydata()) == list(mine.fit)  # pyright: ignore[reportArgumentType]
-        vertices = np.asarray(band.get_paths()[0].vertices, dtype=np.float64)
-        lows = {
-            (float(a), float(b)) for a, b in zip(mine.x, mine.conf_low, strict=True)
-        }
-        highs = {
-            (float(a), float(b)) for a, b in zip(mine.x, mine.conf_high, strict=True)
-        }
-        drawn = {(float(a), float(b)) for a, b in vertices}
-        assert lows <= drawn
-        assert highs <= drawn
-        method = (case.args.get("smooth.line.args") or {}).get("method", "lm")
-        if method == "lm":
-            (rows,) = built
-            for i, row in enumerate(rows):
-                assert _close(mine.fit[i], number(row["y"]))
-                assert _close(mine.conf_low[i], number(row["ymin"]))
-                assert _close(mine.conf_high[i], number(row["ymax"]))
+    # (Only a constant x has none, and the analysis refuses it.)
+    assert built != [[]]
+    assert isinstance(line, Line2D)
+    assert isinstance(band, PolyCollection)
+    level = result.settings.conf_level
+    mine = ols_band(x, y, conf_level=level)
+    assert list(line.get_xdata()) == list(mine.x)  # pyright: ignore[reportArgumentType]
+    assert list(line.get_ydata()) == list(mine.fit)  # pyright: ignore[reportArgumentType]
+    vertices = np.asarray(band.get_paths()[0].vertices, dtype=np.float64)
+    lows = {(float(a), float(b)) for a, b in zip(mine.x, mine.conf_low, strict=True)}
+    highs = {(float(a), float(b)) for a, b in zip(mine.x, mine.conf_high, strict=True)}
+    drawn = {(float(a), float(b)) for a, b in vertices}
+    assert lows <= drawn
+    assert highs <= drawn
+    method = (case.args.get("smooth.line.args") or {}).get("method", "lm")
+    if method == "lm":
+        (rows,) = built
+        for i, row in enumerate(rows):
+            assert _close(mine.fit[i], number(row["y"]))
+            assert _close(mine.conf_low[i], number(row["ymin"]))
+            assert _close(mine.conf_high[i], number(row["ymax"]))
     # The marginal histograms: ggside's built layers, sharing the plot's axes.
     if case.args.get("marginal") is False:
         assert set(fig.axes) == {"main"}
@@ -218,6 +224,23 @@ def test_fixture_figure(name: str) -> None:
     assert ax.get_xlabel() == result.x
     assert ax.get_ylabel() == result.y
     assert figure_codes(fig) == [], fig.check()
+
+
+def test_constant_x_is_refused_and_draws_no_line() -> None:
+    """The analysis refuses a constant x (edge_corr_constant_x); a result with
+    one, built by hand, draws the points and marginals but no line, and
+    ``warnings`` says so."""
+    for case in CASES:
+        if "constant_x" in case.name:
+            assert analyzed(case.name) is None
+            assert REFUSALS[case.name].replay is None
+    frame = pd.DataFrame({"x": [5.0] * 8, "y": [1.0, 3, 2, 5, 4, 6, 8, 7]})
+    fig = ip.render.scatterstats(scatter_result(frame, "x", "y"))
+    assert by_gid(fig, "smooth-line") is None
+    assert by_gid(fig, "smooth-band") is None
+    assert fig.result.warnings[-1].startswith("No least-squares line is drawn")
+    assert numbered_count(fig, "xside-bar") == 1
+    assert figure_codes(fig) == []
 
 
 def test_labelled_fixtures() -> None:
@@ -531,24 +554,27 @@ def test_checks_of_other_figures_do_not_apply() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_three_forms_agree(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+@pytest.mark.parametrize(
+    "type_name", ["parametric", "nonparametric", "robust", "bayes"]
+)
+def test_three_forms_agree(type_name: str, tmp_path: Any) -> None:
     """``ip.scatterstats`` draws what ``ip.render.scatterstats`` draws from the
-    result ``ip.analyze.scatterstats`` returns (a stand-in until every type is
-    computed: the wiring is what is tested)."""
+    result of ``ip.analyze.scatterstats``, byte for byte."""
     frame = _mtcars()
-    result = scatter_result(frame, "wt", "mpg", label_var="car")
-
-    def analysis(data: Any, x: str, y: str, **kwargs: Any) -> StatsResult:
-        assert data is frame
-        assert (x, y, kwargs["label_var"]) == ("wt", "mpg", "car")
-        return result
-
-    monkeypatch.setattr(ip.analyze, "scatterstats", analysis)
-    top = ip.scatterstats(frame, "wt", "mpg", label_var="car", title="t")
+    top = ip.scatterstats(
+        frame, "wt", "mpg", type=type_name, label_var="car", title="t"
+    )
+    result = ip.analyze.scatterstats(
+        frame, "wt", "mpg", type=type_name, label_var="car"
+    )
     drawn = ip.render.scatterstats(result, title="t")
-    top.save(tmp_path / "a.png")
-    drawn.save(tmp_path / "b.png")
-    assert (tmp_path / "a.png").read_bytes() == (tmp_path / "b.png").read_bytes()
+    assert top.result == drawn.result
+    for suffix in ("png", "svg"):
+        top.save(tmp_path / f"a.{suffix}")
+        drawn.save(tmp_path / f"b.{suffix}")
+        assert (tmp_path / f"a.{suffix}").read_bytes() == (
+            tmp_path / f"b.{suffix}"
+        ).read_bytes()
 
 
 def test_saved_files(tmp_path: Any) -> None:

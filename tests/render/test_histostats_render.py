@@ -1,7 +1,7 @@
 """``ip.render.histostats``: every gghistostats fixture drawn, and every argument.
 
-Each fixture's result is assembled from its recorded numbers
-(``tests/no_level_cases.py``) and drawn with the fixture's drawing arguments
+Each fixture's call is analyzed by ``ip.analyze.histostats``
+(``tests/no_level_cases.analyzed``) and drawn with the fixture's drawing arguments
 (``binwidth``, ``centrality_plotting``). For each figure: the bars are
 ggstatsplot's built histogram layer (edges and counts), the percent axis is
 count / n, the centrality line sits at the result's centrality value with the
@@ -34,16 +34,9 @@ from inferplot.render.histostats import MAX_BARS, TEST_VALUE_REACH
 from inferplot.result import StatsResult
 from inferplot.stats import histogram_bins
 from inferplot.text import figure_texts, r_number_text
-from tests import no_level_cases
-from tests.no_level_cases import assembled
+from tests.no_level_cases import analyzed
 from tests.oracle_args import split
-from tests.oracle_fixtures import (
-    OracleCase,
-    cases_for,
-    number,
-    read_dataset,
-    require_cases,
-)
+from tests.oracle_fixtures import OracleCase, cases_for, number, require_cases
 from tests.render._helpers import by_gid, gids, numbered_count, text_of
 from tests.render._no_levels import hist_result
 
@@ -72,29 +65,14 @@ def drawing(case: OracleCase) -> dict[str, Any]:
     return dict(split(case.function, case.args).drawing)
 
 
-# One-sided cases inferplot refuses for types without a one-sided test, where
-# ggstatsplot ignores the argument: drawn as the two-sided call, whose output
-# ggstatsplot's equals (tests/test_histostats_api.py).
-REFUSED_ONE_SIDED = frozenset(
-    {
-        "gghistostats-ToothGrowth-greater-robust",
-        "gghistostats-ToothGrowth-greater-bayes",
-    }
-)
-
-
 @functools.cache
 def result_of(name: str) -> StatsResult:
-    case = BY_NAME[name]
-    if name not in REFUSED_ONE_SIDED:
-        return assembled(case)
-    call = split(case.function, case.args)
-    analysis = {k: v for k, v in call.analysis.items() if k != "alternative"}
-    data, args, digits = no_level_cases.histo._prepare(
-        read_dataset(case), *call.args, **analysis
-    )
-    parts = no_level_cases.histostats_parts(case, data, args)
-    return no_level_cases.histo._assemble(data, args, parts, digits=digits)
+    """``ip.analyze.histostats`` on the fixture's call, or on its replay where
+    inferplot refuses the call (a one-sided alternative with type robust or
+    bayes, which ggstatsplot ignores; ``tests/no_level_cases.REFUSALS``)."""
+    result = analyzed(name)
+    assert result is not None, name
+    return result
 
 
 @functools.cache
@@ -113,9 +91,11 @@ def bars(fig: StatsFigure) -> list[Rectangle]:
 
 
 def tooth(**kwargs: Any) -> StatsResult:
-    return result_of("gghistostats-ToothGrowth-parametric") if not kwargs else (
-        hist_result(_tooth_frame(), "len", **kwargs)
-    )  # fmt: skip
+    """ToothGrowth's len against 18, or ``ip.analyze.histostats`` with
+    ``kwargs``."""
+    if not kwargs:
+        return result_of("gghistostats-ToothGrowth-parametric")
+    return ip.analyze.histostats(_tooth_frame(), "len", **{"test_value": 18, **kwargs})
 
 
 @functools.cache
@@ -565,26 +545,25 @@ def test_checks_of_other_figures_do_not_apply() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_three_forms_agree(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+@pytest.mark.parametrize(
+    "type_name", ["parametric", "nonparametric", "robust", "bayes"]
+)
+def test_three_forms_agree(type_name: str, tmp_path: Any) -> None:
     """``ip.histostats`` draws what ``ip.render.histostats`` draws from the result
-    ``ip.analyze.histostats`` returns (here a stand-in until every type is
-    computed: the wiring is what is tested)."""
+    of ``ip.analyze.histostats``, byte for byte."""
     frame = _tooth_frame()
-    result = hist_result(frame, "len", test_value=18)
-
-    def analysis(data: Any, x: str, **kwargs: Any) -> StatsResult:
-        assert data is frame
-        assert x == "len"
-        assert kwargs["test_value"] == 18
-        return result
-
-    monkeypatch.setattr(ip.analyze, "histostats", analysis)
-    top = ip.histostats(frame, "len", test_value=18, binwidth=3, title="t")
+    top = ip.histostats(
+        frame, "len", type=type_name, test_value=18, binwidth=3, title="t"
+    )
+    result = ip.analyze.histostats(frame, "len", type=type_name, test_value=18)
     drawn = ip.render.histostats(result, binwidth=3, title="t")
-    top.save(tmp_path / "a.png")
-    drawn.save(tmp_path / "b.png")
-    assert (tmp_path / "a.png").read_bytes() == (tmp_path / "b.png").read_bytes()
     assert top.result == drawn.result
+    for suffix in ("png", "svg"):
+        top.save(tmp_path / f"a.{suffix}")
+        drawn.save(tmp_path / f"b.{suffix}")
+        assert (tmp_path / f"a.{suffix}").read_bytes() == (
+            tmp_path / f"b.{suffix}"
+        ).read_bytes()
 
 
 def test_saved_files(tmp_path: Any) -> None:

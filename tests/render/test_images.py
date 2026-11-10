@@ -25,10 +25,6 @@ from scipy.stats import norm
 import inferplot as ip
 from inferplot.render import StatsFigure
 from inferplot.render.betweenstats import MAX_POINTS, SUBSAMPLE_SIZE
-from inferplot.result import StatsResult
-from tests.no_level_cases import assembled
-from tests.oracle_fixtures import cases_for
-from tests.render._no_levels import scatter_result
 
 DATASETS = Path(__file__).resolve().parents[2] / "oracle" / "datasets"
 FIGURE_CODES = frozenset({"label_overlap", "text_clipped"})
@@ -193,30 +189,16 @@ def test_within_drawn_into_a_given_axes() -> Figure:
     return _clean(fig)
 
 
-# histostats and scatterstats (Phase 4). Drawn from results assembled from the
-# fixtures' numbers (tests/no_level_cases.py) or stand-in results
-# (tests/render/_no_levels.py) until their analyses compute every type; their
-# subtitles and captions arrive with the texts of Phase 4, so these baselines are
-# generated after that (mpl_generate=true) and looked at by the lead.
-
-
-def _histostats_case(name: str) -> StatsResult:
-    (case,) = [c for c in cases_for("gghistostats") if c.name == f"gghistostats-{name}"]
-    return assembled(case)
-
-
-def _scatterstats_case(name: str) -> StatsResult:
-    (case,) = [
-        c for c in cases_for("ggscatterstats") if c.name == f"ggscatterstats-{name}"
-    ]
-    return assembled(case)
+# histostats and scatterstats (Phase 4). Their subtitles and captions arrive with
+# the texts of Phase 4, so these baselines are generated after that
+# (mpl_generate=true) and looked at by the lead.
 
 
 @image
 def test_histostats_against_a_test_value() -> Figure:
     """Tooth length against 18: bars, percent axis, the dashed mean line and the
     test value line, their labels above the bars pointing away from each other."""
-    fig = ip.render.histostats(_histostats_case("ToothGrowth-parametric"))
+    fig = ip.histostats(_read("ToothGrowth"), "len", test_value=18)
     return _clean(fig)
 
 
@@ -224,7 +206,7 @@ def test_histostats_against_a_test_value() -> Figure:
 def test_histostats_test_value_beyond_the_bars() -> Figure:
     """Tooth length against 100 (robust): the trimmed mean line, and an arrow at
     the right edge naming the test value instead of a stretched view."""
-    fig = ip.render.histostats(_histostats_case("ToothGrowth-tv100-robust"))
+    fig = ip.histostats(_read("ToothGrowth"), "len", type="robust", test_value=100)
     return _clean(fig)
 
 
@@ -232,7 +214,7 @@ def test_histostats_test_value_beyond_the_bars() -> Figure:
 def test_scatterstats_with_marginals() -> Figure:
     """mtcars mpg by weight: points, least-squares line with its 95% band, and the
     marginal histograms aligned with the plot."""
-    fig = ip.render.scatterstats(_scatterstats_case("mtcars-parametric"))
+    fig = ip.scatterstats(_read("mtcars"), "wt", "mpg")
     assert set(fig.axes) == {"main", "xside", "yside"}
     return _clean(fig)
 
@@ -241,7 +223,7 @@ def test_scatterstats_with_marginals() -> Figure:
 def test_scatterstats_point_labels() -> Figure:
     """Every car labelled: labels clear of each other, joined to their point by a
     line where moved away."""
-    fig = ip.render.scatterstats(_scatterstats_case("mtcars-labels-parametric"))
+    fig = ip.scatterstats(_read("mtcars"), "wt", "mpg", label_var="model")
     assert not [i for i in fig.check() if i.code == "point_labels_crowded"]
     return _clean(fig)
 
@@ -258,20 +240,25 @@ def _many_pairs() -> pd.DataFrame:
 def test_scatterstats_subsampled_points() -> Figure:
     """6,000 pairs: a seeded subsample of 2,000 points over a density layer of
     all pairs; the marginal histograms show all values."""
-    fig = ip.render.scatterstats(scatter_result(_many_pairs(), "x", "y"))
+    fig = ip.scatterstats(_many_pairs(), "x", "y")
     assert fig.subsample is not None
     return _clean(fig)
 
 
 @image
 def test_histostats_and_scatterstats_in_a_grid() -> Figure:
-    """Both drawn with ax= into a 1 x 2 grid of the user's figure."""
+    """Both drawn with ax= into a 1 x 2 grid of the user's figure; the scatter
+    labels the cars of ggstatsplot's label.expression mpg > 25 | wt > 5."""
+    cars = _read("mtcars")
+    selected = cars.assign(
+        model=cars["model"].where((cars["mpg"] > 25) | (cars["wt"] > 5))
+    )
     figure = Figure(figsize=(12.0, 5.0), dpi=100)
     FigureCanvasAgg(figure)
     left, right = figure.subplots(1, 2, gridspec_kw={"wspace": 0.45})
-    ip.render.histostats(_histostats_case("mtcars-robust"), ax=left)
-    fig = ip.render.scatterstats(
-        _scatterstats_case("mtcars-labelexpr-parametric"), ax=right, marginal=False
+    ip.histostats(cars, "mpg", type="robust", ax=left)
+    fig = ip.scatterstats(
+        selected, "wt", "mpg", label_var="model", ax=right, marginal=False
     )
     assert figure.get_size_inches().tolist() == [12.0, 5.0]
     return _clean(fig)

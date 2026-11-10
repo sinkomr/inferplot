@@ -1,13 +1,13 @@
-"""histostats and scatterstats results for the rendering tests, from any frame.
+"""histostats and scatterstats results with stand-in numbers, from any frame.
 
-The analyses of these functions may not compute every type yet, so these results
+For data the analyses refuse (a constant column, values too large to draw) and
+for the random layout tests, which need many shapes of data quickly, the results
 are assembled with the analysis' own ``_prepare`` (every argument checked, the
 data read) and ``_assemble``, from stand-in parts: the test, effect size and Bayes
 factor carry placeholder numbers, and the centrality value is the type's
 centrality of the values (mean, median, 20% trimmed mean; the median standing in
 for the MAP). The renderer draws every number from the result, so the figures
-have the shape the real analyses give; ``tests/no_level_cases.py`` builds the
-fixtures' results the same way from their recorded numbers.
+have the shape the real analyses give.
 """
 
 from __future__ import annotations
