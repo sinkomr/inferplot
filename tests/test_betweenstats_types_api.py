@@ -393,6 +393,24 @@ def test_statistics_messages_keep_words_that_contain_sample_b() -> None:
         "sample b has one resample beyond the bound", ["a\\1", "b\\g<0>"], "g"
     )
     assert out == ("The group 'b\\\\g<0>' of x='g' has one resample beyond the bound")
+    # A level name that is put in is not read again as a group or a sample.
+    out = _named_groups("group 1 differs from sample b", ["sample b", "group 1"], "g")
+    assert out == (
+        "The group 'sample b' of x='g' differs from the group 'group 1' of x='g'"
+    )
+
+
+def test_bayes_pair_errors_with_levels_named_like_group_numbers() -> None:
+    # The pair's message already names its levels; it is not renamed a second
+    # time, which read "group 7" as the seventh of three groups (IndexError).
+    a, b, c = [1e160] * 4, [1.0, 2, 3, 4], [2.0, 3, 4, 6]
+    data = frame({"group 7": a, "group 8": b, "group 9": c})
+    with pytest.raises(ValueError, match="cannot be computed") as info:
+        betweenstats(data, "g", "y", type="bayes", results_subtitle=False)
+    assert str(info.value).startswith(
+        "The Bayes factor of 'group 7' against 'group 8' cannot be computed: the "
+        "group 'group 7' of x='g' is constant and the group 'group 8' of x='g' varies"
+    )
 
 
 def test_robust_seed_and_order(plants: pd.DataFrame) -> None:

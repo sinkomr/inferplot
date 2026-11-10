@@ -309,8 +309,9 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
   is told to convert to a categorical, which fails too; a positional subject column
   gets a `pairwise_display` example; a Series passed as x is printed whole; swapped x
   and y; duplicate column names raise narwhals' own error.
-- [ ] U10: `type="bayes"` with levels named like "group 7" and a pair that cannot be
-  computed raises a bare IndexError (the inner message is renamed twice).
+- [x] U10: `type="bayes"` with levels named like "group 7" and a pair that cannot be
+  computed raised a bare IndexError (the inner message was renamed twice). Fixed: a
+  pair's message is renamed once, in one pass.
 - [ ] U11: `pairs_hidden` fires for an explicit `pairwise_display="none"`; the copy
   embedded in a saved figure loses the `heavy_ties` check.
 - [ ] U12: minor: `digits` has no upper limit; NumPy float32 arguments print as

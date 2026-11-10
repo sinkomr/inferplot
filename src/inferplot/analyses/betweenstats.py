@@ -786,7 +786,7 @@ _STOLINE_URY_1979: Final = (
     "maximum modulus critical values)."
 )
 
-_GROUP_NUMBER = re.compile(r"\bgroups? (\d+)(?: and (\d+))?")
+_GROUP_NUMBER = re.compile(r"\bgroups? (\d+)(?: and (\d+))?|\bsample ([ab])\b")
 
 
 def _percent(tr: float) -> str:
@@ -799,19 +799,19 @@ def _named_groups(message: str, levels: Sequence[str], x: str) -> str:
     replaced by the level names of ``x``."""
 
     def name(match: re.Match[str]) -> str:
+        if match.group(3) is not None:  # "sample a" or "sample b": two groups
+            if len(levels) != 2:
+                return match.group(0)
+            return f"the group {levels['ab'.index(match.group(3))]!r} of x={x!r}"
         first = levels[int(match.group(1)) - 1]
         if match.group(2) is None:
             return f"the group {first!r} of x={x!r}"
         second = levels[int(match.group(2)) - 1]
         return f"the groups {first!r} and {second!r} of x={x!r}"
 
+    # One pass, so a level name put in is never read again as a group number or
+    # as "sample b"; whole words only ("resample beyond" holds "sample b").
     out = _GROUP_NUMBER.sub(name, message)
-    if len(levels) == 2:
-        for letter, level in zip("ab", levels, strict=True):
-            named = f"the group {level!r} of x={x!r}"
-            # A whole word only ("resample beyond" holds "sample b"); a function
-            # as the replacement, so a backslash in a level name stays as it is.
-            out = re.sub(rf"\bsample {letter}\b", lambda _, text=named: text, out)
     if f"x={x!r}" not in out:
         stem = out.removesuffix(".")
         out = f"{stem} (the groups of x={x!r})" + out[len(stem) :]
@@ -1210,9 +1210,12 @@ def _bayes(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> 
         else:
             pairwise = _bayes_pairs(levels, values, args)
     except ValueError as error:
+        # A pair's message already names its levels; renaming it again would read
+        # a level called "group 7" as the seventh group.
+        named = isinstance(error, _NamedPairError)
         raise ValueError(
             _with_advice(
-                _named_groups(str(error), levels, x),
+                str(error) if named else _named_groups(str(error), levels, x),
                 _CHECK_DATA,
                 given="Check the data for entry or unit errors",
             )
@@ -1227,6 +1230,10 @@ def _bayes(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) -> 
         warnings=tuple(warnings),
         citations=tuple(citations),
     )
+
+
+class _NamedPairError(ValueError):
+    """A pair's error whose message already names the pair's levels."""
 
 
 def _bayes_pairs(
@@ -1249,7 +1256,7 @@ def _bayes_pairs(
             except ValueError as error:
                 # "sample a" and "sample b" are this pair's levels.
                 detail = _named_groups(str(error), (levels[i], levels[j]), args.x)
-                raise ValueError(
+                raise _NamedPairError(
                     f"The Bayes factor of {levels[i]!r} against {levels[j]!r} cannot "
                     f"be computed: {detail[0].lower()}{detail[1:]}"
                 ) from None
