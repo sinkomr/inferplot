@@ -880,6 +880,24 @@ def test_real_numbers_become_plain_floats(value: object) -> None:
         assert type(out) is float
 
 
+@pytest.mark.parametrize("kind", [np.float32, np.float16])
+@pytest.mark.parametrize("value", [0.9, 0.1, 0.01, 0.2, 0.707, 0.95, 0.3])
+def test_narrow_floats_are_read_as_they_print(kind: type, value: float) -> None:
+    # np.float32(0.9) is 0.89999997615814208984375; it prints as 0.9, which is
+    # what was meant, so it is read through its shortest repr (STATUS U12).
+    narrow = kind(value)
+    assert float(narrow) != value  # the binary value differs
+    for check in (
+        v.check_conf_level,
+        lambda x: v.check_probability(x, "pairwise_alpha"),
+        lambda x: v.check_positive(x, "bf_prior"),
+        v.check_tr if value < 0.5 else v.check_conf_level,
+    ):
+        out = check(narrow)
+        assert out == value
+        assert type(out) is float
+
+
 @pytest.mark.parametrize(
     "check",
     [
@@ -1003,6 +1021,13 @@ def test_digits_rejected() -> None:
         "digits is a number of decimal places and must be >= 0, for example "
         "digits=2; got -1."
     )
+    for big in (16, 100, 10**6):
+        text = message(ValueError, lambda big=big: v.check_digits(big))
+        assert text == (
+            "digits is a number of decimal places and must be at most 15, the most "
+            "a double-precision number holds meaningfully, for example digits=2; "
+            f"got {big}."
+        )
     with pytest.raises(TypeError) as info:
         v.check_digits(2.0)
     assert str(info.value) == (

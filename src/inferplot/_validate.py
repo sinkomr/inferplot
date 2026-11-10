@@ -265,6 +265,10 @@ def _real(value: object, name: str, example: str) -> float:
             f"{name} must be a number, for example {name}={example}; "
             f"got {_show(value)}."
         )
+    if isinstance(value, np.floating) and value.dtype.itemsize < 8:
+        # A float32 or float16 0.9 is 0.8999999761581421 as a double; read it as
+        # the number it prints as (its shortest repr), which is what was meant.
+        return float(str(value))
     return float(value)
 
 
@@ -1057,13 +1061,23 @@ def check_tr(value: object, name: str = "tr") -> float:
     return number
 
 
+# A double holds about 15 significant decimal digits; more decimals print noise.
+_MAX_DIGITS: Final = 15
+
+
 def check_digits(value: object, name: str = "digits") -> int:
-    """A whole number of decimal places, >= 0 (bool rejected)."""
+    """A whole number of decimal places, 0 to 15 (bool rejected)."""
     number = _integer(value, name, "2")
     if number < 0:
         raise ValueError(
             f"{name} is a number of decimal places and must be >= 0, for example "
             f"{name}=2; got {number}."
+        )
+    if number > _MAX_DIGITS:
+        raise ValueError(
+            f"{name} is a number of decimal places and must be at most "
+            f"{_MAX_DIGITS}, the most a double-precision number holds meaningfully, "
+            f"for example {name}=2; got {number}."
         )
     return number
 

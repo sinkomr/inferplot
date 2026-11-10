@@ -728,6 +728,38 @@ def test_settings_record_canonical_values(plants: pd.DataFrame) -> None:
     assert "CI_90%" in result.text.subtitle
 
 
+def test_float32_arguments_read_as_they_print(teeth: pd.DataFrame) -> None:
+    # A float32 0.9 is 0.8999999761581421 as a double; it is read as the 0.9 it
+    # prints as, so the settings, warnings and texts show 0.9 (STATUS U12).
+    result = betweenstats(
+        teeth,
+        "supp",
+        "len",
+        conf_level=np.float32(0.9),
+        pairwise_alpha=np.float32(0.01),
+        bf_prior=np.float32(0.5),
+        bf_message=False,
+    )
+    settings = result.settings
+    assert (settings.conf_level, settings.pairwise_alpha, settings.bf_prior) == (
+        0.9,
+        0.01,
+        0.5,
+    )
+    assert result.effect_size is not None
+    assert result.effect_size.conf_level == 0.9
+    assert result.text.subtitle is not None
+    assert "CI_90%" in result.text.subtitle
+    assert any("pairwise_alpha=0.01" in w for w in result.warnings)
+    assert any("bf_prior=0.5" in w for w in result.warnings)
+    dumped = result.to_json()
+    assert "0.8999999" not in dumped
+    assert "0.0099999" not in dumped
+    robust = betweenstats(teeth, "supp", "len", type="robust", tr=np.float32(0.1))
+    assert robust.settings.tr == 0.1
+    assert "0.1000000" not in robust.to_json()
+
+
 def test_result_fields(anova: StatsResult) -> None:
     assert (anova.analysis, anova.design, anova.type) == (
         "betweenstats",
