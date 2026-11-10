@@ -369,7 +369,7 @@ def test_infinite_bootstrap_resamples_are_reported() -> None:
         "169 of 2,000 bootstrap resamples give an infinite bootstrap t, because "
         "every winsorized value of the resample is the same number (a standard "
         "error of 0). They are kept, as in WRS2, so the trimmed mean's interval "
-        "[-Inf, Inf] can be unbounded. Collect more values, or use "
+        "is unbounded: [-Inf, Inf]. Collect more values, or use "
         "type='nonparametric'.",
     )
     (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]

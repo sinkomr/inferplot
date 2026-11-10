@@ -982,7 +982,7 @@ def test_provisional_sentences_name_direction_and_bayes(
     )
     pair = _rebuilt(correlation, test=None, effect_size=None, bayes=bayes)
     assert pair.apa == (
-        "Bayesian Pearson correlation (stretched beta prior, r = 0.707): BF10 = "
+        "Bayesian Pearson correlation (stretched beta prior, r = 0.71): BF10 = "
         "3.00, log(BF01) = -1.10, n = 32 pairs."
     )
     none = _rebuilt(correlation, test=None, effect_size=None, bayes=None)

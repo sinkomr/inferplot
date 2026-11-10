@@ -27,6 +27,7 @@ too few values after trimming, every value equal to ``test_value``) raise a plai
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, TypeVar
@@ -147,7 +148,7 @@ def _no_spread_text(data: OneData) -> str:
         return f"every value of x={data.x!r} is {r_number_text(low)}"
     return (
         f"the values of x={data.x!r} differ only by the rounding of double "
-        f"precision (from {low!r} to {high!r}), so as written they are one number"
+        f"precision (from {low!r} to {high!r}): as written they are one number"
     )
 
 
@@ -521,12 +522,18 @@ def _resample_warnings(
         )
     if boot.infinite_resamples:
         infinite = boot.infinite_resamples
+        low, high = effect_size.conf_low, effect_size.conf_high
+        interval = f"[{format_value(low)}, {format_value(high)}]"
+        kept = (
+            f"so the trimmed mean's interval is unbounded: {interval}"
+            if math.isinf(low) or math.isinf(high)
+            else f"so the trimmed mean's interval {interval} would be unbounded at a "
+            "conf_level high enough to reach them"
+        )
         out.append(
             f"{infinite:,} of {total:,} bootstrap resamples give an infinite bootstrap "
             "t, because every winsorized value of the resample is the same number "
-            "(a standard error of 0). They are kept, as in WRS2, so the trimmed "
-            f"mean's interval [{format_value(effect_size.conf_low)}, "
-            f"{format_value(effect_size.conf_high)}] can be unbounded"
+            f"(a standard error of 0). They are kept, as in WRS2, {kept}"
             + (
                 ". Collect more values, or use type='nonparametric'."
                 if nonparametric

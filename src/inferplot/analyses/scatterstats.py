@@ -171,7 +171,7 @@ def _no_spread(name: str, column: str, values: FloatArray) -> str | None:
         return f"every value of {name}={column!r} is {r_number_text(low)}"
     return (
         f"the values of {name}={column!r} differ only by the rounding of double "
-        f"precision (from {low!r} to {high!r}), so as written they are one number"
+        f"precision (from {low!r} to {high!r}): as written they are one number"
     )
 
 
@@ -250,13 +250,12 @@ def _collinear_warning(
     data: PairData, args: _Args, estimate: float, bayes: BayesFactor | None
 ) -> str:
     """|r| = 1 exactly (D85): t is infinite, p is 0, the interval is [r, r] and
-    the Bayes factor is its limit; ggstatsplot prints R's rounding noise there and
-    an empty Bayes factor (edge_corr_perfect)."""
+    the Bayes factor is its limit; ggstatsplot prints R's rounding noise for t, S
+    and p there and an empty Bayes factor (edge_corr_perfect)."""
     bound = "1" if estimate > 0 else "-1"
     linear = (
         f"the columns x={data.x!r} and y={data.y!r} are exactly linearly related "
-        "(every pair "
-        "lies on one straight line), so Pearson's r"
+        "(every pair lies on one straight line), so Pearson's r"
     )
     what = {
         "parametric": linear,
@@ -278,15 +277,26 @@ def _collinear_warning(
             "the t approximation, not an exact probability), and its confidence "
             f"interval has no width: [{bound}, {bound}]."
         )
+        example = (
+            "S = 3.7e-14 and p = 1.1e-62 for y = 2x + 1"
+            if args.type == "nonparametric"
+            else "t = 134217728 and p = 1.1e-62 for y = 2x + 1"
+        )
+        out.append(
+            "ggstatsplot prints the rounding of R's arithmetic for these numbers "
+            f"({example})."
+        )
     if bayes is not None:
         size = "infinite" if math.isinf(bayes.bf10) else format_value(bayes.bf10)
         out.append(
-            f"The Bayes factor is its limit as r approaches {bound} (BF10 {size})."
+            f"The Bayes factor is its limit as r approaches {bound} (BF10 {size}), "
+            "where ggstatsplot leaves it empty."
         )
     out.append(
-        "ggstatsplot prints R's rounding noise for these numbers (a t near 1e8 and a "
-        "p near 1e-62, or an infinite t) and leaves the Bayes factor empty. Check "
-        "that neither column is computed from the other."
+        "A rank correlation needs no straight line for this: y only has to rise or "
+        "fall with x."
+        if args.type == "nonparametric"
+        else "Check that neither column is computed from the other."
     )
     return " ".join(out)
 

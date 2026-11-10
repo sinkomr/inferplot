@@ -227,7 +227,16 @@ def test_exactly_collinear_data(name: str) -> None:
     sign = -1.0 if "-neg-" in name else 1.0
     (warning,) = [w for w in result.warnings if "is exactly" in w]
     assert f"is exactly {'-1' if sign < 0 else '1'}." in warning
-    assert "Check that neither column is computed from the other." in warning
+    assert warning.endswith(
+        "A rank correlation needs no straight line for this: y only has to rise or "
+        "fall with x."
+        if case.type == "nonparametric"
+        else "Check that neither column is computed from the other."
+    )
+    if case.type != "bayes":
+        assert "ggstatsplot prints the rounding of R's arithmetic" in warning
+    if case.type in ("parametric", "bayes"):
+        assert "where ggstatsplot leaves it empty" in warning
     if case.type == "bayes":
         assert result.test is None
         assert "BF10 infinite" in warning
