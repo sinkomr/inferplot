@@ -11,8 +11,8 @@ values at the default, inside and far beyond the data on both sides, must stay
 within these bounds, and ``fig.check()`` must report ``figure_oversized`` when
 a figure does not (here forced by resizing it).
 
-Constant columns are left out: ggstatsplot's bin width for them is being
-settled with a new oracle case (they raise for now).
+Constant columns (one bar 0.1 wide, as ggstatsplot draws them) are drawn at the
+same locations, against the default, equal and far test values.
 
 The bounds hold with room for other systems' fonts: the largest measured over
 300 data sets (macOS, matplotlib 3.10) were 6.5 x 4.7 in (histostats) and 7.6 x
@@ -113,6 +113,29 @@ def test_histogram_size_many(case: Any) -> None:
 @pytest.mark.parametrize("case", SLOW[::2], ids=str)
 def test_scatter_size_many(case: Any) -> None:
     assert_size(_scatter(case), "scatter", case)
+
+
+CONSTANT: Final = list(
+    itertools.product(LOCATIONS, (2, 20), ("parametric", "nonparametric"), TEST_VALUES)
+)
+
+
+@pytest.mark.parametrize("case", CONSTANT[::7], ids=str)
+def test_constant_column_size(case: Any) -> None:
+    location, n, type_name, where = case
+    kwargs: dict[str, Any] = {"type": type_name}
+    if where != "default":
+        assert isinstance(where, float)
+        kwargs["test_value"] = location + where if where else location
+    frame = pd.DataFrame({"x": np.full(n, location)})
+    fig = ip.render.histostats(hist_result(frame, "x", **kwargs))
+    assert_size(fig, "hist", case)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("case", CONSTANT, ids=str)
+def test_constant_column_size_many(case: Any) -> None:
+    test_constant_column_size(case)
 
 
 @pytest.mark.parametrize(
