@@ -35,6 +35,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import numpy as np
+from matplotlib import cbook
 from matplotlib.artist import ArtistInspector
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -207,9 +208,11 @@ def draw(
     """Resolve the palette, check the artist dicts and user texts, then draw."""
     colors, palette_warning = theme.resolve_palette(palette, len(result.levels))
     with theme.context():
-        _check_artist_args(options)
+        invisible = _check_artist_args(options)
         _check_mathtext(options)
-        return drawing(result, options, colors, palette_warning, ax).run()
+        made = drawing(result, options, colors, palette_warning, ax)
+        made.warnings.extend(invisible)
+        return made.run()
 
 
 def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
@@ -299,8 +302,11 @@ def _scratch(layer: str) -> tuple[Figure, Artist]:
     it; nothing of it reaches the user."""
     figure = Figure(figsize=(2.0, 2.0), dpi=100)
     FigureCanvasAgg(figure)
+    figure.patch.set_visible(False)  # so that only the artist leaves pixels
     ax = figure.add_axes((0.1, 0.1, 0.8, 0.8))
-    ax.set_axis_off()  # no texts, so writing it embeds no fonts
+    ax.set_axis_off()  # no texts, so writing it embeds no fonts; no background
+    ax.set_xlim(-0.5, 0.5)  # the whole artist in view
+    ax.set_ylim(-0.5, 4.5)
     values = np.array(_SCRATCH_VALUES)
     color: theme.Color = (0.0, 0.0, 0.0, 1.0)
     if layer == "points":
@@ -330,8 +336,9 @@ def _draw_error(figure: Figure) -> Exception | None:
     return None
 
 
-def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> None:
-    """Apply ``args`` to a scratch artist of ``layer`` and draw it.
+def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> bool:
+    """Apply ``args`` to a scratch artist of ``layer`` and draw it; whether the
+    artist is then invisible (it leaves no pixel).
 
     ``Artist.set`` stores some values without checking them (a line width of
     "bad" for points); matplotlib rejects them only when drawing, which with ``ax=``
@@ -341,7 +348,10 @@ def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> None:
     apply_args(artist, args, name)
     error = _draw_error(figure)
     if error is None:
-        return
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            figure.canvas.draw()
+        return _invisible(figure)
     culprits: list[str] = []
     for key, value in args.items():
         alone, single = _scratch(layer)
@@ -362,9 +372,104 @@ def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> None:
     ) from error
 
 
-def _check_artist_args(options: Options) -> None:
-    """Each non-empty artist dict styles a layer that is drawn, and an artist of
-    that layer styled with it draws; checked before anything is drawn."""
+# Properties an artist dict may not set (SPEC.md section 2), with why: they carry
+# or move the data, or detach the artist from the figure. Found by going through
+# the setters of the points' PathCollection, the box's PathPatch and the violin's
+# Polygon; names that are not properties of these artists (``data``, ``xdata``,
+# ``verts``, ...) are listed too, so they get this message rather than a
+# suggestion of a similar property.
+_DATA: Final = (
+    "would replace the {layer}'s positions or shape, which inferplot draws from "
+    "the result's values"
+)
+_MOVED: Final = (
+    "would draw the {layer} in other coordinates than the axes' data "
+    "coordinates, so it would no longer line up with the axis, the other layers "
+    "and the brackets"
+)
+_DETACHED: Final = "would detach the {layer} from the Axes inferplot draws into"
+_CLIPPED: Final = (
+    "would clip the {layer} to another region than the Axes, hiding values"
+)
+_REFUSED: Final[Mapping[str, str]] = {
+    "offsets": _DATA,
+    "paths": _DATA,
+    "path": _DATA,
+    "xy": _DATA,
+    "verts": _DATA,
+    "segments": _DATA,
+    "data": _DATA,
+    "xdata": _DATA,
+    "ydata": _DATA,
+    "transform": _MOVED,
+    "offset_transform": _MOVED,
+    "figure": _DETACHED,
+    "axes": _DETACHED,
+    "clip_path": _CLIPPED,
+    "clip_box": _CLIPPED,
+    "animated": (
+        "would leave the {layer} out of every ordinary drawing and saved file "
+        "(matplotlib draws animated artists only for blitting)"
+    ),
+}
+
+
+def _refuse_moving_args(name: str, layer: str, args: Mapping[str, object]) -> None:
+    """Refuse a property that carries or moves the data or detaches the artist.
+
+    Aliases are read as the property they stand for.
+    """
+    figure, artist = _scratch(layer)
+    del figure
+    for key in args:
+        prop = key
+        if key not in _REFUSED:
+            try:
+                (prop,) = cbook.normalize_kwargs({key: None}, artist)
+            except TypeError:
+                continue  # a property of two names at once; Artist.set reports it
+        why = _REFUSED.get(prop)
+        if why is not None:
+            raise ValueError(
+                f"{name} sets {key!r}, which {why.format(layer=_LAYER_NOUN[layer])}. "
+                f"Remove {key!r} from {name}"
+                + (
+                    "; to draw other values, change the data before the analysis."
+                    if why is _DATA
+                    else "."
+                )
+            )
+
+
+_LAYER_NOUN: Final = {"points": "points", "box": "boxes", "violin": "violins"}
+
+
+def _invisible(figure: Figure) -> bool:
+    """Whether a scratch figure (transparent but for its one artist) drew nothing:
+    every pixel of the Agg buffer is fully transparent."""
+    canvas = cast("FigureCanvasAgg", figure.canvas)
+    alpha = np.asarray(canvas.buffer_rgba())[..., 3]
+    return not bool(alpha.any())
+
+
+def _invisible_warning(name: str, layer: str, args: Mapping[str, object]) -> str:
+    noun = _LAYER_NOUN[layer]
+    shown = ", ".join(f"{key}={v.describe_value(value)}" for key, value in args.items())
+    return (
+        f"{name}={{{shown}}} makes the {noun} invisible: nothing of them is drawn, "
+        f"although layers= asks for them. To leave the {noun} out, remove "
+        f"{layer!r} from layers= instead; otherwise choose a visible style."
+    )
+
+
+def _check_artist_args(options: Options) -> list[str]:
+    """Each non-empty artist dict styles a layer that is drawn, sets no property
+    that moves or replaces the data, and an artist of that layer styled with it
+    draws; checked before anything is drawn.
+
+    Returns a warning for each dict that leaves its layer invisible (D39).
+    """
+    found: list[str] = []
     for name, layer in _ARTIST_LAYERS:
         args: dict[str, object] = getattr(options, name)
         if not args:
@@ -378,7 +483,10 @@ def _check_artist_args(options: Options) -> None:
                 f"does not draw. To style it, add {layer!r} to layers, for example "
                 f"layers={with_layer!r}; otherwise remove {name}=."
             )
-        _check_drawn(name, layer, args)
+        _refuse_moving_args(name, layer, args)
+        if _check_drawn(name, layer, args):
+            found.append(_invisible_warning(name, layer, args))
+    return found
 
 
 _USER_TEXTS: Final = ("title", "subtitle", "caption", "xlab", "ylab")

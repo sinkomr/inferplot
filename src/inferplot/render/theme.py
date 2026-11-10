@@ -164,7 +164,9 @@ def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
                 f"palette has {len(items)} colors but the plot has {k} levels; pass "
                 f"at least {k} colors, or a colormap name such as 'viridis'."
             )
-        return [_rgba(c, f"index {i}") for i, c in enumerate(items[:k])], None
+        # Every entry is checked, also those beyond the k used.
+        colors = [_rgba(c, f"index {i}") for i, c in enumerate(items)]
+        return colors[:k], None
     raise TypeError(
         "palette must be None, a matplotlib colormap name or a list of colors; got "
         f"{type(palette).__name__}."
