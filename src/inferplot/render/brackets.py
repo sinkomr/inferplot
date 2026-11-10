@@ -42,6 +42,8 @@ DATA_PAD: Final = 0.05  # data range fraction of space below and above the data
 # height left after the subtitle and caption, whichever is less, before the bracket
 # levels are pushed closer together.
 MIN_DATA_SHARE: Final = 0.5
+# Data ranges laid out as they are; others are scaled by a power of two first.
+_UNSCALED: Final = (2.0**-60, 2.0**60)
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +146,10 @@ def _solve(height: Callable[[float], float], target: float) -> float | None:
         if hi > 1e300:
             return None
     for _ in range(200):
-        mid = math.sqrt(lo * hi) if lo > 0 else hi / 2
+        product = lo * hi
+        # The geometric mean; for scales near the ends of the double range the
+        # product underflows, so take the roots first there.
+        mid = math.sqrt(product) if product > 0 else math.sqrt(lo) * math.sqrt(hi)
         if height(mid) < target:
             lo = mid
         else:
@@ -190,6 +195,38 @@ def vertical_layout(
     levels at full spacing (panels sharing a y axis share one scale).
     """
     r = _data_range(data_min, data_max)
+    if not _UNSCALED[0] <= r <= _UNSCALED[1]:
+        # Far from 1 (y x 1e200, y x 1e-200), the search over pixels per data
+        # unit leaves the double range: lay out the data scaled by a power of two
+        # near 1 / r, which is exact, and scale the layout back.
+        scale = math.ldexp(1.0, -math.frexp(r)[1])
+        inner = vertical_layout(
+            data_min=data_min * scale,
+            data_max=data_max * scale,
+            centers=[c * scale for c in centers],
+            n_levels=n_levels,
+            center_half_px=center_half_px,
+            label_px=label_px,
+            pad_px=pad_px,
+            tip_px=tip_px,
+            line_px=line_px,
+            top_px=top_px,
+            bottom_px=bottom_px,
+            min_height_px=min_height_px,
+            data_height_px=data_height_px,
+            height_px=height_px,
+            ppu=None if ppu is None else ppu / scale,
+        )
+        return VerticalLayout(
+            bottom=inner.bottom / scale,
+            top=inner.top / scale,
+            ppu=inner.ppu * scale,
+            levels=tuple(y / scale for y in inner.levels),
+            tip=inner.tip / scale,
+            label_pad=inner.label_pad / scale,
+            step_px=inner.step_px,
+            data_px=inner.data_px,
+        )
     full_step = level_step_px(
         label_px=label_px, pad_px=pad_px, tip_px=tip_px, line_px=line_px
     )

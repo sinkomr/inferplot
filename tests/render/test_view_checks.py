@@ -66,3 +66,47 @@ def test_no_check_message_quotes_mathtext_source() -> None:
         assert "\\" not in issue.message, issue.message
     words = " ".join(i.message for i in issues)
     assert "centrality label of 'a'" in words  # the first render's, in plain words
+
+
+def _scaled(scale: float) -> StatsResult:
+    rng = np.random.default_rng(1)
+    groups = [rng.normal(m, 1, 20) * scale for m in (5, 6, 7.5)]
+    return frame_result(["a", "b", "c"], groups, pairwise_display="all")
+
+
+@pytest.mark.parametrize("scale", [1e200, 1e-200, 1e300, 1e-250])
+def test_any_scale_the_statistics_accept_draws(scale: float) -> None:
+    import warnings
+
+    result = _scaled(scale)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        fig = betweenstats(result)
+    reference = betweenstats(_scaled(1.0))
+    # The same picture: the limits scale with the values.
+    lo, hi = fig.axes["main"].get_ylim()
+    ref_lo, ref_hi = reference.axes["main"].get_ylim()
+    assert lo / scale == pytest.approx(ref_lo, rel=1e-9)
+    assert hi / scale == pytest.approx(ref_hi, rel=1e-9)
+    # (The figure may be taller: matplotlib writes the axis' power of ten above it.)
+    codes = [i.code for i in fig.check()]
+    assert codes == [i.code for i in reference.check()]
+
+
+@pytest.mark.parametrize(("scale", "words"), [(1e-300, "multiply y by 1e300")])
+def test_values_matplotlib_cannot_draw_raise_a_plain_error(
+    scale: float, words: str
+) -> None:
+    with pytest.raises(ValueError, match="too small for matplotlib to draw") as info:
+        betweenstats(_scaled(scale))
+    assert words in str(info.value)
+
+
+def test_a_flat_line_is_reported() -> None:
+    fig = betweenstats(_three())
+    assert _issue(fig, "flat_data") is None
+    fig.axes["main"].set_ylim(-1e6, 1e6)
+    message = _issue(fig, "flat_data")
+    assert message is not None
+    assert "flat line" in message
+    assert "ax.set_ylim(" in message

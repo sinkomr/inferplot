@@ -9,6 +9,8 @@ Measured on the drawn figure, after anything the user changed:
 * ``data_outside_view`` (warning): values, levels or brackets outside the axis
   limits, whoever changed them (``set_ylim``, or a later plot into an Axes that
   shares the y axis);
+* ``flat_data`` (warning): values that differ drawn within two pixels of height
+  (axis limits far wider than the data);
 * ``low_contrast`` (warning): a level's colour or a text that can hardly be told
   from what it is drawn on (WCAG 2.1 contrast ratio; thresholds below).
 """
@@ -92,6 +94,18 @@ def _interval(limits: tuple[float, float]) -> tuple[float, float]:
     return lo - slack, hi + slack
 
 
+def _restore(fig: StatsFigure) -> str:
+    """How to set back the limits inferplot set, in words."""
+    view = fig.view
+    if view is None:
+        return "restore the limits inferplot set"
+    return (
+        f"restore the limits inferplot set with ax.set_ylim({view.ylim[0]:.6g}, "
+        f"{view.ylim[1]:.6g}) and ax.set_xlim({view.xlim[0]:.6g}, "
+        f"{view.xlim[1]:.6g})"
+    )
+
+
 def _out_of_view(fig: StatsFigure) -> Issue | None:
     """Values, levels and brackets that lie outside the view."""
     ax = fig.axes["main"]
@@ -131,16 +145,7 @@ def _out_of_view(fig: StatsFigure) -> Issue | None:
         found.append(f"{brackets} bracket{'s' if brackets > 1 else ''}")
     if not found:
         return None
-    view = fig.view
-    restore = (
-        "Restore the limits inferplot set"
-        if view is None
-        else (
-            f"Restore the limits inferplot set with ax.set_ylim({view.ylim[0]:.6g}, "
-            f"{view.ylim[1]:.6g}) and ax.set_xlim({view.xlim[0]:.6g}, "
-            f"{view.xlim[1]:.6g})"
-        )
-    )
+    restore = _restore(fig)
     return Issue(
         code="data_outside_view",
         severity="warning",
@@ -152,7 +157,8 @@ def _out_of_view(fig: StatsFigure) -> Issue | None:
             "later plot into an Axes that shares this one's y axis."
         ),
         fix=(
-            f"{restore}, or for panels that share a y axis draw everything into "
+            f"{restore[0].upper()}{restore[1:]}, or for panels that share a y axis "
+            "draw everything into "
             "them before setting limits."
         ),
     )
@@ -213,10 +219,47 @@ def _low_contrast(
     )
 
 
+# The data drawn over fewer pixels than this (top to bottom) are a flat line.
+FLAT_PX: Final = 2.0
+
+
+def _flat(fig: StatsFigure) -> Issue | None:
+    """Values that differ but are drawn within FLAT_PX pixels of height."""
+    ax = fig.axes["main"]
+    values = [np.asarray(v, dtype=np.float64) for v in fig.result.values if len(v)]
+    if not values:
+        return None
+    lo = min(float(v.min()) for v in values)
+    hi = max(float(v.max()) for v in values)
+    if not hi > lo or ax.get_yscale() != "linear":
+        return None
+    ends = np.asarray(ax.transData.transform([(0.0, lo), (0.0, hi)]), dtype=np.float64)
+    height = abs(float(ends[1, 1] - ends[0, 1]))
+    if not np.isfinite(height) or height >= FLAT_PX:
+        return None
+    y_lo, y_hi = sorted(float(v) for v in ax.get_ylim())
+    return Issue(
+        code="flat_data",
+        severity="warning",
+        message=(
+            f"The values, from {lo:.6g} to {hi:.6g}, are drawn within "
+            f"{height:.2g} pixels of height, so the plot shows a flat line: the "
+            f"y axis spans {y_lo:.4g} to {y_hi:.4g}, far more than the values."
+        ),
+        fix=(
+            f"If the axis limits were changed after drawing: {_restore(fig)}. If "
+            "the values differ only "
+            "far beyond their leading digits (1e15 plus a little), subtract a "
+            "common offset from y before the analysis; the statistics do not "
+            "change."
+        ),
+    )
+
+
 def view_issues(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[Issue]:
     """The view checks, in order; call after drawing."""
     issues: list[Issue] = []
-    for check in (_axis_changed, _out_of_view):
+    for check in (_axis_changed, _out_of_view, _flat):
         issue = check(fig)
         if issue is not None:
             issues.append(issue)
