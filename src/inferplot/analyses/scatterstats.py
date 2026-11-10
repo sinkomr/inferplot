@@ -495,6 +495,9 @@ def _assemble(
         n_obs=data.n_obs,
         settings=settings,
         design="correlation",
+        values=(xs, ys),
+        point_labels=data.labels,
+        label_var=data.label_var,
     )
     warnings = no_effect_warnings(
         type_name=args.type,
