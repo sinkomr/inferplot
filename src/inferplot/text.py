@@ -2587,3 +2587,95 @@ def figure_texts(result: StatsResult) -> FigureTexts:
         ),
         pairwise_labels=tuple(to_mathtext(node) for node in ex.pairwise),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Provisional texts of barstats (design "contingency")
+# --------------------------------------------------------------------------- #
+#
+# PROVISIONAL. barstats gets its subtitle, caption, cell and bar labels, APA
+# sentence and alt text in a later step, which compares every text with
+# ggstatsplot's. Until then the result carries a plain APA-style sentence and an
+# alt text built from its own numbers (nothing about a figure), None for the
+# subtitle and the caption, and no labels.
+
+
+def _contingency_sentence(
+    *,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    n_obs: int,
+    paired: bool,
+) -> str:
+    """The provisional APA-style sentence of a barstats result: "<test label>:
+    chi2(2) = 8.74, p = .013, Cramer's V = .46, 95% CI [.00, .82], n = 32."
+    (n pairs when paired). Cramér's V, Pearson's C and Cohen's g drop the
+    leading zero (none can exceed 1); a one-sided interval says so."""
+    n = f"n = {format_n(n_obs)}{' pairs' if paired else ''}"
+    if test is None:
+        return f"No test was computed (results_subtitle=False), {n}."
+    parts = [_apa_test(test)]
+    if effect_size is not None:
+        estimate = _apa_number(effect_size.estimate, bounded=True)
+        low = _apa_number(effect_size.conf_low, bounded=True)
+        high = _apa_number(effect_size.conf_high, bounded=True)
+        level = format_conf_level(effect_size.conf_level)
+        sided = "" if effect_size.sidedness == "two-sided" else "one-sided "
+        parts.append(
+            f"{effect_size.label} = {estimate}, {level} {sided}CI [{low}, {high}]"
+        )
+    return f"{test.label}: {', '.join(parts)}, {n}."
+
+
+def contingency_texts(
+    *,
+    x: str,
+    y: str | None,
+    levels: Sequence[str],
+    y_levels: Sequence[str],
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    n_obs: int,
+    settings: Settings,
+) -> Texts:
+    """The texts of a barstats result (PROVISIONAL, see above): subtitle and
+    caption None, no labels, the APA sentence and an alt text from the result's
+    numbers: "Counts of the 3 levels of cyl within the 2 levels of am (n = 32).
+    <sentence>"; "Counts of the 3 levels of cyl (n = 32). <sentence>"; paired:
+    "Paired counts of before and after over 2 levels (n = 40 pairs). <sentence>".
+    Column names are shortened (40, 20, 12 characters) until the alt text fits
+    ``ALT_TEXT_MAX_CHARS``, else the description is left out; the sentence is
+    never cut."""
+    paired = bool(settings.paired)
+    sentence = _contingency_sentence(
+        test=test, effect_size=effect_size, n_obs=n_obs, paired=paired
+    )
+    alt = sentence
+    for limit in (40, 20, 12):
+        name = _short(x, limit)
+        if y is None:
+            head = (
+                f"Counts of the {len(levels)} levels of {name} (n = {format_n(n_obs)})."
+            )
+        elif paired:
+            head = (
+                f"Paired counts of {name} and {_short(y, limit)} over "
+                f"{len(levels)} levels (n = {format_n(n_obs)} pairs)."
+            )
+        else:
+            head = (
+                f"Counts of the {len(levels)} levels of {name} within the "
+                f"{len(y_levels)} levels of {_short(y, limit)} (n = {format_n(n_obs)})."
+            )
+        if len(f"{head} {sentence}") <= ALT_TEXT_MAX_CHARS:
+            alt = f"{head} {sentence}"
+            break
+    return Texts(
+        subtitle=None,
+        caption=None,
+        apa=sentence,
+        alt_text=alt,
+        centrality_labels=(),
+        tick_labels=(),
+        pairwise_labels=(),
+    )

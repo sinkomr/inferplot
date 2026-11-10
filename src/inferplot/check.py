@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Final, Literal
 if TYPE_CHECKING:
     from inferplot.result import StatsResult
 
-__all__ = ["HEAVY_TIES", "SMALL_N", "Issue", "Severity", "result_issues"]
+__all__ = [
+    "HEAVY_TIES",
+    "SMALL_EXPECTED",
+    "SMALL_N",
+    "Issue",
+    "Severity",
+    "expected_counts",
+    "result_issues",
+]
 
 Severity = Literal["warning", "info"]
 
@@ -42,6 +50,8 @@ class Issue:
 
 
 def _small_n(result: StatsResult) -> Issue | None:
+    if result.design == "contingency":
+        return None  # counts: small_expected judges the expected counts instead
     if result.design in ("one-sample", "correlation"):
         return _small_sample(result)
     small = [d for d in result.descriptives if d.n < SMALL_N]
@@ -114,7 +124,9 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
     parts: list[str] = []
     if result.n_dropped > 0:
         rows = "row was" if result.n_dropped == 1 else "rows were"
-        if result.y is None:  # one-sample: a single column
+        if result.design == "contingency":
+            columns = _either(result.x, result.y, result.counts_var)
+        elif result.y is None:  # one-sample: a single column
             columns = repr(result.x)
         elif result.subject_id is None:
             columns = f"{result.x!r} or {result.y!r}"
@@ -136,6 +148,10 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
     if result.subject_id is not None:
         out, unit = result.dropped_subjects, "subjects"
         total = result.n_obs + out
+    elif result.counts_var is not None:
+        # A table of counts: its rows are cells, not observations, and a row
+        # with a missing count stands for an unknown number of them.
+        out, unit, total = 0, "rows", 0
     else:
         out, unit = result.n_dropped, "rows"
         total = result.n_obs + out
@@ -190,8 +206,8 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
     without observations (``to_json(include_values=False)``) gives the same
     answer.
     """
-    if result.type != "nonparametric":
-        return None
+    if result.type != "nonparametric" or result.design == "contingency":
+        return None  # barstats ranks nothing: nonparametric is the chi-square test
     if result.design == "within":
         return _paired_heavy_ties(result)
     if result.design == "one-sample":
@@ -507,12 +523,138 @@ def _bound(x: float) -> str:
     return f"{x:.2f}"
 
 
+def _either(*names: str | None) -> str:
+    """``'a'``, ``'a' or 'b'``, ``'a', 'b' or 'c'`` of the names given."""
+    quoted = [repr(name) for name in names if name is not None]
+    if len(quoted) == 1:
+        return quoted[0]
+    return ", ".join(quoted[:-1]) + " or " + quoted[-1]
+
+
+# --------------------------------------------------------------------------- #
+# small_expected: the chi-square approximations of barstats (design contingency)
+# --------------------------------------------------------------------------- #
+
+# Cochran's (1954) rule for a chi-square approximation: no expected count below
+# MIN_EXPECTED, and at most SMALL_EXPECTED_SHARE of them below SMALL_EXPECTED.
+SMALL_EXPECTED: Final = 5.0
+MIN_EXPECTED: Final = 1.0
+SMALL_EXPECTED_SHARE: Final = 0.2
+
+
+def _shares(result: StatsResult) -> list[float]:
+    """The expected share of each level of x in a goodness-of-fit test:
+    ``settings.ratio``, else equal shares."""
+    k = len(result.levels)
+    ratio = result.settings.ratio
+    return list(ratio) if ratio is not None else [1.0 / k] * k
+
+
+def expected_counts(result: StatsResult) -> list[float]:
+    """The expected counts behind a barstats result's main test (design
+    "contingency"): one-way, n times each level's share (``settings.ratio``,
+    else equal; every level kept); two-way, row total times column total over
+    n for the rows and columns that hold observations (R's ``chisq.test`` drops
+    the others); paired, half the discordant pairs of each pair of levels that
+    has any ((n_ij + n_ji) / 2, what McNemar's and Bowker's tests compare each
+    count with)."""
+    counts = result.counts
+    n = result.n_obs
+    if not result.y_levels:
+        return [n * share for share in _shares(result)]
+    if result.settings.paired:
+        k = len(counts)
+        out: list[float] = []
+        for i in range(k):
+            for j in range(i + 1, k):
+                discordant = counts[i][j] + counts[j][i]
+                if discordant:
+                    out.extend([discordant / 2] * 2)
+        return out
+    rows = [sum(row) for row in counts]
+    columns = [sum(column) for column in zip(*counts, strict=True)]
+    return [r * c / n for r in rows if r for c in columns if c]
+
+
+def _fails_cochran(expected: list[float]) -> bool:
+    if not expected:
+        return False
+    small = sum(e < SMALL_EXPECTED for e in expected)
+    return min(expected) < MIN_EXPECTED or small > SMALL_EXPECTED_SHARE * len(expected)
+
+
+def _small_expected(result: StatsResult) -> Issue | None:
+    """Expected counts too small for the chi-square approximation of a barstats
+    p-value (Cochran's rule: none below 1 and at most 20% below 5), in the main
+    test or, where the figure labels them, a bar's proportion test. R's
+    ``chisq.test`` warns ("Chi-squared approximation may be incorrect") and
+    ggstatsplot mutes the warning; inferplot computes no exact test."""
+    if result.design != "contingency":
+        return None
+    parts: list[str] = []
+    main = expected_counts(result) if result.test is not None else []
+    if _fails_cochran(main):
+        small = sum(e < SMALL_EXPECTED for e in main)
+        tiny = sum(e < MIN_EXPECTED for e in main)
+        what = (
+            "discordant counts McNemar's test compares"
+            if result.settings.paired
+            else "expected counts"
+        )
+        below_one = f", {tiny} below 1" if tiny else ""
+        parts.append(
+            f"{small} of the {len(main)} {what} of the main test are below 5 (the "
+            f"smallest is {min(main):.2f}{below_one}), so its p-value, a chi-square "
+            "approximation, may be inaccurate"
+        )
+    if result.settings.proportion_test:
+        shares = _shares(result)
+        bars = [
+            bar.level
+            for bar in result.bars
+            if bar.test is not None
+            and bar.level is not None
+            and _fails_cochran([bar.n * share for share in shares])
+        ]
+        if bars:
+            one = len(bars) == 1
+            names = ", ".join(repr(bar) for bar in bars)
+            tail = (
+                "too"
+                if parts
+                else f"so {'its p-value' if one else 'their p-values'} may be "
+                "inaccurate"
+            )
+            parts.append(
+                f"the proportion {'test of the bar' if one else 'tests of the bars'} "
+                f"{names} {'has' if one else 'have'} expected counts below 5, {tail}"
+            )
+    if not parts:
+        return None
+    message = "; ".join(parts)
+    return Issue(
+        code="small_expected",
+        severity="warning",
+        message=(
+            message[0].upper()
+            + message[1:]
+            + ". R's chisq.test warns about this and ggstatsplot does not pass the "
+            "warning on."
+        ),
+        fix=(
+            "Report the p-values as approximate, combine sparse categories, or "
+            "collect more data."
+        ),
+    )
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
-    """The statistical issues of ``result``: small_n, heavy_ties,
+    """The statistical issues of ``result``: small_n, small_expected, heavy_ties,
     infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
     pairwise_conf_level."""
     found = (
         _small_n(result),
+        _small_expected(result),
         _heavy_ties(result),
         _infinite_effect_size(result),
         _estimate_outside_interval(result),

@@ -1997,11 +1997,21 @@ def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
     return group
 
 
-def _is_categorical(series: nw.Series[Any]) -> bool:
-    """Whether a column reads as categories whatever its values: text,
-    categorical or boolean (numbers are judged by their values)."""
+def _looks_measured(series: nw.Series[Any]) -> bool:
+    """Whether a column looks like a measurement rather than categories: numeric
+    (not boolean) with a value that is not whole, or with more than
+    ``_MANY_CODES`` distinct values over fewer than twice as many rows (the rule
+    ``_check_codes`` applies, here on every value present)."""
     dtype = series.dtype
-    return not dtype.is_numeric() or isinstance(dtype, nw.Boolean)
+    if not dtype.is_numeric() or isinstance(dtype, nw.Boolean):
+        return False
+    values = _float_values(series)[~_missing(series)]
+    if values.size == 0:
+        return False
+    if bool((~np.isfinite(values) | (values != np.round(values))).any()):
+        return True
+    distinct = len(set(values.tolist()))
+    return distinct > _MANY_CODES and 2 * distinct > values.size
 
 
 def _measurement_advice(
@@ -2009,8 +2019,7 @@ def _measurement_advice(
 ) -> str:
     """Which function fits when ``arg`` holds measurements, given the other
     column (``other``; None without y)."""
-    other_numeric = other is not None and not _is_categorical(other)
-    if other_numeric:
+    if other is not None and _looks_measured(other):
         return (
             f"To relate two numeric columns use scatterstats(data, x={x!r}, y={y!r})."
         )
@@ -2050,7 +2059,7 @@ def _check_codes(
                 "barstats counts observations in categories (text, categorical, "
                 f"booleans or whole-number codes). {advice}"
             )
-        distinct = int(np.unique(values).size)
+        distinct = len(set(values.tolist()))
     else:
         full: list[Any] = series.to_list()
         distinct = len({int(full[i]) for i in rows.tolist()})
@@ -2382,10 +2391,11 @@ def read_table(
     if counts_col is None:
         flat = np.bincount(cells, minlength=n_cells).astype(np.int64)
     else:
-        flat = np.zeros(n_cells, dtype=used_weights.dtype)
+        addends: npt.NDArray[Any] = used_weights
+        flat = np.zeros(n_cells, dtype=addends.dtype)
         if flat.dtype == object:
-            flat[:] = 0
-        np.add.at(flat, cells, used_weights)
+            flat[:] = 0  # Python ints, not the float 0.0 of np.zeros
+        np.add.at(flat, cells, addends)  # pyright: ignore[reportUnknownMemberType]
     as_rows: list[list[Any]] = flat.reshape(len(x_levels.levels), n_columns).tolist()
     return TableData(
         x=x,
@@ -2485,7 +2495,7 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
         notes.append(
             f"The {'level' if one else 'levels'} {_quoted(vanished)} of {name!r} "
             f"{'was' if one else 'were'} left out of the analysis: every row of "
-            f"{'it' if one else 'them'} has {' or '.join(causes)}."
+            f"{'it' if one else 'them'} has {', or '.join(causes)}."
         )
     for level in column.levels:
         drawn = _control_characters(level)
