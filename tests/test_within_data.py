@@ -613,3 +613,19 @@ def test_row_order_and_backend_do_not_change_the_matrix() -> None:
             assert data.subjects == reference.subjects
             assert data.dropped_subjects == reference.dropped_subjects
             assert data.values.tobytes() == reference.values.tobytes()
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_integer_y_too_large_for_a_double_raises(backend: str) -> None:
+    # As for read_between: integers above 2**53 that float64 would round raise.
+    big = 1_700_000_000_000_000_000
+    frame = make(
+        backend,
+        {
+            "s": [1, 1, 2, 2, 3, 3],
+            "g": list("ababab"),
+            "y": [big + v for v in (10, 40, 70, 150, 180, 210)],
+        },
+    )
+    with pytest.raises(ValueError, match="too large to analyze exactly"):
+        read_within(frame, "g", "y", "s")

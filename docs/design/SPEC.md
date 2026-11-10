@@ -145,7 +145,9 @@ explaining that pairing by row order is not allowed.
 - `y` must be numeric (boolean rejected). `x` may be text, categorical, integer, or
   float when every value is whole (boolean rejected) (D35).
 - Rows with missing values in used columns are dropped and counted (`n_dropped`).
-  An infinite `y` in a complete row raises `ValueError`. At least two levels need data.
+  An infinite `y` in a complete row raises `ValueError`, and so does an integer `y`
+  above 2^53 that a double cannot hold exactly (it would be rounded into ties; the
+  message says to subtract an offset). At least two levels need data.
 - Level order: the declared order of a pandas `Categorical`, polars `Enum` or pyarrow
   dictionary column, else sorted unique values (a polars `Categorical` counts as text:
   its category order changed within polars 1.x); `order=` must be a permutation of the

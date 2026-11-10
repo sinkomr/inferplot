@@ -274,9 +274,33 @@ def _float_values(series: nw.Series[Any]) -> FloatArray:
     pandas columns at the pandas floor (2.1) return object arrays holding ``<NA>``, and
     filling with NaN would turn back into NA in pandas 3. Callers mask with
     ``_missing``.
+
+    Integers beyond 2**53 are converted one by one (round to nearest, as a cast
+    does): pyarrow's cast refuses them even when the double is exact.
+    ``_check_exact_integers`` is what refuses the ones a double cannot hold.
     """
+    if series.dtype.is_integer() and _beyond_exact_integers(series):
+        return np.array(
+            [
+                float(v) if isinstance(v, numbers.Integral) else 0.0
+                for v in series.to_list()
+            ],
+            dtype=np.float64,
+        )
     as_float = series.cast(nw.Float64()).fill_null(value=0.0)
     return np.asarray(as_float.to_numpy(), dtype=np.float64)
+
+
+# Every integer of magnitude up to 2**53 is a float64 exactly; above it, only some.
+_EXACT_INTEGER_LIMIT: Final = 2**53
+
+
+def _beyond_exact_integers(series: nw.Series[Any]) -> bool:
+    """Whether an integer column holds a value of magnitude above 2**53."""
+    low, high = series.min(), series.max()
+    if low is None or high is None:  # every value missing
+        return False
+    return int(low) < -_EXACT_INTEGER_LIMIT or int(high) > _EXACT_INTEGER_LIMIT
 
 
 # --- grouping columns: x and subject_id ---------------------------------------------
@@ -607,6 +631,34 @@ def _check_finite(name: str, values: FloatArray, rows: IntArray) -> None:
         )
 
 
+def _check_exact_integers(series: nw.Series[Any], name: str, rows: IntArray) -> None:
+    """An integer ``y`` that float64 cannot hold exactly raises.
+
+    The statistics run in float64. An integer above 2**53 (a nanosecond timestamp,
+    a large identifier or count) is rounded to a multiple of a power of two there,
+    so nearby values collapse into ties and every statistic changes, the rank
+    tests included. Only the analyzed ``rows`` are checked.
+    """
+    if not series.dtype.is_integer() or rows.size == 0:
+        return
+    if not _beyond_exact_integers(series):
+        return
+    full: list[Any] = series.to_list()
+    kept = [int(full[r]) for r in rows.tolist()]
+    rounded = [v for v in kept if int(float(v)) != v]
+    if not rounded:
+        return
+    example = rounded[0]
+    raise ValueError(
+        f"y={name!r} holds integers too large to analyze exactly: {len(rounded)} of "
+        f"its {len(kept)} values change when stored as double-precision numbers "
+        f"(for example {example} becomes {int(float(example))}), so different values "
+        "would become ties. Subtract a common offset or change the unit first, for "
+        f"example y - y.min() (smallest value: {min(kept)}); that leaves every test "
+        "and standardized effect size as it is."
+    )
+
+
 # --- betweenstats -----------------------------------------------------------------
 
 
@@ -637,6 +689,7 @@ def read_between(
     keep = ~(missing_x | missing_y)
     rows = np.nonzero(keep)[0]
 
+    _check_exact_integers(y_col, y, rows)
     y_kept = _float_values(y_col)[keep]
     _check_finite(y, y_kept, rows)
 
@@ -842,6 +895,7 @@ def read_within(
 
     keep = ~(s_group.missing | x_group.missing | missing_y)
     rows = np.nonzero(keep)[0]
+    _check_exact_integers(y_col, y, rows)
     y_kept = _float_values(y_col)[keep]
     _check_finite(y, y_kept, rows)
 

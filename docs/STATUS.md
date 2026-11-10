@@ -198,10 +198,13 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 Statistics review (no wrong formula, tail, df, correction, adjustment or resampling
 scheme found; scripts in the session scratch folder `reviewS/`). To fix:
 
-- [ ] S1 (wrong numbers, silent): an integer `y` above 2^53 (nanosecond timestamps,
-  large counts) is rounded by the float64 cast in `_data._float_values`; 12 values
-  1.7e18 + 10..300 keep 2 distinct values (Welch t -3.16 for the true -4.32;
-  Mann-Whitney p 0.02 for 0.008). Reproduced by the lead.
+- [x] S1 (wrong numbers, silent): an integer `y` above 2^53 (nanosecond timestamps,
+  large counts) was rounded by the float64 cast; 12 values 1.7e18 + 10..300 kept 2
+  distinct values (Welch t -3.16 for the true -4.32; Mann-Whitney p 0.02 for 0.008).
+  Fixed: such a column raises `ValueError` naming the remedy (subtract an offset);
+  large integers a double holds exactly are read, also on pyarrow, whose cast refused
+  them. Decimal columns with more than 17 significant digits are still rounded
+  (a decimal is rarely exact in a double, so there is no exactness test to apply).
 - [ ] S2: Hedges' g with a group of n = 2 collapses with Welch's df near 1 (n 2 against
   50: d 1.16, g 0.026); the formula is the documented one (J at Welch's df), but the
   warning fires only at df exactly 1. Warn below 2 df; pin effectsize's value with a

@@ -243,6 +243,63 @@ def test_y_numeric_types(frame: Any) -> None:
     assert [v.tolist() for v in out.values] in ([[1.0], [2.0]], [[1.5], [2.0]])
 
 
+_BIG = 1_700_000_000_000_000_000  # nanoseconds since 1970, about 2023
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_integer_y_too_large_for_a_double_raises(backend: str) -> None:
+    # Above 2**53 float64 keeps only multiples of a power of two (256 here), so
+    # these 6 distinct values would become 2 and every statistic would change.
+    offsets = [10, 40, 70, 150, 180, 210]
+    frame = make(backend, {"g": list("aaabbb"), "y": [_BIG + v for v in offsets]})
+    assert len({float(_BIG + v) for v in offsets}) == 2
+    with pytest.raises(ValueError, match="too large to analyze exactly") as error:
+        read_between(frame, "g", "y")
+    message = str(error.value)
+    assert "6 of its 6 values" in message
+    assert f"for example {_BIG + 10} becomes {_BIG}" in message
+    assert f"smallest value: {_BIG + 10}" in message
+    # The remedy the message gives works and loses nothing.
+    shifted = make(backend, {"g": list("aaabbb"), "y": offsets})
+    out = read_between(shifted, "g", "y")
+    assert [v.tolist() for v in out.values] == [
+        [10.0, 40.0, 70.0],
+        [150.0, 180.0, 210.0],
+    ]
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_large_integer_y_that_a_double_holds_exactly_is_read(backend: str) -> None:
+    # 2**53 itself, multiples of 2**10 near 2**60, and a rounded value in a row that
+    # is dropped for its missing x.
+    values = [2**53, -(2**53), 2**60, 2**60 + 2**10, 2**53 + 1]
+    frame = make(backend, {"g": ["a", "a", "b", "b", None], "y": values})
+    out = read_between(frame, "g", "y")
+    assert [v.tolist() for v in out.values] == [
+        [float(2**53), -float(2**53)],
+        [float(2**60), float(2**60 + 2**10)],
+    ]
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_one_integer_past_2_to_the_53_raises(backend: str) -> None:
+    frame = make(backend, {"g": list("aabb"), "y": [1, 2, 3, 2**53 + 1]})
+    with pytest.raises(ValueError, match=r"1 of its 4 values .*9007199254740993"):
+        read_between(frame, "g", "y")
+
+
+def test_unsigned_and_nullable_integer_y_too_large_raise() -> None:
+    big = [2**63 + 1, 2**63 + 3, 2**63 + 5, 2**63 + 7]
+    unsigned = pl.DataFrame({"g": list("aabb"), "y": pl.Series(big, dtype=pl.UInt64)})
+    with pytest.raises(ValueError, match="too large to analyze exactly"):
+        read_between(unsigned, "g", "y")
+    nullable = pd.DataFrame(
+        {"g": list("aabbb"), "y": pd.array([_BIG + 1, _BIG + 2, None, 3, 4], "Int64")}
+    )
+    with pytest.raises(ValueError, match="2 of its 4 values"):
+        read_between(nullable, "g", "y")
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_infinite_y_raises(backend: str) -> None:
     frame = make(
