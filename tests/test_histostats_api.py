@@ -561,3 +561,19 @@ def test_result_contract_of_each_fixture(case: OracleCase) -> None:
     elif result.bayes is not None:
         assert frame["bf10"][0] == result.bayes.bf10
     assert len(result.to_frame(backend="polars")) == len(frame)
+
+
+def test_one_far_value_gives_no_map_estimate_with_a_warning() -> None:
+    # Review Z3: a bare ZeroDivisionError from the MAP bandwidth, in histostats and
+    # betweenstats; now no centrality value and a warning naming the value.
+    one = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0, 1e50]})
+    result = ip.analyze.histostats(one, "x", type="bayes")
+    assert result.descriptives[0].value is None
+    assert any("no MAP estimate" in w and "1e+50" in w for w in result.warnings)
+    groups = pd.DataFrame(
+        {"g": ["a"] * 6 + ["b"] * 6, "y": [1.0, 2, 3, 4, 5, 1e60, 2, 3, 4, 5, 6, 7]}
+    )
+    between = ip.analyze.betweenstats(groups, "g", "y", type="bayes")
+    assert between.descriptives[0].value is None
+    assert between.descriptives[1].value is not None
+    assert any("no MAP estimate" in w and "1e+60" in w for w in between.warnings)

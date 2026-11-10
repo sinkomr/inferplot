@@ -341,3 +341,29 @@ def test_pair_counts_match_brute_force() -> None:
     diffs = np.abs(bins[:, None] - bins[None, :])[np.triu_indices(x.size, 1)]
     expected = np.bincount(diffs, minlength=counts.size)
     assert counts.tolist() == expected.astype(np.float64).tolist()
+
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        [1.0, 2.0, 3.0, 4.0, 5.0, 1e50],
+        [1.0, 2.0, 3.0, 4.0, 5.0, 1e160],
+        [1e-300, 1e300, 1.0, -1e300, 5.0, 2.0],
+        [*np.random.default_rng(0).normal(50, 10, 200).tolist(), 1e60],
+    ],
+)
+def test_one_far_value_raises_the_no_map_error(x: list[float]) -> None:
+    # Review Z3: the bandwidth's 7th power underflowed and a bare
+    # ZeroDivisionError escaped; now the ValueError the analyses turn into "no MAP
+    # estimate" with a warning, naming the far value, and no floating-point
+    # warning leaks.
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match="no MAP estimate: the value") as info:
+            map_estimate(np.array(x))
+        with pytest.raises(ValueError, match="no Sheather-Jones bandwidth"):
+            bw_sj(np.array(x))
+    far = max(x, key=lambda v: abs(v - float(np.median(x))))
+    assert repr(far) in str(info.value)

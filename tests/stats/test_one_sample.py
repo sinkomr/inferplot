@@ -479,3 +479,69 @@ def test_degenerate_inputs() -> None:
         one_sample_t(SAMPLE, mu=0.0, alternative="two.sided")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="largest double"):
         one_sample_t([1.0, 1.0 + 2.0**-40], mu=-1e300)
+
+
+def test_bootstrap_t_statistic_is_rounded_once() -> None:
+    # Lead's finding (new fixture, n = 2): t from a rounded standard error was one
+    # unit in the last place low, 0.6749999999999999, printed "0.67" where R prints
+    # "0.68". From exact quantities, rounded once: (3.9 - 3) / (0.8 sqrt(2) /
+    # (0.6 sqrt(2))) = 0.675 on the doubles too.
+    result = trimmed_mean_bootstrap_t(np.array([3.1, 4.7]), mu=3.0)
+    assert result.statistic == 0.675
+    exact = Fraction(3.1) + Fraction(4.7)
+    t2 = (
+        (exact / 2 - 3) ** 2
+        * (1 - 2 * Fraction(0.2)) ** 2
+        * 2
+        / ((Fraction(4.7) - Fraction(3.1)) ** 2 / 2)
+    )
+    assert result.statistic == float(
+        Fraction(math.isqrt(t2.numerator * 4**80 // t2.denominator), 2**80)
+    )
+
+
+@pytest.mark.parametrize(("n", "word"), [(10, "3rd"), (5, "2nd"), (12, "3rd")])
+def test_winsorized_constant_message_uses_ordinals(n: int, word: str) -> None:
+    # Review Z6 (11): "the 2-th smallest".
+    x = np.array([1.0] + [5.0] * (n - 2) + [9.0])
+    with pytest.raises(ValueError, match=f"the {word} smallest to the {word} largest"):
+        trimmed_mean_bootstrap_t(x, tr=0.2)
+
+
+def test_values_equal_to_mu_as_written_are_zeros_of_the_signed_rank_test() -> None:
+    # Review Z6 (8): 0.1 + 0.2 against 0.3 has the rounded difference 5.6e-17,
+    # which was ranked as a positive difference; it is a zero as written (D74),
+    # as 0.3 typed is. The other differences stay R's rounded ones (D88).
+    typed = np.array([0.3, 0.3, 0.3, 0.3, 0.4, 0.2, 0.5])
+    computed = np.array([0.3, 0.1 + 0.2, 0.3, 0.1 + 0.2, 0.4, 0.2, 0.5])
+    a = one_sample_signed_rank(typed, mu=0.3)
+    b = one_sample_signed_rank(computed, mu=0.3)
+    assert (b.n_nonzero, b.statistic, b.p_value) == (
+        a.n_nonzero,
+        a.statistic,
+        a.p_value,
+    )
+    assert b.n_nonzero == 3
+    assert one_sample_rank_biserial(computed, mu=0.3) == one_sample_rank_biserial(
+        typed, mu=0.3
+    )
+    # Every value equal to mu as written: nothing to rank.
+    for function in (one_sample_signed_rank, one_sample_rank_biserial):
+        with pytest.raises(ValueError, match="every one of the 3 values"):
+            function(np.array([0.3, 0.1 + 0.2, 0.3]), mu=0.3)
+
+
+@pytest.mark.parametrize(
+    ("scale", "mu"), [(1e-300, 1e10), (1e-200, 1e110), (1e-10, 1e300)]
+)
+def test_a_test_value_too_far_for_a_double_t_is_explained(
+    scale: float, mu: float
+) -> None:
+    # Review Z6 (7): t beyond the largest double raised a bare OverflowError
+    # ("integer division result too large for a float").
+    x = np.array([1.0, 2.0, 4.0, 5.0, 7.0]) * scale
+    for function in (one_sample_t, trimmed_mean_bootstrap_t):
+        with pytest.raises(ValueError, match="exceeds the largest double"):
+            function(x, mu=mu)
+    with pytest.raises(ValueError, match="exceeds the largest double"):
+        jzs_bf10_one_sample(x, mu=mu, prior_scale=0.707)

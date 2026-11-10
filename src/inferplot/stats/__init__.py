@@ -36,6 +36,7 @@ from inferplot.stats.correlation import (
     correlation_bf10,
     correlation_log_bf10,
     cross_moments,
+    pair_moments,
     pearson,
     spearman,
     winsorized_correlation,
@@ -160,6 +161,12 @@ from inferplot.stats.within_robust import (
     trimmed_rm_anova,
     yuen_dependent_t,
 )
+from inferplot.stats.written import (
+    all_equal_as_written,
+    equal_as_written,
+    written_value,
+    written_values,
+)
 
 __all__ = [
     "ALTERNATIVES",
@@ -201,6 +208,7 @@ __all__ = [
     "YuenDependentT",
     "YuenT",
     "akp_effect",
+    "all_equal_as_written",
     "average_dependent_akp",
     "bootstrap_t_critical_value",
     "bw_sj",
@@ -212,6 +220,7 @@ __all__ = [
     "differences_same_within_rounding",
     "dunn",
     "durbin_conover",
+    "equal_as_written",
     "explanatory_effect",
     "f_ncp_bound",
     "friedman",
@@ -238,6 +247,7 @@ __all__ = [
     "one_sample_signed_rank",
     "one_sample_t",
     "p_adjust",
+    "pair_moments",
     "paired_differences_constant",
     "paired_differences_winsorize_to_constant",
     "paired_hedges_g",
@@ -274,6 +284,8 @@ __all__ = [
     "winsorized_correlation",
     "winsorized_normal_variance",
     "winsorized_variance",
+    "written_value",
+    "written_values",
     "yuen_dependent_t",
     "yuen_t",
 ]

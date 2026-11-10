@@ -36,6 +36,7 @@ __all__ = [
     "median",
     "rounding_tolerance",
     "scaled_variance",
+    "sqrt_rounded",
     "variance",
 ]
 
@@ -44,6 +45,14 @@ __all__ = [
 # in [0, 2^27): float64 sums of up to 2^26 such integers are exact (< 2^53).
 _SPLIT: Final = 2.0**27
 _CHUNK: Final = 1 << 26
+
+
+def ordinal(k: int) -> str:
+    """k as an English ordinal for messages: 1st, 2nd, 3rd, 4th, 11th, 21st."""
+    suffix = (
+        "th" if 10 <= k % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(k % 10, "th")
+    )
+    return f"{k}{suffix}"
 
 
 def as_sample(x: SampleLike, *, name: str = "x", min_size: int = 1) -> FloatArray:
@@ -239,6 +248,26 @@ def differences_same_within_rounding(x: FloatArray, y: FloatArray) -> bool:
     tolerance = (rounding_tolerance(x) + rounding_tolerance(y)) * scale
     relative: FloatArray = (s - s[0]) + e
     return bool((relative - tolerance).max() <= (relative + tolerance).min())
+
+
+def sqrt_rounded(value: Fraction) -> float:
+    """sqrt(value) of an exact rational value >= 0, correctly rounded (one
+    rounding): the integer square root to at least 62 bits with a sticky bit for
+    the rest, then Python's correctly rounded conversion of the rational."""
+    if value == 0:
+        return 0.0
+    num, den = value.numerator, value.denominator
+    k = 62 - (num.bit_length() - den.bit_length()) // 2
+    if k >= 0:
+        num <<= 2 * k
+    else:
+        den <<= -2 * k
+    root = math.isqrt(num // den)
+    sticky = int(root * root * den != num)
+    try:
+        return float(Fraction(2 * root + sticky) * Fraction(2) ** -(k + 1))
+    except OverflowError:
+        return math.inf
 
 
 def scaled_variance(x: FloatArray) -> float:

@@ -446,3 +446,19 @@ def test_result_contract_of_each_fixture(case: OracleCase) -> None:
     elif result.bayes is not None:
         assert frame["bf10"][0] == result.bayes.bf10
     assert len(result.to_frame(backend="polars")) == len(frame)
+
+
+@pytest.mark.parametrize("type_", ["parametric", "robust", "bayes"])
+def test_columns_collinear_as_written_get_the_collinear_result(type_: str) -> None:
+    # Review Z2: Fahrenheit against one-decimal Celsius is collinear as written but
+    # not in binary; it printed t = 7e15 and BF10 = 1e228 without a warning.
+    celsius = np.round(np.random.default_rng(1).normal(20, 5, 20), 1)
+    frame = pd.DataFrame({"c": celsius, "f": celsius * 1.8 + 32})
+    result = ip.analyze.scatterstats(frame, "c", "f", type=type_)
+    assert any("straight line" in w for w in result.warnings)
+    if result.test is not None:
+        assert result.test.statistic == math.inf
+        assert result.test.p_value == 0.0
+    if type_ != "robust":
+        assert result.bayes is not None
+        assert result.bayes.bf10 == math.inf
