@@ -1,0 +1,505 @@
+{
+ "_true_values": {
+  "winsorized_rho_0.3": {
+   "formula": 0.26456479061962357,
+   "monte_carlo": 0.26358004137353674
+  },
+  "spearman_rho_0.3": {
+   "formula": 0.28756421862262127,
+   "monte_carlo": 0.2867020071507759
+  },
+  "winsorized_rho_0.8": {
+   "formula": 0.7545914409330494,
+   "monte_carlo": 0.7541507359860621
+  },
+  "spearman_rho_0.8": {
+   "formula": 0.7859392826067277,
+   "monte_carlo": 0.7857177123623489
+  },
+  "xi": {
+   "formula": 0.46132218407938624,
+   "monte_carlo": 0.46134589200828074
+  },
+  "epsilon_squared": {
+   "formula": 0.11584943175456375,
+   "monte_carlo": 0.11552751248344181
+  },
+  "kendall_w": {
+   "formula": 0.07500024379735529,
+   "monte_carlo": 0.0746462912425003
+  },
+  "lognormal_trimmed_mean": {
+   "formula": 1.1110015059675609,
+   "monte_carlo": 1.1102298031753681
+  }
+ },
+ "between_akp_effect": {
+  "params": "normal n (12, 24), sd (1, 2), means (0.8, 0); AKP = 0.8",
+  "reps": 10000,
+  "seed": 30261210,
+  "hits": {
+   "cover": 9602
+  },
+  "seconds": 21.9
+ },
+ "between_akp_null": {
+  "params": "normal n (12, 24), sd (1, 2), means 0; AKP",
+  "reps": 10000,
+  "seed": 30261209,
+  "hits": {
+   "cover": 9495
+  },
+  "seconds": 21.9
+ },
+ "between_bayes_effect": {
+  "params": "normal n (30, 30), sd 1, means (0.8, 0); JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261215,
+  "hits": {
+   "alt": 9020
+  },
+  "seconds": 5.3
+ },
+ "between_bayes_null": {
+  "params": "normal n (100, 100), sd 1, means 0; JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261214,
+  "hits": {
+   "null": 9554
+  },
+  "seconds": 5.4
+ },
+ "between_epsilon_effect": {
+  "params": "normal n (8, 15, 30), sd 1, means (0, 0.5, 1); epsilon^2 = 0.115849",
+  "reps": 10000,
+  "seed": 30261207,
+  "hits": {
+   "cover": 8525,
+   "inside": 9980
+  },
+  "seconds": 120.3
+ },
+ "between_epsilon_null": {
+  "params": "normal n (8, 15, 30), sd 1, means 0; rank epsilon squared",
+  "reps": 10000,
+  "seed": 30261206,
+  "hits": {
+   "cover": 0,
+   "inside": 9467
+  },
+  "seconds": 122.6
+ },
+ "between_games_howell_null": {
+  "params": "normal n (8, 15, 30), sd (1, 2, 4), means 0",
+  "reps": 20000,
+  "seed": 30261201,
+  "hits": {
+   "raw": 990,
+   "holm": 310,
+   "omega0": 19675
+  },
+  "seconds": 50.9
+ },
+ "between_kruskal_null": {
+  "params": "normal n (8, 15, 30), sd 1, means 0",
+  "reps": 20000,
+  "seed": 30261205,
+  "hits": {
+   "p": 934,
+   "holm": 799
+  },
+  "seconds": 2.3
+ },
+ "between_mann_whitney_null": {
+  "params": "normal n (10, 25), sd 1, means 0; ip.analyze.betweenstats",
+  "reps": 10000,
+  "seed": 30261203,
+  "hits": {
+   "p": 475,
+   "r0": 9341
+  },
+  "seconds": 58.4,
+  "exact": {
+   "p": 0.04530427804654069
+  }
+ },
+ "between_omega_effect": {
+  "params": "normal n (20, 20, 20), sd 1, means (0, 0.5, 1); omega^2 = 1/7",
+  "reps": 20000,
+  "seed": 30261202,
+  "hits": {
+   "cover": 18328
+  },
+  "seconds": 13.1
+ },
+ "between_rank_biserial_shift": {
+  "params": "normal n (10, 25), sd 1, means (0.8, 0); r = 0.428392",
+  "reps": 20000,
+  "seed": 30261204,
+  "hits": {
+   "cover": 18181
+  },
+  "seconds": 0.7
+ },
+ "between_t1way_null": {
+  "params": "normal n (8, 15, 30), sd (1, 2, 4), means 0",
+  "reps": 20000,
+  "seed": 30261211,
+  "hits": {
+   "p": 1042,
+   "holm": 854,
+   "ci": 19106
+  },
+  "seconds": 6.3
+ },
+ "between_xi_effect": {
+  "params": "normal n (15, 15, 15), sd 1, means (0, 0.5, 1); xi = 0.461322",
+  "reps": 10000,
+  "seed": 30261213,
+  "hits": {
+   "cover": 9243
+  },
+  "seconds": 47.8
+ },
+ "between_xi_null": {
+  "params": "normal n (15, 15, 15), sd 1, means 0; xi",
+  "reps": 10000,
+  "seed": 30261212,
+  "hits": {
+   "cover": 0
+  },
+  "seconds": 49.3
+ },
+ "between_yuen_null": {
+  "params": "normal n (10, 25), sd (3, 1), means 0",
+  "reps": 20000,
+  "seed": 30261208,
+  "hits": {
+   "p": 1261
+  },
+  "seconds": 1.7
+ },
+ "correlation_bayes_effect": {
+  "params": "n 30, bivariate normal rho 0.5; stretched beta prior 0.707",
+  "reps": 10000,
+  "seed": 30261513,
+  "hits": {
+   "alt": 8943
+  },
+  "seconds": 5.1
+ },
+ "correlation_bayes_null": {
+  "params": "n 100, bivariate normal rho 0; stretched beta prior 0.707",
+  "reps": 10000,
+  "seed": 30261512,
+  "hits": {
+   "null": 9471
+  },
+  "seconds": 5.6
+ },
+ "one_sample_bayes_effect": {
+  "params": "n 20, normal mean 0.8, sd 1, test value 0; JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261409,
+  "hits": {
+   "alt": 9509
+  },
+  "seconds": 5.0
+ },
+ "one_sample_bayes_null": {
+  "params": "n 100, standard normal, test value 0; JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261408,
+  "hits": {
+   "null": 9659
+  },
+  "seconds": 5.1
+ },
+ "one_sample_rank_biserial_shift": {
+  "params": "n 20, normal mean 0.5, sd 1, test value 0; r = 0.520500",
+  "reps": 20000,
+  "seed": 30261405,
+  "hits": {
+   "two": 17941,
+   "one": 18872
+  },
+  "seconds": 2.8
+ },
+ "one_sample_signed_rank_null": {
+  "params": "n 20, standard normal, test value 0",
+  "reps": 20000,
+  "seed": 30261404,
+  "hits": {
+   "p": 948,
+   "p_less": 914,
+   "two": 18623,
+   "one": 18795
+  },
+  "seconds": 2.8,
+  "exact": {
+   "p": 0.04844093322753906,
+   "p_less": 0.048653602600097656
+  }
+ },
+ "spearman_rho0.0": {
+  "params": "n 15, bivariate normal rho 0.0; rho_S = 0.000000",
+  "reps": 20000,
+  "seed": 30261505,
+  "hits": {
+   "cover": 19063
+  },
+  "seconds": 6.9
+ },
+ "spearman_rho0.3": {
+  "params": "n 15, bivariate normal rho 0.3; rho_S = 0.287564",
+  "reps": 20000,
+  "seed": 30261506,
+  "hits": {
+   "cover": 19044
+  },
+  "seconds": 7.0
+ },
+ "spearman_rho0.8": {
+  "params": "n 15, bivariate normal rho 0.8; rho_S = 0.785939",
+  "reps": 20000,
+  "seed": 30261507,
+  "hits": {
+   "cover": 18793
+  },
+  "seconds": 7.0
+ },
+ "spearman_small_null": {
+  "params": "n 10, bivariate normal rho 0",
+  "reps": 20000,
+  "seed": 30261504,
+  "hits": {
+   "p": 1062,
+   "cover": 19046
+  },
+  "seconds": 6.9
+ },
+ "trimcibt_lognormal": {
+  "params": "n 20, standard lognormal, test value 1.111002 (the true trimmed mean)",
+  "reps": 10000,
+  "seed": 30261407,
+  "hits": {
+   "p": 570,
+   "cover": 9427
+  },
+  "seconds": 13.3
+ },
+ "trimcibt_normal": {
+  "params": "n 20, standard normal, test value 0 (the true trimmed mean)",
+  "reps": 10000,
+  "seed": 30261406,
+  "hits": {
+   "p": 454,
+   "cover": 9540
+  },
+  "seconds": 13.2
+ },
+ "wincor_rho0.0": {
+  "params": "n 20, bivariate normal rho 0.0; rho_w = 0.000000",
+  "reps": 20000,
+  "seed": 30261509,
+  "hits": {
+   "p": 1048,
+   "cover": 18932
+  },
+  "seconds": 6.4
+ },
+ "wincor_rho0.3": {
+  "params": "n 20, bivariate normal rho 0.3; rho_w = 0.264565",
+  "reps": 20000,
+  "seed": 30261510,
+  "hits": {
+   "cover": 18874
+  },
+  "seconds": 6.5
+ },
+ "wincor_rho0.8": {
+  "params": "n 20, bivariate normal rho 0.8; rho_w = 0.754591",
+  "reps": 20000,
+  "seed": 30261511,
+  "hits": {
+   "cover": 17924
+  },
+  "seconds": 6.5
+ },
+ "wincor_t3_null": {
+  "params": "n 20, independent Student t (3 df)",
+  "reps": 20000,
+  "seed": 30261508,
+  "hits": {
+   "p": 1017,
+   "cover": 18967
+  },
+  "seconds": 6.5
+ },
+ "within_avg_akp_effect": {
+  "params": "12 subjects x 3 conditions, compound symmetry (subject variance 1, error variance 1), effects (0, 0.5, 1); average AKP = -0.471405",
+  "reps": 10000,
+  "seed": 30261318,
+  "hits": {
+   "cover": 9962
+  },
+  "seconds": 21.6
+ },
+ "within_avg_akp_null": {
+  "params": "12 subjects x 3 conditions, compound symmetry (subject variance 1, error variance 1), means 0; wmcpAKP",
+  "reps": 10000,
+  "seed": 30261317,
+  "hits": {
+   "cover": 9956
+  },
+  "seconds": 21.9
+ },
+ "within_bayes_effect": {
+  "params": "20 pairs, sds (1, 2), correlation 0.5, mean difference 0.8 x sqrt(3); JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261320,
+  "hits": {
+   "alt": 9461
+  },
+  "seconds": 5.1
+ },
+ "within_bayes_null": {
+  "params": "100 pairs, sds (1, 2), correlation 0.5, means 0; JZS r 0.707",
+  "reps": 10000,
+  "seed": 30261319,
+  "hits": {
+   "null": 9658
+  },
+  "seconds": 5.2
+ },
+ "within_dep_akp_effect": {
+  "params": "15 pairs, sds (1, 2), correlation 0.5, mean difference 0.8 x sqrt(3); AKP = 0.8",
+  "reps": 10000,
+  "seed": 30261314,
+  "hits": {
+   "cover": 9418
+  },
+  "seconds": 10.5
+ },
+ "within_dep_akp_null": {
+  "params": "15 pairs, sds (1, 2), correlation 0.5, means 0; dep.effect AKP",
+  "reps": 10000,
+  "seed": 30261313,
+  "hits": {
+   "cover": 9417
+  },
+  "seconds": 10.6
+ },
+ "within_friedman_null": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), means 0",
+  "reps": 20000,
+  "seed": 30261309,
+  "hits": {
+   "p": 892,
+   "holm": 784
+  },
+  "seconds": 2.0
+ },
+ "within_kendall_effect": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), effects (0, 0.25, 0.5, 0.75); W = 0.075000",
+  "reps": 10000,
+  "seed": 30261311,
+  "hits": {
+   "cover": 6769,
+   "inside": 9896
+  },
+  "seconds": 81.6
+ },
+ "within_kendall_null": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), means 0; Kendall's W",
+  "reps": 10000,
+  "seed": 30261310,
+  "hits": {
+   "cover": 0,
+   "inside": 9604
+  },
+  "seconds": 80.6
+ },
+ "within_rm_nonspherical": {
+  "params": "12 subjects x 4 conditions, sds (1, 1.5, 2, 3), correlation 0.8^|i - j|, means 0; population epsilon 0.5150",
+  "reps": 20000,
+  "seed": 30261305,
+  "hits": {
+   "p": 1032,
+   "omega0": 19961,
+   "holm": 757
+  },
+  "seconds": 19.4
+ },
+ "within_rm_omega_effect": {
+  "params": "20 subjects x 3 conditions, compound symmetry (subject variance 1, error variance 1), effects (-0.5, 0, 0.5); omega^2 = 0.076923",
+  "reps": 20000,
+  "seed": 30261306,
+  "hits": {
+   "cover": 19964
+  },
+  "seconds": 6.1
+ },
+ "within_rm_spherical": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), means 0",
+  "reps": 20000,
+  "seed": 30261304,
+  "hits": {
+   "p": 710,
+   "omega0": 19998,
+   "holm": 856
+  },
+  "seconds": 19.1
+ },
+ "within_rmanova_null": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), means 0; rmanova, rmmcp",
+  "reps": 20000,
+  "seed": 30261315,
+  "hits": {
+   "p": 763,
+   "holm": 857,
+   "ci": 19143
+  },
+  "seconds": 24.1
+ },
+ "within_rmmcp_effect": {
+  "params": "12 subjects x 4 conditions, compound symmetry (subject variance 1, error variance 1), effects (0, 0.5, 1, 1.5); rmmcp",
+  "reps": 20000,
+  "seed": 30261316,
+  "hits": {
+   "ci": 19214
+  },
+  "seconds": 20.0
+ },
+ "within_signed_rank_null": {
+  "params": "15 pairs, sds (1, 2), correlation 0.5, means 0",
+  "reps": 20000,
+  "seed": 30261307,
+  "hits": {
+   "p": 797,
+   "cover": 18554
+  },
+  "seconds": 1.3,
+  "exact": {
+   "p": 0.041259765625
+  }
+ },
+ "within_signed_rank_shift": {
+  "params": "15 pairs, sds 1, correlation 0.5 (differences sd 1), mean difference 0.5; r = 0.520500",
+  "reps": 20000,
+  "seed": 30261308,
+  "hits": {
+   "cover": 17630
+  },
+  "seconds": 1.3
+ },
+ "within_yuend_null": {
+  "params": "15 pairs, sds (1, 2), correlation 0.5, means 0",
+  "reps": 20000,
+  "seed": 30261312,
+  "hits": {
+   "p": 948
+  },
+  "seconds": 2.1
+ }
+}
