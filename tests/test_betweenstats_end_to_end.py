@@ -146,6 +146,18 @@ def test_every_fixture_of_the_other_types(name: str, tmp_path: Path) -> None:
     # than 8 levels (edge_k9) the palette falls back to tab20 and says so.
     rendering = result.warnings[len(analyzed.warnings) :]
     assert result.warnings[: len(analyzed.warnings)] == analyzed.warnings
+    # A level whose values are all equal has no violin, and the figure says so
+    # (D63; edge_tied3_small's group c: 1, 1, 1).
+    frame = data[[args[0], args[1]]].dropna()
+    constant = [
+        str(level)
+        for level, values in frame.groupby(args[0])[args[1]]
+        if values.nunique() < 2
+    ]
+    violins = [w for w in rendering if w.startswith("The violin of level")]
+    assert len(violins) == len(constant)
+    assert all(any(f"'{level}'" in w for w in violins) for level in constant)
+    rendering = tuple(w for w in rendering if w not in violins)
     if len(result.levels) > 8:
         assert len(rendering) == 1
         assert "tab20" in rendering[0]

@@ -585,6 +585,12 @@ EXPECTED_METHOD_WARNINGS: Mapping[str, str] = {
         "squared is undefined; its confidence interval comes from the other 1,992, "
         "as in ggstatsplot."
     ),
+    # Review T7: three groups of three sharing the value 1 (D54 in R itself).
+    "ggbetweenstats-edge_tied3_small-nonparametric": (
+        "169 of 2,000 bootstrap resamples have every value tied, where rank epsilon "
+        "squared is undefined; its confidence interval comes from the other 1,831, "
+        "as in ggstatsplot."
+    ),
 }
 
 
