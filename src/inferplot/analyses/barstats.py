@@ -999,6 +999,9 @@ def _assemble(
         y_levels=y_levels,
         test=parts.test,
         effect_size=parts.effect_size,
+        bars=bars,
+        cells=cells,
+        pairwise=parts.pairwise,
         n_obs=table.n,
         settings=settings,
     )

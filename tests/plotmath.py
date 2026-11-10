@@ -7,7 +7,8 @@ builders return, so text parity is plain AST equality.
 
 Precedence, low to high: ``~``; ``==`` (and the other comparisons); ``+ -``;
 ``* /``; unary ``+ -``; ``^`` (right-associative); calls ``f(...)`` and subscripts
-``x[...]``. Unary operators do not occur in statsExpressions' templates and raise.
+``x[...]``. Unary ``+`` and ``-`` do not occur in statsExpressions' templates and
+raise; a leading unary ``~`` (ggbarstats' bar labels) is the call `~`(x).
 
 ``expected_glyphs`` predicts the characters plotmath draws for an expression, the
 multiset the mathtext rendering's SVG must contain.
@@ -81,7 +82,13 @@ class _Parser:
         return node
 
     def tilde(self) -> Node:
-        node = self.comparison()
+        if self.at("~"):
+            # A leading ``~x`` is R's call `~`(x) (ggbarstats' bar labels,
+            # ``list(~italic(p)=='0.09')``); plotmath draws a space before x.
+            self.take()
+            node: Node = Call(Sym("~"), (self.comparison(),))
+        else:
+            node = self.comparison()
         while self.at("~"):
             self.take()
             node = BinOp("~", node, self.comparison())
@@ -192,7 +199,7 @@ def expected_glyphs(node: Node) -> str:
     args = [expected_glyphs(a) for a in node.args]
     if isinstance(fn, Sym) and fn.name == "list":
         return ",".join(args)
-    if isinstance(fn, Sym) and fn.name in ("italic", "plain", "bold"):
+    if isinstance(fn, Sym) and fn.name in ("italic", "plain", "bold", "~"):
         return args[0]
     if isinstance(fn, Sym) and fn.name == "widehat":
         return "\u0302" + args[0]

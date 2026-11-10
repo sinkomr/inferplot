@@ -409,7 +409,16 @@ class Bar(_Plain):
 
 @dataclass(frozen=True, slots=True)
 class Texts(_Plain):
-    """Every text of the result as plain Unicode (mathtext is built by the renderer)."""
+    """Every text of the result as plain Unicode (mathtext is built by the renderer).
+
+    Design "contingency" (barstats) alone fills ``bar_labels`` (one per entry of
+    ``StatsResult.bars``: its proportion test's "p = 0.09", drawn above the bar
+    when ``settings.proportion_test``; "" for a bar without a test),
+    ``n_labels`` (one per bar: "(n = 13)", drawn under it) and ``cell_labels``
+    (one per entry of ``StatsResult.cells``: "16%", "3" or "3\\n(16%)" as
+    ``settings.label`` says; "" for a zero cell, which has no label); they are
+    empty in every other design.
+    """
 
     subtitle: str | None
     caption: str | None
@@ -418,6 +427,9 @@ class Texts(_Plain):
     centrality_labels: tuple[str, ...]
     tick_labels: tuple[str, ...]
     pairwise_labels: tuple[str, ...]
+    bar_labels: tuple[str, ...] = ()
+    n_labels: tuple[str, ...] = ()
+    cell_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1198,6 +1210,11 @@ def _contingency_fields_problem(result: StatsResult) -> str | None:
     if result.counts_var is not None:
         filled.append("counts_var")
     filled += [
+        f"text.{name}"
+        for name in ("bar_labels", "n_labels", "cell_labels")
+        if getattr(result.text, name)
+    ]
+    filled += [
         f"settings.{name}"
         for name in _CONTINGENCY_SETTINGS
         if getattr(result.settings, name) is not None
@@ -1325,6 +1342,11 @@ def _bars_problem(result: StatsResult, columns: int) -> str | None:
                 f"the cell {cell.bar!r}, {cell.level!r} must hold its share of the "
                 "bar, count / n * 100"
             )
+    text = result.text
+    if not (len(text.bar_labels) == len(text.n_labels) == len(result.bars)):
+        return "text.bar_labels and text.n_labels must hold one label per bar"
+    if len(text.cell_labels) != len(result.cells):
+        return "text.cell_labels must hold one label per cell"
     return None
 
 

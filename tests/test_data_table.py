@@ -243,7 +243,10 @@ def test_large_counts_are_added_exactly_without_repeating_rows() -> None:
         pd.DataFrame({"x": ["a", "a", "b"], "w": [huge, huge, 1]}), "x", counts="w"
     )
     assert counts_of(exact) == [[2 * huge], [1]]
-    beyond = pl.DataFrame({"x": ["a", "a"], "w": [2**63 + 1, 2**63 + 1]})
+    # (The dtype is given: polars 1.0 does not infer UInt64 from Python ints.)
+    beyond = pl.DataFrame(
+        {"x": ["a", "a"], "w": pl.Series("w", [2**63 + 1, 2**63 + 1], dtype=pl.UInt64)}
+    )
     assert counts_of(read_table(beyond, "x", counts="w")) == [[2**64 + 2]]
     floats = pd.DataFrame({"x": ["a", "b"], "w": [1e15, 3.0]})
     assert counts_of(read_table(floats, "x", counts="w")) == [[10**15], [3]]
