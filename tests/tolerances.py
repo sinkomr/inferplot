@@ -224,8 +224,13 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "A prior scale of sqrt(2)/2 instead of 0.707 moves them by 3.7e-6 or "
                 "more, and Welch's t instead of Student's moves every unbalanced "
                 "pair by 1.5e-4 or more (bugs_long, 92 against 91), so both fail. "
-                "Measure paired and one-sample values when their fixtures arrive; "
-                "other Bayes factor families need their own entry."
+                "Paired: every paired Bayes factor in the ggwithinstats fixtures "
+                "(sleep, bugs_long, edge_within*) is within 9.3e-10 of "
+                "tools/reference (tests/test_reference_vs_oracle.py); BayesFactor "
+                "itself misses large |t| (probe-pairedbf: within 2.6e-6 up to "
+                "|t| 12, -0.78% at n 30 and t 50). Measure one-sample values when "
+                "their fixtures arrive; other Bayes factor families need their own "
+                "entry."
             ),
         ),
         "akp_constant": Tolerance(

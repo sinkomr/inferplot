@@ -156,8 +156,18 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   `ip.analyze.withinstats` and `ip.render.withinstats` with every argument check,
   `StatsResult.subjects`; every type raises NotImplementedError until its statistics
   land. 11,475 tests pass
-- [ ] oracle: ggwithinstats cases and probes (generator extension, in progress on
-  `oracle/phase3-cases`)
+- [x] oracle: fixtures from run 42780911147 (generator at 55f7900, ten shards and a
+  merge job): the 161 earlier cases, 159 ggwithinstats cases (sleep, bugs_long and 20
+  within-subject edge datasets exported by `oracle/export_datasets.R`, all four types;
+  every other p.adjust method, conf.level 0.90, tr 0.1, display all/ns/none, digits 3,
+  no subtitle, one-sided, bf.prior 0.8, no Bayes caption, no paths), two heavy-tie
+  robust ggbetweenstats cases, and five probes (signrank, pairedbf, friedman, rmanova,
+  wrs2within); probe-map gains four anchor vectors. All 136 bootstrap references
+  reproduce ggstatsplot's 100-resample values exactly (62 within: 25 wmcpAKP, 23
+  kendalls_w, 14 dep.effect). Earlier fixtures byte-identical except
+  edge_large_n-bayes's posterior R-squared (v0.2 output, at most 8.1e-14). Each fixture
+  records the complete subjects it analyzed (`within_data`); `read_within` gives the
+  same subjects and values on all 159 cases and three backends. 14,105 tests pass
 - [ ] parametric: paired t, Hedges' g; repeated-measures ANOVA, partial omega squared,
   paired t pairs
 - [ ] nonparametric: Wilcoxon signed-rank, rank-biserial r; Friedman, Kendall's W,
@@ -392,17 +402,12 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
   (`?TDist`); the largest two-group \|t\| in the fixtures is 5.65 (mtcars `am` x `drat`),
   whose Hedges' g CI matches within `noncentral_ci`; parity above that is untested.
-- The generator handles ggbetweenstats only: `between_analysis`,
-  `statsexpressions_rows` (`paired = FALSE`) and `bootstrap_candidates` stop on any
-  other function. Each one needs its own bookkeeping (complete subjects for
-  withinstats via `statsExpressions::complete_subjects`, one sample for histostats)
-  and bootstrap replay (withinstats: `kendalls_w`, `dep.effect`, `wmcpAKP`; histostats
-  robust: `trimcibt`) before its cases are added, and so do `name_hidden`, the caption
-  rule in `outcome_problems` and `label_counts`, which assume ggbetweenstats (barstats
-  computes its pairwise tests through the same hidden helper, and `.chisq_test_safe`
-  swallows errors into NA rows the recorders cannot see). Unused edge CSV:
-  `edge_within_missing` (Phase 3). `ORACLE_SUBSET` limits a local debugging run (no
-  manifest).
+- The generator handles ggbetweenstats and ggwithinstats; histostats, scatterstats and
+  barstats still stop in `ANALYSES`, `bootstrap_candidates` and the hidden-call rules
+  (histostats needs one-sample bookkeeping and a `trimcibt` replay; barstats computes
+  its pairwise tests through a hidden helper, and `.chisq_test_safe` swallows errors
+  into NA rows the recorders cannot see). `ORACLE_SUBSET` limits a debugging run (no
+  manifest, never attested).
 - withinstats alt text (text.py) says "groups" and does not mention the paths; use
   "conditions" and "measured on the same n subjects" when the statistics are
   integrated. An explicit `point_path=True` with three or more conditions is silent
@@ -424,21 +429,29 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
   `NotImplementedError` (WRS2 stops too). An AKP or xi resample whose effect size is
   0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at 10,000
   values per group; a counting-based sort could make it about 5 times faster.
-- MAP binning: R anchors bw.SJ's bins at min(x) far from zero; inferplot does so from
-  2^31 bin widths, inferred from probe-map (49 vectors at most 2.8e4, two at 2.4e10
-  and 7.5e11). Pin it in the next oracle run with the base vector
-  [0,1,2,2,3,3,3,4,5,7,9,12] plus c = 1200, 1211988, 26027440 and 26027507 (1e5, 1e8,
-  just below and just above 2^31 bin widths; the anchors' bandwidths differ by about
-  1e-3 there; avoid c = 26027539, where they agree).
-- Infinite AKP and xi resamples are kept on the assumption that WRS2 computes the
-  same ±Inf; no fixture has one. Add a case when an oracle run is next due.
+- MAP binning: the anchor threshold is pinned at 2^31 bin widths to within 2e-6
+  (probe-map anchor_26027440 and anchor_26027507); `_ANCHOR_AT_MIN = 2**31` matches all
+  four anchor vectors.
+- WRS2 returns ±Inf for an infinite AKP resample and ggstatsplot prints it
+  (edge_heavy_ties2, edge_within2_small, edge_within_small robust); 20,000 resamples
+  can make the bound finite again (edge_within_small: -10.18). inferplot reproduces
+  edge_heavy_ties2's -Inf. What WRS2 does with a 0/0 resample is still open (S3).
+- Paired Bayes factors: BayesFactor misses large |t| by far more than its own error
+  estimate (probe-pairedbf against 25-digit mpmath: +68% at n 5, t 1,000; +5.3% at
+  n 10, t 1,000; -0.78% at n 30, t 50; within 2.6e-6 at |t| <= 12). Every paired
+  fixture value is within 9.3e-10 of tools/reference, so `ttest_bayes_factor` (1e-8)
+  holds on the fixtures. inferplot computes the accurate value (the paired version of
+  D50, which the owner confirmed for the two-sample case on 2026-11-09); flag it for
+  the owner with the Phase 3 report. tools/reference overflows above BF 1e308.
+- The text tests check ggbetweenstats only; ggwithinstats joins with the withinstats
+  text layer (GG df with 2 decimals, n_pairs, labels for complete subjects only).
 - The APA sentence prints a huge statistic in fixed notation (an F of 1e250 gives 251
   digits), the only way the alt text can exceed 400 characters.
 - Unverified lead (statistics review): SciPy's betainc is used where both beta
   parameters are at least 1e4 within a factor of 10 (large Welch df2 and ncp in the
   omega squared interval); `noncentral_f_df1_two` covers df1 = 2 only.
-- Phases 3 and 4: `ttest_bayes_factor` was measured on two-sample Bayes factors only;
-  measure paired and one-sample ones against an exact integral when their fixtures
+- Phase 4: `ttest_bayes_factor` is measured on two-sample and paired Bayes factors;
+  measure one-sample ones (histostats) against an exact integral when their fixtures
   arrive, and log any change.
 - MAP centrality: every fixture label and 49 of probe-map's 52 vectors on R's grid
   point (`MAP_CENTRALITY`, 0 steps); constant data and zero IQR behave as D55 says;

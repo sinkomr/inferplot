@@ -272,21 +272,27 @@ largest double.
 
 ### withinstats, two conditions
 
+Read from the Phase 3 fixtures and probes (oracle run 42780911147). n is the number
+of complete subjects; the subtitle prints it as n_pairs.
+
 | type | Test | Effect size + CI | Centrality |
 | --- | --- | --- | --- |
-| parametric | paired t (`stats::t.test`, paired) | Hedges' g, paired *(verify d_z vs d_av)*; the CI follows `alternative` as for two groups (ggwithinstats passes it to the same `two_sample_test`) | mean |
-| nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired) *(verify exact/correct)* | rank-biserial r *(verify CI)*; follows `alternative` as for two groups | median |
-| robust | Yuen for dependent samples (`WRS2::yuend`) | robust effect size for dependent groups, `WRS2::dep.effect` (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`), bootstrap CI (ggstatsplot: 100 resamples); 1.1.3 fixed this value | trimmed mean |
-| bayes | paired JZS Bayes factor (`ttestBF`) | posterior difference: v0.2 | MAP |
+| parametric | paired t (`stats::t.test`, paired), t signed as first level minus second, df n - 1 | Hedges' g of the differences: d_z x J(n - 1) with d_z = mean(d) / sd(d) (not d_av, which misses every fixture). CI: the noncentral-t interval at the paired t and n - 1 df, each bound divided by sqrt(n) and multiplied by J; it follows `alternative` (sleep-less: [-Inf, -0.50]) | mean |
+| nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired), always `exact = FALSE, correct = TRUE`: zero differences dropped, normal approximation with tie and continuity corrections, V reported (R's own default would be exact for small samples; probe-signrank) | matched-pairs rank-biserial r = (W+ - W-) / (W+ + W-) over the nonzero differences. CI analytic, not bootstrapped: tanh(atanh r -/+ z SE), SE = sqrt(n (n + 1) (2n + 1) / 6) / (n (n + 1) / 2) with n counting every pair, zeros included; \|r\| = 1 gives [r, r]; follows `alternative` | median |
+| robust | Yuen for dependent samples (`WRS2::yuend`): t signed (unlike `yuen`'s \|t\|), df h - 1, p = 2 (1 - pt) in R (probe-wrs2within, 84 of 84 rows); inferplot reports the accurate tail (D43) | `WRS2::dep.effect`, AKP row (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`); percentile bootstrap (ggstatsplot: 100 resamples), always a 95% interval: `conf.level` does not reach it (sleep-cl90-robust prints CI 95%); bounds can be infinite; 1.1.3 fixed this value | trimmed mean |
+| bayes | paired JZS Bayes factor (`ttestBF(x, y, paired = TRUE)`): the one-sample Bayes factor of the differences | posterior difference: v0.2 | MAP |
+
+`alternative` has no effect on the robust and bayes types in ggstatsplot (sleep-greater);
+inferplot raises for them, as in betweenstats (section 2).
 
 ### withinstats, three or more conditions
 
 | type | Omnibus | Effect size + CI | Pairwise, then `p_adjust_method` | Centrality |
 | --- | --- | --- | --- | --- |
-| parametric | one-way repeated-measures ANOVA (`afex::aov_ez`) *(verify Greenhouse-Geisser default)* | partial omega squared | paired t | mean |
-| nonparametric | Friedman (`stats::friedman.test`) | Kendall's W (`effectsize::kendalls_w`), bootstrap CI | Durbin-Conover (`PMCMRplus::durbinAllPairsTest`) | median |
-| robust | trimmed-means RM ANOVA (`WRS2::rmanova`) | AKP average (`WRS2::wmcpAKP`) | `WRS2::rmmcp` | trimmed mean |
-| bayes | v0.2 | v0.2 | v0.2 | MAP |
+| parametric | one-way repeated-measures ANOVA (`afex::aov_ez`) with the Greenhouse-Geisser correction, always (never Huynh-Feldt): corrected df and p; the subtitle prints the corrected df with 2 decimals (bugs_long: F(2.63, 228.95)) | partial omega squared from the error strata, df_c (MS_c - MS_e) / (SS_c + SS_e + SS_s + MS_s) (not `F_to_omega2`: 0.078 against 0.18 on bugs_long); one-sided CI [low, 1] through the noncentral F at the uncorrected df, although the subtitle shows the corrected df | paired t (`pairwise.t.test(paired = TRUE)`) | mean |
+| nonparametric | Friedman (`stats::friedman.test`), tie-corrected chi-square on k - 1 df | Kendall's W = chi-square / (n (k - 1)) (`effectsize::kendalls_w`); bootstrap CI, one-sided [low, 1] at `conf.level` (ggstatsplot: 100 resamples). When every subject ranks the conditions alike W = 1, R's bootstrap fails and ggstatsplot drops the subtitle silently (edge_within_small) | Durbin-Conover (`PMCMRplus::durbinAllPairsTest`; Conover 1999, complete blocks): two-sided t on (n - 1)(k - 1) df; W = 1 gives t = Inf, p = 0 | median |
+| robust | trimmed-means RM ANOVA (`WRS2::rmanova`): fractional df when its sphericity correction applies, p = 1 - pf in R (84 of 84 probe rows; inferplot reports the accurate tail, D43) | average AKP (`WRS2::wmcpAKP`), percentile bootstrap, always a 95% interval (`conf.level` does not reach it; bugs_long-cl90-robust) | `WRS2::rmmcp`: per pair the trimmed mean of the differences, a one-sample trimmed t on n - 2g - 1 df, p = 2 (1 - pt), then `p_adjust_method` (rmmcp's own `p.crit` is in its table but ggstatsplot does not use it); its interval uses the Bonferroni t at alpha / (2C) | trimmed mean |
+| bayes | v0.2 (a Bayesian RM ANOVA with a random subject effect, `anovaBF`) | v0.2 | paired JZS Bayes factor per pair, prior 0.707 whatever `bf_prior` is (bugs_long-prior08), as in betweenstats | MAP |
 
 ### histostats (one sample against `test_value`)
 
@@ -623,11 +629,15 @@ in plain words, never mathtext source.
   JSON file per case: inputs, arguments, R and package versions (ggstatsplot,
   statsExpressions, effectsize, WRS2, BayesFactor, PMCMRplus, afex, correlation),
   `extract_stats()` tables, and the subtitle and caption expression strings. It handles
-  ggbetweenstats. Each other function first needs its own bookkeeping (which rows it
-  analyzes: complete subjects for withinstats, one sample for histostats), its own
+  ggbetweenstats and ggwithinstats (complete subjects through
+  `statsExpressions::complete_subjects`, recorded as `within_data`; bootstrap replay
+  of `dep.effect`, `wmcpAKP` and `kendalls_w`). Each other function first needs its
+  own bookkeeping (which rows it analyzes: one sample for histostats), its own
   bootstrap replay, and its own rules for naming the hidden calls, for when a caption
   is expected and for checking `n_per_level`; until then the script stops on its cases
-  instead of writing an incomplete fixture.
+  instead of writing an incomplete fixture. In GitHub Actions the generator runs in
+  ten parallel shards, and a merge job checks that every case and probe ran exactly
+  once on the same R and library before it writes the manifest.
 - For bootstrap-based CIs, the script first replays ggstatsplot's own bootstrap: the
   effect-size call is the first random draw inside `ggbetweenstats()`, so `set.seed()`
   with the case seed followed by the same call, with 100 resamples and the rows in
@@ -711,8 +721,15 @@ in plain words, never mathtext source.
   `probe-wrs2p`: 420 yuen, t1way and lincon p-values against 1 - cdf and the exact
   tail. `probe-akp`: `akp.effect` on 8 datasets at tr 0.01 to 0.49. `probe-map`: 52
   vectors with `map_estimate`, `bw.SJ` (or its error), `bw.nrd0` and density
-  summaries. `probe-ranks`: `wilcox.test`, `rank_biserial`, `kruskal.test` and Dunn on
-  tied data. They are hashed in the
+  summaries (plus 4 vectors that pin the bin anchor threshold). `probe-ranks`:
+  `wilcox.test`, `rank_biserial`, `kruskal.test` and Dunn on tied data.
+  `probe-signrank`: paired `wilcox.test` for every combination of exact, correct and
+  alternative, and the paired `rank_biserial`, on 12 sets of pairs. `probe-pairedbf`:
+  paired `ttestBF` at \|t\| from 0 to 1,000. `probe-friedman`: `friedman.test`,
+  Durbin-Conover and Kendall's W on 11 tables. `probe-rmanova`: afex with no,
+  Greenhouse-Geisser and Huynh-Feldt correction, the error strata and omega squared.
+  `probe-wrs2within`: yuend and rmanova p-values against 1 - cdf and the exact tail,
+  the rmmcp table, dep.effect and wmcpAKP. They are hashed in the
   manifest (`probes`) and checked like the fixtures; tests read them with
   `load_probes()` / `probe()` and `OracleProbe.section()` / `rows()`.
 - Both sides read CSVs the same way: only empty fields are missing, and R sorts strings
@@ -752,6 +769,7 @@ in plain words, never mathtext source.
 | `subtitle`, `caption` | deparsed plotmath from `extract_subtitle()` and `extract_caption()` |
 | `stats` | every `extract_stats()` table as an array of row objects; plotmath columns deparsed. In 1.1.4 `descriptive_data` is null |
 | `plot_layers` | the ggplot layers in order: `name`, `geom`, and the layer's own data (the centrality labels: value, n, `expression`, `n.expression`), null for layers that draw the main data. Bracket layers (`GeomSignif`) also carry `params` (`stat`, `geom`, `aes`; `stat.comparisons` lists the drawn pairs, `stat.annotations` their labels) and `built`, the rows ggplot2 computes for drawing |
+| `within_data` | ggwithinstats only: `subject_id`, `levels`, `subjects`, `subject_order` (the sort rule, as text), `values` (one row per complete subject), `dropped_subjects`, `rows_without_x_or_subject` |
 | `bootstrap_reference` | null, or: `call`; `ggstatsplot` (its estimate and bounds, 100 resamples, seed); `replay` (`matches` and each candidate's replayed values); the 20,000-resample `estimate`, `conf_low`, `conf_high` and `raw` output; `replicates` (mean and SD of the estimate and each bound over 50 runs of 2,000) |
 | `versions` | R version, platform, OS, collation, repositories, package versions |
 
