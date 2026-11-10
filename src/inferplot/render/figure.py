@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Literal
 
+import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.text import Text
+from numpy.typing import NDArray
 
 from inferplot.render import theme
 
@@ -29,8 +31,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CenterLabel",
+    "DrawnData",
     "DrawnPaths",
     "DrawnView",
+    "PointLabels",
     "StatsFigure",
     "Subsample",
     "axes_background",
@@ -57,6 +61,9 @@ class Subsample:
     subjects: tuple[int, int] | None = None
     # Levels whose violin or density outline is not drawn.
     undrawn: tuple[str, ...] = ()
+    # histostats and scatterstats: the check's message in full (they have no
+    # levels to speak of).
+    message: str | None = None
 
 
 def shows_all(sub: Subsample, verb: str) -> str:
@@ -85,6 +92,39 @@ class DrawnPaths:
     subjects: LineCollection | None
     centrality: Line2D | None
     levels: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class DrawnData:
+    """Marks a histostats or scatterstats panel draws from the data, for the view
+    checks (``data_outside_view``, ``flat_data``).
+
+    ``panel`` is a key of ``StatsFigure.axes``; ``what`` names the marks in
+    messages ("values", "bars"); ``x`` and ``y`` are (marks, points) arrays of
+    each mark's points in data coordinates, which must all lie in view for the
+    mark to be shown whole, or None where the mark spans that axis (a value of a
+    histogram lies along x at any height, a vertical line spans the height);
+    ``spread`` names the axes ("x", "y", "xy" or "") along which the marks'
+    range must not be drawn within ``flat_data``'s two pixels.
+    """
+
+    panel: str
+    what: str
+    x: NDArray[np.float64] | None
+    y: NDArray[np.float64] | None
+    spread: str = ""
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class PointLabels:
+    """The point labels of a scatterstats figure, for ``check()``: the texts, the
+    drawn points they must not hide (``points``, or None), how many labels there
+    are and the most inferplot places clear of each other (``limit``)."""
+
+    texts: tuple[Text, ...]
+    points: PathCollection | None
+    total: int
+    limit: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,12 +163,15 @@ class StatsFigure:
         "_axes",
         "_brackets",
         "_centers",
+        "_color_names",
         "_colors",
+        "_data",
         "_figure",
         "_inside",
         "_labels",
         "_own",
         "_paths",
+        "_point_labels",
         "_result",
         "_roles",
         "_subsample",
@@ -151,6 +194,9 @@ class StatsFigure:
         colors: tuple[theme.Color, ...] = (),
         centers: tuple[tuple[str, PathCollection], ...] = (),
         labels: tuple[CenterLabel, ...] = (),
+        data: tuple[DrawnData, ...] = (),
+        color_names: tuple[str, ...] = (),
+        point_labels: PointLabels | None = None,
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -165,6 +211,9 @@ class StatsFigure:
         self._colors = colors
         self._centers = centers
         self._labels = labels
+        self._data = data
+        self._color_names = color_names
+        self._point_labels = point_labels
 
     @property
     def figure(self) -> Figure:
@@ -173,7 +222,8 @@ class StatsFigure:
 
     @property
     def axes(self) -> Mapping[str, Axes]:
-        """The panels by name: ``"main"``."""
+        """The panels by name: ``"main"``, and for scatterstats' marginal
+        histograms ``"xside"`` (above) and ``"yside"`` (right)."""
         return self._axes
 
     @property
@@ -240,9 +290,15 @@ class StatsFigure:
 
     def __repr__(self) -> str:
         r = self._result
-        what = r.x if r.y is None else f"{r.y} by {r.x}"
+        if r.design == "one-sample":
+            what = f"{r.x}, {r.n_obs:,} values"
+        elif r.design == "correlation":
+            what = f"{r.y} and {r.x}, {r.n_obs:,} pairs"
+        else:
+            what = r.x if r.y is None else f"{r.y} by {r.x}"
+            what = f"{what}, {len(r.levels)} levels"
         return (
-            f"<StatsFigure {r.analysis}: {what}, {len(r.levels)} levels; "
+            f"<StatsFigure {r.analysis}: {what}; "
             "fig.check() lists problems, fig.save(path) writes it>"
         )
 
@@ -294,6 +350,23 @@ class StatsFigure:
     def colors(self) -> tuple[theme.Color, ...]:
         """Each level's colour from the palette, in level order."""
         return self._colors
+
+    @property
+    def data(self) -> tuple[DrawnData, ...]:
+        """What histostats and scatterstats draw from the data, for the view
+        checks; empty for the other figures."""
+        return self._data
+
+    @property
+    def color_names(self) -> tuple[str, ...]:
+        """What each of ``colors`` paints, in words ("the bars"); empty where the
+        colours follow the levels."""
+        return self._color_names
+
+    @property
+    def point_labels(self) -> PointLabels | None:
+        """scatterstats' point labels, or None."""
+        return self._point_labels
 
     @property
     def view(self) -> DrawnView | None:

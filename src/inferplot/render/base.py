@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import dataclasses
 import io
+import math
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast
@@ -67,9 +68,14 @@ __all__ = [
     "apply_args",
     "check_artist_args",
     "check_axes",
+    "check_drawable",
+    "check_given_axes",
+    "check_scale",
+    "check_subtitle",
     "check_user_texts",
     "draw",
     "px",
+    "shared_limits",
     "siblings",
 ]
 
@@ -410,6 +416,100 @@ def check_axes(ax: Axes, *, shared_x: bool = False) -> None:
             "the other's. Make the panels with sharex=False (the default), for "
             "example figure.subplots(1, 2, sharey=True)."
         )
+
+
+def check_drawable(result: StatsResult, analysis: str, call: str) -> None:
+    """A result of ``analysis`` that still holds its observations (histostats,
+    scatterstats); ``call`` is how to recompute it."""
+    from inferplot.result import StatsResult
+
+    if not isinstance(result, StatsResult):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(
+            f"render.{analysis}() draws the result of ip.analyze.{analysis}(); "
+            f"got {type(result).__name__}."
+        )
+    if result.analysis != analysis:
+        raise TypeError(
+            f"render.{analysis}() draws results of ip.analyze.{analysis}(); this "
+            f"result comes from ip.analyze.{result.analysis}(). Draw it with "
+            f"ip.render.{result.analysis}(result)."
+        )
+    if not result.values or not all(result.values):
+        raise ValueError(
+            "This result holds no observations to draw: the copy of a result that "
+            "save() embeds in a figure file leaves them out. Recompute it with "
+            f"{call} and draw that."
+        )
+
+
+def check_subtitle(result: StatsResult, subtitle: str | None) -> None:
+    """A user subtitle only where the result draws none of its own."""
+    if subtitle is not None and result.settings.results_subtitle:
+        raise ValueError(
+            "subtitle= would replace the results subtitle, which this result draws "
+            "(it was computed with results_subtitle=True). To use your own "
+            "subtitle, pass results_subtitle=False to the analysis; to add text, "
+            "use title= or caption=."
+        )
+
+
+def check_given_axes(ax: object) -> None:
+    """``ax`` is None or a plain rectangular 2D Axes (histostats, scatterstats:
+    shared axes are allowed, and laid out to fit every panel that shares them)."""
+    if ax is None:
+        return
+    if not isinstance(ax, Axes):
+        raise TypeError(
+            f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
+        )
+    check_axes(ax, shared_x=True)
+
+
+# The largest |value| histostats and scatterstats draw: matplotlib treats axis
+# limits whose size is below about 1e21 times the smallest normal double as zero,
+# and the padding around the data must stay below the largest double.
+_SMALLEST_DRAWN: Final = 1e-280
+_LARGEST_DRAWN: Final = 1e306
+
+
+def check_scale(values: Sequence[float], column: str, letter: str) -> None:
+    """Values matplotlib can draw on an axis; raised before anything is drawn."""
+    largest = max((abs(float(x)) for x in values), default=0.0)
+    if largest == 0.0 or _SMALLEST_DRAWN <= largest <= _LARGEST_DRAWN:
+        return
+    exponent = math.floor(math.log10(largest))
+    small = largest < _SMALLEST_DRAWN
+    if small:
+        why = (
+            f"the largest is {largest:.3g} in size, and matplotlib treats axis "
+            "limits below about 1e-287 as zero"
+        )
+        how = f"multiply {letter} by 1e{-exponent}"
+    else:
+        why = (
+            f"the largest is {largest:.3g}, and the axis, with room around the "
+            "data, would pass the largest double (1.8e308)"
+        )
+        how = f"divide {letter} by 1e{exponent}"
+    raise ValueError(
+        f"The values of {column!r} are too {'small' if small else 'large'} "
+        f"for matplotlib to draw: {why}. The statistics do not depend on the "
+        f"units: {how} (change its units) before the analysis and draw that."
+    )
+
+
+def shared_limits(
+    ax: Axes, which: Literal["x", "y"], low: float, high: float
+) -> tuple[float, float]:
+    """The limits ``low``, ``high`` widened to hold the view of every other Axes
+    that shares that axis and draws something, so that drawing into one panel
+    never cuts another's data."""
+    for other in siblings(ax, which):
+        if other is ax or not other.has_data():
+            continue
+        a, b = sorted(other.get_xlim() if which == "x" else other.get_ylim())
+        low, high = min(low, float(a)), max(high, float(b))
+    return low, high
 
 
 def siblings(ax: Axes, which: Literal["x", "y"]) -> list[Axes]:

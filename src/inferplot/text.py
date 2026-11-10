@@ -73,6 +73,7 @@ __all__ = [
     "UNPINNED_KEEP_NEGATIVE_ZERO",
     "BinOp",
     "Call",
+    "DrawnLayers",
     "FigureTexts",
     "Index",
     "Node",
@@ -1685,18 +1686,49 @@ def alt_text(
     return f"{head}. {result}{pairs}"
 
 
+@dataclass(frozen=True, slots=True)
+class DrawnLayers:
+    """What a histostats or scatterstats figure draws, for its alt text.
+
+    histostats: ``bars`` (the number of histogram bars), ``centrality`` (the
+    centrality line and its label), ``test_value`` ("line" where the test value
+    is marked by a line, "edge" where it lies beyond the view and an arrow at the
+    edge names it). scatterstats: ``points`` (the points drawn; fewer than the
+    pairs when a random subsample is drawn), ``smooth`` (the least-squares line
+    with its band), ``marginal`` (the marginal histograms), ``labels`` (the
+    labelled points).
+    """
+
+    bars: int = 0
+    centrality: bool = False
+    test_value: str | None = None
+    points: int = 0
+    smooth: bool = False
+    marginal: bool = False
+    labels: int = 0
+
+
 def figure_alt_text(
     result: StatsResult,
     *,
     subject_paths: int | None = None,
     centrality_path: bool | None = None,
     centrality: bool = True,
+    drawn: DrawnLayers | None = None,
 ) -> str:
     """The alt text of a figure that draws ``subject_paths`` subjects' paths (0
     for none) and the centrality path or not (within subjects; None for
     independent groups), with or without the ``centrality`` points and labels
-    (:func:`alt_text`); the renderer gives it to the result it returns. Designs
-    between and within only (they always name ``y``)."""
+    (:func:`alt_text`); the renderer gives it to the result it returns.
+
+    Designs "one-sample" and "correlation" (histostats, scatterstats) pass what
+    their figure draws as ``drawn``; until their texts are compared with
+    ggstatsplot's (PROVISIONAL, see ``_provisional_texts``) the alt text is the
+    result's own, which describes the analysis, not the figure.
+    """
+    if result.design in _PROVISIONAL_DESIGNS:
+        del drawn
+        return result.text.alt_text
     if result.y is None:
         raise ValueError(f"design {result.design!r} has no figure alt text yet")
     return alt_text(
@@ -2094,7 +2126,35 @@ class FigureTexts:
 
 
 def figure_texts(result: StatsResult) -> FigureTexts:
-    """The renderer's texts for ``result``, rebuilt from its numbers and settings."""
+    """The renderer's texts for ``result``, rebuilt from its numbers and settings.
+
+    Designs "one-sample" and "correlation" (PROVISIONAL, see
+    ``_provisional_texts``): no subtitle and no caption lines yet, no tick or
+    bracket labels, and for "one-sample" the centrality label ggstatsplot draws
+    (``widehat(mu)[mean] == "18.81"``), empty where the value is missing.
+    """
+    if result.design in _PROVISIONAL_DESIGNS:
+        centrality = (
+            tuple(
+                to_mathtext(
+                    centrality_expression(
+                        centrality=d.centrality,
+                        value=d.value,
+                        digits=result.settings.digits,
+                    )
+                )
+                for d in result.descriptives
+            )
+            if result.design == "one-sample"
+            else ()
+        )
+        return FigureTexts(
+            subtitle=None,
+            caption_lines=(),
+            centrality_labels=centrality,
+            tick_labels=(),
+            pairwise_labels=(),
+        )
     ex = _expressions(
         descriptives=result.descriptives,
         test=result.test,

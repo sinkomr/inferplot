@@ -111,7 +111,10 @@ def text_extents(fig: StatsFigure) -> list[tuple[Text, str, Bbox]]:
     renderer = _renderer(fig)
     hidden: set[int] = set()
     roles: dict[int, str] = {}
-    for axes in [ax] if not fig.own else list(root_figure(fig.figure).axes):
+    panels = [ax] if not fig.own else list(root_figure(fig.figure).axes)
+    # With the secondary axes of each (histostats' percent axis).
+    panels += [child for panel in panels for child in _children(panel)]
+    for axes in panels:
         if axes.xaxis.get_visible():
             hidden |= _hidden_tick_labels(axes.xaxis)
         else:
@@ -137,6 +140,11 @@ def text_extents(fig: StatsFigure) -> list[tuple[Text, str, Bbox]]:
         )
         out.append((text, described, box))
     return out
+
+
+def _children(axes: Axes) -> list[Axes]:
+    """The child Axes of ``axes`` (secondary axes), visible or not."""
+    return list(cast("list[Axes]", getattr(axes, "child_axes", [])))
 
 
 def _axes_hidden(axes: Axes) -> set[int]:
@@ -182,6 +190,9 @@ def _other_extents(fig: StatsFigure) -> list[tuple[str, Bbox]]:
             out.append(("the plotting area of another panel", frame))
         hidden = _axes_hidden(other)
         roles = _axis_roles(other) | _title_roles(other)
+        for child in _children(other):
+            hidden |= _axes_hidden(child)
+            roles |= _axis_roles(child)
         for text in texts:
             if id(text) in hidden or not text.get_visible():
                 continue
@@ -255,12 +266,18 @@ def _listing(items: list[str]) -> str:
     return listed
 
 
-def _overlaps(extents: list[tuple[Text, str, Bbox]]) -> list[str]:
+def _overlaps(
+    extents: list[tuple[Text, str, Bbox]], apart: frozenset[int] = frozenset()
+) -> list[str]:
+    """Pairs of texts whose boxes intersect, except pairs of texts both in
+    ``apart`` (point labels, which ``point_labels_crowded`` reports)."""
     found: list[str] = []
     for a in range(len(extents)):
-        _, da, ba = extents[a]
+        ta, da, ba = extents[a]
         for b in range(a + 1, len(extents)):
-            _, db, bb = extents[b]
+            tb, db, bb = extents[b]
+            if id(ta) in apart and id(tb) in apart:
+                continue
             width = min(ba.x1, bb.x1) - max(ba.x0, bb.x0)
             height = min(ba.y1, bb.y1) - max(ba.y0, bb.y0)
             if width > 0 and height > 0:
@@ -567,13 +584,84 @@ def _ambiguous_labels(fig: StatsFigure) -> Issue | None:
     )
 
 
+def _crowded_labels(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> Issue | None:
+    """scatterstats' point labels that overlap each other or hide points, or that
+    were too many to place."""
+    labels = fig.point_labels
+    if labels is None:
+        return None
+    boxes = {id(text): (described, box) for text, described, box in extents}
+    shown = [boxes[id(t)] for t in labels.texts if id(t) in boxes]
+    found: list[str] = []
+    pairs = [
+        f"{da} and {db}"
+        for (da, ba), (db, bb) in itertools.combinations(shown, 2)
+        if min(ba.x1, bb.x1) - max(ba.x0, bb.x0) > 0
+        and min(ba.y1, bb.y1) - max(ba.y0, bb.y0) > 0
+    ]
+    if pairs:
+        noun = "pair of point labels overlaps" if len(pairs) == 1 else (
+            "pairs of point labels overlap"
+        )  # fmt: skip
+        found.append(f"{len(pairs)} {noun}: {_listing(pairs)}")
+    points = labels.points
+    if (
+        points is not None
+        and points.get_visible()
+        and points.axes is not None
+        and shown
+    ):
+        offsets = np.asarray(cast("Any", points).get_offsets(), dtype=np.float64)
+        if offsets.size:
+            xy = np.asarray(points.get_offset_transform().transform(offsets))
+            tol = _CLIP_TOLERANCE
+            hidden = np.zeros(xy.shape[0], dtype=bool)
+            for _, box in shown:
+                hidden |= (
+                    (xy[:, 0] > box.x0 + tol)
+                    & (xy[:, 0] < box.x1 - tol)
+                    & (xy[:, 1] > box.y0 + tol)
+                    & (xy[:, 1] < box.y1 - tol)
+                )
+            count = int(hidden.sum())
+            if count:
+                found.append(
+                    f"{count:,} of the {xy.shape[0]:,} points lie under a point label"
+                )
+    if labels.total > labels.limit:
+        found.append(
+            f"{labels.total:,} points are labelled, more than the {labels.limit:,} "
+            "inferplot places clear of each other and of the points, so the labels "
+            "are drawn beside their points without avoiding anything"
+        )
+    if not found:
+        return None
+    return Issue(
+        code="point_labels_crowded",
+        severity="warning",
+        message="The point labels are crowded: " + "; ".join(found) + ".",
+        fix=(
+            "Label fewer points: set the label column (label_var) to None or '' "
+            "for the points you do not need to name, as ggstatsplot's "
+            "label.expression selects them; or draw into a larger Axes with ax= "
+            "(made with a larger figsize, marginal=False)."
+        ),
+    )
+
+
 def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     """Rendering issues: label_overlap, text_clipped, points_subsampled, and for
     withinstats path_hidden and paths_crowded."""
     fig.draw()
     extents = text_extents(fig)
     issues: list[Issue] = []
-    overlaps = _overlaps(extents)
+    labels = fig.point_labels
+    apart: frozenset[int] = frozenset(
+        id(t) for t in (labels.texts if labels is not None else ())
+    )
+    overlaps = _overlaps(extents, apart)
     crossings = _crossings(fig, extents)
     room = (
         "Give the plot more room (a larger Axes passed as ax=, or inferplot's own "
@@ -637,13 +725,28 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
                 fix=room,
             )
         )
+    crowded = _crowded_labels(fig, extents)
+    if crowded is not None:
+        issues.append(crowded)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
     if ambiguous is not None:
         issues.append(ambiguous)
     issues += view_issues(fig, extents)
     sub = fig.subsample
-    if sub is not None:
+    if sub is not None and sub.message is not None:
+        issues.append(
+            Issue(
+                code="points_subsampled",
+                severity="info",
+                message=sub.message,
+                fix=(
+                    "Nothing needs fixing. Pass another seed to the analysis to draw "
+                    "a different subsample."
+                ),
+            )
+        )
+    elif sub is not None:
         whole = (
             ", with each level's smallest and largest value"
             if sub.subjects is None
