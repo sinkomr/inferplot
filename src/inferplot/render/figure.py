@@ -25,11 +25,13 @@ if TYPE_CHECKING:
     from matplotlib.collections import LineCollection, PathCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
 
     from inferplot.check import Issue
     from inferplot.result import StatsResult
 
 __all__ = [
+    "CellLabel",
     "CenterLabel",
     "DrawnData",
     "DrawnPaths",
@@ -139,6 +141,21 @@ class CenterLabel:
     usual: Literal["right", "left"]
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class CellLabel:
+    """A barstats cell label, for ``check()``: its text, the segment it labels,
+    the cell in words (``"'4' in '0'"``) and its label's words, where the
+    drawing put it (``place``: "inside" its segment, "outside" beside its bar,
+    or "omitted" for lack of room) and the bar's position on the x axis."""
+
+    text: Text
+    segment: Rectangle
+    name: str
+    words: str
+    place: Literal["inside", "outside", "omitted"]
+    bar: int
+
+
 @dataclass(slots=True)
 class DrawnView:
     """The axis limits inferplot set for a panel (updated when a later drawing
@@ -161,6 +178,7 @@ class StatsFigure:
     __slots__ = (
         "_axes",
         "_brackets",
+        "_cell_labels",
         "_centers",
         "_color_names",
         "_colors",
@@ -196,6 +214,7 @@ class StatsFigure:
         data: tuple[DrawnData, ...] = (),
         color_names: tuple[str, ...] = (),
         point_labels: PointLabels | None = None,
+        cell_labels: tuple[CellLabel, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -213,6 +232,7 @@ class StatsFigure:
         self._data = data
         self._color_names = color_names
         self._point_labels = point_labels
+        self._cell_labels = cell_labels
 
     @property
     def figure(self) -> Figure:
@@ -366,6 +386,12 @@ class StatsFigure:
     def point_labels(self) -> PointLabels | None:
         """scatterstats' point labels, or None."""
         return self._point_labels
+
+    @property
+    def cell_labels(self) -> tuple[CellLabel, ...]:
+        """barstats' cell labels (every non-zero cell); empty for the other
+        figures."""
+        return self._cell_labels
 
     @property
     def view(self) -> DrawnView | None:

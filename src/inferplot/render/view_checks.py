@@ -126,13 +126,16 @@ def _axis_changed_data(fig: StatsFigure) -> Issue | None:
             undo.append(f"ax.{setter}('linear')")
     if not found:
         return None
+    drawn = "the bins and the line drawn"
+    if fig.cell_labels:  # barstats
+        drawn = "the bars stacked"
     return Issue(
         code="axis_changed",
         severity="warning",
         message=(
             "The axes were changed after inferplot drew them: "
             + "; ".join(found)
-            + ". The labels were placed, and the bins and the line drawn, for "
+            + f". The labels were placed, and {drawn}, for "
             "upright linear axes, so they may now cover the data or read wrongly."
         ),
         fix=(
@@ -317,11 +320,20 @@ def _low_contrast(
                 f"{_hex(inside)} has {ratio:.2f}:1, below {COLOR_CONTRAST}:1"
             )
     frame = ax.get_window_extent()
+    # barstats: a cell label drawn on its segment is read against the segment.
+    segments = {
+        id(c.text): c.segment
+        for c in fig.cell_labels
+        if c.place == "inside" and c.segment.get_visible()
+    }
     for text, described, box in extents:
         patch = text.get_bbox_patch()
         x, y = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
         within = frame.x0 <= x <= frame.x1 and frame.y0 <= y <= frame.y1
         below = inside if within else outside
+        segment = segments.get(id(text))
+        if segment is not None and segment.get_fill():
+            below = theme.over(segment.get_facecolor(), inside)
         if patch is not None and patch.get_visible() and patch.get_fill():
             below = theme.over(patch.get_facecolor(), below)
         alpha = text.get_alpha()

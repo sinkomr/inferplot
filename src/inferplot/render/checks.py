@@ -40,6 +40,7 @@ from matplotlib.transforms import Bbox, BboxBase
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
+from inferplot.render.bar_checks import cell_label_issue
 from inferplot.render.figure import (
     describe_text,
     drawn_before,
@@ -713,6 +714,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     crowded = _crowded_labels(fig, extents)
     if crowded is not None:
         issues.append(crowded)
+    hidden = cell_label_issue(fig, extents)  # barstats
+    if hidden is not None:
+        issues.append(hidden)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
     if ambiguous is not None:
