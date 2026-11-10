@@ -103,6 +103,8 @@ These names get a targeted message instead:
 | `hue` | no second grouping in this function; `grouping_var` arrives in v0.2 |
 | `ci`, `errorbar` | intervals are always `conf_level` confidence intervals |
 | `subject`, `id`, `subject.id` | use `subject_id` |
+| `paired` | withinstats: not needed; measurements are always paired by `subject_id` |
+| `centrality.path.args`, `point.path.args` | withinstats: no equivalent; `centrality_path` and `point_path` switch the paths |
 
 Other ggbetweenstats 1.1.4 arguments with no inferplot equivalent (`centrality.type`,
 `centrality.point.args`, `centrality.label.args`, `ggsignif.args`, `ggtheme`,
@@ -111,7 +113,9 @@ did-you-mean. A keyword whose snake_case form (dots, hyphens and camelCase turne
 lowercase underscores) is a valid argument raises `TypeError` naming that spelling.
 `subject`, `id`, `subject.id` point to `subject_id` in functions that have it; in
 `betweenstats` they, and `subject_id`, say the groups are independent and point to
-`withinstats(..., subject_id=...)`. When several keywords are wrong, the first in call
+`withinstats(..., subject_id=...)`. `ip.render.withinstats` says the subject column is an
+argument of the analysis (`subject_id=`). An extra positional string given to a
+function with `subject_id` gets the hint `subject_id='<value>'`. When several keywords are wrong, the first in call
 order is reported. Did-you-mean never suggests an argument the call already gives; a
 snake_case spelling of one says it is already given. A drawing keyword given to
 `ip.analyze.<name>` (`ax`, `palette`, `layers`, `title`, `subtitle`, `caption`, `xlab`,
@@ -159,9 +163,18 @@ explaining that pairing by row order is not allowed.
   below roughly 1e-154 times it; §4, "Scale and range") raises too, naming the
   levels; with two groups this happens only when the group with the largest |y| is
   constant. A group whose values span more than the largest double raises.
-- `withinstats`: pivot `subject_id × x`. A repeated subject within a level raises,
-  naming the first duplicates. Subjects missing any level are removed from statistics
-  **and** the plot and counted (ggstatsplot 1.1.3 behavior).
+- `withinstats` (D56): pivot `subject_id × x`. `subject_id` follows `x`'s type rules and
+  may not be `x` or `y`. Rows with a missing `x`, `y` or `subject_id` are dropped and
+  counted in `n_dropped` (rows). A subject with more than one row at a level raises,
+  naming the first repeats; the check covers every row with a subject and a level, also
+  one whose `y` is missing. An infinite `y` in a row with all three columns present
+  raises, also when its subject is left out later. Subjects without a value at every
+  level are removed from statistics **and** the plot and counted in `dropped_subjects`
+  (subjects; ggstatsplot 1.1.3 behavior), including a subject whose `y` values are all
+  missing. Fewer than two complete subjects raise. The analyzed data are a
+  subjects-by-levels matrix whose rows follow the subject column's order (declared
+  categories, else sorted: text by code point, numbers numerically), so results do not
+  depend on the input row order or the data frame library.
 - More than 5,000 points in one panel: draw a density layer plus a seeded subsample of
   2,000 points; statistics always use all data; record it in `warnings`.
 
@@ -428,13 +441,14 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | --- | --- |
 | `analysis`, `design`, `type` | e.g. `"betweenstats"`, `"between"`, `"parametric"` (canonical) |
 | `x`, `y`, `subject_id`, `levels` | column names and analyzed level order |
-| `values` | per level, the analyzed `y` values in data order; the renderer draws from them (D36) |
+| `values` | per level, the analyzed `y` values in data order (betweenstats) or in `subjects` order (withinstats: entry i of every level belongs to `subjects[i]`); the renderer draws from them (D36) |
+| `subjects` | withinstats: labels of the complete subjects, in matrix row order (D56); empty for betweenstats |
 | `descriptives` | per level: `n`, centrality name (`mean`, `median`, `trimmed_mean`, `map`) and value |
 | `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45) |
 | `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
 | `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46) |
-| `n_obs`, `n_dropped`, `dropped_subjects` | counts |
+| `n_obs`, `n_dropped`, `dropped_subjects` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; to confirm against ggstatsplot's `n.obs` when the first ggwithinstats fixture arrives); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level |
 | `warnings` | plain-English strings, no internal jargon |
 | `provenance` | inferplot, numpy, scipy, matplotlib and narwhals versions (read from package metadata, so matplotlib is not imported); seed; parity target `"ggstatsplot 1.1.4"`; method citations |
 | `settings` | the analysis arguments that shaped the numbers and texts, canonical values |
@@ -457,8 +471,9 @@ inside an `rc_context`, drops the SVG date and PDF creation date (saving twice w
 identical bytes), and embeds `result.to_json(include_values=False)` in file metadata:
 the PNG text chunk "Description", the SVG Dublin Core description and the PDF Info
 "Subject". The embedded copy holds every number and text but not the analyzed
-observations, which can be large and are the user's data (D36); a result read back
-from it has `values == ()` and cannot be drawn again.
+observations or the subject labels, which can be large and are the user's data (D36,
+D56); a result read back from it has `values == ()` and `subjects == ()` and cannot be
+drawn again.
 
 ## 7. Text formats
 
@@ -549,7 +564,7 @@ no problems.
 
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
-| `small_n` | result | warning | any group with n < 5 |
+| `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once) |
 | `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.values`) |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed |

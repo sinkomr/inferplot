@@ -150,7 +150,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 
 ## Phase 3 — withinstats, all types
 
-- [ ] parametric, nonparametric, robust, bayes (two conditions); `subject_id` handling
+- [x] foundation (D56): `read_within` (complete subjects, paired by `subject_id`; the
+  same matrix on pandas, polars and pyarrow and under shuffled rows; bugs_long 88 of 93
+  subjects, sleep 10, edge_within_missing 11), `ip.withinstats`,
+  `ip.analyze.withinstats` and `ip.render.withinstats` with every argument check,
+  `StatsResult.subjects`; every type raises NotImplementedError until its statistics
+  land. 11,475 tests pass
+- [ ] oracle: ggwithinstats cases and probes (generator extension, in progress on
+  `oracle/phase3-cases`)
+- [ ] parametric: paired t, Hedges' g; repeated-measures ANOVA, partial omega squared,
+  paired t pairs
+- [ ] nonparametric: Wilcoxon signed-rank, rank-biserial r; Friedman, Kendall's W,
+  Durbin-Conover pairs
+- [ ] robust: Yuen for dependent samples, dep.effect; rmanova, average AKP, rmmcp pairs
+- [ ] bayes: paired JZS Bayes factor (two conditions; three or more is v0.2)
+- [ ] renderer: subject paths (`point_path`) and the centrality path
+- [ ] end-of-phase fresh-context review of the Phase 3 diff against SPEC.md
 
 ## Phase 4 — histostats, scatterstats, barstats
 
@@ -207,6 +222,12 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   swallows errors into NA rows the recorders cannot see). Unused edge CSV:
   `edge_within_missing` (Phase 3). `ORACLE_SUBSET` limits a local debugging run (no
   manifest).
+- withinstats foundation: R's subject row order and `n_obs` = complete subjects are
+  unconfirmed until the first ggwithinstats fixture (`test_fixture_pivot` reads its
+  `within_data` field); `heavy_ties` counts raw values, not paired differences or ties
+  within a subject; the D39 no-effect warnings are not ported to withinstats yet;
+  `ip.render.betweenstats(result, paired=True)` wrongly says `paired=` is an analysis
+  argument (it is one only for barstats).
 - Deliberate differences confirmed by the owner on 2026-11-09 (accuracy over R's
   numbers, like D31): D50, two pairwise Bayes factors BayesFactor misses (iris
   Petal.Length, +1.16e-3 and -6.1e-5; one label -133.68 for ggstatsplot's -133.69);
