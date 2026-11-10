@@ -607,7 +607,10 @@ def _sentences(text: str) -> int:
 
 
 def test_alt_text_on_every_parametric_fixture() -> None:
+    # ggbetweenstats only; ggwithinstats joins with the withinstats text layer.
     for case in load_cases():
+        if case.function != "ggbetweenstats":
+            continue
         if case.type != "parametric" or case.error is not None:
             continue
         result = result_from_fixture(case)

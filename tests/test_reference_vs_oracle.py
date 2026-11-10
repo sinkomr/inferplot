@@ -1303,13 +1303,15 @@ def test_ranks_probe_k_samples() -> None:
 def _within_params(
     type_: str, *, two: bool, needs: Output | None = "subtitle"
 ) -> list[Any]:
-    """ggwithinstats cases of one type and design that have the output a check reads."""
+    """ggwithinstats cases of one type and design that have the output a check reads
+    (an output whose error the case declares ggstatsplot swallows has none)."""
     cases = [
         case
         for case in cases_for("ggwithinstats")
         if case.type == type_
         and (len(case.analysis_levels) == 2) == two
         and (needs is None or _draws(case, needs))
+        and (needs is None or needs not in case.expected_hidden_errors)
     ]
     design = "two conditions" if two else "three or more conditions"
     require_cases(cases, f"ggwithinstats {type_}, {design}, with {needs}")
@@ -1562,7 +1564,7 @@ def test_rm_omega_squared(case: OracleCase) -> None:
     row = case.subtitle_data
     assert row["effectsize"] == "Omega2_partial" or "Omega" in str(row["effectsize"])
     assert_close("closed_form", omega, _value(row, "estimate"), what="omega")
-    assert not is_close(
+    assert omega == 0.0 or not is_close(
         "closed_form",
         ref.omega2_partial_from_f(f_stat, df1, df2),
         _value(row, "estimate"),
@@ -1667,7 +1669,10 @@ def _durbin_conover(
     out = {}
     for i in range(k):
         for j in range(i + 1, k):
-            t = abs(float(sums[i] - sums[j])) / se
+            difference = abs(float(sums[i] - sums[j]))
+            # Every subject ranking the conditions alike (Kendall's W = 1) leaves no
+            # error variance: R reports t = Inf and p = 0 (edge_within_small).
+            t = difference / se if se > 0 else math.inf
             out[(i, j)] = (t, float(2 * stats.t.sf(t, df)))
     return out
 

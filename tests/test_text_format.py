@@ -46,9 +46,17 @@ _DF2_RE = re.compile(r"\]\((\S+?), (\S+?)\) ==")
 _DF1_RE = re.compile(r'\* "\(" \* (\S+?) \* "\)" ==')
 
 
+# ggwithinstats fixtures (Phase 3) join these checks with the withinstats text
+# layer: their subtitles differ (paired n, corrected df) and their labels describe
+# complete subjects only.
+def text_cases() -> list[OracleCase]:
+    """The fixtures whose texts the text layer covers: ggbetweenstats, every type."""
+    return [case for case in load_cases() if case.function == "ggbetweenstats"]
+
+
 def all_case_params() -> list[Any]:
-    """Every fixture, of every function and type, as a pytest param."""
-    cases = require_cases(load_cases(), "any function")
+    """Every ggbetweenstats fixture, of every type, as a pytest param."""
+    cases = require_cases(text_cases(), "ggbetweenstats")
     return [pytest.param(case, id=case.name) for case in cases]
 
 
@@ -401,7 +409,7 @@ def test_decimal_ties_are_recomputed_and_correct() -> None:
     PlantGrowth, edge_k5 and edge_unbalanced are exact ties of two middle values.
     """
     ties = 0
-    for case in load_cases():
+    for case in text_cases():
         if case.type == "bayes":
             continue
         y = str(case.args["y"])

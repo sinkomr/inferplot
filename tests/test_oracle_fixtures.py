@@ -728,7 +728,12 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
     # Bootstrapped designs (SPEC.md section 9), and only when ggstatsplot computed the
     # effect size: without a subtitle (results.subtitle = FALSE) there is no CI.
     bootstrapped = (case.type == "robust") or (case.type == "nonparametric" and k > 2)
-    with_subtitle = case.args.get("results.subtitle", True) is not False
+    # A subtitle ggstatsplot swallowed an error for has no effect size either
+    # (edge_within_small, nonparametric).
+    with_subtitle = (
+        case.args.get("results.subtitle", True) is not False
+        and "subtitle" not in case.expected_hidden_errors
+    )
     if not (bootstrapped and with_subtitle):
         assert ref is None
         return
