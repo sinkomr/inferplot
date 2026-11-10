@@ -987,13 +987,30 @@ statsexpressions_rows <- function(analysis) {
 # long_to_wide_converter(paired = TRUE, spread = FALSE) gives two_sample_test(),
 # oneway_anova() and pairwise_comparisons() (rows sorted by subject, then by
 # condition), and the wide tibble (one column per condition, subjects in that order)
-# two_sample_test() gives dep.effect for the robust type.
-statsexpressions_paired_rows <- function(analysis) {
+# two_sample_test() gives dep.effect for the robust type. The columns keep the
+# case's own names (x_name, y_name), as in ggstatsplot: renamed to x and y, a level
+# called "x" or "y" (edge_within_nonspherical) would clash with them when the data are
+# spread wide.
+statsexpressions_paired_rows <- function(analysis, x_name, y_name) {
   convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
+  data <- analysis
+  names(data) <- c(".rowid", x_name, y_name)
+  xs <- rlang::sym(x_name)
+  ys <- rlang::sym(y_name)
   list(
-    long = convert(data = analysis, x = x, y = y, subject.id = .rowid, paired = TRUE, spread = FALSE),
-    wide = convert(data = analysis, x = x, y = y, subject.id = .rowid, paired = TRUE, spread = TRUE)
+    x = x_name, y = y_name,
+    long = rlang::inject(convert(
+      data = data, x = !!xs, y = !!ys, subject.id = .rowid, paired = TRUE, spread = FALSE
+    )),
+    wide = rlang::inject(convert(
+      data = data, x = !!xs, y = !!ys, subject.id = .rowid, paired = TRUE, spread = TRUE
+    ))
   )
+}
+
+# statsExpressions' formula y ~ x | .rowid for a design (friedman.test, kendalls_w).
+blocked_formula <- function(rows) {
+  stats::as.formula(sprintf("`%s` ~ `%s` | .rowid", rows$y, rows$x))
 }
 
 akp_candidate <- function(analysis, eqvar, alpha, tr) {
@@ -1054,7 +1071,7 @@ raw_matrix <- function(m) {
 # effectsize::kendalls_w for three or more nonparametric conditions. statsExpressions
 # passes neither alpha nor conf.level to the two WRS2 calls, only tr and nboot.
 within_bootstrap_candidates <- function(case, rows, subtitle_row) {
-  k <- nlevels(rows$long$x)
+  k <- nlevels(rows$long[[rows$x]])
   type <- case$args$type
   if (type %in% c("parametric", "bayes") || (type == "nonparametric" && k == 2L)) {
     return(list())
@@ -1083,7 +1100,9 @@ within_bootstrap_candidates <- function(case, rows, subtitle_row) {
     convert <- utils::getFromNamespace("long_to_wide_converter", "statsExpressions")
     long <- rows$long
     long$.rowid <- as.factor(long$.rowid)
-    wide <- convert(data = long, x = x, y = y)
+    xs <- rlang::sym(rows$x)
+    ys <- rlang::sym(rows$y)
+    wide <- rlang::inject(convert(data = long, x = !!xs, y = !!ys))
     wide$.rowid <- NULL
     return(list(list(
       call = sprintf("WRS2::wmcpAKP(wide, tr = %s, nboot = R)", format(tr)),
@@ -1097,14 +1116,15 @@ within_bootstrap_candidates <- function(case, rows, subtitle_row) {
   if (type == "nonparametric") {
     long <- rows$long
     long$.rowid <- as.factor(long$.rowid)
+    formula <- blocked_formula(rows)
     return(list(list(
       call = sprintf(
-        "effectsize::kendalls_w(y ~ x | .rowid, data, ci = %s, iterations = R)",
-        format(conf_level)
+        "effectsize::kendalls_w(%s, data, ci = %s, iterations = R)",
+        deparse_text(formula), format(conf_level)
       ),
       run = function(resamples) {
         r <- effectsize::kendalls_w(
-          y ~ x | .rowid,
+          formula,
           data = long, ci = conf_level, iterations = resamples, verbose = FALSE
         )
         list(values = c(r[[1L]], r$CI_low, r$CI_high), raw = r)
@@ -1200,7 +1220,11 @@ run_or_stop <- function(case, what, expr) {
 bootstrap_reference <- function(case, analysis, stats) {
   subtitle_row <- stats$subtitle_data
   within <- case$fun == "ggwithinstats"
-  ordered <- if (within) statsexpressions_paired_rows(analysis) else statsexpressions_rows(analysis)
+  ordered <- if (within) {
+    statsexpressions_paired_rows(analysis, case$args$x, case$args$y)
+  } else {
+    statsexpressions_rows(analysis)
+  }
   candidates <- bootstrap_candidates(case, ordered, subtitle_row)
   if (length(candidates) == 0L) {
     return(NULL)
@@ -2818,13 +2842,13 @@ within_probe_design <- function(design) {
   subject <- design$subject %||% "subject"
   set <- probe_dataset(design$dataset)
   analysis <- within_analysis(set$data, x, y, subject)
-  rows <- statsexpressions_paired_rows(analysis)
+  rows <- statsexpressions_paired_rows(analysis, x, y)
   long <- rows$long
   long$.rowid <- as.factor(long$.rowid)
   levels <- levels(analysis$x)
   list(
     name = design$name, entry = set$entry, analysis = analysis, long = long,
-    paired_long = rows$long, wide = rows$wide, levels = levels,
+    paired_long = rows$long, wide = rows$wide, levels = levels, x = x, y = y,
     values_hex = stats::setNames(
       lapply(levels, function(level) hex_list(analysis$y[analysis$x == level])), levels
     ),
@@ -2994,7 +3018,7 @@ friedman_probe <- function() {
       y = as.vector(t(m))
     )
     designs[[length(designs) + 1L]] <- list(
-      name = name, entry = NULL, long = long,
+      name = name, entry = NULL, long = long, x = "x", y = "y",
       paired_long = data.frame(.rowid = as.integer(long$.rowid), x = long$x, y = long$y),
       levels = c("a", "b", "c"),
       values_hex = stats::setNames(lapply(seq_len(ncol(m)), function(j) hex_list(m[, j])), c("a", "b", "c")),
@@ -3003,13 +3027,15 @@ friedman_probe <- function() {
   }
   rows <- lapply(designs, function(design) {
     long <- design$long
-    friedman <- probe_attempt(stats::friedman.test(y ~ x | .rowid, data = long))
+    formula <- blocked_formula(design)
+    friedman <- probe_attempt(stats::friedman.test(formula, data = long))
     paired <- design$paired_long
     durbin <- probe_attempt(PMCMRplus::durbinAllPairsTest(
-      y = paired$y, groups = paired$x, blocks = paired$.rowid, p.adjust.method = "none"
+      y = paired[[design$y]], groups = paired[[design$x]], blocks = paired$.rowid,
+      p.adjust.method = "none"
     ))
     kendall <- probe_attempt(effectsize::kendalls_w(
-      y ~ x | .rowid, data = long, ci = NULL, verbose = FALSE
+      formula, data = long, ci = NULL, verbose = FALSE
     ))
     levels <- design$levels
     k <- length(levels)
@@ -3060,7 +3086,7 @@ rmanova_probe <- function() {
     long <- design$long
     fit <- probe_call(
       paste("aov_ez for", design$name),
-      afex::aov_ez(id = ".rowid", dv = "y", data = long, within = "x", include_aov = TRUE)
+      afex::aov_ez(id = ".rowid", dv = design$y, data = long, within = design$x, include_aov = TRUE)
     )
     mod <- fit$value
     tables <- lapply(c("none", "GG", "HF"), function(correction) {

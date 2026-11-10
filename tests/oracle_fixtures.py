@@ -118,6 +118,37 @@ class OracleCase:
         return {str(k): int(v) for k, v in self.raw["n_per_level"].items()}
 
     @property
+    def subject_id(self) -> str:
+        """The subject column of a ggwithinstats case; other functions raise."""
+        if self.function != "ggwithinstats":
+            raise ValueError(f"{self.name}: {self.function} has no subject column")
+        return str(self.args["subject.id"])
+
+    @property
+    def within_data(self) -> Mapping[str, Any]:
+        """The subjects-by-conditions data a ggwithinstats case analyzed.
+
+        As ``statsExpressions::complete_subjects()`` left it for ggwithinstats:
+        ``subject_id`` (the subject column), ``levels``, ``subjects`` (as R prints
+        them, in the order ggstatsplot holds them: numbers numerically, text in the
+        C locale), ``values`` (one row per subject, one column per level),
+        ``dropped_subjects`` (subjects with a row, x and subject present, left out
+        for a missing level or value) and ``rows_without_x_or_subject``.
+        """
+        if self.function != "ggwithinstats":
+            raise ValueError(f"{self.name}: only ggwithinstats records within_data")
+        return self.raw["within_data"]
+
+    def within_columns(self) -> dict[str, list[float]]:
+        """Each level's values in subject order, as floats (``within_data``)."""
+        data = self.within_data
+        levels = [str(level) for level in data["levels"]]
+        return {
+            level: [number(row[j]) for row in data["values"]]
+            for j, level in enumerate(levels)
+        }
+
+    @property
     def error(self) -> str | None:
         return self.raw["error"]
 
