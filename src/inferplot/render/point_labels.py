@@ -28,9 +28,17 @@ from typing import Final, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-__all__ = ["DIRECTIONS", "Placement", "place_labels"]
+__all__ = ["CANDIDATES", "DIRECTIONS", "RINGS", "Placement", "place_labels"]
 
 FloatArray = NDArray[np.float64]
+Horizontal = Literal["left", "right", "center"]
+Vertical = Literal["bottom", "top", "center"]
+
+
+def _ha_of(ux: float) -> Horizontal:
+    """The alignment of a label at an anchor reached in direction ``ux``."""
+    return "left" if ux > 0.0 else "right" if ux < 0.0 else "center"
+
 
 # (x, y) unit steps of the eight directions, in order of preference.
 DIRECTIONS: Final[tuple[tuple[float, float], ...]] = (
@@ -43,13 +51,20 @@ DIRECTIONS: Final[tuple[tuple[float, float], ...]] = (
     (0.0, 1.0),
     (0.0, -1.0),
 )
+# The candidate places on a ring: each direction with the label's alignment at its
+# anchor, then straight above and below with the label starting or ending at the
+# point (a wide label then reaches past its neighbours on one side only).
+CANDIDATES: Final[tuple[tuple[float, float, Horizontal], ...]] = (
+    *((ux, uy, _ha_of(ux)) for ux, uy in DIRECTIONS),
+    (0.0, 1.0, "left"),
+    (0.0, -1.0, "left"),
+    (0.0, 1.0, "right"),
+    (0.0, -1.0, "right"),
+)
 # Ring distances beyond the first, in label heights.
-RINGS: Final = (0.0, 1.2, 2.4, 3.6, 5.0, 7.0)
+RINGS: Final = (0.0, 1.2, 2.4, 3.6, 5.0, 7.0, 9.5, 12.5)
 _TOLERANCE: Final = 0.5  # pixels of contact that do not count (anti-aliasing)
 SPACING: Final = 1.0  # pixels kept between two labels
-
-Horizontal = Literal["left", "right", "center"]
-Vertical = Literal["bottom", "top", "center"]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -66,8 +81,8 @@ class Placement:
 
 
 def _align(u: float) -> float:
-    """Where the anchor lies along a label's side for a step ``u``: its start
-    (0), its end (-1) or its middle (-0.5), in label widths or heights."""
+    """Where the anchor lies along a label's height for a step ``u``: its bottom
+    (0), its top (-1) or its middle (-0.5), in label heights."""
     if u > 0.0:
         return 0.0
     if u < 0.0:
@@ -75,8 +90,7 @@ def _align(u: float) -> float:
     return -0.5
 
 
-def _ha(ux: float) -> Horizontal:
-    return "left" if ux > 0.0 else "right" if ux < 0.0 else "center"
+_START: Final[dict[str, float]] = {"left": 0.0, "right": -1.0, "center": -0.5}
 
 
 def _va(uy: float) -> Vertical:
@@ -84,12 +98,13 @@ def _va(uy: float) -> Vertical:
 
 
 def _box(
-    x: float, y: float, w: float, h: float, ux: float, uy: float, r: float
-) -> tuple[float, float, float, float]:
+    x: float, y: float, w: float, h: float, ux: float, uy: float, r: float,
+    ha: Horizontal,
+) -> tuple[float, float, float, float]:  # fmt: skip
     """(x0, y0, x1, y1) of a w x h label anchored r pixels from (x, y) in
-    direction (ux, uy)."""
+    direction (ux, uy), aligned ``ha`` at the anchor."""
     ax_, ay_ = x + r * ux, y + r * uy
-    x0, y0 = ax_ + _align(ux) * w, ay_ + _align(uy) * h
+    x0, y0 = ax_ + _START[ha] * w, ay_ + _align(uy) * h
     return x0, y0, x0 + w, y0 + h
 
 
@@ -155,8 +170,8 @@ def place_labels(
         found = False
         for ring, step in enumerate(RINGS):
             r = first + step * h
-            for ux, uy in DIRECTIONS:
-                box = _box(x, y, w, h, ux, uy, r)
+            for ux, uy, ha in CANDIDATES:
+                box = _box(x, y, w, h, ux, uy, r, ha)
                 outside = (
                     max(0.0, fx0 - box[0] - _TOLERANCE)
                     + max(0.0, box[2] - fx1 - _TOLERANCE)
@@ -172,9 +187,7 @@ def place_labels(
                         & (np.abs(points[:, 1] - cy) < h / 2 + marker - _TOLERANCE)
                     ).sum()
                 )
-                place = Placement(
-                    dx=r * ux, dy=r * uy, ha=_ha(ux), va=_va(uy), ring=ring
-                )
+                place = Placement(dx=r * ux, dy=r * uy, ha=ha, va=_va(uy), ring=ring)
                 bad = outside + clash
                 score = (float(bad > 0.0), bad, float(covered), float(ring))
                 if score < best[0]:
