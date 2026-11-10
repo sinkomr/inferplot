@@ -289,6 +289,101 @@ def test_empty_declared_level_is_named_in_warnings() -> None:
     assert any("'zero'" in w and "left out" in w for w in result.warnings)
 
 
+_VANISHED = (
+    "The level 'c' of 'g' was left out of the analysis: every row of it has a "
+    "missing 'y'."
+)
+
+
+@pytest.mark.parametrize("kind", ["pandas text", "polars", "pyarrow", "integer"])
+def test_a_level_whose_y_is_all_missing_is_named_in_warnings(kind: str) -> None:
+    # Every row of 'c' misses y: Welch's ANOVA becomes a t-test, and the result
+    # says why, whatever the column type (a declared level says it already).
+    g = ["a"] * 3 + ["b"] * 3 + ["c"] * 2
+    y = [1.0, 2.0, 4.0, 3.0, 5.0, 4.0, None, None]
+    data: Any = pd.DataFrame({"g": g, "y": y})
+    if kind == "polars":
+        data = pl.DataFrame({"g": g, "y": y})
+    elif kind == "pyarrow":
+        import pyarrow as pa
+
+        data = pa.table({"g": pa.array(g).dictionary_encode(), "y": y})
+    elif kind == "integer":
+        data = pd.DataFrame({"g": [{"a": 1, "b": 2, "c": 3}[v] for v in g], "y": y})
+    result = betweenstats(data, "g", "y")
+    expected = _VANISHED if kind != "integer" else _VANISHED.replace("'c'", "'3'")
+    assert result.test.method == "Welch Two Sample t-test"
+    assert result.warnings == (expected,)
+    two_left = betweenstats(data, "g", "y", order=list(result.levels)[::-1])
+    assert two_left.warnings == (expected,)
+    gone = 3 if kind == "integer" else "c"
+    with pytest.raises(ValueError, match="have no rows with both x and y present"):
+        betweenstats(data, "g", "y", order=[*result.levels, gone])
+
+
+def test_levels_left_out_name_both_and_one_level_left_raises() -> None:
+    data = pd.DataFrame(
+        {"g": ["a", "a", "b", "c", "c"], "y": [1.0, 2.0, None, None, None]}
+    )
+    with pytest.raises(ValueError, match=r"needs at least 2 groups with data; found 1"):
+        betweenstats(data, "g", "y")
+    data = pd.DataFrame(
+        {
+            "g": ["a"] * 4 + ["b"] * 4 + ["c", "d", "d"],
+            "y": [1.0, 2.0, 4.0, 3.0, 3.0, 5.0, 4.0, 6.0, None, None, None],
+        }
+    )
+    assert betweenstats(data, "g", "y").warnings == (
+        "The levels 'c' and 'd' of 'g' were left out of the analysis: every row of "
+        "them has a missing 'y'.",
+    )
+
+
+def test_unordered_dictionary_order_is_named_in_warnings() -> None:
+    import pyarrow as pa
+
+    g = ["treatment"] * 3 + ["control"] * 3
+    table = pa.table(
+        {"g": pa.array(g).dictionary_encode(), "y": [3.0, 4.0, 6.0, 1.0, 2.0, 4.0]}
+    )
+    result = betweenstats(table, "g", "y")
+    assert result.levels == ("control", "treatment")
+    assert result.warnings == (
+        "The levels of 'g' are in sorted order ('control', 'treatment'), not in the "
+        "order of its pyarrow dictionary ('treatment', 'control'): a dictionary that "
+        "is not marked ordered, as dictionary_encode(), pyarrow.csv and polars' "
+        ".to_arrow() make, lists values in the order they first appear in the rows, "
+        "so it does not declare an order. To choose the order, pass order= (a list "
+        "of the levels) or mark the dictionary ordered.",
+    )
+    assert betweenstats(table, "g", "y", order=["treatment", "control"]).warnings == ()
+    # Many levels are shortened.
+    names = [f"L{i:02d}" for i in range(12)][::-1]
+    many = pa.table(
+        {
+            "g": pa.array(np.repeat(names, 3)).dictionary_encode(),
+            "y": np.arange(36.0) % 7,
+        }
+    )
+    (note,) = betweenstats(many, "g", "y", type="nonparametric").warnings
+    assert "('L00', 'L01', 'L02', 'L03', 'L04', ... (12 levels))" in note
+    assert "('L11', 'L10', 'L09', 'L08', 'L07', ... (12 levels))" in note
+
+
+def test_levels_that_differ_only_in_whitespace_are_kept_and_named() -> None:
+    data = pd.DataFrame(
+        {"g": ["a", "a ", " a", "b"] * 3, "y": [1.0, 2.0, 4.0, 3.0, 5.0, 4.0] * 2}
+    )
+    result = betweenstats(data, "g", "y", type="nonparametric")
+    assert result.levels == (" a", "a", "a ", "b")  # never merged
+    assert result.warnings == (
+        "The levels ' a', 'a' and 'a ' of 'g' differ only in spaces at their start "
+        "or end, so they are analyzed as separate groups whose labels look alike. "
+        "If they are the same group, remove the spaces first, for example with "
+        ".str.strip() in pandas or .str.strip_chars() in polars.",
+    )
+
+
 def test_rows_with_missing_values_are_counted() -> None:
     data = pd.DataFrame(
         {"g": ["a", "a", "a", None, "b", "b", "b"], "y": [1, 2, 3, 4, 5, None, 9.0]}
@@ -631,6 +726,38 @@ def test_settings_record_canonical_values(plants: pd.DataFrame) -> None:
     assert result.effect_size.conf_level == 0.9
     assert result.text.subtitle is not None
     assert "CI_90%" in result.text.subtitle
+
+
+def test_float32_arguments_read_as_they_print(teeth: pd.DataFrame) -> None:
+    # A float32 0.9 is 0.8999999761581421 as a double; it is read as the 0.9 it
+    # prints as, so the settings, warnings and texts show 0.9 (STATUS U12).
+    result = betweenstats(
+        teeth,
+        "supp",
+        "len",
+        conf_level=np.float32(0.9),
+        pairwise_alpha=np.float32(0.01),
+        bf_prior=np.float32(0.5),
+        bf_message=False,
+    )
+    settings = result.settings
+    assert (settings.conf_level, settings.pairwise_alpha, settings.bf_prior) == (
+        0.9,
+        0.01,
+        0.5,
+    )
+    assert result.effect_size is not None
+    assert result.effect_size.conf_level == 0.9
+    assert result.text.subtitle is not None
+    assert "CI_90%" in result.text.subtitle
+    assert any("pairwise_alpha=0.01" in w for w in result.warnings)
+    assert any("bf_prior=0.5" in w for w in result.warnings)
+    dumped = result.to_json()
+    assert "0.8999999" not in dumped
+    assert "0.0099999" not in dumped
+    robust = betweenstats(teeth, "supp", "len", type="robust", tr=np.float32(0.1))
+    assert robust.settings.tr == 0.1
+    assert "0.1000000" not in robust.to_json()
 
 
 def test_result_fields(anova: StatsResult) -> None:

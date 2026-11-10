@@ -36,7 +36,7 @@ import numpy as np
 import numpy.typing as npt
 
 from inferplot import stats
-from inferplot._data import read_between
+from inferplot._data import data_notes, read_between
 from inferplot._validate import (
     canonical_pairwise_display,
     canonical_type,
@@ -1530,6 +1530,7 @@ def betweenstats(
             "observations with both x and y present and "
             f"{'was' if len(empty) == 1 else 'were'} left out of the analysis."
         )
+    warnings += data_notes(between)
     warnings += parts.warnings
     if type_name == "bayes":
         warnings += _bayes_no_effect_warnings(

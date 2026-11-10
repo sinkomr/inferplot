@@ -61,8 +61,6 @@ __all__ = [
 P = ParamSpec("P")
 R = TypeVar("R")
 
-# Cutoff used for every did-you-mean suggestion (SPEC.md section 2).
-_CLOSE_MATCH_CUTOFF = 0.6
 # Longest repr an error message quotes; longer values are named by their type.
 _MAX_REPR = 40
 
@@ -114,18 +112,120 @@ def _show(value: object) -> str:
     return f"a {name}"
 
 
-def _closest(word: str, candidates: Iterable[str]) -> str | None:
-    """The candidate closest to ``word``: a case-insensitive exact match first, then
-    difflib with cutoff 0.6 on case-folded text."""
-    options = list(candidates)
-    folded = {c.casefold(): c for c in reversed(options)}
-    key = word.casefold()
-    if key in folded:
-        return folded[key]
-    match = difflib.get_close_matches(
-        key, list(folded), n=1, cutoff=_CLOSE_MATCH_CUTOFF
+_SEPARATORS: Final = re.compile(r"[\s._\-]+")
+
+# Other names for keywords that are very likely meant as these (did-you-mean).
+_KEYWORD_SYNONYMS: Final[Mapping[str, str]] = {
+    "trim": "tr",
+    "trimming": "tr",
+    "conf": "conf_level",
+    "confidence": "conf_level",
+    "confidence_level": "conf_level",
+    "ci_level": "conf_level",
+    "level": "conf_level",
+    "decimals": "digits",
+    "prior": "bf_prior",
+    "display": "pairwise_display",
+    "axes": "ax",
+}
+
+
+def _plain(word: str) -> str:
+    """``word`` case-folded, with each run of spaces, dots, hyphens and underscores
+    turned into one underscore and none at either end."""
+    return _SEPARATORS.sub("_", word.casefold()).strip("_")
+
+
+def _edits(a: str, b: str) -> int:
+    """The optimal string alignment distance: insertions, deletions, substitutions
+    and swaps of two neighbouring characters, each counting 1."""
+    previous2: list[int] = []
+    previous = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        current = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            current[j] = min(
+                previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost
+            )
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                current[j] = min(current[j], previous2[j - 2] + 1)
+        previous2, previous = previous, current
+    return previous[len(b)]
+
+
+def _misspelled(word: str, candidate: str) -> bool:
+    """Whether ``word`` is a misspelling or a longer form of ``candidate`` (both
+    ``_plain``).
+
+    A misspelling: at most one edit for a name of 4 to 6 letters, two for a longer
+    one, none for a shorter one (separators ignored). A longer form: ``word`` is
+    ``candidate`` plus at most 4 letters, not a separate word (``bayesian``,
+    ``boxplot``, ``seeds``; not ``fdr_tsbh``). Similar-looking names of different
+    things (``tail`` and ``title``, ``one-sided`` and ``two-sided``,
+    ``holm-bonferroni`` and ``bonferroni``) are neither.
+    """
+    bare, target = word.replace("_", ""), candidate.replace("_", "")
+    allowed = 0 if len(target) <= 3 else 1 if len(target) <= 6 else 2
+    if _edits(bare, target) <= allowed:
+        return True
+    return (
+        len(target) >= 3
+        and word.startswith(candidate)
+        and 0 < len(word) - len(candidate) <= 4
+        and word[len(candidate)] != "_"  # an added word is another name
     )
-    return folded[match[0]] if match else None
+
+
+def _abbreviated(word: str, candidate: str) -> bool:
+    """Whether ``word`` is the start of ``candidate`` (both ``_plain``; separators
+    ignored): the whole of its first two or more parts (``p_adjust``, ``padjust``),
+    or at least 5 letters ending inside a part (``param``, ``centrality_plot``).
+    Exactly its first part is not enough: ``centrality`` could mean
+    ``centrality_plotting`` or a centrality measure, ``pairwise`` several arguments.
+    """
+    bare, target = word.replace("_", ""), candidate.replace("_", "")
+    if bare == target or not target.startswith(bare):
+        return False
+    ends: list[int] = []
+    total = 0
+    for part in candidate.split("_"):
+        total += len(part)
+        ends.append(total)
+    if len(bare) in ends:
+        return ends.index(len(bare)) >= 1
+    return len(bare) >= 5
+
+
+def _closest(word: str, candidates: Iterable[str]) -> str | None:
+    """The candidate ``word`` very likely meant, or None (SPEC.md section 2).
+
+    In turn: a match ignoring case and separators (``Type``, ``two_sided``,
+    ``nonsignificant``); a keyword synonym (``trim`` for ``tr``); the misspellings
+    and longer forms ``_misspelled`` accepts, the closest by difflib's ratio; the
+    one candidate ``word`` abbreviates (none when it abbreviates several). A
+    did-you-mean is followed literally by an AI agent, so an unlikely guess is worse
+    than none: without one the message lists the valid names.
+    """
+    options = list(candidates)
+    key = _plain(word)
+    if not key:
+        return None
+    plain = {c: _plain(c) for c in options}
+    for c in options:
+        if plain[c].replace("_", "") == key.replace("_", ""):
+            return c
+    synonym = _KEYWORD_SYNONYMS.get(key)
+    if synonym is not None and synonym in options:
+        return synonym
+    misspelled = [c for c in options if _misspelled(key, plain[c])]
+    if misspelled:
+        return max(
+            misspelled,
+            key=lambda c: difflib.SequenceMatcher(None, key, plain[c]).ratio(),
+        )
+    abbreviated = [c for c in options if _abbreviated(key, plain[c])]
+    return abbreviated[0] if len(abbreviated) == 1 else None
 
 
 def describe_value(value: object) -> str:
@@ -134,7 +234,7 @@ def describe_value(value: object) -> str:
 
 
 def closest_name(word: str, candidates: Iterable[str]) -> str | None:
-    """The name a did-you-mean suggests for ``word``, or None (cutoff 0.6)."""
+    """The name a did-you-mean suggests for ``word``, or None (see ``_closest``)."""
     return _closest(word, candidates)
 
 
@@ -165,6 +265,10 @@ def _real(value: object, name: str, example: str) -> float:
             f"{name} must be a number, for example {name}={example}; "
             f"got {_show(value)}."
         )
+    if isinstance(value, np.floating) and value.dtype.itemsize < 8:
+        # A float32 or float16 0.9 is 0.8999999761581421 as a double; read it as
+        # the number it prints as (its shortest repr), which is what was meant.
+        return float(str(value))
     return float(value)
 
 
@@ -420,6 +524,9 @@ def _targeted(
             f"{arg}= is not needed: {fn}() always pairs the measurements of each "
             f"subject, matched by subject_id. Remove {arg}=."
         )
+    common = _common_name(arg, key, value, fn, valid)
+    if common is not None:
+        return common
     reason = _NO_EQUIVALENT.get(key)
     if reason is None and fn in _SUBJECT_FUNCTIONS:
         reason = _NO_EQUIVALENT_WITHIN.get(key)
@@ -427,6 +534,118 @@ def _targeted(
         return TypeError(
             f"{arg}= is a ggstatsplot argument that inferplot does not have: "
             f"{reason} Remove {arg}=."
+        )
+    return None
+
+
+def _instead(arg: str, fn: str, valid: frozenset[str], target: str, what: str) -> str:
+    """The message for ``arg``, a common name for what ``target`` does: ``what``
+    explains it, and the message says where ``target`` belongs when ``fn`` does not
+    take it (the analysis, or the drawing)."""
+    if target in valid:
+        return f"{arg}= is not an argument of {fn}(); {what} Remove {arg}=."
+    if "result" in valid and target in ANALYSIS_KEYWORDS:
+        return (
+            f"{arg}= is not an argument of render.{fn}(); {what} {target}= is an "
+            f"argument of the analysis: pass it to ip.analyze.{fn}() or ip.{fn}() "
+            f"and draw that result. Remove {arg}=."
+        )
+    if target in DRAWING_KEYWORDS.get(fn, _COMMON_DRAWING):
+        return (
+            f"{arg}= is not an argument of {fn}(); {what} {target}= is a drawing "
+            f"option of ip.{fn}(...) and ip.render.{fn}(result, ...). "
+            f"Remove {arg}=."
+        )
+    return (
+        f"{arg}= is not an argument of {fn}(), which has no {target}=. Remove {arg}=."
+    )
+
+
+# Common names for alternative=, order= and the labels (keys in snake_case).
+_DIRECTION_NAMES: Final = frozenset(
+    {"tail", "tails", "sided", "sides", "alternative_hypothesis", "one_sided"}
+)
+_ORDER_NAMES: Final = frozenset({"levels", "categories", "x_order", "level_order"})
+_LABEL_NAMES: Final = frozenset({"label", "labels"})
+_PATH_NAMES: Final = frozenset({"point_path", "centrality_path"})
+
+
+def _common_name(
+    arg: str, key: str, value: object, fn: str, valid: frozenset[str]
+) -> TypeError | None:
+    """The message for a common name of something inferplot spells otherwise, or
+    has not (``tail``, ``alpha``, ``levels``, ``legend``, ...), whose nearest valid
+    name would be another argument (STATUS U3)."""
+    if key in _DIRECTION_NAMES:
+        what = (
+            "the direction of the test is set by alternative=: 'two-sided' (the "
+            "default), 'greater' (the first level of x is greater than the second) "
+            "or 'less' (it is less). The first level is the first in order= when "
+            "given, else the first declared category, else the first in sorted "
+            "order."
+        )
+        return TypeError(_instead(arg, fn, valid, "alternative", what))
+    if key == "alpha":
+        transparency = (
+            "For transparency, use point_args={'alpha': 0.5}, boxplot_args or "
+            "violin_args."
+        )
+        if "pairwise_alpha" in valid:
+            drawn = f" {transparency}" if "point_args" in valid else ""
+            return TypeError(
+                f"{arg}= is not an argument of {fn}(): pairwise_alpha= sets the "
+                "threshold below which a pair's adjusted p-value counts as "
+                "significant, and conf_level= sets the level of the confidence "
+                f"intervals (conf_level=0.95 for 95%).{drawn} Remove {arg}= and pass "
+                "the one you mean."
+            )
+        if "result" in valid:
+            drawn = f" {transparency}" if "point_args" in valid else ""
+            return TypeError(
+                f"{arg}= is not an argument of render.{fn}().{drawn} pairwise_alpha= "
+                "and conf_level= are arguments of the analysis: pass them to "
+                f"ip.analyze.{fn}() or ip.{fn}() and draw that result. Remove {arg}=."
+            )
+        return None
+    if key == "paired" and fn not in _SUBJECT_FUNCTIONS:
+        return TypeError(
+            f"{fn}() compares independent groups and takes no {arg}=. For repeated "
+            "measures of the same subjects use "
+            f"withinstats(data, x, y, subject_id=...); otherwise remove {arg}=."
+        )
+    if key in _ORDER_NAMES:
+        example = (
+            _show(list(cast("Iterable[object]", value)))
+            if isinstance(value, list | tuple)
+            else "['control', 'treatment']"
+        )
+        what = (
+            "the order of the levels of x is set by order=, a list of every level "
+            f"present, for example order={example}."
+        )
+        return TypeError(_instead(arg, fn, valid, "order", what))
+    if key == "legend":
+        return TypeError(
+            f"{arg}= is not an argument of {fn}(): there is no legend; the colors "
+            f"follow the levels of x, which the x axis names. Remove {arg}=."
+        )
+    if key == "bayes":
+        what = (
+            "for Bayesian statistics pass type='bayes', and for the Bayes factor "
+            "caption under a parametric subtitle pass bf_message=True or False."
+        )
+        return TypeError(_instead(arg, fn, valid, "type", what))
+    if key in _LABEL_NAMES:
+        what = (
+            "the labels are set by xlab= (the x axis), ylab= (the y axis) and title=."
+        )
+        return TypeError(_instead(arg, fn, valid, "xlab", what))
+    if key in _PATH_NAMES and fn not in _SUBJECT_FUNCTIONS:
+        return TypeError(
+            f"{arg}= is an argument of withinstats(), which joins each subject's "
+            "points (point_path) or the centrality points (centrality_path) across "
+            f"conditions; {fn}() compares independent groups and draws no paths. "
+            f"Remove {arg}=."
         )
     return None
 
@@ -537,23 +756,46 @@ def _keyword_problem(
 
 
 def _positional_problem(
-    fn: str, positional: Sequence[str], extra: Sequence[object], valid: frozenset[str]
+    fn: str,
+    positional: Sequence[str],
+    extra: Sequence[object],
+    valid: frozenset[str],
+    *,
+    subject_given: bool,
 ) -> TypeError:
     names = ", ".join(positional)
     given = len(positional) + len(extra)
     shown = ", ".join(_show(v) for v in extra)
     hint = ""
     first = extra[0]
+    other = None  # the keyword a string value is a valid value of
     if isinstance(first, str):
         if first in TYPES and "type" in valid:
-            hint = f" For example {fn}(..., type={first!r})."
+            other = "type"
         elif first in PAIRWISE_DISPLAYS and "pairwise_display" in valid:
-            hint = f" For example {fn}(..., pairwise_display={first!r})."
-        elif "subject_id" in valid:
+            other = "pairwise_display"
+    if "subject_id" in valid and not subject_given:
+        # The required subject column is missing, so it comes first whatever the
+        # value: a column may well be called 's' or 'np'.
+        if isinstance(first, str):
             hint = (
                 f" If {first!r} is the column that identifies each subject, write "
-                f"{fn}(..., subject_id={first!r})."
+                f"{fn}(..., subject_id={first!r})"
             )
+            hint += (
+                f"; if it is {other}, write {fn}(..., {other}={first!r})."
+                if other is not None
+                else "."
+            )
+        else:
+            own = getattr(first, "name", None)
+            column = own if isinstance(own, str) else "subject"
+            hint = (
+                f" {fn}() takes the column that identifies each subject by its "
+                f"name: write {fn}(..., subject_id={column!r})."
+            )
+    elif other is not None:
+        hint = f" For example {fn}(..., {other}={first!r})."
     plural = "argument" if len(positional) == 1 else "arguments"
     return TypeError(
         f"{fn}() takes {len(positional)} positional {plural} ({names}) but {given} "
@@ -642,7 +884,13 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
             if arg not in valid:
                 raise _keyword_problem(arg, value, name, valid, order, filled)
         if len(args) > len(positional):
-            raise _positional_problem(name, positional, args[len(positional) :], valid)
+            raise _positional_problem(
+                name,
+                positional,
+                args[len(positional) :],
+                valid,
+                subject_given="subject_id" in kwargs,
+            )
         if "subject_id" in required and "subject_id" not in kwargs:
             raise subject_id_required(name)
         return fn(*args, **kwargs)
@@ -667,6 +915,8 @@ def _choice(
         return mapping[text]
     hint = hints.get(text)
     if hint is None:
+        hint = hints.get(_plain(text))
+    if hint is None:
         close = _closest(text, mapping)
         hint = f" Did you mean {name}={close!r}?" if close is not None else ""
     raise ValueError(f"{name}={text!r} is not allowed; use one of {allowed}.{hint}")
@@ -683,18 +933,77 @@ def canonical_pairwise_display(value: object, name: str = "pairwise_display") ->
     return _choice(value, name, PAIRWISE_DISPLAYS, {})
 
 
+# Other names of R's p.adjust() methods (keys as ``_plain`` spells them): the
+# procedure's name and R's spelling.
+_BH: Final = "The Benjamini-Hochberg procedure (the false discovery rate)"
+_BY: Final = "The Benjamini-Yekutieli procedure"
+_HOLM: Final = "The Holm-Bonferroni procedure"
+_ADJUSTMENT_NAMES: Final[Mapping[str, tuple[str, str]]] = {
+    "benjamini_hochberg": (_BH, "BH"),
+    "fdr_bh": (_BH, "BH"),
+    "b_h": (_BH, "BH"),
+    "benjamini_yekutieli": (_BY, "BY"),
+    "fdr_by": (_BY, "BY"),
+    "b_y": (_BY, "BY"),
+    "holm_bonferroni": (_HOLM, "holm"),
+    "bonferroni_holm": (_HOLM, "holm"),
+}
+# Adjustments R's p.adjust() does not have.
+_ADJUSTMENTS_NOT_AVAILABLE: Final[Mapping[str, str]] = {
+    "sidak": "Sidak's correction",
+    "holm_sidak": "The Holm-Sidak procedure",
+    "tukey": "Tukey's method",
+    "tukey_hsd": "Tukey's method",
+}
+
+
 def check_p_adjust_method(value: object, name: str = "p_adjust_method") -> str:
-    """One of R's ``p.adjust()`` method names, spelled exactly as in R."""
+    """One of R's ``p.adjust()`` method names, spelled exactly as in R. Other names
+    of the same procedures are told R's spelling; procedures R does not have are
+    said to be unavailable."""
     methods = {m: m for m in P_ADJUST_METHODS}
-    return _choice(value, name, methods, {})
+    hints = {
+        key: f" {procedure} is R's {method!r}: write {name}={method!r}."
+        for key, (procedure, method) in _ADJUSTMENT_NAMES.items()
+    }
+    for key, procedure in _ADJUSTMENTS_NOT_AVAILABLE.items():
+        hints[key] = (
+            f" {procedure} is not one of R's p.adjust() methods, which inferplot "
+            "follows, so it is not available; choose one of those listed."
+        )
+    return _choice(value, name, methods, hints)
+
+
+def direction_note(name: str = "alternative") -> str:
+    """What 'greater' and 'less' compare, as the messages state it (SPEC.md
+    section 2): the first level of x against the second."""
+    return (
+        f"{name}='greater' tests whether the first level of x is greater than the "
+        f"second, and {name}='less' whether it is less. The first level is the "
+        "first in order= when given, else the first declared category, else the "
+        "first in sorted order."
+    )
+
+
+_ONE_SIDED: Final = ("one_sided", "onesided", "one_side", "one_tailed", "onetailed")
+_TWO_TAILED: Final = ("two_tailed", "twotailed")
 
 
 def check_alternative(value: object, name: str = "alternative") -> str:
-    """'two-sided', 'less' or 'greater'; R's 'two.sided' gets a pointed hint."""
+    """'two-sided', 'less' or 'greater'. R's 'two.sided' and 'two-tailed' are told
+    the spelling; 'one-sided' is told that the direction must be given."""
+    one_sided = f" A one-sided test needs its direction: {direction_note(name)}"
+    two_tailed = f" A two-tailed test is {name}='two-sided': write {name}='two-sided'."
     hints = {
-        "two.sided": (f" R spells it 'two.sided'; inferplot writes {name}='two-sided'.")
+        "two.sided": f" R spells it 'two.sided'; inferplot writes {name}='two-sided'.",
+        **dict.fromkeys(_ONE_SIDED, one_sided),
+        **dict.fromkeys(_TWO_TAILED, two_tailed),
     }
     return _choice(value, name, {a: a for a in ALTERNATIVES}, hints)
+
+
+# Confidence levels written as percentages that the message may divide by 100.
+_COMMON_PERCENTAGES: Final = frozenset({90.0, 95.0, 99.0, 99.9})
 
 
 def check_conf_level(value: object, name: str = "conf_level") -> float:
@@ -702,7 +1011,9 @@ def check_conf_level(value: object, name: str = "conf_level") -> float:
     number = _real(value, name, "0.95")
     if not 0.0 < number < 1.0:
         hint = ""
-        if 1.0 < number < 100.0:
+        if number in _COMMON_PERCENTAGES:
+            # Only the levels in common use: 5 or 1.96 would become 0.05 or 0.0196,
+            # a different analysis, so they get the rule alone.
             hint = (
                 f" It is a proportion, not a percentage: write {name}={number / 100:g}."
             )
@@ -750,13 +1061,23 @@ def check_tr(value: object, name: str = "tr") -> float:
     return number
 
 
+# A double holds about 15 significant decimal digits; more decimals print noise.
+_MAX_DIGITS: Final = 15
+
+
 def check_digits(value: object, name: str = "digits") -> int:
-    """A whole number of decimal places, >= 0 (bool rejected)."""
+    """A whole number of decimal places, 0 to 15 (bool rejected)."""
     number = _integer(value, name, "2")
     if number < 0:
         raise ValueError(
             f"{name} is a number of decimal places and must be >= 0, for example "
             f"{name}=2; got {number}."
+        )
+    if number > _MAX_DIGITS:
+        raise ValueError(
+            f"{name} is a number of decimal places and must be at most "
+            f"{_MAX_DIGITS}, the most a double-precision number holds meaningfully, "
+            f"for example {name}=2; got {number}."
         )
     return number
 

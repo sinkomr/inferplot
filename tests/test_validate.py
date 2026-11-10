@@ -327,11 +327,15 @@ def test_a_required_subject_id_is_never_left_to_python() -> None:
 
 def test_withinstats_names_do_not_change_betweenstats_messages() -> None:
     # paired= and the path-styling arguments get withinstats' messages only there.
-    for name in ("paired", "point.path.args", "centrality_path_args"):
+    for name in ("point.path.args", "centrality_path_args"):
         text = message(TypeError, lambda name=name: call(**{name: 1}))
         assert text.startswith(
             f"betweenstats() got an unexpected keyword argument {name!r}."
         )
+    # betweenstats' paired= points to withinstats instead (STATUS U3).
+    text = message(TypeError, lambda: call(paired=True))
+    assert text.startswith("betweenstats() compares independent groups")
+    assert "not needed" not in text
 
 
 def test_layout_messages_adapt_to_the_function() -> None:
@@ -644,17 +648,16 @@ def test_did_you_mean(typo: str, fix: str) -> None:
     )
 
 
-def test_did_you_mean_cutoff_is_0_6() -> None:
-    def best(word: str) -> float:
-        return max(difflib.SequenceMatcher(None, word, k).ratio() for k in KEYWORDS)
-
-    assert best("ordqq") == 0.6
-    with pytest.raises(TypeError, match=r"Did you mean order=1\?"):
-        call(ordqq=1)
-    assert best("ordqqq") < 0.6
+def test_did_you_mean_needs_a_likely_match() -> None:
+    # difflib's ratio alone is not enough: 'ordqq' scores 0.6 against 'order' (the
+    # old cutoff) but is two edits from a five-letter name, so nothing is
+    # suggested; one edit is.
+    assert difflib.SequenceMatcher(None, "ordqq", "order").ratio() == 0.6
     with pytest.raises(TypeError) as info:
-        call(ordqqq=1)
+        call(ordqq=1)
     assert "Did you mean" not in str(info.value)
+    with pytest.raises(TypeError, match=r"Did you mean order=1\?"):
+        call(ordr=1)
 
 
 def test_unknown_keyword_without_a_match_lists_the_arguments() -> None:
@@ -877,6 +880,24 @@ def test_real_numbers_become_plain_floats(value: object) -> None:
         assert type(out) is float
 
 
+@pytest.mark.parametrize("kind", [np.float32, np.float16])
+@pytest.mark.parametrize("value", [0.9, 0.1, 0.01, 0.2, 0.707, 0.95, 0.3])
+def test_narrow_floats_are_read_as_they_print(kind: type, value: float) -> None:
+    # np.float32(0.9) is 0.89999997615814208984375; it prints as 0.9, which is
+    # what was meant, so it is read through its shortest repr (STATUS U12).
+    narrow = kind(value)
+    assert float(narrow) != value  # the binary value differs
+    for check in (
+        v.check_conf_level,
+        lambda x: v.check_probability(x, "pairwise_alpha"),
+        lambda x: v.check_positive(x, "bf_prior"),
+        v.check_tr if value < 0.5 else v.check_conf_level,
+    ):
+        out = check(narrow)
+        assert out == value
+        assert type(out) is float
+
+
 @pytest.mark.parametrize(
     "check",
     [
@@ -1000,6 +1021,13 @@ def test_digits_rejected() -> None:
         "digits is a number of decimal places and must be >= 0, for example "
         "digits=2; got -1."
     )
+    for big in (16, 100, 10**6):
+        text = message(ValueError, lambda big=big: v.check_digits(big))
+        assert text == (
+            "digits is a number of decimal places and must be at most 15, the most "
+            "a double-precision number holds meaningfully, for example digits=2; "
+            f"got {big}."
+        )
     with pytest.raises(TypeError) as info:
         v.check_digits(2.0)
     assert str(info.value) == (
@@ -1149,3 +1177,343 @@ def test_artist_args_rejected() -> None:
     assert str(info.value) == (
         "violin_args keys must be matplotlib property names (strings); got 1."
     )
+
+
+# --- hints that must not lead to another valid analysis (STATUS U3) ----------------
+#
+# The user is an AI agent that follows a hint literally, so a did-you-mean is given
+# only when the suggestion is very likely what was meant; otherwise the valid names
+# are listed without one. Common names of things inferplot spells differently get
+# a message of their own.
+
+
+def _public_callables() -> dict[str, Callable[..., object]]:
+    """Every public function that checks keywords, each called with valid
+    positional arguments, so only the keyword under test is wrong."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import inferplot as ip
+
+    frame = pd.DataFrame(
+        {"g": list("ab") * 6, "y": np.arange(12.0) % 5, "s": np.repeat(range(6), 2)}
+    )
+    between = ip.analyze.betweenstats(frame, "g", "y")
+    loose = cast("Any", ip)
+    return {
+        "ip.betweenstats": lambda **kw: loose.betweenstats(frame, "g", "y", **kw),
+        "ip.analyze.betweenstats": lambda **kw: loose.analyze.betweenstats(
+            frame, "g", "y", **kw
+        ),
+        "ip.render.betweenstats": lambda **kw: loose.render.betweenstats(between, **kw),
+        "ip.withinstats": lambda **kw: loose.withinstats(
+            frame, "g", "y", subject_id="s", **kw
+        ),
+        "ip.analyze.withinstats": lambda **kw: loose.analyze.withinstats(
+            frame, "g", "y", subject_id="s", **kw
+        ),
+        "ip.render.withinstats": lambda **kw: loose.render.withinstats(
+            _within_result(), **kw
+        ),
+    }
+
+
+def _within_result() -> Any:
+    """A within result built from made-up parts (no within statistics exist yet)."""
+    from tests.test_withinstats_api import _fake_result  # pyright: ignore[reportPrivateUsage]
+
+    frame = pd.DataFrame(
+        {
+            "subject": np.repeat(range(6), 2),
+            "condition": list("ab") * 6,
+            "desire": np.arange(12.0) % 5,
+        }
+    )
+    return _fake_result(frame)
+
+
+PUBLIC = _public_callables()
+
+# (keyword, value, the suggestion it must not get)
+WRONG_SUGGESTIONS = [
+    ("tail", "greater", "title="),
+    ("tails", 1, "tr="),
+    ("alternative_hypothesis", "greater", "Did you mean"),
+    ("one_sided", True, "Did you mean"),
+    ("levels", ["b", "a"], "conf_level="),
+    ("categories", ["b", "a"], "Did you mean"),
+    ("x_order", ["b", "a"], "Did you mean"),
+    ("legend", False, "seed="),
+    ("bayes", True, "layers="),
+    ("label", "p", "Did you mean ylab="),
+    ("labels", "p", "Did you mean"),
+    ("centrality", "median", "centrality_plotting="),
+    ("alpha", 0.01, "Did you mean"),
+    ("hue_order", ["a"], "order="),
+]
+
+
+@pytest.mark.parametrize("where", list(PUBLIC))
+@pytest.mark.parametrize(("keyword", "value", "wrong"), WRONG_SUGGESTIONS)
+def test_unlikely_keyword_suggestions_are_not_made(
+    where: str, keyword: str, value: object, wrong: str
+) -> None:
+    with pytest.raises(TypeError) as info:
+        PUBLIC[where](**{keyword: value})
+    text = str(info.value)
+    assert wrong not in text, text
+    assert "Did you mean" not in text, text
+    assert keyword in text
+
+
+@pytest.mark.parametrize(
+    "where", ["ip.betweenstats", "ip.analyze.betweenstats", "ip.render.betweenstats"]
+)
+@pytest.mark.parametrize("keyword", ["point_path", "centrality_path"])
+def test_path_keywords_in_betweenstats_belong_to_withinstats(
+    where: str, keyword: str
+) -> None:
+    text = message(TypeError, lambda: PUBLIC[where](**{keyword: False}))
+    assert text == (
+        f"{keyword}= is an argument of withinstats(), which joins each subject's "
+        "points (point_path) or the centrality points (centrality_path) across "
+        "conditions; betweenstats() compares independent groups and draws no "
+        f"paths. Remove {keyword}=."
+    )
+
+
+def test_targeted_keyword_messages_exact() -> None:
+    text = message(TypeError, lambda: call(tail="greater"))
+    assert text == (
+        "tail= is not an argument of betweenstats(); the direction of the test is "
+        "set by alternative=: 'two-sided' (the default), 'greater' (the first "
+        "level of x is greater than the second) or 'less' (it is less). The first "
+        "level is the first in order= when given, else the first declared "
+        "category, else the first in sorted order. Remove tail=."
+    )
+    for name in ("tails", "alternative_hypothesis", "one_sided", "one.sided"):
+        text = message(TypeError, lambda name=name: call(**{name: True}))
+        assert text.startswith(
+            f"{name}= is not an argument of betweenstats(); the direction of the test "
+            "is set by alternative=:"
+        )
+    text = message(TypeError, lambda: call(alpha=0.01))
+    assert text == (
+        "alpha= is not an argument of betweenstats(): pairwise_alpha= sets the "
+        "threshold below which a pair's adjusted p-value counts as significant, "
+        "and conf_level= sets the level of the confidence intervals (conf_level=0.95 "
+        "for 95%). For transparency, use point_args={'alpha': 0.5}, boxplot_args or "
+        "violin_args. Remove alpha= and pass the one you mean."
+    )
+    text = message(TypeError, lambda: call(paired=True))
+    assert text == (
+        "betweenstats() compares independent groups and takes no paired=. For "
+        "repeated measures of the same subjects use "
+        "withinstats(data, x, y, subject_id=...); otherwise remove paired=."
+    )
+    for name in ("levels", "categories", "x_order"):
+        text = message(TypeError, lambda name=name: call(**{name: ["b", "a"]}))
+        assert text == (
+            f"{name}= is not an argument of betweenstats(); the order of the levels "
+            "of x is set by order=, a list of every level present, for example "
+            f"order=['b', 'a']. Remove {name}=."
+        )
+    text = message(TypeError, lambda: call(levels=3))
+    assert "for example order=['control', 'treatment']" in text
+    text = message(TypeError, lambda: call(legend=False))
+    assert text == (
+        "legend= is not an argument of betweenstats(): there is no legend; the "
+        "colors follow the levels of x, which the x axis names. Remove legend=."
+    )
+    text = message(TypeError, lambda: call(bayes=True))
+    assert text == (
+        "bayes= is not an argument of betweenstats(); for Bayesian statistics pass "
+        "type='bayes', and for the Bayes factor caption under a parametric "
+        "subtitle pass bf_message=True or False. Remove bayes=."
+    )
+    for name in ("label", "labels"):
+        text = message(TypeError, lambda name=name: call(**{name: "p"}))
+        assert text == (
+            f"{name}= is not an argument of betweenstats(); the labels are set by "
+            "xlab= (the x axis), ylab= (the y axis) and title=. "
+            f"Remove {name}=."
+        )
+
+
+def test_targeted_keyword_messages_point_to_the_right_function() -> None:
+    text = message(TypeError, lambda: PUBLIC["ip.render.betweenstats"](tail="less"))
+    assert text.startswith("tail= is not an argument of render.betweenstats(); ")
+    assert (
+        "alternative= is an argument of the analysis: pass it to "
+        "ip.analyze.betweenstats() or ip.betweenstats() and draw that result. "
+        "Remove tail=." in text
+    )
+    text = message(TypeError, lambda: PUBLIC["ip.analyze.betweenstats"](label="p"))
+    assert text.startswith("label= is not an argument of betweenstats(); ")
+    assert (
+        "xlab= is a drawing option of ip.betweenstats(...) and "
+        "ip.render.betweenstats(result, ...). Remove label=." in text
+    )
+    text = message(TypeError, lambda: PUBLIC["ip.render.betweenstats"](alpha=0.5))
+    assert text == (
+        "alpha= is not an argument of render.betweenstats(). For transparency, use "
+        "point_args={'alpha': 0.5}, boxplot_args or violin_args. pairwise_alpha= "
+        "and conf_level= are arguments of the analysis: pass them to "
+        "ip.analyze.betweenstats() or ip.betweenstats() and draw that result. "
+        "Remove alpha=."
+    )
+    text = message(TypeError, lambda: PUBLIC["ip.render.betweenstats"](paired=True))
+    assert text.startswith("betweenstats() compares independent groups")
+    text = message(TypeError, lambda: PUBLIC["ip.analyze.withinstats"](alpha=0.5))
+    assert "For transparency" not in text  # the analysis draws nothing
+    assert "pairwise_alpha= sets the threshold" in text
+    # withinstats keeps its own paired= message (SPEC.md section 2).
+    text = message(TypeError, lambda: PUBLIC["ip.withinstats"](paired=True))
+    assert text == (
+        "paired= is not needed: withinstats() always pairs the measurements of each "
+        "subject, matched by subject_id. Remove paired=."
+    )
+
+
+# Suggestions that are very likely what was meant stay.
+LIKELY = [
+    ("conf_levle", "conf_level"),
+    ("pairwise_dispay", "pairwise_display"),
+    ("p_adjust", "p_adjust_method"),
+    ("conf_lvl", "conf_level"),
+    ("seeds", "seed"),
+    ("layer", "layers"),
+    ("boxplot_arg", "boxplot_args"),
+    ("Pairwise_Displays", "pairwise_display"),
+    ("ndigits", "digits"),
+    ("trim", "tr"),
+    ("prior", "bf_prior"),
+    ("ci_level", "conf_level"),
+    ("level", "conf_level"),
+    ("pointargs", "point_args"),
+    ("ylabel", "ylab"),
+    ("palete", "palette"),
+]
+
+
+@pytest.mark.parametrize(("typo", "fix"), LIKELY)
+def test_likely_keyword_suggestions_stay(typo: str, fix: str) -> None:
+    text = message(TypeError, lambda: call(**{typo: 1}))
+    assert text == (
+        f"betweenstats() got an unexpected keyword argument {typo!r}. "
+        f"Did you mean {fix}=1?"
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "right"),
+    [
+        ("benjamini-hochberg", "BH"),
+        ("Benjamini-Hochberg", "BH"),
+        ("fdr_bh", "BH"),
+        ("fdr-bh", "BH"),
+        ("b-h", "BH"),
+        ("benjamini-yekutieli", "BY"),
+        ("fdr_by", "BY"),
+        ("holm-bonferroni", "holm"),
+    ],
+)
+def test_adjustment_names_map_to_rs_spelling(value: str, right: str) -> None:
+    text = message(ValueError, lambda: v.check_p_adjust_method(value))
+    assert text.startswith(f"p_adjust_method={value!r} is not allowed; use one of ")
+    assert text.endswith(f"write p_adjust_method={right!r}.")
+    assert "Did you mean" not in text
+
+
+def test_adjustment_names_exact_wording() -> None:
+    allowed = "'holm', 'hochberg', 'hommel', 'bonferroni', 'BH', 'BY', 'fdr', 'none'"
+    start = f"is not allowed; use one of {allowed}."
+    assert message(ValueError, lambda: v.check_p_adjust_method("fdr_bh")) == (
+        f"p_adjust_method='fdr_bh' {start} The Benjamini-Hochberg procedure (the "
+        "false discovery rate) is R's 'BH': write p_adjust_method='BH'."
+    )
+    assert message(ValueError, lambda: v.check_p_adjust_method("fdr_by")) == (
+        f"p_adjust_method='fdr_by' {start} The Benjamini-Yekutieli procedure is R's "
+        "'BY': write p_adjust_method='BY'."
+    )
+    assert message(ValueError, lambda: v.check_p_adjust_method("holm-bonferroni")) == (
+        f"p_adjust_method='holm-bonferroni' {start} The Holm-Bonferroni procedure is "
+        "R's 'holm': write p_adjust_method='holm'."
+    )
+    for name, label in (
+        ("sidak", "Sidak's correction"),
+        ("holm-sidak", "The Holm-Sidak procedure"),
+        ("tukey", "Tukey's method"),
+    ):
+        text = message(ValueError, lambda name=name: v.check_p_adjust_method(name))
+        assert text == (
+            f"p_adjust_method={name!r} {start} {label} is not one of R's p.adjust() "
+            "methods, which inferplot follows, so it is not available; choose one "
+            "of those listed."
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["one-sided", "one.sided", "one_sided", "onesided", "One-Sided", "one-tailed"],
+)
+def test_one_sided_asks_for_the_direction(value: str) -> None:
+    text = message(ValueError, lambda: v.check_alternative(value))
+    assert text == (
+        f"alternative={value!r} is not allowed; use one of 'two-sided', 'less', "
+        "'greater'. A one-sided test needs its direction: alternative='greater' "
+        "tests whether the first level of x is greater than the second, and "
+        "alternative='less' whether it is less. The first level is the first in "
+        "order= when given, else the first declared category, else the first in "
+        "sorted order."
+    )
+
+
+def test_two_tailed_is_two_sided() -> None:
+    text = message(ValueError, lambda: v.check_alternative("two-tailed"))
+    assert text.endswith(
+        "A two-tailed test is alternative='two-sided': write alternative='two-sided'."
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "hint"),
+    [
+        (95, " It is a proportion, not a percentage: write conf_level=0.95."),
+        (90, " It is a proportion, not a percentage: write conf_level=0.9."),
+        (99.0, " It is a proportion, not a percentage: write conf_level=0.99."),
+        (99.9, " It is a proportion, not a percentage: write conf_level=0.999."),
+        (5, ""),
+        (1.96, ""),
+        (80, ""),
+        (100, ""),
+        (1, ""),
+    ],
+)
+def test_conf_level_proposes_a_value_only_for_a_common_percentage(
+    value: float, hint: str
+) -> None:
+    text = message(ValueError, lambda: v.check_conf_level(value))
+    assert text == (
+        "conf_level must be strictly between 0 and 1, for example conf_level=0.95; "
+        f"got {value!r}.{hint}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("check", "value", "unlikely"),
+    [
+        (v.check_p_adjust_method, "benjamini", "hochberg"),
+        (v.check_p_adjust_method, "fdr-tsbh", "fdr"),
+        (v.check_alternative, "one-side", "two-sided"),
+        (v.canonical_type, "anova", None),
+        (v.canonical_pairwise_display, "some", None),
+    ],
+)
+def test_unlikely_value_suggestions_are_not_made(
+    check: Callable[[object], object], value: str, unlikely: str | None
+) -> None:
+    text = message(ValueError, lambda: check(value))
+    assert "Did you mean" not in text, text
+    if unlikely is not None:
+        assert f"={unlikely!r}" not in text

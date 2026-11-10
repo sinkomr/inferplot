@@ -12,6 +12,8 @@ the dependency floors (DECISIONS.md D22) in the lowest-direct CI job:
   (``test_pandas_nullable_and_arrow_dtypes``);
 * pandas ``ArrowDtype`` dictionary columns have no ``.cat`` accessor in narwhals
   (``test_pandas_arrow_dictionary_x_rejected_clearly``);
+* pyarrow 14: an unordered dictionary column is decoded with a cast to its value
+  type (``test_pyarrow_unordered_dictionary_is_text``);
 * polars ``Categorical`` order changed in polars 1.32
   (``test_polars_categorical_is_sorted_not_encounter_order``).
 """
@@ -338,6 +340,205 @@ def test_x_datetime_rejected() -> None:
         read_between(frame, "g", "y")
 
 
+_TO_TEXT = (
+    "Convert them to text first, for example data['g'].astype(str) in pandas or "
+    "pl.col('g').cast(pl.String) in polars."
+)
+
+
+def _dates_and_times() -> list[tuple[str, Any]]:
+    import datetime
+
+    when = pd.to_datetime(["2024-01-01", "2024-02-01"] * 2)
+    return [
+        ("pandas datetime", pd.DataFrame({"g": when})),
+        ("pandas timedelta", pd.DataFrame({"g": pd.to_timedelta([1, 2] * 2, "D")})),
+        ("pandas period", pd.DataFrame({"g": when.to_period("M")})),
+        (
+            "pandas object dates",
+            pd.DataFrame(
+                {"g": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)] * 2}
+            ),
+        ),
+        ("pandas categorical", pd.DataFrame({"g": pd.Categorical(when)})),
+        (
+            "polars date",
+            pl.DataFrame(
+                {"g": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)] * 2}
+            ),
+        ),
+        ("polars time", pl.DataFrame({"g": [datetime.time(1), datetime.time(2)] * 2})),
+        (
+            "polars duration",
+            pl.DataFrame({"g": [datetime.timedelta(1), datetime.timedelta(2)] * 2}),
+        ),
+        ("pyarrow timestamp", pa.table({"g": pa.array(when)})),
+        (
+            "pyarrow date dictionary",
+            pa.table(
+                {
+                    "g": pa.array(
+                        [datetime.date(2024, 1, 1)] * 2
+                        + [datetime.date(2024, 2, 1)] * 2
+                    ).dictionary_encode()
+                }
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "frame"), _dates_and_times(), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_x_dates_and_times_are_told_to_become_text(kind: str, frame: Any) -> None:
+    # Converting to a categorical does not help (its categories are still dates);
+    # converting to text does, so the message says that, for a categorical too.
+    y = [1.0, 2.0, 3.0, 4.0]
+    frame = (
+        frame.assign(y=y)
+        if isinstance(frame, pd.DataFrame)
+        else frame.with_columns(pl.Series("y", y))
+        if isinstance(frame, pl.DataFrame)
+        else frame.append_column("y", pa.array(y))
+    )
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "y")
+    text = str(info.value)
+    assert text.startswith("x='g' holds dates or times"), text
+    assert text.endswith("which cannot define groups as they are. " + _TO_TEXT), text
+    assert "categorical" not in text
+
+
+@pytest.mark.parametrize("cut", [pd.cut, pd.qcut])
+def test_x_bins_are_told_to_become_text(cut: Any) -> None:
+    age = pd.Series([21, 35, 48, 62, 29, 55])
+    frame = pd.DataFrame({"g": cut(age, 2), "y": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "y")
+    text = str(info.value)
+    assert text.startswith("x='g' holds intervals (bins made by pandas.cut or ")
+    assert text.endswith(
+        "which cannot define groups as they are. Convert them to text first, for "
+        "example data['g'].astype(str) in pandas; "
+        "data['g'].cat.rename_categories(str) does so and keeps the bins in their "
+        "order."
+    )
+    # Both fixes work; the second keeps the bin order.
+    assert len(read_between(frame.assign(g=frame.g.astype(str)), "g", "y").levels) == 2
+    kept = read_between(frame.assign(g=frame.g.cat.rename_categories(str)), "g", "y")
+    assert kept.levels == tuple(str(c) for c in frame.g.cat.categories)
+    assert kept.level_source == "declared"
+
+
+def test_subject_dates_are_told_to_become_text() -> None:
+    from inferplot._data import read_within
+
+    when = pd.to_datetime(["2024-01-01", "2024-02-01"]).repeat(2)
+    frame = pd.DataFrame({"s": when, "g": ["a", "b"] * 2, "y": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(TypeError) as info:
+        read_within(frame, "g", "y", "s")
+    assert str(info.value).startswith("subject_id='s' holds dates or times")
+    assert "cannot identify subjects as they are. Convert them to text first" in str(
+        info.value
+    )
+
+
+def test_non_string_column_labels_get_a_way_forward() -> None:
+    frame = pd.DataFrame(np.c_[np.repeat([0, 1], 4), np.arange(8.0)])
+    fix = (
+        "The column labels of data are not strings (0, 1), as pandas.DataFrame(array) "
+        "makes them, and inferplot names columns by strings: name the columns, for "
+        "example pandas.DataFrame(array, columns=['group', 'score']), or turn the "
+        "labels into strings with data.rename(columns=str)"
+    )
+    with pytest.raises(ColumnNotFoundError) as info:
+        read_between(frame, "0", "1")
+    assert str(info.value) == f"x='0' is not a column of data. {fix} and keep x='0'."
+    with pytest.raises(TypeError) as info:
+        read_between(frame, 0, 1)  # type: ignore[arg-type]
+    assert str(info.value) == (
+        f"x must be a column name (a string), not 0. {fix} and pass x='0'."
+    )
+    out = read_between(frame.rename(columns=str), "0", "1")
+    assert out.levels == ("0", "1")
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        pd.Series(["a", "b"] * 30, name="g"),
+        np.array(["a", "b"] * 30),
+        ["a", "b"] * 30,
+        pl.Series("g", ["a", "b"] * 30),
+    ],
+    ids=["pandas Series", "NumPy array", "list", "polars Series"],
+)
+def test_a_column_passed_instead_of_its_name(given: Any) -> None:
+    frame = pd.DataFrame({"g": ["a", "b"] * 30, "y": np.arange(60.0)})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, given, "y")
+    text = str(info.value)
+    kind = {
+        "Series": "a pandas.Series"
+        if isinstance(given, pd.Series)
+        else "a polars.Series",
+        "ndarray": "a numpy.ndarray",
+        "list": "a list",
+    }[type(given).__name__]
+    assert text.startswith(f"x must be a column name (a string), not {kind}: ")
+    assert "\n" not in text
+    assert len(text) < 250
+    named = getattr(given, "name", None) == "g"
+    assert text.endswith(
+        "pass the column's name, for example x='g'."
+        if named
+        else "pass the name of a column of data, for example x='group'."
+    )
+    with pytest.raises(
+        TypeError, match=r"^y must be a column name \(a string\), not a"
+    ):
+        read_between(frame, "g", frame["y"])  # pyright: ignore[reportArgumentType]
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_swapped_x_and_y_are_named(backend: str) -> None:
+    frame = make(backend, {"g": ["a", "b", "a", "b"], "score": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "score", "g")
+    assert str(info.value).endswith(
+        "x='score' is numeric, so x and y may be swapped: x is the grouping column "
+        "and y the measurement, as in x='g', y='score'."
+    )
+    from inferplot._data import read_within
+
+    frame = make(
+        backend, {"s": [1, 1, 2, 2], "g": ["a", "b", "a", "b"], "score": [1.0, 2, 3, 4]}
+    )
+    with pytest.raises(TypeError, match="x and y may be swapped"):
+        read_within(frame, "score", "g", "s")
+    # Text x with text y: no such guess.
+    frame = make(backend, {"g": ["a", "b"], "t": ["1", "2"]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "t")
+    assert "swapped" not in str(info.value)
+
+
+@pytest.mark.parametrize("backend", ["pandas", "pyarrow"])
+def test_duplicate_column_names(backend: str) -> None:
+    if backend == "pandas":
+        frame: Any = pd.DataFrame([["a", 1.0, 2.0]], columns=["g", "y", "y"])
+    else:
+        frame = pa.table(
+            [pa.array(["a"]), pa.array([1.0]), pa.array([2.0])], names=["g", "y", "y"]
+        )
+    with pytest.raises(ValueError, match="more than one column") as info:
+        read_between(frame, "g", "y")
+    assert str(info.value) == (
+        "data has more than one column named 'y'; rename the columns so that each "
+        "name is used once."
+    )
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_x_float_whole_numbers(backend: str) -> None:
     # A pandas integer column with a missing value becomes float64.
@@ -449,17 +650,24 @@ def test_null_and_nan_both_missing(backend: str) -> None:
     assert out.counts() == {"a": 1, "b": 2}
 
 
-def test_dictionary_nulls() -> None:
+@pytest.mark.parametrize("ordered", [False, True])
+def test_dictionary_nulls(ordered: bool) -> None:
     # A null index, and an index pointing at a null dictionary entry (pyarrow 14's
     # is_null() misses the second).
     x = pa.DictionaryArray.from_arrays(
-        pa.array([0, 1, None, 2, 0, 2], type=pa.int8()), pa.array(["b", None, "a"])
+        pa.array([0, 1, None, 2, 0, 2], type=pa.int8()),
+        pa.array(["b", None, "a"]),
+        ordered=ordered,
     )
     out = read_between(
         pa.table({"g": x, "y": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}), "g", "y"
     )
-    assert (out.levels, out.n_per_level, out.n_missing_x) == (("b", "a"), (2, 2), 2)
-    assert [v.tolist() for v in out.values] == [[1.0, 5.0], [4.0, 6.0]]
+    if ordered:  # the declared order
+        assert (out.levels, out.n_per_level, out.n_missing_x) == (("b", "a"), (2, 2), 2)
+        assert [v.tolist() for v in out.values] == [[1.0, 5.0], [4.0, 6.0]]
+    else:  # text, sorted
+        assert (out.levels, out.n_per_level, out.n_missing_x) == (("a", "b"), (2, 2), 2)
+        assert [v.tolist() for v in out.values] == [[4.0, 6.0], [1.0, 5.0]]
 
 
 # --- level order ---------------------------------------------------------------------
@@ -509,7 +717,53 @@ def test_polars_categorical_is_sorted_not_encounter_order() -> None:
     _check(out, ("a", "b", "c"), (), "sorted")
 
 
-def test_pyarrow_dictionary_order() -> None:
+def _ordered(values: list[Any], dictionary: list[Any]) -> pa.DictionaryArray:
+    """A pyarrow dictionary array whose type is marked ordered: a declared order."""
+    indices = [None if v is None else dictionary.index(v) for v in values]
+    return pa.DictionaryArray.from_arrays(
+        pa.array(indices, type=pa.int32()), pa.array(dictionary), ordered=True
+    )
+
+
+def test_pyarrow_ordered_dictionary_declares_the_order() -> None:
+    from_pandas = pa.Table.from_pandas(
+        pd.DataFrame(
+            {
+                "g": pd.Categorical(
+                    ["b", "a"], categories=["c", "b", "a"], ordered=True
+                ),
+                "y": [1.0, 2.0],
+            }
+        ),
+        preserve_index=False,
+    )
+    _check(read_between(from_pandas, "g", "y"), ("b", "a"), ("c",), "declared")
+    marked = pa.table(
+        {"g": _ordered(["b", "a", "b"], ["b", "a"]), "y": [1.0, 2.0, 3.0]}
+    )
+    _check(read_between(marked, "g", "y"), ("b", "a"), (), "declared")
+    assert read_between(marked, "g", "y").dictionary_order == ()
+    chunked = pa.table(
+        {
+            "g": pa.chunked_array(
+                [
+                    _ordered(["b", None], ["b", "c", "a"]),
+                    _ordered(["c", "a"], ["b", "c", "a"]),
+                ]
+            ),
+            "y": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    out = read_between(chunked, "g", "y")
+    _check(out, ("b", "c", "a"), (), "declared")
+    assert [v.tolist() for v in out.values] == [[1.0], [3.0], [4.0]]
+
+
+def test_pyarrow_unordered_dictionary_is_text() -> None:
+    # dictionary_encode(), pyarrow.csv's auto_dict_encode and polars .to_arrow()
+    # list the values as they first appear: an accident of row order, not a
+    # declared order. The levels are sorted, and the dictionary order is kept to
+    # say so in the result's warnings.
     from_pandas = pa.Table.from_pandas(
         pd.DataFrame(
             {
@@ -519,13 +773,23 @@ def test_pyarrow_dictionary_order() -> None:
         ),
         preserve_index=False,
     )
-    _check(read_between(from_pandas, "g", "y"), ("b", "a"), ("c",), "declared")
+    out = read_between(from_pandas, "g", "y")
+    _check(out, ("a", "b"), (), "sorted")  # the unused 'c' is not a declared level
+    assert out.dictionary_order == ("b", "a")
     encoded = pa.table(
         {"g": pa.array(["b", "a", "b"]).dictionary_encode(), "y": [1.0, 2.0, 3.0]}
     )
-    _check(
-        read_between(encoded, "g", "y"), ("b", "a"), (), "declared"
-    )  # encounter order
+    out = read_between(encoded, "g", "y")
+    _check(out, ("a", "b"), (), "sorted")
+    assert out.dictionary_order == ("b", "a")
+    assert [v.tolist() for v in out.values] == [[2.0], [1.0, 3.0]]
+    in_order = pa.table(
+        {"g": pa.array(["a", "b", "a"]).dictionary_encode(), "y": [1.0, 2.0, 3.0]}
+    )
+    assert read_between(in_order, "g", "y").dictionary_order == ()
+    # order= sets the order; nothing to report.
+    by_order = read_between(encoded, "g", "y", order=["b", "a"])
+    assert (by_order.levels, by_order.dictionary_order) == (("b", "a"), ())
     chunked = pa.table(
         {
             "g": pa.chunked_array(
@@ -538,8 +802,103 @@ def test_pyarrow_dictionary_order() -> None:
         }
     )
     out = read_between(chunked, "g", "y")
-    _check(out, ("b", "c", "a"), (), "declared")
-    assert [v.tolist() for v in out.values] == [[1.0], [3.0], [4.0]]
+    _check(out, ("a", "b", "c"), (), "sorted")  # one dictionary for both chunks
+    assert out.dictionary_order == ("b", "c", "a")
+    assert [v.tolist() for v in out.values] == [[4.0], [1.0], [3.0]]
+    # Number dictionaries are read as numbers: sorted numerically, labelled as R.
+    numbers = pa.table(
+        {"g": pa.array([10, 9, 10, 9]).dictionary_encode(), "y": [1.0, 2.0, 3.0, 4.0]}
+    )
+    out = read_between(numbers, "g", "y")
+    assert (out.levels, out.dictionary_order) == (("9", "10"), ("10", "9"))
+    floats = pa.table(
+        {"g": pa.array([8.0, 4.0, 8.0]).dictionary_encode(), "y": [1.0, 2.0, 3.0]}
+    )
+    assert read_between(floats, "g", "y").levels == ("4", "8")
+    # ... and follow a float column's rule: whole numbers only.
+    halves = pa.table(
+        {"g": pa.array([4.0, 0.5, 4.0]).dictionary_encode(), "y": [1.0, 2.0, 3.0]}
+    )
+    with pytest.raises(TypeError, match=r"holds numbers that are not whole \(0\.5\)"):
+        read_between(halves, "g", "y")
+
+
+def test_csv_and_polars_arrow_dictionaries_are_sorted() -> None:
+    import io
+
+    import pyarrow.csv as pacsv
+
+    table = pacsv.read_csv(
+        io.BytesIO(b"g,y\nb,1\nb,2\na,3\na,4\n"),
+        convert_options=pacsv.ConvertOptions(auto_dict_encode=True),
+    )
+    out = read_between(table, "g", "y")
+    assert (out.levels, out.level_source, out.dictionary_order) == (
+        ("a", "b"),
+        "sorted",
+        ("b", "a"),
+    )
+    frame = pl.DataFrame(
+        {
+            "g": pl.Series(["b", "b", "a", "a"], dtype=pl.Categorical),
+            "y": [1.0, 2, 3, 4],
+        }
+    )
+    out = read_between(frame.to_arrow(), "g", "y")
+    assert (out.levels, out.level_source) == (("a", "b"), "sorted")
+
+
+def _fifteen_against_fifteen() -> tuple[np.ndarray, np.ndarray]:
+    """The review's example: 15 'treatment' rows, then 15 'control' rows."""
+    rng = np.random.default_rng(2)
+    g = np.repeat(["treatment", "control"], 15)
+    y = np.r_[rng.normal(1.0, 1, 15), rng.normal(0, 1, 15)]
+    return g, y
+
+
+def _frames_of(g: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+    return {
+        "pandas text": pd.DataFrame({"g": g, "y": y}),
+        "polars Categorical": pl.DataFrame(
+            {"g": pl.Series(g, dtype=pl.Categorical), "y": y}
+        ),
+        "polars Enum": pl.DataFrame(
+            {"g": pl.Series(g, dtype=pl.Enum(["control", "treatment"])), "y": y}
+        ),
+        "pyarrow unordered dictionary": pa.table(
+            {"g": pa.array(g).dictionary_encode(), "y": y}
+        ),
+        "pyarrow string": pa.table({"g": pa.array(g), "y": y}),
+        "polars to_arrow": pl.DataFrame(
+            {"g": pl.Series(g, dtype=pl.Categorical), "y": y}
+        ).to_arrow(),
+    }
+
+
+def test_level_order_does_not_depend_on_row_order() -> None:
+    from inferplot.analyses.betweenstats import betweenstats
+
+    g, y = _fifteen_against_fifteen()
+    seen: set[tuple[Any, ...]] = set()
+    for seed in range(4):
+        perm = np.random.default_rng(seed).permutation(30)
+        for kind, frame in _frames_of(g[perm], y[perm]).items():
+            result = betweenstats(frame, "g", "y", alternative="greater")
+            test = result.test
+            assert test is not None
+            seen.add(
+                (result.levels, round(test.statistic, 12), round(test.p_value, 12))
+            )
+            assert result.levels == ("control", "treatment"), kind
+    assert len(seen) == 1, seen
+    # A dictionary marked ordered keeps its declared order on every row order.
+    for seed in range(4):
+        perm = np.random.default_rng(seed).permutation(30)
+        table = pa.table(
+            {"g": _ordered(list(g[perm]), ["treatment", "control"]), "y": y[perm]}
+        )
+        result = betweenstats(table, "g", "y", alternative="greater")
+        assert result.levels == ("treatment", "control")
 
 
 def test_label_collision_raises() -> None:

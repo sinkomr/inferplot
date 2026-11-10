@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from inferplot import stats
-from inferplot._data import WithinData, read_within
+from inferplot._data import WithinData, data_notes, read_within
 from inferplot._validate import (
     canonical_pairwise_display,
     canonical_type,
@@ -179,6 +179,7 @@ def _data_warnings(data: WithinData) -> list[str]:
             f"{_plural(empty, 'has', 'have')} no rows with x, y and subject_id all "
             f"present and {_plural(empty, 'was', 'were')} left out of the analysis."
         )
+    out += data_notes(data)
     dropped = data.dropped_subjects
     if dropped:
         out.append(
