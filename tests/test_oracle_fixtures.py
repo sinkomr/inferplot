@@ -1511,14 +1511,15 @@ def test_scatter_smooth_band_and_marginals(case: OracleCase) -> None:
         assert number(built[-1]["x"]) == x.max()
         if method == "lm":
             _check_ols_band(built, x, y, level)
-    # Marginal histograms: 30 bins of each variable, every value counted once.
+    # Marginal histograms: 30 bins of each variable (one of width 0.1 for a constant
+    # one, edge_corr_constant_x), every value counted once.
     for geom, values in {"GeomXsidebar": x, "GeomYsidebar": y}.items():
         layers = [layer["built"] for layer in case.plot_layers if layer["geom"] == geom]
         if case.args.get("marginal", True) is False:
             assert layers == []
             continue
         (side,) = layers
-        assert len(side) == 30
+        assert len(side) == (1 if values.min() == values.max() else 30)
         assert sum(int(b["count"]) for b in side) == values.size
     # Point labels: every analyzed point, or those label.expression selects.
     labelled = [
