@@ -26,7 +26,7 @@ import dataclasses
 import io
 import math
 import warnings
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast
 
 import numpy as np
@@ -49,13 +49,13 @@ from inferplot.render.figure import (
     reported_glyphs,
     root_figure,
 )
+from inferplot.result import StatsResult
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
     from matplotlib.backend_bases import RendererBase
 
     from inferplot.render.figure import StatsFigure
-    from inferplot.result import StatsResult
 
 __all__ = [
     "GAP_PT",
@@ -70,6 +70,7 @@ __all__ = [
     "check_axes",
     "check_drawable",
     "check_given_axes",
+    "check_result_type",
     "check_scale",
     "check_subtitle",
     "check_user_texts",
@@ -418,11 +419,9 @@ def check_axes(ax: Axes, *, shared_x: bool = False) -> None:
         )
 
 
-def check_drawable(result: StatsResult, analysis: str, call: str) -> None:
-    """A result of ``analysis`` that still holds its observations (histostats,
-    scatterstats); ``call`` is how to recompute it."""
-    from inferplot.result import StatsResult
-
+def check_result_type(result: StatsResult, analysis: str) -> None:
+    """A :class:`StatsResult` of ``analysis``, or ``TypeError`` naming the
+    function that draws it."""
     if not isinstance(result, StatsResult):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(
             f"render.{analysis}() draws the result of ip.analyze.{analysis}(); "
@@ -434,6 +433,12 @@ def check_drawable(result: StatsResult, analysis: str, call: str) -> None:
             f"result comes from ip.analyze.{result.analysis}(). Draw it with "
             f"ip.render.{result.analysis}(result)."
         )
+
+
+def check_drawable(result: StatsResult, analysis: str, call: str) -> None:
+    """A result of ``analysis`` that still holds its observations (histostats,
+    scatterstats); ``call`` is how to recompute it."""
+    check_result_type(result, analysis)
     if not result.values or not all(result.values):
         raise ValueError(
             "This result holds no observations to draw: the copy of a result that "
@@ -472,8 +477,16 @@ _SMALLEST_DRAWN: Final = 1e-280
 _LARGEST_DRAWN: Final = 1e306
 
 
-def check_scale(values: Sequence[float], column: str, letter: str) -> None:
-    """Values matplotlib can draw on an axis; raised before anything is drawn."""
+def check_scale(
+    values: Iterable[float],
+    column: str | None,
+    letter: str,
+    *,
+    room: str = "with room around the data",
+) -> None:
+    """Values matplotlib can draw on an axis; raised before anything is drawn.
+
+    ``room`` says what the axis holds besides the data, in the message."""
     largest = max((abs(float(x)) for x in values), default=0.0)
     if largest == 0.0 or _SMALLEST_DRAWN <= largest <= _LARGEST_DRAWN:
         return
@@ -487,8 +500,8 @@ def check_scale(values: Sequence[float], column: str, letter: str) -> None:
         how = f"multiply {letter} by 1e{-exponent}"
     else:
         why = (
-            f"the largest is {largest:.3g}, and the axis, with room around the "
-            "data, would pass the largest double (1.8e308)"
+            f"the largest is {largest:.3g}, and the axis, {room}, would pass "
+            "the largest double (1.8e308)"
         )
         how = f"divide {letter} by 1e{exponent}"
     raise ValueError(

@@ -29,7 +29,6 @@ centrality labels go).
 from __future__ import annotations
 
 import dataclasses
-import math
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal
 
@@ -207,17 +206,7 @@ def checked_result(result: StatsResult, analysis: str, call: str) -> int:
     ``call`` is how to recompute it, for the message about a result without
     observations.
     """
-    if not isinstance(result, StatsResult):  # pyright: ignore[reportUnnecessaryIsInstance]
-        raise TypeError(
-            f"render.{analysis}() draws the result of ip.analyze.{analysis}(); "
-            f"got {type(result).__name__}."
-        )
-    if result.analysis != analysis:
-        raise TypeError(
-            f"render.{analysis}() draws results of ip.analyze.{analysis}(); this "
-            f"result comes from ip.analyze.{result.analysis}(). Draw it with "
-            f"ip.render.{result.analysis}(result)."
-        )
+    base.check_result_type(result, analysis)
     k = len(result.levels)
     if k >= 1 and not result.values:
         raise ValueError(
@@ -252,39 +241,12 @@ def check_options(result: StatsResult, options: Options, ax: Axes | None) -> Non
     _check_scale(result)
 
 
-# The largest |y| inferplot draws must lie within these bounds: matplotlib treats
-# axis limits whose size is below about 1e21 times the smallest normal double
-# (2.2e-287) as zero and widens them to +-0.05, and above about 1e306 the room
-# for brackets above the data comes close to the largest double.
-_SMALLEST_DRAWN: Final = 1e-280
-_LARGEST_DRAWN: Final = 1e306
-
-
 def _check_scale(result: StatsResult) -> None:
     """Values matplotlib can draw on an axis; raised before anything is drawn."""
-    sizes = [abs(float(v)) for level in result.values for v in level]
-    sizes += [abs(d.value) for d in result.descriptives if d.value is not None]
-    largest = max(sizes, default=0.0)
-    if largest == 0.0 or _SMALLEST_DRAWN <= largest <= _LARGEST_DRAWN:
-        return
-    exponent = math.floor(math.log10(largest))
-    small = largest < _SMALLEST_DRAWN
-    if small:
-        why = (
-            f"the largest is {largest:.3g} in size, and matplotlib treats axis "
-            "limits below about 1e-287 as zero"
-        )
-        how = f"multiply y by 1e{-exponent}"
-    else:
-        why = (
-            f"the largest is {largest:.3g}, and the axis, with room for the "
-            "brackets above the data, would pass the largest double (1.8e308)"
-        )
-        how = f"divide y by 1e{exponent}"
-    raise ValueError(
-        f"The values of {result.y!r} are too {'small' if small else 'large'} "
-        f"for matplotlib to draw: {why}. The statistics do not depend on the "
-        f"units: {how} (change its units) before the analysis and draw that."
+    sizes = [float(v) for level in result.values for v in level]
+    sizes += [d.value for d in result.descriptives if d.value is not None]
+    base.check_scale(
+        sizes, result.y, "y", room="with room for the brackets above the data"
     )
 
 

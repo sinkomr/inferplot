@@ -123,22 +123,6 @@ def check_drawing(
     )
 
 
-def checked_result(result: StatsResult, analysis: str) -> None:
-    """A result of ``analysis``, or ``TypeError`` naming the function that draws
-    it (the analysis keeps this for its own checks)."""
-    if not isinstance(result, StatsResult):  # pyright: ignore[reportUnnecessaryIsInstance]
-        raise TypeError(
-            f"render.{analysis}() draws the result of ip.analyze.{analysis}(); "
-            f"got {type(result).__name__}."
-        )
-    if result.analysis != analysis:
-        raise TypeError(
-            f"render.{analysis}() draws results of ip.analyze.{analysis}(); this "
-            f"result comes from ip.analyze.{result.analysis}(). Draw it with "
-            f"ip.render.{result.analysis}(result)."
-        )
-
-
 @v.checked
 def histostats(
     result: StatsResult,

@@ -51,7 +51,6 @@ from inferplot.render.figure import (
     StatsFigure,
     Subsample,
 )
-from inferplot.render.histostats import checked_result
 from inferplot.render.point_labels import place_labels
 from inferplot.result import StatsResult
 from inferplot.stats.plot_geometry import (
@@ -65,7 +64,7 @@ from inferplot.text import DrawnLayers, drawable, figure_alt_text, figure_texts
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
 
-__all__ = ["MAX_LABELS", "check_drawing", "checked_result", "scatterstats"]
+__all__ = ["MAX_LABELS", "check_drawing", "scatterstats"]
 
 FloatArray = NDArray[np.float64]
 
