@@ -280,7 +280,8 @@ def test_rmmcp_definition() -> None:
         assert pair.conf_low == pytest.approx(pair.estimate - critical * se, rel=1e-12)
         assert pair.p_value == pair.p_adjusted
     holm = rmmcp(columns)
-    assert tuple(p.p_adjusted for p in holm) == p_adjust([p.p_value for p in pairs], "holm")
+    raw = [p.p_value for p in pairs]
+    assert tuple(p.p_adjusted for p in holm) == p_adjust(raw, "holm")
     with pytest.raises(ValueError, match=r"p_adjust_method|unknown"):
         rmmcp(columns, p_adjust_method="nope")  # type: ignore[arg-type]
     flat = [columns[0], columns[0] + 1.0, columns[1]]

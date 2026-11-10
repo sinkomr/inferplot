@@ -666,9 +666,10 @@ def dependent_akp(
     floor((1 - alpha / 2) B)-th smallest delta, alpha = 1 - conf_level
     (``akp_effect``'s rule; at B = 2,000 and 95% it coincides with t1way's). The
     scheme was read off the fixtures' 20,000-resample references: over 40 seeds
-    resampling pairs puts every bound within 1.9 standard errors of R's 50
-    replicate runs on the 14 two-condition references, resampling the samples
-    apart misses by 12 to 350 (DECISIONS.md log). A resample whose winsorized
+    resampling pairs puts every bound's mean within 1.9 standard errors of the
+    mean of R's 50 replicate runs on the 11 distinct two-condition references;
+    resampling the two samples apart misses each reference by 8 to 350 standard
+    errors on at least one bound (DECISIONS.md log). A resample whose winsorized
     differences are constant gives +/-inf (kept, counted in
     ``infinite_resamples``; edge_within2_small's upper bound is Inf in R too) or
     0 / 0 (left out, counted in ``undefined_resamples``; ``akp_effect``'s rule).
@@ -716,11 +717,12 @@ def average_dependent_akp(
     (probe-wrs2within: all 8 wmcpAKP estimates to 3.3e-16 relative with WRS2's
     s_N), and each bound the mean of the pairs' bounds. The bootstrap resamples
     the subjects once (B = 2,000) and computes every pair's AKP on the same
-    resamples. Read off the fixtures' references: averaging per-pair intervals
-    puts the bounds within 1.7 standard errors of R's 50 replicate runs on the 12
-    references with three or more conditions, while the percentile interval of the
-    resampled average misses by 19 to 1,000; drawing the subjects once for all
-    pairs matches the spread of R's replicate runs (mean log SD ratio +0.02, 0.9
+    resamples. Read off the fixtures' references (100 seeds): averaging per-pair
+    intervals puts the bounds' means within 1.8 standard errors of the means of
+    R's 50 replicate runs on the 12 distinct references with three or more
+    conditions, while the percentile interval of the resampled average misses each
+    by 73 to 1,000 on at least one bound; drawing the subjects once for all pairs
+    matches the spread of R's replicate runs (mean log SD ratio +0.02, 0.9
     standard errors) better than a fresh draw per pair (-0.06, -2.4) (DECISIONS.md
     log). A pair's infinite bound makes the average infinite, as in R
     (edge_within_small: -Inf at 100 resamples). ``undefined_resamples`` and
