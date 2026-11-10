@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from matplotlib.collections import LineCollection, PathCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
+    from matplotlib.patches import ConnectionPatch
 
     from inferplot.check import Issue
     from inferplot.result import StatsResult
@@ -120,11 +121,15 @@ class DrawnData:
 class PointLabels:
     """The point labels of a scatterstats figure, for ``check()``: the texts, how
     many there are and the most inferplot places clear of each other
-    (``limit``)."""
+    (``limit``); the least-squares line (None where not drawn) and each link
+    line with the label it joins to its point, which no other label may lie
+    across."""
 
     texts: tuple[Text, ...]
     total: int
     limit: int
+    line: Line2D | None = None
+    links: tuple[tuple[ConnectionPatch, Text], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, eq=False)

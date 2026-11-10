@@ -411,6 +411,7 @@ class _ScatterDrawing(base.BaseDrawing):
         self.band: Any = None
         self.label_texts: list[Text] = []
         self.links: list[ConnectionPatch] = []
+        self.linked: list[tuple[ConnectionPatch, Text]] = []  # link, its label
         self.subsample: Subsample | None = None
         self.drawn_points = self.x.size
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
@@ -457,6 +458,8 @@ class _ScatterDrawing(base.BaseDrawing):
                     texts=tuple(self.label_texts),
                     total=len(self.label_texts),
                     limit=MAX_LABELS,
+                    line=self.line,
+                    links=tuple(self.linked),
                 )
                 if self.label_texts
                 else None
@@ -745,6 +748,8 @@ class _ScatterDrawing(base.BaseDrawing):
             gap=px(LABEL_GAP_PT, self.dpi),
             frame=(frame.x0, frame.y0, frame.x1, frame.y1),
             obstacles=cast("list[tuple[float, float, float, float]]", obstacles),
+            lines=line_strokes(self.line, self.dpi),
+            link_width=px(LINK_WIDTH, self.dpi),
             limit=MAX_LABELS,
         )
         to_pt = 72.0 / self.dpi
@@ -774,6 +779,7 @@ class _ScatterDrawing(base.BaseDrawing):
             )
             ax.add_artist(link)
             self.links.append(link)
+            self.linked.append((link, text))
 
     # -- finishing -------------------------------------------------------------
 
@@ -845,6 +851,18 @@ class _ScatterDrawing(base.BaseDrawing):
         return dataclasses.replace(
             result, text=dataclasses.replace(result.text, alt_text=alt)
         )
+
+
+def line_strokes(line: Line2D | None, dpi: float) -> FloatArray:
+    """The straight pieces of a drawn line in pixels with half its width, as
+    :func:`inferplot.render.point_labels.crossing` takes them ((k, 5)); none for
+    a line not drawn."""
+    if line is None or not line.get_visible() or line.axes is None:
+        return np.empty((0, 5), dtype=np.float64)
+    data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
+    xy = np.asarray(cast("Any", line.get_transform()).transform(data), dtype=np.float64)
+    half = px(float(line.get_linewidth()), dpi) / 2.0
+    return np.column_stack([xy[:-1], xy[1:], np.full(len(xy) - 1, half)])
 
 
 def _padded(low: float, high: float) -> tuple[float, float]:

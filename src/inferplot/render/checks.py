@@ -44,7 +44,7 @@ from matplotlib.axis import Axis
 from matplotlib.backends.backend_agg import RendererAgg
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
-from matplotlib.transforms import Bbox, BboxBase
+from matplotlib.transforms import Bbox, BboxBase, Transform
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
     from matplotlib.collections import LineCollection
 
-    from inferplot.render.figure import DrawnPaths, StatsFigure
+    from inferplot.render.figure import DrawnPaths, PointLabels, StatsFigure
 
 __all__ = ["figure_issues", "text_extents"]
 
@@ -668,6 +668,58 @@ def _ambiguous_line_labels(
     )
 
 
+def _crossed_labels(
+    fig: StatsFigure,
+    labels: PointLabels,
+    boxes: dict[int, tuple[str, Bbox]],
+) -> tuple[list[str], list[str]]:
+    """The point labels (in words) that the least-squares line, and that the
+    link of another label, crosses as drawn."""
+    from inferplot.render.point_labels import crossing
+    from inferplot.render.scatterstats import line_strokes
+
+    dpi = float(root_figure(fig.figure).dpi)
+    shown = [(t, boxes[id(t)]) for t in labels.texts if id(t) in boxes]
+    if not shown:
+        return [], []
+    extents = np.array([[b.x0, b.y0, b.x1, b.y1] for _, (_, b) in shown])
+    by_line: list[str] = []
+    strokes = line_strokes(labels.line, dpi)
+    if strokes.shape[0]:
+        hit = crossing(strokes, extents).any(axis=0)
+        by_line = [d for (_, (d, _)), h in zip(shown, hit, strict=True) if h]
+    links: list[FloatArray] = []
+    owners: list[int] = []
+    for link, owner in labels.links:
+        if not link.get_visible() or link.axes is None:
+            continue
+        ends: list[FloatArray] = []
+        # ConnectionPatch keeps its two ends and their coordinates as attributes.
+        drawn = cast("Any", link)
+        for xy, coords in ((drawn.xy1, drawn.coords1), (drawn.xy2, drawn.coords2)):
+            if not isinstance(coords, Transform):
+                break
+            ends.append(np.asarray(coords.transform(xy), dtype=np.float64))
+        if len(ends) != 2:
+            continue
+        start, end = ends
+        length = float(np.hypot(*(end - start)))
+        if length == 0.0:
+            continue
+        shrink = float(drawn.shrinkA) * dpi / 72.0
+        start = start + (end - start) * min(1.0, shrink / length)
+        half = float(link.get_linewidth()) * dpi / 72.0 / 2.0
+        links.append(np.array([*start, *end, half]))
+        owners.append(id(owner))
+    by_link: list[str] = []
+    if links:
+        hit = crossing(np.array(links), extents)
+        for j, (text, (described, _)) in enumerate(shown):
+            if any(hit[k, j] and owners[k] != id(text) for k in range(len(links))):
+                by_link.append(described)
+    return by_line, by_link
+
+
 def _crowded_labels(
     fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
 ) -> Issue | None:
@@ -691,6 +743,18 @@ def _crowded_labels(
             "pairs of point labels overlap"
         )  # fmt: skip
         found.append(f"{len(pairs)} {noun}: {_listing(pairs)}")
+    by_line, by_link = _crossed_labels(fig, labels, boxes)
+    if by_line:
+        noun = "point label lies" if len(by_line) == 1 else "point labels lie"
+        found.append(
+            f"{len(by_line)} {noun} across the least-squares line: {_listing(by_line)}"
+        )
+    if by_link:
+        noun = "point label is" if len(by_link) == 1 else "point labels are"
+        found.append(
+            f"{len(by_link)} {noun} crossed by the line joining another label "
+            f"to its point: {_listing(by_link)}"
+        )
     if labels.total > labels.limit:
         found.append(
             f"{labels.total:,} points are labelled, more than the {labels.limit:,} "
@@ -707,7 +771,9 @@ def _crowded_labels(
             "Label fewer points: set the label column (label_var) to None or '' "
             "for the points you do not need to name, as ggstatsplot's "
             "label.expression selects them; or draw into a larger Axes with ax= "
-            "(made with a larger figsize, marginal=False)."
+            "(made with a larger figsize, marginal=False). A label across the "
+            "least-squares line also clears it with smooth=False, which leaves "
+            "the line out."
         ),
     )
 
