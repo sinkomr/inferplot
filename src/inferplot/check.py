@@ -90,12 +90,19 @@ def _small_sample(result: StatsResult) -> Issue | None:
             f"{result.y!r}"
         )
         unit = "pairs"
+    # Type bayes reports a Bayes factor alone (D45): no test, no interval.
+    if result.test is not None:
+        reported = "The test and its interval are unreliable"
+    elif result.bayes is not None:
+        reported = "The Bayes factor can say little either way"
+    else:
+        reported = "Any test is unreliable"
     return Issue(
         code="small_n",
         severity="warning",
         message=(
             f"Only {what} {'was' if n == 1 else 'were'} analyzed, fewer than "
-            f"{SMALL_N}. The test and its interval are unreliable with so few {unit}."
+            f"{SMALL_N}. {reported} with so few {unit}."
         ),
         fix="Collect more data, or report the result as exploratory.",
     )
@@ -364,11 +371,22 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         )
         if one_sample:
             # The bootstrap-t test of the trimmed mean: a resample whose
-            # winsorized values are all equal has a standard error of 0.
+            # winsorized values are all equal has a standard error of 0. The
+            # interval is unbounded when its critical value falls among them.
+            unbounded = math.isinf(es.conf_low) or math.isinf(es.conf_high)
+            shown = (
+                f"{_percent(es.conf_level)} CI [{_bound(es.conf_low)}, "
+                f"{_bound(es.conf_high)}]"
+            )
             parts.append(
                 f"{infinite:,} of {total:,} bootstrap resamples have a standard "
-                "error of 0 and an infinite bootstrap t, so the "
-                f"{es.label}'s {interval}."
+                "error of 0 and an infinite bootstrap t; they are kept, so the "
+                f"{es.label}'s {shown} "
+                + (
+                    "is unbounded."
+                    if unbounded
+                    else "would be unbounded at a conf_level high enough to reach them."
+                )
             )
         elif es.name == "akp_delta_avg":
             # Counted per pair, in resamples: the most of any one pair.
@@ -389,14 +407,21 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         else " A winsorized variance of 0 next to trimmed means that differ makes "
         "the effect size infinite."
     )
+    fix = (
+        # A one-sample robust result has values that vary (else it is refused),
+        # so the signed-rank test can run; a smaller tr does not remove resamples
+        # whose values are all one number.
+        "Report the interval as it is, unbounded where it is; collect more values, "
+        "or use type='nonparametric', which does not resample."
+        if one_sample
+        else "Report the effect size as unbounded, pass a smaller tr, or use "
+        "type='nonparametric'."
+    )
     return Issue(
         code="infinite_effect_size",
         severity="warning",
         message=" ".join(parts) + cause,
-        fix=(
-            "Report the effect size as unbounded, pass a smaller tr, or use "
-            "type='nonparametric'."
-        ),
+        fix=fix,
     )
 
 
@@ -424,7 +449,7 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
         f"{_named(es.label)}, {_three(es.estimate)}, lies outside its own {level} "
         f"CI [{_three(es.conf_low)}, {_three(es.conf_high)}]."
     )
-    if es.bootstrap_resamples is not None:
+    if es.ci_method == "percentile bootstrap":
         between = {"within": "conditions", "between": "groups"}.get(result.design)
         larger = (
             "resampling adds chance variation"

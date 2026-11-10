@@ -32,6 +32,8 @@ PAIR = pd.DataFrame(
     }
 )
 TYPES = ("parametric", "nonparametric", "robust", "bayes")
+_HISTO: Any = ip.analyze.histostats
+_SCATTER: Any = ip.analyze.scatterstats
 _NO_CAPTION = (
     "bf_message=False has no effect: the Bayes factor caption is drawn only for "
     "type='parametric' with the results subtitle (as in ggstatsplot), and "
@@ -189,7 +191,7 @@ def test_histostats_argument_without_effect(
     type_: str, extra: dict[str, Any], name: str, value: Any, gives: Any
 ) -> None:
     def call(**kwargs: Any) -> StatsResult:
-        return ip.analyze.histostats(ONE, "v", type=type_, **extra, **kwargs)
+        return _HISTO(ONE, "v", type=type_, **extra, **kwargs)
 
     _check(call, name, value, gives)
 
@@ -203,7 +205,7 @@ def test_scatterstats_argument_without_effect(
     type_: str, extra: dict[str, Any], name: str, value: Any, gives: Any
 ) -> None:
     def call(**kwargs: Any) -> StatsResult:
-        return ip.analyze.scatterstats(PAIR, "a", "b", type=type_, **extra, **kwargs)
+        return _SCATTER(PAIR, "a", "b", type=type_, **extra, **kwargs)
 
     _check(call, name, value, gives)
 
@@ -213,8 +215,8 @@ def test_the_warnings_name_the_value_as_given() -> None:
 
     # (NumPy 2 prints np.float32(0.8), NumPy 1 prints 0.8: the repr as given.)
     prior = np.float32(0.8)
-    result = ip.analyze.histostats(ONE, "v", type="np", bf_prior=prior)
+    result = _HISTO(ONE, "v", type="np", bf_prior=prior)
     assert result.warnings[-1].startswith(f"bf_prior={prior!r} has no effect")
     seed = np.int64(5)
-    result = ip.analyze.histostats(ONE, "v", seed=seed)
+    result = _HISTO(ONE, "v", seed=seed)
     assert result.warnings[-1].startswith(f"seed={seed!r} has no effect")
