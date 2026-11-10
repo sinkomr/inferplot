@@ -543,7 +543,7 @@ def test_fisher_refuses_what_would_take_too_long() -> None:
         fisher_exact(table)
     assert time.perf_counter() - start <= 3.0
     with pytest.raises(ValueError, match="merge sparse levels"):
-        fisher_exact(np.array([[700_000, 700_000, 700_000], [1, 1, 1]]))
+        fisher_exact(np.array([[2_000_000, 2_000_000, 2_000_000], [1, 1, 1]]))
 
 
 @pytest.mark.parametrize(
@@ -638,3 +638,40 @@ def test_pairwise_marks_what_is_not_defined() -> None:
     assert [p.p_adjusted for p in pairs[1:]] == list(
         p_adjust([second.p_value, third.p_value], "holm")  # type: ignore[list-item]
     )
+
+
+# --------------------------------------------------------------------------- #
+# Large counts
+# --------------------------------------------------------------------------- #
+
+
+def test_large_counts_keep_their_accuracy() -> None:
+    # Counts near 1e9 per cell. The chi-square statistics follow R's order of
+    # operations (expected counts rounded once): relative error 1.2e-11 at chi^2
+    # 1.6 here, absolute 2e-17 next to independence, against exact rationals.
+    # McNemar's terms are exact integer ratios rounded once. Nothing overflows.
+    big = 10**9
+    table = np.array([[big, big + 50_000], [big + 30_000, big]])
+    test = chisq_independence(table)
+    assert test.statistic == pytest.approx(float(_exact_chi2(table)), rel=1e-10)
+    near = np.array([[big, big + 7], [big + 3, big]])
+    assert chisq_independence(near).statistic == pytest.approx(
+        float(_exact_chi2(near)), abs=1e-15
+    )
+    mixed = np.array([[123456789, 987654321, 555555555], [999999999, 111111111, 7]])
+    assert chisq_independence(mixed).statistic == pytest.approx(
+        float(_exact_chi2(mixed)), rel=1e-13
+    )
+    paired = np.array([[big, big + 12_345], [big - 6_789, 3 * big]])
+    b, c = big + 12_345, big - 6_789
+    assert mcnemar(paired).statistic == float(Fraction((b - c) ** 2, b + c))
+    gof = goodness_of_fit([big, big + 40_000, big - 40_000])
+    n = 3 * big
+    exact = sum(
+        Fraction((x - Fraction(n, 3)) ** 2) / Fraction(n, 3)
+        for x in (big, big + 40_000, big - 40_000)
+    )
+    assert gof.statistic == pytest.approx(float(exact), rel=1e-9)
+    v = cramers_v(table)
+    assert v.conf_low == 0.0  # chi^2 1.6 on 1 df: p = 0.21
+    assert 0.0 < v.estimate < v.conf_high < 1e-4

@@ -108,9 +108,12 @@ _LOG_2PI: Final = math.log(2.0 * math.pi)
 # gives up. Measured on an Apple M-series laptop: about 3e7 elements per second,
 # so this is about two seconds (see fisher_exact).
 _FISHER_WORK_LIMIT: Final = 6.0e7
-# ... and the largest table total for which the per-column arrays are built (memory
-# of the suffix bounds: about 8 n (c - 1)^2 bytes).
-_FISHER_TOTAL_LIMIT: Final = 2_000_000
+# ... and the largest n (c - 2) for which the per-column arrays are built: the
+# bounds and masses of every suffix of columns take about 24 n (c - 2) bytes, so
+# about 100 MB here (2 x 3 up to n = 4e6; 2 x 5 up to n = 1.3e6).
+_FISHER_SIZE_LIMIT: Final = 4_000_000
+# The search builds its per-node grids in chunks of at most this many elements.
+_FISHER_CHUNK: Final = 1 << 18
 # Pruning margin of the search, relative to 1 + |log threshold| (the log
 # probabilities are accurate to about 1e-14 relative).
 _FISHER_MARGIN: Final = 1e-9
@@ -1010,76 +1013,121 @@ def _fisher_2xc(first: list[int], cols: list[int]) -> float:
     counted: list[FloatArray] = []
     for j in range(k - 1):
         final = j == k - 2
-        cut = threshold if final else threshold - margin
         rem = r1 - sums
         nodes, node_of = np.unique(rem, return_inverse=True)
+        node_of = node_of.reshape(-1)
         a_lo = np.maximum(0, nodes - remaining[j + 1])
         a_hi = np.minimum(cols[j], nodes)
         width = int((a_hi - a_lo).max()) + 1
         work += float(nodes.size) * width + float(sums.size) * math.log2(width + 1)
         if work > _FISHER_WORK_LIMIT:
             raise _TooLarge
-        a_grid = a_lo[:, None] + np.arange(width)[None, :]
-        valid = a_grid <= a_hi[:, None]
-        a_safe = np.where(valid, a_grid, a_lo[:, None])
-        rest = nodes[:, None] - a_safe
-        here = logs[j][a_safe]
-        bound = np.where(valid, here + best[j + 1][rest], -math.inf)
-        weight = np.where(valid, here + mass[j + 1][rest], -math.inf)
-        with np.errstate(invalid="ignore"):
-            prefix = np.logaddexp.accumulate(weight, axis=1)
-            suffix = np.logaddexp.accumulate(weight[:, ::-1], axis=1)[:, ::-1]
-        peak = np.argmax(bound, axis=1)
-        length = a_hi - a_lo + 1
-        # Per table so far: children with values + bound <= cut have every
-        # completion counted; they form both ends of the concave bound.
-        limit = cut - values
-        peak_s = peak[node_of]
-        len_s = length[node_of]
-        x1 = _bsearch(
-            bound, node_of, np.zeros_like(peak_s), peak_s + 1, limit, above=True
-        )
-        x2 = _bsearch(bound, node_of, peak_s, len_s, limit, above=False) - 1
-        none_open = x1 > peak_s
-        tails = np.full(sums.size, -math.inf)
-        all_mass = prefix[node_of, len_s - 1]
-        tails[none_open] = all_mass[none_open]
-        open_ = ~none_open
-        left = np.where(
-            open_ & (x1 > 0), prefix[node_of, np.maximum(x1 - 1, 0)], -math.inf
-        )
-        right_index = np.minimum(x2 + 1, len_s - 1)
-        right = np.where(
-            open_ & (x2 + 1 < len_s), suffix[node_of, right_index], -math.inf
-        )
-        tails[open_] = np.logaddexp(left[open_], right[open_])
-        counted.append(values + tails)
+        # The tables so far grouped by node, the nodes in chunks of at most
+        # _FISHER_CHUNK grid elements, so that memory stays bounded.
+        order = np.argsort(node_of, kind="stable")
+        sums, values, node_of = sums[order], values[order], node_of[order]
+        per_chunk = max(1, _FISHER_CHUNK // width)
+        next_sums: list[IntArray] = []
+        next_values: list[FloatArray] = []
+        for first_node in range(0, nodes.size, per_chunk):
+            last_node = min(nodes.size, first_node + per_chunk)
+            lo_state, hi_state = np.searchsorted(node_of, [first_node, last_node])
+            tails, children = _fisher_stage(
+                logs[j],
+                best[j + 1],
+                mass[j + 1],
+                nodes[first_node:last_node],
+                a_lo[first_node:last_node],
+                a_hi[first_node:last_node],
+                node_of[lo_state:hi_state] - first_node,
+                values[lo_state:hi_state],
+                threshold if final else threshold - margin,
+                expand=not final,
+            )
+            counted.append(values[lo_state:hi_state] + tails)
+            if children is None:
+                continue
+            parent, child_a = children
+            work += float(child_a.size)
+            if work > _FISHER_WORK_LIMIT:
+                raise _TooLarge
+            child_sums = sums[lo_state:hi_state][parent] + child_a
+            child_values = values[lo_state:hi_state][parent] + logs[j][child_a]
+            keep = child_values + worst[j + 1][r1 - child_sums] <= threshold + margin
+            next_sums.append(child_sums[keep])
+            next_values.append(child_values[keep])
         if final:
             break
-        # The children in between are undecided: expand them.
-        span = np.where(open_, x2 - x1 + 1, 0)
-        total = int(span.sum())
-        work += float(total)
-        if work > _FISHER_WORK_LIMIT:
-            raise _TooLarge
-        parent = np.repeat(np.arange(sums.size), span)
-        start = np.repeat(np.cumsum(span) - span, span)
-        offset = np.arange(total) - start
-        child_a = a_lo[node_of[parent]] + x1[parent] + offset
-        child_sums = sums[parent] + child_a
-        child_values = values[parent] + logs[j][child_a]
-        keep = child_values + worst[j + 1][r1 - child_sums] <= threshold + margin
-        sums = child_sums[keep]
-        values = child_values[keep]
+        sums = np.concatenate(next_sums)
+        values = np.concatenate(next_values)
         if sums.size == 0:
             break
-    every = np.concatenate(counted) if counted else np.zeros(0)
+    every = np.concatenate(counted)
     finite = every[np.isfinite(every)]
     if finite.size == 0:  # pragma: no cover - the observed table always counts
         return 0.0
     top = float(finite.max())
-    log_p = top + math.log(math.fsum(np.exp(finite - top).tolist())) - log_total
+    log_p = top + math.log(float(np.sum(np.exp(finite - top)))) - log_total
     return min(1.0, math.exp(log_p))
+
+
+def _fisher_stage(
+    here_logs: FloatArray,
+    best: FloatArray,
+    mass: FloatArray,
+    nodes: IntArray,
+    a_lo: IntArray,
+    a_hi: IntArray,
+    node_of: IntArray,
+    values: FloatArray,
+    cut: float,
+    *,
+    expand: bool,
+) -> tuple[FloatArray, tuple[IntArray, IntArray] | None]:
+    """One column of the search for a chunk of nodes (counts still to place in the
+    first row) and the partial tables at them (``node_of``, ``values``).
+
+    Per table, the children a of this column with values + here_logs[a] +
+    best[rest] <= ``cut`` have every completion counted: they form both ends of
+    the concave bound, found by bisection, and their mass (``mass``: all
+    completions) is summed from cumulative sums along the node's row. Returns the
+    log of that counted mass per table and, with ``expand``, the children in
+    between (parent index, a) for the next column.
+    """
+    width = int((a_hi - a_lo).max()) + 1
+    a_grid = a_lo[:, None] + np.arange(width)[None, :]
+    valid = a_grid <= a_hi[:, None]
+    a_safe = np.where(valid, a_grid, a_lo[:, None])
+    rest = nodes[:, None] - a_safe
+    here = here_logs[a_safe]
+    bound = np.where(valid, here + best[rest], -math.inf)
+    weight = np.where(valid, here + mass[rest], -math.inf)
+    with np.errstate(invalid="ignore"):
+        prefix = np.logaddexp.accumulate(weight, axis=1)
+        suffix = np.logaddexp.accumulate(weight[:, ::-1], axis=1)[:, ::-1]
+    peak = np.argmax(bound, axis=1)[node_of]
+    length = (a_hi - a_lo + 1)[node_of]
+    limit = cut - values
+    x1 = _bsearch(bound, node_of, np.zeros_like(peak), peak + 1, limit, above=True)
+    x2 = _bsearch(bound, node_of, peak, length, limit, above=False) - 1
+    none_open = x1 > peak
+    open_ = ~none_open
+    tails = np.where(none_open, prefix[node_of, length - 1], -math.inf)
+    left = np.where(open_ & (x1 > 0), prefix[node_of, np.maximum(x1 - 1, 0)], -math.inf)
+    right = np.where(
+        open_ & (x2 + 1 < length),
+        suffix[node_of, np.minimum(x2 + 1, length - 1)],
+        -math.inf,
+    )
+    tails = np.where(open_, np.logaddexp(left, right), tails)
+    if not expand:
+        return tails, None
+    span = np.where(open_, x2 - x1 + 1, 0)
+    total = int(span.sum())
+    parent = np.repeat(np.arange(values.size), span)
+    offset = np.arange(total) - np.repeat(np.cumsum(span) - span, span)
+    child_a = a_lo[node_of[parent]] + x1[parent] + offset
+    return tails, (parent, child_a)
 
 
 def fisher_exact(
@@ -1118,11 +1166,16 @@ def fisher_exact(
     completion is counted is summed at once (the mass of all completions is
     binomial) and one whose every completion is more probable is dropped; only the
     others are extended. The last two columns are summed from cumulative sums along
-    the second-to-last column. The work grows with n and with how far the observed
-    table lies from independence: 2 x 3 at n = 2,000 and 10,000 and 2 x 5 at n =
-    500 take well under a second (tests/stats/test_contingency.py times them). When
-    the search would need more than about two seconds (2e7 array elements, or a
-    total above 2,000,000 for c >= 3) it raises instead of approximating.
+    the second-to-last column. The work grows with n, with c and with how far the
+    observed table lies from independence; measured (tests/stats/test_contingency.py
+    times them): 2 x 3 at n = 2,000 0.004 s (p 0.18) to 0.015 s (p 3e-27), at
+    n = 10,000 0.03 s (p 0.05) to 0.29 s (p 9e-133); 2 x 5 at n = 500 0.003 s to
+    0.04 s (p 5e-13), at n = 2,000 0.01 s (p 0.65) to 0.09 s (p 1.6e-4), while 2 x 5
+    at n = 2,000 with p near 1e-55 would need about 1.2e8 array elements (3.2 s).
+    When the search would need more than about two seconds (6e7 array elements,
+    about 3e7 per second), or its arrays more than about 100 MB (n (c - 2) above
+    4e6), it raises instead of approximating; the refusal comes before the stage
+    that would cross the limit, after at most about two seconds.
 
     Columns without counts do not change the test and are left out; a table with
     one non-empty column or one empty row has a single table with its margins, p 1
@@ -1159,7 +1212,7 @@ def fisher_exact(
         j0, j1 = kept
         p_value = _fisher_2x2(first[j0], r1, cols[j0], cols[j1], side)
         return FisherExact(p_value=p_value, alternative=side, n=n, columns=2)
-    if n > _FISHER_TOTAL_LIMIT:
+    if n * (len(kept) - 2) > _FISHER_SIZE_LIMIT:
         raise ValueError(_too_large_message(len(kept), n))
     try:
         p_value = _fisher_2xc([first[j] for j in kept], [cols[j] for j in kept])
