@@ -19,7 +19,7 @@ from tests.render._results import fixture_result, parametric_cases
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
 DC_NS = "{http://purl.org/dc/elements/1.1/}"
-FIGURE_CODES = frozenset({"label_overlap", "text_clipped"})
+FIGURE_CODES = frozenset({"label_overlap", "text_clipped", "figure_oversized"})
 
 
 def short(case: OracleCase) -> str:

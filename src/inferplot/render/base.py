@@ -25,6 +25,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import math
+import re
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast
@@ -34,8 +35,10 @@ from matplotlib import cbook
 from matplotlib.artist import ArtistInspector
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 from matplotlib.text import Text
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.transforms import Bbox, offset_copy
 
 from inferplot import _validate as v
@@ -111,12 +114,15 @@ class UserTexts(Protocol):
 # --------------------------------------------------------------------------- #
 
 
-def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
+def apply_args(
+    artist: Artist, args: Mapping[str, object], name: str, *, levels: bool = True
+) -> None:
     """``artist.set(**args)``, with a message naming the argument on failure.
 
     A name the artist has no setter for is an unknown property (``TypeError``);
     any error from setting a known property is a rejected value (``ValueError``),
-    whatever exception type matplotlib uses for it.
+    whatever exception type matplotlib uses for it. ``levels``: the figure
+    colours its points by level (betweenstats, withinstats), for the messages.
     """
     if not args:
         return
@@ -124,9 +130,8 @@ def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
     for key in args:
         if not callable(getattr(artist, f"set_{key}", None)):
             close = v.closest_name(key, ArtistInspector(artist).get_setters())
-            shorthand = (
-                _SCATTER_SHORTHANDS.get(key) if kind == "PathCollection" else None
-            )
+            shorthands = _SCATTER_SHORTHANDS if levels else _ONE_COLOR_SHORTHANDS
+            shorthand = shorthands.get(key) if kind == "PathCollection" else None
             if shorthand is not None:
                 hint = f" {shorthand}"
             elif close is not None:
@@ -156,6 +161,15 @@ _SCATTER_SHORTHANDS: Final = {
         "point_args={'color': 'black'}), and palette= colours them by level."
     ),
 }
+# The same for points of one colour (scatterstats).
+_ONE_COLOR_SHORTHANDS: Final = {
+    **_SCATTER_SHORTHANDS,
+    "c": (
+        "That is scatter()'s name for the colour; the points' property is "
+        "'color', for example point_args={'color': 'black'} (palette= sets it "
+        "too, with the marginal histograms)."
+    ),
+}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -177,6 +191,7 @@ class LayerArgs:
     pronoun: str = "them"
     asks: str = ""
     advice: str = "Choose a visible style."
+    levels: bool = True  # the layer is coloured by level
 
 
 # The vector formats a scratch drawing is also written to: matplotlib checks some
@@ -213,9 +228,12 @@ def _draw_error(figure: Figure) -> Exception | None:
     return None
 
 
-def _check_drawn(spec: LayerArgs, args: Mapping[str, object]) -> bool:
-    """Apply ``args`` to a scratch artist of ``spec``'s layer and draw it; whether
-    the artist is then invisible (it leaves no pixel).
+def _check_drawn(
+    spec: LayerArgs, args: Mapping[str, object], background: theme.Color | None
+) -> str | None:
+    """Apply ``args`` to a scratch artist of ``spec``'s layer and draw it; why
+    the artist is then invisible (it leaves no pixel, or none that can be told
+    from ``background``), or None.
 
     ``Artist.set`` stores some values without checking them (a line width of
     "bad" for points); matplotlib rejects them only when drawing, which with ``ax=``
@@ -223,13 +241,13 @@ def _check_drawn(spec: LayerArgs, args: Mapping[str, object]) -> bool:
     """
     name, layer = spec.name, spec.layer
     figure, artist = _scratch(spec)
-    apply_args(artist, args, name)
+    apply_args(artist, args, name, levels=spec.levels)
     error = _draw_error(figure)
     if error is None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             figure.canvas.draw()
-        return _invisible(figure)
+        return _invisible(figure, background)
     culprits: list[str] = []
     for key, value in args.items():
         alone, single = _scratch(spec)
@@ -325,32 +343,71 @@ def _refuse_moving_args(spec: LayerArgs, args: Mapping[str, object]) -> None:
             )
 
 
-def _invisible(figure: Figure) -> bool:
-    """Whether a scratch figure (transparent but for its one artist) drew nothing:
-    every pixel of the Agg buffer is fully transparent."""
+# A layer whose every pixel has less contrast than this with the background
+# cannot be seen (view_checks' COLOR_CONTRAST: white on white is 1:1).
+_SEEN_CONTRAST: Final = 1.1
+
+
+def _invisible(figure: Figure, background: theme.Color | None) -> str | None:
+    """Why a scratch figure (transparent but for its one artist) shows nothing
+    on ``background``: "nothing of them is drawn" (every pixel of the Agg buffer
+    is fully transparent), or the colour it is drawn in where no pixel, laid
+    over ``background``, has 1.1:1 contrast with it (white on white); None
+    where something can be seen."""
     canvas = cast("FigureCanvasAgg", figure.canvas)
-    alpha = np.asarray(canvas.buffer_rgba())[..., 3]
-    return not bool(alpha.any())
-
-
-def _invisible_warning(spec: LayerArgs, args: Mapping[str, object]) -> str:
-    shown = ", ".join(f"{key}={v.describe_value(value)}" for key, value in args.items())
+    rgba = np.asarray(canvas.buffer_rgba()).reshape(-1, 4)
+    drawn = rgba[rgba[:, 3] > 0]
+    if drawn.shape[0] == 0:
+        return "nothing of {pronoun} is drawn"
+    if background is None:
+        return None
+    under = theme.over(background, "white")
+    best, shown = 0.0, under
+    for pixel in np.unique(drawn, axis=0):
+        color = theme.over(tuple(float(c) / 255.0 for c in pixel), under)
+        ratio = theme.contrast(color, under)
+        if ratio > best:
+            best, shown = ratio, color
+        if ratio >= _SEEN_CONTRAST:
+            return None
     return (
-        f"{spec.name}={{{shown}}} makes the {spec.noun} invisible: nothing of "
-        f"{spec.pronoun} is drawn{spec.asks}. {spec.advice}"
+        f"{{subject}} would be drawn in {to_hex(shown)} on the background "
+        f"{to_hex(under)} ({best:.2f}:1 contrast), which cannot be told apart"
+    )
+
+
+_SUBJECT: Final = {"them": "they"}  # the pronoun as a sentence's subject
+
+
+def _invisible_warning(spec: LayerArgs, args: Mapping[str, object], why: str) -> str:
+    shown = ", ".join(f"{key}={v.describe_value(value)}" for key, value in args.items())
+    subject = _SUBJECT.get(spec.pronoun, spec.pronoun)
+    reason = why.format(pronoun=spec.pronoun, subject=subject)
+    return (
+        f"{spec.name}={{{shown}}} makes the {spec.noun} invisible: {reason}"
+        f"{spec.asks}. {spec.advice}"
     )
 
 
 def check_artist_args(
     given: Sequence[tuple[LayerArgs, Mapping[str, object], str | None]],
+    *,
+    ax: Axes | None = None,
+    colors: bool = False,
 ) -> list[str]:
     """Each non-empty artist dict styles a layer that is drawn (``refusal``, the
     third item, is the message raised when it is not), sets no property that
     moves or replaces the data, and an artist of that layer styled with it draws;
     checked before anything is drawn.
 
-    Returns a warning for each dict that leaves its layer invisible (D39).
+    Returns a warning for each dict that leaves its layer invisible (D39): no
+    pixel drawn, or with ``colors`` (histostats, scatterstats, whose layers lie
+    on the background) none that can be told from the background (that of
+    ``ax``, white for inferplot's own figure).
     """
+    background: theme.Color = (
+        (1.0, 1.0, 1.0, 1.0) if ax is None else (*axes_background(ax), 1.0)
+    )
     found: list[str] = []
     for spec, args, refusal in given:
         if not args:
@@ -358,8 +415,9 @@ def check_artist_args(
         if refusal is not None:
             raise ValueError(refusal)
         _refuse_moving_args(spec, args)
-        if _check_drawn(spec, args):
-            found.append(_invisible_warning(spec, args))
+        why = _check_drawn(spec, args, background if colors else None)
+        if why is not None:
+            found.append(_invisible_warning(spec, args, why))
     return found
 
 
@@ -447,6 +505,18 @@ def check_drawable(result: StatsResult, analysis: str, call: str) -> None:
         )
 
 
+def check_one_call_subtitle(subtitle: object, results_subtitle: object) -> None:
+    """In the one-call form (``ip.histostats``, ``ip.scatterstats``): a user
+    subtitle only with ``results_subtitle=False`` in the same call."""
+    if subtitle is not None and results_subtitle is not False:
+        raise ValueError(
+            "subtitle= would replace the results subtitle, which this call draws "
+            "(results_subtitle=True, the default). To use your own subtitle, pass "
+            "results_subtitle=False in this call as well; to add text, use title= "
+            "or caption=."
+        )
+
+
 def check_subtitle(result: StatsResult, subtitle: str | None) -> None:
     """A user subtitle only where the result draws none of its own."""
     if subtitle is not None and result.settings.results_subtitle:
@@ -468,6 +538,29 @@ def check_given_axes(ax: object) -> None:
             f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
         )
     check_axes(ax, shared_x=True)
+    # A scale or direction set before the call is refused, not drawn over: the
+    # labels, bins and line are placed for linear upright axes, and inferplot's
+    # limits would silently turn an inverted axis back.
+    found: list[str] = []
+    undo: list[str] = []
+    for letter, scale, inverted in (
+        ("x", ax.get_xscale(), ax.xaxis_inverted()),
+        ("y", ax.get_yscale(), ax.yaxis_inverted()),
+    ):
+        if scale != "linear":
+            found.append(f"a {scale!r} {letter} scale")
+            undo.append(f"ax.set_{letter}scale('linear')")
+        if inverted:
+            found.append(f"an inverted {letter} axis")
+            undo.append(f"ax.invert_{letter}axis()")
+    if found:
+        raise ValueError(
+            f"ax has {' and '.join(found)}; inferplot draws into an Axes whose axes "
+            "are linear and run up and to the right, as it places its labels, "
+            "bars and line for them. Undo it before the call with "
+            f"{' and '.join(undo)}. To show the values on another scale, "
+            "transform the column before the analysis."
+        )
 
 
 # The largest |value| histostats and scatterstats draw: matplotlib treats axis
@@ -511,6 +604,29 @@ def check_scale(
     )
 
 
+_MATH_SPAN: Final = re.compile(r"(?<!\\)\$.*?(?<!\\)\$")
+
+
+def wrap_words(text: str, fits: Callable[[str], bool]) -> str:
+    """``text`` broken into lines at spaces (never inside a mathtext span
+    between two dollar signs), each line as long as ``fits`` accepts; a word
+    that does not fit alone is a line of its own. Existing line breaks stay."""
+    out: list[str] = []
+    for paragraph in text.split("\n"):
+        # Spaces inside $...$ are protected so that the split keeps the span.
+        protected = _MATH_SPAN.sub(lambda m: m.group(0).replace(" ", "\0"), paragraph)
+        current = ""
+        for word in protected.split(" "):
+            joined = f"{current} {word}" if current else word
+            if not current or fits(joined.replace("\0", " ")):
+                current = joined
+            else:
+                out.append(current)
+                current = word
+        out.append(current)
+    return "\n".join(out).replace("\0", " ")
+
+
 def shared_limits(
     ax: Axes, which: Literal["x", "y"], low: float, high: float
 ) -> tuple[float, float]:
@@ -540,17 +656,22 @@ def draw(
     k: int,
     options: UserTexts,
     artist_args: Callable[[], list[str]],
+    uses: str | None = None,
 ) -> StatsFigure:
-    """Resolve ``k`` colours of the palette, check the artist dicts
-    (``artist_args``, which returns the warnings of invisible layers) and user
-    texts, then make the drawing and run it, inside inferplot's theme and fonts."""
-    colors, palette_warning = theme.resolve_palette(palette, k)
+    """Resolve ``k`` colours of the palette (``uses``: what a figure without
+    levels colours, for the messages), check the artist dicts (``artist_args``,
+    which returns the warnings of invisible layers) and user texts, then make
+    the drawing and run it, inside inferplot's theme and fonts."""
+    colors, palette_warning = theme.resolve_palette(palette, k, uses)
     fallbacks = theme.user_fallbacks()  # before context() resets the rcParams
     with reported_glyphs(), theme.context(), theme.fallback_fonts(fallbacks):
         invisible = artist_args()
         check_user_texts(options)
         made = make(colors, palette_warning)
         made.warnings.extend(invisible)
+        # The artist dicts whose layer is invisible ("bar_args={...} makes the
+        # bars invisible"): the alt text leaves those layers out.
+        made.hidden = {warning.split("=", 1)[0] for warning in invisible}
         return made.run()
 
 
@@ -593,6 +714,10 @@ class BaseDrawing:
         self.inside: list[Text] = []
         self.header: list[Text] = []  # title, subtitle (own figure)
         self.captions: list[Text] = []
+        # Axis labels as set, before an offset text is folded into them.
+        self.unfolded: dict[int, str] = {}
+        # The artist dicts (names) that leave their layer invisible.
+        self.hidden: set[str] = set()
 
     def run(self) -> StatsFigure:
         raise NotImplementedError
@@ -736,6 +861,7 @@ class BaseDrawing:
         the header above, the caption lines below and room for the Axes'
         decorations, measured from the rendered figure until it holds."""
         dpi = self.dpi
+        self.wrap_axis_labels(*self.label_room(axes_w, axes_h))
         margin, gap = px(MARGIN_PT, dpi), px(GAP_PT, dpi)
         header = [self.extent(t) for t in self.header]
         captions = [self.extent(t) for t in self.captions]
@@ -764,11 +890,68 @@ class BaseDrawing:
             for text, box in zip(self.captions, captions, strict=True):
                 text.set_position((margin / width, top / height))
                 top -= box.height + gap
+            self.fold_offsets()
             canvas.draw()
             measured = self.decoration_extra()
             if all(abs(a - b) <= 0.5 for a, b in zip(measured, extra, strict=True)):
                 break
             extra = measured
+
+    def fold_offsets(self) -> None:
+        """inferplot's own figure draws no axis offset text ("1e12", "+1.7e9"
+        above or right of an axis, where it lands on a marginal histogram or the
+        header): where an axis has one, it is hidden and its text follows the
+        axis label in parentheses, "mpg (1e12)", read as matplotlib prints it
+        (a multiplier, then an offset added to the tick values)."""
+        for axis in (self.ax.xaxis, self.ax.yaxis):
+            formatter = axis.get_major_formatter()
+            if not isinstance(formatter, ScalarFormatter):
+                continue
+            label = axis.label
+            plain = self.unfolded.setdefault(id(axis), label.get_text())
+            formatter.set_locs(list(axis.get_majorticklocs()))
+            offset = formatter.get_offset()
+            axis.offsetText.set_visible(not offset)
+            shown = f"{plain} ({offset})" if offset else plain
+            if label.get_text() != shown:
+                label.set_text(shown)
+
+    def label_room(self, axes_w: float, axes_h: float) -> tuple[float, float]:
+        """Hook: the width of the x-axis label's line and the height of the
+        y-axis label's line, in pixels, for a plotting area of ``axes_w`` by
+        ``axes_h``: the main Axes' sides."""
+        return axes_w, axes_h
+
+    def wrap_axis_labels(self, width: float, height: float) -> None:
+        """Wrap an axis label longer than its side of the plotting area on its
+        spaces (outside mathtext), so that a long name does not widen the figure
+        to its length; a label that fits is left as it is. A word longer than the
+        side stays whole."""
+        renderer = self.renderer()
+        for label, room in (
+            (self.ax.xaxis.label, width),
+            (self.ax.yaxis.label, height),
+        ):
+            shown = label.get_text()
+            if " " not in shown:
+                continue
+            probe = self.figure.text(
+                0.0, 0.0, "", fontproperties=label.get_fontproperties(),
+                parse_math=bool(label.get_parse_math()),
+            )  # fmt: skip
+
+            def fits(
+                line: str, probe: Text = probe, room: float = room,
+                renderer: RendererBase | None = renderer,
+            ) -> bool:  # fmt: skip
+                probe.set_text(line)
+                return float(probe.get_window_extent(renderer).width) <= room
+
+            try:
+                if not fits(shown):
+                    label.set_text(wrap_words(shown, fits))
+            finally:
+                probe.remove()
 
     def decoration_extra(self) -> list[float]:
         """Pixels the Axes' texts reach beyond its plotting area on each side."""

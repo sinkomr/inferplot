@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from matplotlib.collections import LineCollection, PathCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
+    from matplotlib.patches import ConnectionPatch
 
     from inferplot.check import Issue
     from inferplot.result import StatsResult
@@ -34,6 +35,7 @@ __all__ = [
     "DrawnData",
     "DrawnPaths",
     "DrawnView",
+    "LineLabel",
     "PointLabels",
     "StatsFigure",
     "Subsample",
@@ -119,11 +121,26 @@ class DrawnData:
 class PointLabels:
     """The point labels of a scatterstats figure, for ``check()``: the texts, how
     many there are and the most inferplot places clear of each other
-    (``limit``)."""
+    (``limit``); the least-squares line (None where not drawn) and each link
+    line with the label it joins to its point, which no other label may lie
+    across."""
 
     texts: tuple[Text, ...]
     total: int
     limit: int
+    line: Line2D | None = None
+    links: tuple[tuple[ConnectionPatch, Text], ...] = ()
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class LineLabel:
+    """A label of a vertical line (histostats' centrality and test value lines),
+    for ``check()``: its text, its own line, and what the line is in words
+    ("the centrality line")."""
+
+    text: Text
+    line: Line2D
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +185,7 @@ class StatsFigure:
         "_figure",
         "_inside",
         "_labels",
+        "_line_labels",
         "_own",
         "_paths",
         "_point_labels",
@@ -196,6 +214,7 @@ class StatsFigure:
         data: tuple[DrawnData, ...] = (),
         color_names: tuple[str, ...] = (),
         point_labels: PointLabels | None = None,
+        line_labels: tuple[LineLabel, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -213,6 +232,7 @@ class StatsFigure:
         self._data = data
         self._color_names = color_names
         self._point_labels = point_labels
+        self._line_labels = line_labels
 
     @property
     def figure(self) -> Figure:
@@ -252,7 +272,9 @@ class StatsFigure:
         inverted axis or a non-linear scale (``axis_changed``), values or
         brackets outside the axis limits (``data_outside_view``) and values
         drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
-        panels' texts and a figure title count as ``label_overlap``.
+        panels' texts and a figure title count as ``label_overlap``. inferplot's
+        own figure far larger than its plotting area, or than any of its layouts
+        needs, is ``figure_oversized``.
         """
         from inferplot.render.checks import figure_issues
 
@@ -270,7 +292,7 @@ class StatsFigure:
         Text stays editable (SVG text elements, PDF TrueType fonts) and the result's
         JSON goes into the file's metadata: the PNG text chunk and SVG metadata
         "Description", the PDF "Subject". ``dpi`` is at most 2,400, and a PNG at
-        most 100 million pixels.
+        least 10 dpi and at most 100 million pixels.
 
         The figure is not pyplot's current figure, so saving with pyplot after an
         inferplot call writes pyplot's own, empty figure. Save with
@@ -361,6 +383,11 @@ class StatsFigure:
         """What each of ``colors`` paints, in words ("the bars"); empty where the
         colours follow the levels."""
         return self._color_names
+
+    @property
+    def line_labels(self) -> tuple[LineLabel, ...]:
+        """histostats' labels of its vertical lines, with their lines."""
+        return self._line_labels
 
     @property
     def point_labels(self) -> PointLabels | None:
