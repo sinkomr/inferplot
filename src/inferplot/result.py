@@ -178,6 +178,29 @@ class TestResult(_Plain):
     ``df_error`` is statsExpressions' ``df.error`` (Welch's t df; the denominator df
     of an F test) and ``df`` its ``df`` (numerator df), None where absent.
 
+    Sign of ``statistic`` and place of the degrees of freedom, by ``name`` (first
+    and second are ``StatsResult.levels[0]`` and ``levels[1]``), as ggstatsplot
+    reports them:
+
+    * "welch_t": signed, mean(first) - mean(second); Welch's df in ``df_error``.
+    * "mann_whitney": W, the Mann-Whitney U of the first level (pairs in which its
+      value is the larger, ties counted 1/2), never negative; no df. The
+      rank-biserial r is positive when the first level tends to be larger.
+    * "yuen_t": the absolute value \\|t\\| (WRS2's yuen as ggstatsplot prints it),
+      whichever trimmed mean is larger; the AKP effect size keeps the sign of
+      trimmed mean(first) - trimmed mean(second). Yuen's df in ``df_error``.
+    * "welch_anova", "trimmed_means_anova": F, numerator df in ``df`` and
+      denominator df in ``df_error``.
+    * "kruskal_wallis": chi2 (H); its df, k - 1, in ``df_error`` (``df`` None).
+    * "paired_t": signed, mean of the differences first - second; n - 1 in
+      ``df_error``.
+    * "rm_anova": F with the Greenhouse-Geisser corrected df in ``df`` and
+      ``df_error``.
+    * Within-subjects tests merged later follow SPEC section 4: the signed-rank V
+      sums the ranks of the positive differences first - second, Friedman's chi2
+      has its df in ``df_error``, and dependent Yuen's t is signed (unlike
+      "yuen_t").
+
     ``alternative`` is "two-sided", "less" or "greater". A one-sided test compares
     the two entries of ``StatsResult.levels`` in that order: "greater" tests
     whether ``levels[0]`` is greater than ``levels[1]`` (for paired tests: whether
@@ -274,6 +297,20 @@ class PairwiseComparison(_Plain):
     Bayes factor where the comparison is Bayesian (type "bayes"); such a pair has
     no p-value, so ``p_value``, ``p_adjusted`` and ``significant`` are None and
     ``adjust_method`` is "none" (Bayes factors are not adjusted).
+
+    ``group1`` is the earlier of the two in ``StatsResult.levels``. Sign of
+    ``statistic`` and its df (``df``; pairs have no ``df_error``), by ``test``, as
+    ggstatsplot reports them:
+
+    * "games_howell": q signed as mean(group2) - mean(group1) (the opposite of
+      the other pairwise tests); the pair's Welch df.
+    * "dunn": z = \\|mean-rank difference\\| / SE, never negative; no df.
+    * "yuen_trimmed_means" (lincon): t signed as trimmed mean(group1) - trimmed
+      mean(group2), like ``estimate``; the pair's Yuen df.
+    * "paired_t" (within subjects): t signed as the mean of the differences
+      group1 - group2; df n - 1.
+    * Bayes pairs: Student's t (pooled; between subjects) or the paired t
+      (within), signed group1 - group2; df n1 + n2 - 2 or n - 1.
     """
 
     group1: str

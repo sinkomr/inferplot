@@ -544,6 +544,52 @@ def test_no_check_reads_the_observations() -> None:
     assert "result.subjects" not in source
 
 
+def test_sign_and_df_conventions_as_documented() -> None:
+    """U8: the conventions TestResult and PairwiseComparison document. Levels a <
+    b < c by construction, so a sign shows which difference is taken."""
+    rng = np.random.default_rng(1)
+    shift = np.repeat([0.0, 1.0, 2.0], 12)
+    three = pd.DataFrame(
+        {"g": np.repeat(["a", "b", "c"], 12), "y": rng.normal(size=36) + shift}
+    )
+    two = three[three.g != "b"]
+    between: Any = ip.analyze.betweenstats
+
+    welch = between(two, "g", "y")
+    assert welch.test.statistic < 0
+    assert welch.effect_size.estimate < 0
+    assert (welch.test.df, welch.test.df_error is not None) == (None, True)
+    mann = between(two, "g", "y", type="np")
+    assert mann.test.statistic >= 0
+    assert mann.effect_size.estimate < 0
+    assert (mann.test.df, mann.test.df_error) == (None, None)
+    yuen = between(two, "g", "y", type="r")
+    assert yuen.test.statistic > 0
+    assert yuen.effect_size.estimate < 0
+    assert yuen.test.df is None
+
+    anova = between(three, "g", "y")
+    assert (anova.test.df, anova.test.df_error is not None) == (2.0, True)
+    assert all(p.statistic > 0 for p in anova.pairwise)  # q: group2 - group1
+    kruskal = between(three, "g", "y", type="np")
+    assert (kruskal.test.df, kruskal.test.df_error) == (None, 2.0)
+    assert all(p.statistic >= 0 and p.df is None for p in kruskal.pairwise)
+    lincon = between(three, "g", "y", type="r")
+    assert all(p.statistic < 0 and (p.estimate or 0) < 0 for p in lincon.pairwise)
+    bayes = between(three, "g", "y", type="bayes", results_subtitle=False)
+    assert all(p.statistic < 0 and p.df == 22 for p in bayes.pairwise)
+
+    within: Any = ip.analyze.withinstats
+    paired = three.assign(s=np.tile(np.arange(12), 3))
+    t = within(paired[paired.g != "b"], "g", "y", subject_id="s")
+    assert t.test.statistic < 0
+    assert (t.test.df, t.test.df_error) == (None, 11.0)
+    rm = within(paired, "g", "y", subject_id="s")
+    assert rm.test.df is not None
+    assert rm.test.df_error is not None
+    assert all(p.statistic < 0 and p.df == 11 for p in rm.pairwise)
+
+
 def test_issue_is_frozen_and_prints() -> None:
     issue = Issue("small_n", "warning", "Too few.", "Collect more.")
     assert str(issue) == "[warning] small_n: Too few. Collect more."
