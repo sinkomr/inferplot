@@ -8,6 +8,15 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_paired, jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.correlation import (
+    Correlation,
+    CorrelationMethod,
+    correlation_bf10,
+    correlation_log_bf10,
+    pearson,
+    spearman,
+    winsorized_correlation,
+)
 from inferplot.stats.density import MapEstimate, bw_sj, map_estimate
 from inferplot.stats.descriptive import (
     common_scale,
@@ -118,6 +127,8 @@ __all__ = [
     "Alternative",
     "BootstrapEffectSizeCI",
     "BootstrapTrimmedMeanTest",
+    "Correlation",
+    "CorrelationMethod",
     "DunnPair",
     "DurbinConoverPair",
     "EffectSizeCI",
@@ -148,6 +159,8 @@ __all__ = [
     "bootstrap_t_critical_value",
     "bw_sj",
     "common_scale",
+    "correlation_bf10",
+    "correlation_log_bf10",
     "dependent_akp",
     "dunn",
     "durbin_conover",
@@ -180,6 +193,7 @@ __all__ = [
     "paired_t",
     "paired_t_pairs",
     "partial_omega_squared",
+    "pearson",
     "rank_biserial",
     "rank_epsilon_squared",
     "rm_anova",
@@ -190,6 +204,7 @@ __all__ = [
     "smm_cdf",
     "smm_critical_value",
     "smm_quantile",
+    "spearman",
     "srange_logsf",
     "srange_sf",
     "student_t",
@@ -203,6 +218,7 @@ __all__ = [
     "welch_anova",
     "welch_t",
     "welch_t_scaled",
+    "winsorized_correlation",
     "winsorized_normal_variance",
     "winsorized_variance",
     "yuen_dependent_t",

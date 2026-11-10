@@ -235,6 +235,29 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "entry."
             ),
         ),
+        "correlation_bayes_factor": Tolerance(
+            rtol=5e-12,
+            atol=0.0,
+            reason=(
+                "Bayes factors of a Pearson correlation (BayesFactor::correlationBF, "
+                "the stretched beta prior of Ly, Verhagen & Wagenmakers 2016, which "
+                "it evaluates in closed form: its error estimate is 0). inferplot's "
+                "correlation_bf10 is within 1.8e-12 of 40-digit mpmath values of "
+                "the hypergeometric form on a grid of n 3 to 2,000 and |r| up to "
+                "1 - 1e-7 (tests/data/corrbf_reference.json), which is the rounding "
+                "of a log BF10 of 15,384 (1.2e-16 relative in the log). Measured "
+                "against R: the 26 finite fixture values (9 distinct; Bayes "
+                "subtitles and parametric captions, prior 0.707 and 0.8) at most "
+                "3.07e-12 "
+                "(edge_corr_large_n, n 2,000, BF10 1.37e172), then 1.19e-12 (iris, "
+                "n 150), all others within 5.3e-14; probe-corr's 28 finite values "
+                "at R's own r at most 1.25e-12 (iris), so the residual is "
+                "BayesFactor's own floating point, growing with n. 5e-12 leaves "
+                "1.6 times headroom over the largest; ttest_bayes_factor's 1e-8 "
+                "would hide a wrong prior parameterization only above 1e-8, and "
+                "kappa = 0.707 against sqrt(2)/2 moves these values by 1e-6 or more."
+            ),
+        ),
         "akp_constant": Tolerance(
             rtol=5e-7,
             atol=0.0,
