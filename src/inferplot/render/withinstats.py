@@ -4,6 +4,12 @@
 """Draw a withinstats result: betweenstats' layers plus the subject and centrality
 paths of ggstatsplot's ``ggwithinstats()``.
 
+It draws a result of any type as the analysis computed it: the centrality points
+and labels are the type's (means for parametric, medians for nonparametric,
+trimmed means for robust, MAP estimates for bayes), the subtitle and caption the
+result's texts, and the brackets its pairwise comparisons (paired t,
+Durbin-Conover, rmmcp or paired Bayes factors).
+
 The drawing is :class:`inferplot.render.comparison.Drawing` with four changes:
 
 * points: each subject keeps one seeded horizontal offset at every level, so its

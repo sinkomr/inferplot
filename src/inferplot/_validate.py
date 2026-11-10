@@ -520,6 +520,11 @@ def _targeted(
             f"{arg}=."
         )
     if key == "paired" and fn in _SUBJECT_FUNCTIONS:
+        if "result" in valid:
+            return TypeError(
+                f"{arg}= is not needed: render.{fn}() draws a result whose "
+                f"measurements are already paired by subject_id. Remove {arg}=."
+            )
         return TypeError(
             f"{arg}= is not needed: {fn}() always pairs the measurements of each "
             f"subject, matched by subject_id. Remove {arg}=."
@@ -608,6 +613,16 @@ def _common_name(
             )
         return None
     if key == "paired" and fn not in _SUBJECT_FUNCTIONS:
+        # paired= belongs to barstats' analysis only (McNemar's test); every
+        # form of the comparison functions refuses it with this message.
+        if "result" in valid:
+            return TypeError(
+                f"render.{fn}() draws independent groups and takes no {arg}=. For "
+                "repeated measures of the same subjects use "
+                "withinstats(data, x, y, subject_id=...), or "
+                "ip.analyze.withinstats() and ip.render.withinstats(); otherwise "
+                f"remove {arg}=."
+            )
         return TypeError(
             f"{fn}() compares independent groups and takes no {arg}=. For repeated "
             "measures of the same subjects use "

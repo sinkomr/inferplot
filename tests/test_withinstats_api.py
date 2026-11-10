@@ -212,7 +212,10 @@ def test_paired_is_not_needed(two: pd.DataFrame, four: pd.DataFrame) -> None:
             == expected
         )
     result = _fake_result(four)
-    assert message(TypeError, lambda: draw(result, paired=True)) == expected
+    assert message(TypeError, lambda: draw(result, paired=True)) == (
+        "paired= is not needed: render.withinstats() draws a result whose "
+        "measurements are already paired by subject_id. Remove paired=."
+    )
 
 
 def test_extra_positional_argument_hints_subject_id(two: pd.DataFrame) -> None:
@@ -612,3 +615,32 @@ def test_small_n_names_subjects_once() -> None:
     )
     assert math.isclose(result.descriptives[1].value or 0.0, 23 / 6)
     assert result.subjects == ("1", "2", "3")
+
+
+def test_docstrings_describe_every_type() -> None:
+    """The module and the public forms say what each type computes, as
+    betweenstats' do (review item 4c)."""
+    import importlib
+
+    module = importlib.import_module("inferplot.analyses.withinstats")
+    renderer = importlib.import_module("inferplot.render.withinstats")
+    names = (
+        "paired t-test",
+        "Greenhouse-Geisser",
+        "signed-rank",
+        "Friedman",
+        "Kendall's W",
+        "Durbin-Conover",
+        "Yuen",
+        "AKP",
+        "rmmcp",
+        "Bayes factor",
+        "MAP",
+    )
+    for doc in (module.__doc__, analyze.__doc__, top.__doc__):
+        assert doc is not None
+        for name in names:
+            assert name in doc, name
+    assert renderer.__doc__ is not None
+    for word in ("means", "medians", "trimmed means", "MAP estimates"):
+        assert word in renderer.__doc__

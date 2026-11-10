@@ -164,6 +164,19 @@ def withinstats(
     :func:`inferplot.analyze.withinstats`; the drawing arguments those of
     :func:`inferplot.render.withinstats`.
 
+    What each ``type`` computes (ggstatsplot 1.1.4's ``ggwithinstats()``; two
+    conditions / three or more): "parametric", the paired t-test with Hedges' g
+    and the paired Bayes factor caption / the repeated-measures ANOVA
+    (Greenhouse-Geisser) with partial omega squared and paired t pairs, means;
+    "nonparametric", the Wilcoxon signed-rank test with the rank-biserial r /
+    Friedman's test with Kendall's W and Durbin-Conover pairs, medians; "robust",
+    Yuen's dependent trimmed-means test with the AKP effect size / the
+    trimmed-means repeated-measures ANOVA with the average AKP and rmmcp pairs,
+    trimmed means; "bayes", the paired Bayes factor / with
+    ``results_subtitle=False``, a Bayes factor for every pair, MAP estimates. The
+    figure joins each subject's points with two conditions (``point_path``) and
+    the centrality points (``centrality_path``), as ggwithinstats does.
+
     ``alternative="greater"`` tests whether the first level of ``x`` is greater
     than the second (the differences first minus second are positive), and
     ``"less"`` whether it is less (two conditions only). The first level is the

@@ -177,6 +177,42 @@ def test_heavy_ties_check() -> None:
     assert "heavy_ties" not in _codes(betweenstats(distinct, "g", "y", type="np"))
 
 
+def test_rank_biserial_at_its_bound_warns() -> None:
+    """S9: a rank-biserial r of exactly 1 or -1 has the interval [r, r] (Fisher z
+    of +-1 is infinite); a warnings entry says why, as the paired case does (D64)."""
+    data = frame({"low": [1.0, 2, 3, 4, 5], "high": [6.0, 7, 8, 9, 10]})
+    below = betweenstats(data, "g", "y", type="np", order=["low", "high"])
+    assert below.effect_size is not None
+    es = below.effect_size
+    assert (es.estimate, es.conf_low, es.conf_high) == (-1.0, -1.0, -1.0)
+    message = (
+        "Every value of 'low' is below every value of 'high' (x='g'), so the "
+        "rank-biserial r is at its bound (-1) and its confidence interval has no "
+        "width: [-1, -1]. The interval is built on the Fisher z scale, where r = 1 "
+        "or -1 lies infinitely far out; it does not mean the effect is known "
+        "exactly. ggstatsplot prints the same interval."
+    )
+    assert below.warnings == (message,)
+    above = betweenstats(data, "g", "y", type="np", order=["high", "low"])
+    assert above.warnings == (
+        message.replace(
+            "'low' is below every value of 'high'",
+            "'high' is above every value of 'low'",
+        )
+        .replace("(-1)", "(1)")
+        .replace("[-1, -1]", "[1, 1]"),
+    )
+    # A one-sided interval that keeps its width needs no word: r = 1 with
+    # "less" is [-1, 1].
+    wide = betweenstats(
+        data, "g", "y", type="np", order=["high", "low"], alternative="less"
+    )
+    assert wide.warnings == ()
+    # Short of the bound, nothing.
+    near = frame({"low": [1.0, 2, 3, 4, 7], "high": [6.0, 7.5, 8, 9, 10]})
+    assert betweenstats(near, "g", "y", type="np").warnings == ()
+
+
 def test_undefined_resamples_are_in_the_result() -> None:
     # Three groups of three on two values: some resamples tie every value, where
     # rank epsilon squared is undefined; they are left out of the interval (D54).
