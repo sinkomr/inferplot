@@ -362,35 +362,28 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   reports nothing about the figure on any fixture; 120 random data sets clean in the
   own figure and in `ax=` at three dpi; passes on matplotlib 3.8.0. Six new image
   baselines. Open, small: a link line can cross another label in a crowded figure
-- [ ] end-of-phase review of histostats and scatterstats (two fresh reviewers).
+- [x] end-of-phase review of histostats and scatterstats (two fresh reviewers; all
+  findings fixed and re-checked by the lead; barstats gets its own review).
   Visible half done (2026-11-10; scripts and images in `reviewP4B/`): about 230 first
   attempts with other libraries' argument names, 70 hand-built frames on three
   backends, 717 results' texts re-derived, about 200 figures measured, 60 saved files,
   49 comparisons of the three forms: sound. Findings, being fixed on
   `fix/phase4-review-visible`:
-  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures; the cause is
-    fixed on main since 30e177a: 6.4 in for body temperatures, heights, negative data
-    and Unix timestamps; the layout-bounds tests and the figure-size check are still
-    to come with the fix branch): with the
-    test value far outside the bars (the default 0 for data away from zero) the
-    histogram's own figure is sized to reach the test value: 100 in wide for body
-    temperatures, 25 in for heights, a FreeType crash for Unix timestamps; 118 of 300
-    random figures; `fig.check()` silent. The edge label is created at the data
-    coordinate before the layout runs. The lead's own check missed it (it read check
-    codes, not figure sizes).
-  - [ ] Y2: the "test value" label is sometimes drawn beside the centrality line, 40
-    to 72 pt from its own line (8 of 120 figures; 169 of 398 with 15-digit labels).
-  - [ ] Y3: point labels are crossed by the regression line and by other labels' link
-    lines (mtcars: 7 and 5 of 32), unreported.
-  - [ ] Y4: the robust histostats APA sentence prints the trimmed mean and its interval
-    with two fixed decimals ("0.00, 95% CI [0.00, 0.00]" for data in 1e-9 units).
-  - [ ] Y5: four hints that lead to another error (constant column to nonparametric to
-    binwidth; `to_numeric` on text with "NA"; polars Categorical cast; sparse columns).
-  - [ ] Y6: the y axis offset text ("1e12") lands on the top marginal histogram.
-  - [ ] Y7 (low, eight items): percent axis above 100%; `save(dpi<7)` crashes in
-    FreeType; the test value label prints 15 digits; two messages for too small a bin
-    width; layers made invisible by colour not noticed; whitespace-only labels count
-    as labels; alt text names layers the caller made invisible; wording slips.
+  - [x] Y1 (high): fixed (D109). The histogram's own figure no longer grows to reach
+    the test value: body temperatures 100.4 in to 6.5 in, heights 25.5 to 6.4, Unix
+    timestamps a crash to 7.6 in; 118 of 300 random figures oversized before, 0 after
+    (the reviewer's scan, re-run by the lead on the merged main). New check
+    `figure_oversized` for all own figures; layout-bounds tests over many data sets.
+  - [x] Y2: fixed (D110): each line's label stays at its own line (8 of 120 misplaced
+    before, 0 after); new check `line_label_ambiguous`; long test values are rounded
+    and marked.
+  - [x] Y3: fixed (D111): mtcars with 32 labels has 0 labels crossed by the line or a
+    link (7 and 5 before); crossings that remain in dense clouds are reported.
+  - [x] Y4: fixed (D112): quantities in data units follow the subtitle's number rule.
+  - [x] Y5: fixed: every conversion hint is in the frame's own library and is executed
+    by a test; a constant column now draws (D89).
+  - [x] Y6: fixed (D112): axis offsets are folded into the axis label.
+  - [x] Y7: all eight low items fixed.
   Statistics half done (2026-11-10; scripts in `reviewP4A/`): 260 one-sample and 260
   pair data sets agree with independent computations on every stored field (worst
   2e-14; Hedges' g bounds 8e-12); 1 - r^2 exact on 300 of 300 data sets; Bayes factors

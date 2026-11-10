@@ -451,7 +451,8 @@ value (mean, median, trimmed mean at tr, MAP) with its label
 inferplot's histogram (D94, D95): counts on the left axis from 0, the share of n in
 percent on a right axis; the centrality line dashed in the centrality colour with
 ggstatsplot's label; the test value marked with a thin grey line labelled "test value
-<v>", or, when it lies more than a quarter of the bars' width beyond them, with an
+<v>" (the value as written when short, otherwise rounded with `digits` and marked
+"≈"; D110), or, when it lies more than a quarter of the bars' width beyond them, with an
 arrow at that edge ("test value 100 →") so that the default test value 0 does not
 squash the bars; both labels in a strip above the tallest bar, never over bars, on
 two rows only when they would touch.
@@ -1071,7 +1072,9 @@ no problems.
 | `paths_crowded` | figure | warning | withinstats: the subject paths, rendered alone as drawn, are at least half opaque over more than 15% of the area between the two conditions (about 250 subjects in inferplot's own figure); the fix is `point_path=False` |
 | `centrality_label_overlap` | figure | warning | a centrality point at least half covered by a text's box |
 | `centrality_label_ambiguous` | figure | warning | a centrality label reads as another level's, wherever it is when checked: on its usual side its box's middle lies beyond the neighbouring point, on the other side it reaches past the middle toward the neighbouring point, or it lies over the centrality path between two other conditions (D75) |
-| `point_labels_crowded` | figure | warning | scatterstats: point labels overlap each other, or more than 200 points are labelled (D97); labels over points of a dense cloud are not reported |
+| `point_labels_crowded` | figure | warning | scatterstats: point labels overlap each other, lie across the least-squares line or are crossed by another label's link, or more than 200 points are labelled (D97, D111); labels over points of a dense cloud are not reported |
+| `figure_oversized` | figure | warning | inferplot's own figure: the panels fill under 25% of its area, or a side exceeds 30 in (plus 3 in per level and 0.5 in per bracket in comparison figures); the message names a text over 12 in that makes it grow (D109) |
+| `line_label_ambiguous` | figure | warning | histostats: a line's label nearer to the other line than to its own, or crossed by it (D110) |
 | `low_contrast` | figure | warning | a text under 3:1 (WCAG 2.1, large text and graphics) against its background, or a level's colour under 1.1:1 against the Axes background (WCAG's 3:1 would report the default palette's yellow, 1.32:1 on white) |
 | `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX); matplotlib's own "Glyph ... missing" warning for these characters is held back during inferplot's drawing, `check()` and `save()`, and passes through for characters this check does not report (D79) |
 | `axis_changed` | figure | warning | an inverted x or y axis, or a non-linear scale: brackets and labels were placed for an upright linear axis |

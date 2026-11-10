@@ -701,12 +701,19 @@ def test_apa_sentence_and_alt_text_form(name: str) -> None:
             "winsorized_r",
             "rank_biserial",
         )
-        assert f"{es.label} = {_apa(es.estimate, bounded)}, " in apa
         level = tx.format_conf_level(es.conf_level)
-        assert (
-            f"{level} CI [{_apa(es.conf_low, bounded)}, {_apa(es.conf_high, bounded)}]"
-            in apa
-        )
+        if es.name == "trimmed_mean":
+            # In the data's units: the subtitle's number rule with digits
+            # (review item Y4), "19.24" at digits 2, "19.244" at digits 3.
+            digits = result.settings.digits
+            shown = [
+                tx.format_value(x, digits)
+                for x in (es.estimate, es.conf_low, es.conf_high)
+            ]
+        else:
+            shown = [_apa(x, bounded) for x in (es.estimate, es.conf_low, es.conf_high)]
+        assert f"{es.label} = {shown[0]}, " in apa
+        assert f"{level} CI [{shown[1]}, {shown[2]}]" in apa
         if one_sample:
             against = tx.r_number_text(result.settings.test_value or 0.0)
             assert (f" against {against}: " in apa) == (test.alternative == "two-sided")

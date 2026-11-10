@@ -228,11 +228,16 @@ def _colormap_colors(name: str, k: int) -> list[Color]:
     return [_rgba(cmap((i + 0.5) / k), f"{(i + 0.5) / k:.3f}") for i in range(k)]
 
 
-def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
-    """``k`` colors for ``palette`` and a warning when the default had to change.
+def resolve_palette(
+    palette: object, k: int, uses: str | None = None
+) -> tuple[list[Color], str | None]:
+    """``k`` colors for ``palette`` and a warning when the default had to change,
+    or when the palette has colours the figure does not use (D39).
 
     ``palette`` is None (Okabe-Ito; more than 8 levels use ``tab20``), a matplotlib
-    colormap name, or a sequence of at least ``k`` matplotlib colors.
+    colormap name, or a sequence of at least ``k`` matplotlib colors. ``uses``
+    says what a figure without levels colours ("the bars"); None for a figure
+    whose colours follow its levels.
     """
     if palette is None:
         if k <= len(OKABE_ITO):
@@ -251,6 +256,11 @@ def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
         return _colormap_colors(palette, k), None
     if isinstance(palette, Sequence):
         items = list(cast("Sequence[object]", palette))
+        if len(items) < k and uses is not None:
+            raise ValueError(
+                f"palette is empty; pass a list with at least one color (the first "
+                f"colors {uses}), or a colormap name such as 'viridis'."
+            )
         if len(items) < k:
             raise ValueError(
                 f"palette has {len(items)} colors but the plot has {k} levels; pass "
@@ -258,7 +268,18 @@ def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
             )
         # Every entry is checked, also those beyond the k used.
         colors = [_rgba(c, f"index {i}") for i, c in enumerate(items)]
-        return colors[:k], None
+        unused = None
+        if len(items) > k and uses is not None:
+            unused = (
+                f"palette has {len(items)} colors; the figure uses only the first, "
+                f"for {uses}, and not the other {len(items) - k}."
+            )
+        elif len(items) > k:
+            unused = (
+                f"palette has {len(items)} colors; the plot has {k} levels and uses "
+                f"the first {k}, not the other {len(items) - k}."
+            )
+        return colors[:k], unused
     raise TypeError(
         "palette must be None, a matplotlib colormap name or a list of colors; got "
         f"{type(palette).__name__}."

@@ -997,7 +997,20 @@ def _check_y(series: nw.Series[Any], name: str, x: nw.Series[Any], x_name: str) 
                 f"y={x_name!r}."
             )
         else:
-            hint = "Convert it with pandas.to_numeric() or .cast(float) first."
+            _check_sparse(series, name, "y")
+            library = _library(series)
+            first = _first_value(series)
+            if _numbers_as_text(first):
+                categories = isinstance(dtype, nw.Categorical | nw.Enum)
+                hint = (
+                    f"It holds numbers stored as text (for example {first!r}). "
+                    "Convert it first: "
+                    f"{_to_numbers(library, name, categories=categories)}. Entries "
+                    "that are not numbers become missing values, which are left out "
+                    "like the other missing values."
+                )
+            else:
+                hint = _generic_numbers(library, name)
     else:
         return
     raise TypeError(f"y={name!r} must be numeric; its type is {dtype}. {hint}")
@@ -1447,6 +1460,66 @@ class PairData:
 _OneOrPair = Literal["histostats", "scatterstats"]
 
 
+Library = Literal["pandas", "polars", "pyarrow"]
+
+
+def _library(series: nw.Series[Any]) -> Library:
+    """The library of the user's frame, for recipes written in it."""
+    impl = series.implementation
+    if impl.is_polars():
+        return "polars"
+    if impl.is_pyarrow():
+        return "pyarrow"
+    return "pandas"
+
+
+def _replace_column(
+    library: Library, name: str, pandas: str, polars: str, arrow: str
+) -> str:
+    """A statement that replaces column ``name`` of ``data`` with the
+    expression for ``library`` (pandas: a Series; polars: an expression;
+    pyarrow: an array)."""
+    if library == "polars":
+        return f"data = data.with_columns(({polars}).alias({name!r}))"
+    if library == "pyarrow":
+        return (
+            f"data = data.set_column(data.column_names.index({name!r}), {name!r}, "
+            f"{arrow})"
+        )
+    return f"data[{name!r}] = {pandas}"
+
+
+# A number as text, after trimming spaces (pyarrow's recipe keeps only these).
+_NUMBER_PATTERN: Final = r"^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$"
+
+
+def _to_numbers(library: Library, name: str, *, categories: bool) -> str:
+    """A statement that converts the text (or categories) of column ``name`` to
+    numbers in ``library``, entries that are not numbers becoming missing."""
+    col = f"data[{name!r}]"
+    pandas = f"pandas.to_numeric({col}, errors='coerce')"
+    text = f"pl.col({name!r})" + (".cast(pl.String)" if categories else "")
+    polars = f"{text}.str.strip_chars().cast(pl.Float64, strict=False)"
+    arrow_text = f"pyarrow.compute.cast({col}, pyarrow.string())" if categories else col
+    trimmed = f"pyarrow.compute.utf8_trim_whitespace({arrow_text})"
+    arrow = (
+        "pyarrow.compute.cast(pyarrow.compute.if_else("
+        f"pyarrow.compute.match_substring_regex({trimmed}, r'{_NUMBER_PATTERN}'), "
+        f"{trimmed}, None), pyarrow.float64())"
+    )
+    return _replace_column(library, name, pandas, polars, arrow)
+
+
+def _not_numbers(series: nw.Series[Any]) -> list[str]:
+    """The distinct non-missing entries of a text column that do not read as
+    numbers, in order of appearance."""
+    try:
+        values = series.drop_nulls().to_list()
+    except Exception:  # an unusual column type narwhals cannot handle
+        return []
+    return list(dict.fromkeys(str(v) for v in values if not _numbers_as_text(str(v))))
+
+
 def _numbers_as_text(value: object) -> bool:
     """Whether ``value`` is text that reads as a number ("1.5", " 2 ")."""
     if not isinstance(value, str):
@@ -1502,6 +1575,8 @@ def _check_measurement(
     dtype = series.dtype
     if dtype.is_numeric() and not isinstance(dtype, nw.Boolean):
         return
+    library = _library(series)
+    _check_sparse(series, name, arg)
     start = f"{arg}={name!r} must be numeric; its type is {dtype}."
     if isinstance(dtype, nw.Boolean):
         raise TypeError(
@@ -1514,16 +1589,30 @@ def _check_measurement(
     if isinstance(dtype, nw.Datetime | nw.Date | nw.Time | nw.Duration):
         raise TypeError(
             f"{start} It holds dates or times, which {fn}() cannot analyze as "
-            "numbers. Convert them to numbers in the unit you mean first, for "
-            f"example the days since the first date: (data[{name!r}] - "
-            f"data[{name!r}].min()).dt.days in pandas."
+            "numbers. Convert them to numbers in the unit you mean first"
+            + _time_recipe(library, name, dtype)
         )
     first = _first_value(series)
     if _numbers_as_text(first):
+        bad = _not_numbers(series)
+        categories = isinstance(dtype, nw.Categorical | nw.Enum)
+        held = (
+            "categories whose names are numbers"
+            if categories
+            else "numbers stored as text"
+        )
+        missing = ""
+        if bad:
+            shown = ", ".join(repr(v) for v in bad[:3])
+            more = f" and {len(bad) - 3} more" if len(bad) > 3 else ""
+            missing = (
+                f" The entries that are not numbers ({shown}{more}) become missing "
+                "values, which are left out like the other missing values."
+            )
         raise TypeError(
-            f"{start} It holds numbers stored as text (for example {first!r}). "
-            f"Convert it first, for example pandas.to_numeric(data[{name!r}]) in "
-            f"pandas or pl.col({name!r}).cast(pl.Float64) in polars."
+            f"{start} It holds {held} (for example {first!r}). "
+            f"Convert it first: {_to_numbers(library, name, categories=categories)}."
+            + missing
         )
     if isinstance(dtype, nw.String | nw.Categorical | nw.Enum) or isinstance(
         first, str
@@ -1540,11 +1629,62 @@ def _check_measurement(
     if isinstance(first, numbers.Real) and not isinstance(first, bool | np.bool_):
         raise TypeError(
             f"{start} It holds numbers in a column of Python objects; convert it "
-            f"first, for example pandas.to_numeric(data[{name!r}])."
+            f"first: {_to_numbers(library, name, categories=False)}."
         )
+    raise TypeError(f"{start} {_generic_numbers(library, name)}")
+
+
+def _generic_numbers(library: Library, name: str) -> str:
+    """Advice to convert a column of another type to numbers, in ``library``."""
+    if library == "polars":
+        how = f"pl.col({name!r}).cast(pl.Float64)"
+    elif library == "pyarrow":
+        how = f"pyarrow.compute.cast(data[{name!r}], pyarrow.float64())"
+    else:
+        how = f"pandas.to_numeric(data[{name!r}])"
+    return f"Convert it to numbers first, for example with {how}."
+
+
+def _check_sparse(series: nw.Series[Any], name: str, arg: str) -> None:
+    """A pandas sparse column (which narwhals reads as of an unknown type) is
+    told what it is and how to make it dense."""
+    native = nw.to_native(series)
+    dtype = getattr(native, "dtype", None)
+    if type(dtype).__name__ != "SparseDtype":
+        return
     raise TypeError(
-        f"{start} Convert it with pandas.to_numeric() or .cast(float) first."
+        f"{arg}={name!r} is a pandas sparse column ({dtype}): it stores only the "
+        "entries that differ from its fill value, and inferplot reads dense "
+        f"columns only. Make it dense first: data[{name!r}] = "
+        f"data[{name!r}].sparse.to_dense()."
     )
+
+
+def _time_recipe(library: Library, name: str, dtype: object) -> str:
+    """A recipe that turns dates or durations into numbers in ``library``,
+    after "Convert them to numbers in the unit you mean first"."""
+    col = f"data[{name!r}]"
+    if isinstance(dtype, nw.Duration):
+        how = _replace_column(
+            library,
+            name,
+            f"{col}.dt.total_seconds()",
+            f"pl.col({name!r}).dt.total_seconds()",
+            f"pyarrow.compute.cast({col}, pyarrow.int64())",
+        )
+        if library == "pyarrow":
+            return f", for example the durations in the column's own unit: {how}."
+        return f", for example the seconds: {how}."
+    if isinstance(dtype, nw.Datetime | nw.Date):
+        how = _replace_column(
+            library,
+            name,
+            f"({col} - {col}.min()).dt.days",
+            f"(pl.col({name!r}) - pl.col({name!r}).min()).dt.total_days()",
+            f"pyarrow.compute.days_between(pyarrow.compute.min({col}), {col})",
+        )
+        return f", for example the days since the first date: {how}."
+    return "."
 
 
 def _measurement(
@@ -1621,9 +1761,11 @@ def _label_text(value: object) -> str:
 
 
 def _point_labels(series: nw.Series[Any], rows: IntArray) -> tuple[str, ...]:
-    """The label of each of ``rows``; "" where the label is missing."""
+    """The label of each of ``rows``; "" where the label is missing or only
+    white space (nothing would be drawn: no label)."""
     raw: list[object] = series.to_list()
-    return tuple(_label_text(raw[i]) for i in rows.tolist())
+    texts = (_label_text(raw[i]) for i in rows.tolist())
+    return tuple(text if text.strip() else "" for text in texts)
 
 
 def read_pair(

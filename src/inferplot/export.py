@@ -45,6 +45,9 @@ METADATA_KEYS: Final[dict[Format, str]] = {
 # buffer of 400 MB).
 MAX_DPI: Final = 2_400
 MAX_PNG_PIXELS: Final = 100_000_000
+# The least dpi save() writes as PNG: FreeType fails on inferplot's figures
+# below 7 dpi ("invalid ppem value"), and at 10 the texts are a few pixels high.
+MIN_PNG_DPI: Final = 10
 SAVE_RC: Final[dict[str, object]] = {
     "svg.fonttype": "none",
     "pdf.fonttype": 42,
@@ -100,8 +103,8 @@ def save(
 
     Raises:
         ValueError: the extension is not .svg, .pdf or .png, ``dpi`` is not a
-            positive number or is above MAX_DPI, or a PNG would have more than
-            MAX_PNG_PIXELS pixels.
+            positive number or is above MAX_DPI, or a PNG is asked for below
+            MIN_PNG_DPI or would have more than MAX_PNG_PIXELS pixels.
         TypeError: ``path`` is not a string or path, or ``transparent`` not a bool.
     """
     if not isinstance(path, str | os.PathLike):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -134,6 +137,13 @@ def _check_dpi(fig: StatsFigure, dots: float, given: object, fmt: Format) -> Non
         )
     if fmt != "png":
         return
+    if dots < MIN_PNG_DPI:
+        raise ValueError(
+            f"dpi={given!r} is less than {MIN_PNG_DPI}, the least save() writes as "
+            "PNG: below about 7 dpi the font renderer (FreeType) cannot draw the "
+            "texts at all, and below 10 they are unreadable. Pass dpi=10 or more "
+            "(300 for print), or save as .svg or .pdf, which do not depend on dpi."
+        )
     width, height = (float(s) for s in root_figure(fig.figure).get_size_inches())
     pixels = width * dots * height * dots
     if pixels > MAX_PNG_PIXELS:

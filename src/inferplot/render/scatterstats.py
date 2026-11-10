@@ -225,6 +225,11 @@ def scatterstats(
         ),
         palette=palette,
         k=1,
+        uses=(
+            "the points and the marginal histograms"
+            if options.marginal
+            else "the points"
+        ),
         options=options,
         artist_args=lambda: base.check_artist_args(
             [
@@ -251,7 +256,9 @@ def scatterstats(
                         "marginal=True; otherwise remove marginal_args=."
                     ),
                 ),
-            ]
+            ],
+            ax=ax,
+            colors=True,
         ),
     )
 
@@ -355,6 +362,7 @@ _POINT_ARGS: Final = LayerArgs(
     noun="points",
     make=_scratch_points,
     advice="Choose a visible style; the points are the data.",
+    levels=False,
 )
 _SMOOTH_ARGS: Final = LayerArgs(
     name="smooth_args",
@@ -411,6 +419,7 @@ class _ScatterDrawing(base.BaseDrawing):
         self.band: Any = None
         self.label_texts: list[Text] = []
         self.links: list[ConnectionPatch] = []
+        self.linked: list[tuple[ConnectionPatch, Text]] = []  # link, its label
         self.subsample: Subsample | None = None
         self.drawn_points = self.x.size
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
@@ -457,6 +466,8 @@ class _ScatterDrawing(base.BaseDrawing):
                     texts=tuple(self.label_texts),
                     total=len(self.label_texts),
                     limit=MAX_LABELS,
+                    line=self.line,
+                    links=tuple(self.linked),
                 )
                 if self.label_texts
                 else None
@@ -507,7 +518,9 @@ class _ScatterDrawing(base.BaseDrawing):
                 f"and every labelled point; {shows}."
             )
         self.points = _points_artist(ax, x[shown], y[shown], self.colors[0])
-        base.apply_args(self.points, self.options.point_args, "point_args")
+        base.apply_args(
+            self.points, self.options.point_args, "point_args", levels=False
+        )
 
     def draw_density(self) -> None:
         """A 2D histogram of every pair, under the subsampled points: white where
@@ -648,6 +661,12 @@ class _ScatterDrawing(base.BaseDrawing):
             ((x0 + main_w + gap) / fig_w, y0 / fig_h, side / fig_w, main_h / fig_h)
         )
 
+    def label_room(self, axes_w: float, axes_h: float) -> tuple[float, float]:
+        if self.xside is None:
+            return axes_w, axes_h
+        less = (SIDE_IN + SIDE_GAP_IN) * self.dpi
+        return axes_w - less, axes_h - less
+
     def panels(self) -> list[Axes]:
         return [a for a in (self.ax, self.xside, self.yside) if a is not None]
 
@@ -739,6 +758,8 @@ class _ScatterDrawing(base.BaseDrawing):
             gap=px(LABEL_GAP_PT, self.dpi),
             frame=(frame.x0, frame.y0, frame.x1, frame.y1),
             obstacles=cast("list[tuple[float, float, float, float]]", obstacles),
+            lines=line_strokes(self.line, self.dpi),
+            link_width=px(LINK_WIDTH, self.dpi),
             limit=MAX_LABELS,
         )
         to_pt = 72.0 / self.dpi
@@ -768,6 +789,7 @@ class _ScatterDrawing(base.BaseDrawing):
             )
             ax.add_artist(link)
             self.links.append(link)
+            self.linked.append((link, text))
 
     # -- finishing -------------------------------------------------------------
 
@@ -829,8 +851,8 @@ class _ScatterDrawing(base.BaseDrawing):
         are a subsample, how many are drawn."""
         alt = figure_alt_text(
             result,
-            smooth=self.line is not None,
-            marginal=self.xside is not None,
+            smooth=self.line is not None and "smooth_args" not in self.hidden,
+            marginal=self.xside is not None and "marginal_args" not in self.hidden,
             labelled_points=len(self.label_texts),
             points_shown=self.drawn_points if self.subsample is not None else None,
         )
@@ -839,6 +861,18 @@ class _ScatterDrawing(base.BaseDrawing):
         return dataclasses.replace(
             result, text=dataclasses.replace(result.text, alt_text=alt)
         )
+
+
+def line_strokes(line: Line2D | None, dpi: float) -> FloatArray:
+    """The straight pieces of a drawn line in pixels with half its width, as
+    :func:`inferplot.render.point_labels.crossing` takes them ((k, 5)); none for
+    a line not drawn."""
+    if line is None or not line.get_visible() or line.axes is None:
+        return np.empty((0, 5), dtype=np.float64)
+    data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
+    xy = np.asarray(cast("Any", line.get_transform()).transform(data), dtype=np.float64)
+    half = px(float(line.get_linewidth()), dpi) / 2.0
+    return np.column_stack([xy[:-1], xy[1:], np.full(len(xy) - 1, half)])
 
 
 def _padded(low: float, high: float) -> tuple[float, float]:

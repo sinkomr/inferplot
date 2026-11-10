@@ -49,7 +49,13 @@ from tests.render._within import (
 )
 
 FIGURE_CODES = frozenset(
-    {"label_overlap", "text_clipped", "path_hidden", "paths_crowded"}
+    {
+        "label_overlap",
+        "text_clipped",
+        "path_hidden",
+        "paths_crowded",
+        "figure_oversized",
+    }
 )
 
 

@@ -269,8 +269,10 @@ def histostats(
             version yet.
     """
     from inferplot import render  # imports matplotlib
+    from inferplot.render.base import check_given_axes, check_one_call_subtitle
     from inferplot.render.histostats import check_drawing
 
+    check_one_call_subtitle(subtitle, results_subtitle)
     check_drawing(
         binwidth=binwidth,
         centrality_plotting=centrality_plotting,
@@ -281,6 +283,7 @@ def histostats(
         caption=caption,
         bar_args=bar_args,
     )
+    check_given_axes(ax)
     result = analyze.histostats(
         data,
         x,
@@ -355,8 +358,10 @@ def scatterstats(
             version yet.
     """
     from inferplot import render  # imports matplotlib
+    from inferplot.render.base import check_given_axes, check_one_call_subtitle
     from inferplot.render.scatterstats import check_drawing
 
+    check_one_call_subtitle(subtitle, results_subtitle)
     check_drawing(
         marginal=marginal,
         smooth=smooth,
@@ -370,6 +375,7 @@ def scatterstats(
         marginal_args=marginal_args,
         ax=ax,
     )
+    check_given_axes(ax)
     result = analyze.scatterstats(
         data,
         x,

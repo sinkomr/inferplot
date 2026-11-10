@@ -177,14 +177,21 @@ def test_booleans_are_refused(backend: str) -> None:
 def test_numbers_stored_as_text_are_told_to_convert(backend: str) -> None:
     text = message(TypeError, lambda: read_one(make(backend, {"v": ["1.5", "2"]}), "v"))
     assert "holds numbers stored as text (for example '1.5')" in text
-    assert "pandas.to_numeric(data['v'])" in text
+    # Each library's own recipe (review item Y5; tests/test_data_hints.py runs
+    # them).
+    recipe = {
+        "pandas": "pandas.to_numeric(data['v'], errors='coerce')",
+        "polars": "pl.col('v').str.strip_chars().cast(pl.Float64, strict=False)",
+        "pyarrow": "pyarrow.compute.cast(pyarrow.compute.if_else(",
+    }[backend]
+    assert recipe in text
 
 
 def test_an_object_column_of_numbers_is_told_to_convert() -> None:
     frame = pd.DataFrame({"v": pd.Series([1.5, 2.5, None], dtype=object)})
     text = message(TypeError, lambda: read_one(frame, "v"))
     assert "holds numbers in a column of Python objects" in text
-    assert "pandas.to_numeric(data['v'])" in text
+    assert "data['v'] = pandas.to_numeric(data['v'], errors='coerce')" in text
 
 
 def test_dates_are_refused() -> None:

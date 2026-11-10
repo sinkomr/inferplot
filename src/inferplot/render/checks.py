@@ -18,6 +18,14 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
   opaque over more than 15% of the area between the two conditions, measured on
   the paths alone rendered as drawn, so they hide the boxes and violins beneath
   them;
+* ``line_label_ambiguous`` (warning, histostats): the label of the centrality
+  line or of the test value line lies nearer to the other line than to its
+  own, or the other line runs through it;
+* ``figure_oversized`` (warning): inferplot's own figure is far larger than the
+  plotting area it was laid out around (the panels fill under 25% of it) or
+  larger than any of its layouts needs (30 in a side, plus 3 in a level and 0.5
+  in a bracket for the comparison figures); the message names the long texts
+  that widen it, or says that the layout went wrong;
 * ``centrality_label_ambiguous`` (warning): a centrality label that reads as
   another level's (:func:`inferplot.render.labels.ambiguities`): mostly beyond
   the neighbouring point on its usual side, past the middle toward the
@@ -36,7 +44,7 @@ from matplotlib.axis import Axis
 from matplotlib.backends.backend_agg import RendererAgg
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
-from matplotlib.transforms import Bbox, BboxBase
+from matplotlib.transforms import Bbox, BboxBase, Transform
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
@@ -55,7 +63,7 @@ if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
     from matplotlib.collections import LineCollection
 
-    from inferplot.render.figure import DrawnPaths, StatsFigure
+    from inferplot.render.figure import DrawnPaths, PointLabels, StatsFigure
 
 __all__ = ["figure_issues", "text_extents"]
 
@@ -95,6 +103,7 @@ def _axis_roles(ax: Axes) -> dict[int, str]:
     roles: dict[int, str] = {}
     for name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
         roles[id(axis.label)] = f"{name}-axis label"
+        roles[id(axis.offsetText)] = f"{name}-axis offset text"
         for tick in [*axis.get_major_ticks(), *axis.get_minor_ticks()]:
             roles[id(tick.label1)] = f"{name} tick label"
             roles[id(tick.label2)] = f"{name} tick label"
@@ -593,6 +602,126 @@ def _ambiguous_labels(fig: StatsFigure) -> Issue | None:
     )
 
 
+def _distance(box: BboxBase, piece: FloatArray) -> float:
+    """Pixels between a box and a straight piece of line ((2, 2): its ends),
+    sampled along the piece; 0 where the line runs through the box."""
+    t = np.linspace(0.0, 1.0, 65)[:, None]
+    points = piece[0] + t * (piece[1] - piece[0])
+    dx = np.maximum(np.maximum(box.x0 - points[:, 0], points[:, 0] - box.x1), 0.0)
+    dy = np.maximum(np.maximum(box.y0 - points[:, 1], points[:, 1] - box.y1), 0.0)
+    return float(np.hypot(dx, dy).min())
+
+
+def _line_distance(box: BboxBase, line: Line2D) -> float:
+    data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
+    xy = np.asarray(cast("Any", line.get_transform()).transform(data), dtype=np.float64)
+    return min(
+        (_distance(box, np.stack([a, b])) for a, b in itertools.pairwise(xy)),
+        default=float("inf"),
+    )
+
+
+def _ambiguous_line_labels(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> Issue | None:
+    """``line_label_ambiguous``: a label of one of histostats' lines that lies
+    nearer to another line than to its own, or that another line runs through."""
+    boxes = {id(text): (described, box) for text, described, box in extents}
+    shown = [
+        label
+        for label in fig.line_labels
+        if id(label.text) in boxes
+        and label.line.get_visible()
+        and label.line.axes is not None
+    ]
+    if len(shown) < 2:
+        return None
+    dpi = float(root_figure(fig.figure).dpi)
+    to_pt = 72.0 / dpi
+    found: list[str] = []
+    for label in shown:
+        described, box = boxes[id(label.text)]
+        own = _line_distance(box, label.line)
+        for other in shown:
+            if other is label:
+                continue
+            near = _line_distance(box, other.line)
+            if near == 0.0:
+                found.append(f"{other.name} runs through the {described}")
+            elif near + _CLIP_TOLERANCE < own:
+                found.append(
+                    f"the {described} lies nearer to {other.name} ({near * to_pt:.0f} "
+                    f"pt) than to its own, {label.name} ({own * to_pt:.0f} pt)"
+                )
+    if not found:
+        return None
+    return Issue(
+        code="line_label_ambiguous",
+        severity="warning",
+        message=f"A line's label can be read as another line's: {_listing(found)}.",
+        fix=(
+            "Give the plot more room (a wider Axes passed as ax=, made with a larger "
+            "figsize, or inferplot's own figure by leaving ax out) so that each "
+            "label fits beside its own line; if you moved a label, move it back "
+            "beside its line. Or leave the centrality line out with "
+            "centrality_plotting=False and report the value from "
+            "fig.result.descriptives."
+        ),
+    )
+
+
+def _crossed_labels(
+    fig: StatsFigure,
+    labels: PointLabels,
+    boxes: dict[int, tuple[str, Bbox]],
+) -> tuple[list[str], list[str]]:
+    """The point labels (in words) that the least-squares line, and that the
+    link of another label, crosses as drawn."""
+    from inferplot.render.point_labels import crossing
+    from inferplot.render.scatterstats import line_strokes
+
+    dpi = float(root_figure(fig.figure).dpi)
+    shown = [(t, boxes[id(t)]) for t in labels.texts if id(t) in boxes]
+    if not shown:
+        return [], []
+    extents = np.array([[b.x0, b.y0, b.x1, b.y1] for _, (_, b) in shown])
+    by_line: list[str] = []
+    strokes = line_strokes(labels.line, dpi)
+    if strokes.shape[0]:
+        hit = crossing(strokes, extents).any(axis=0)
+        by_line = [d for (_, (d, _)), h in zip(shown, hit, strict=True) if h]
+    links: list[FloatArray] = []
+    owners: list[int] = []
+    for link, owner in labels.links:
+        if not link.get_visible() or link.axes is None:
+            continue
+        ends: list[FloatArray] = []
+        # ConnectionPatch keeps its two ends and their coordinates as attributes.
+        drawn = cast("Any", link)
+        for xy, coords in ((drawn.xy1, drawn.coords1), (drawn.xy2, drawn.coords2)):
+            if not isinstance(coords, Transform):
+                break
+            ends.append(np.asarray(coords.transform(xy), dtype=np.float64))
+        if len(ends) != 2:
+            continue
+        start, end = ends
+        length = float(np.hypot(*(end - start)))
+        if length == 0.0:
+            continue
+        shrink = float(drawn.shrinkA) * dpi / 72.0
+        start = start + (end - start) * min(1.0, shrink / length)
+        half = float(link.get_linewidth()) * dpi / 72.0 / 2.0
+        links.append(np.array([*start, *end, half]))
+        owners.append(id(owner))
+    by_link: list[str] = []
+    if links:
+        hit = crossing(np.array(links), extents)
+        for j, (text, (described, _)) in enumerate(shown):
+            if any(hit[k, j] and owners[k] != id(text) for k in range(len(links))):
+                by_link.append(described)
+    return by_line, by_link
+
+
 def _crowded_labels(
     fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
 ) -> Issue | None:
@@ -616,6 +745,18 @@ def _crowded_labels(
             "pairs of point labels overlap"
         )  # fmt: skip
         found.append(f"{len(pairs)} {noun}: {_listing(pairs)}")
+    by_line, by_link = _crossed_labels(fig, labels, boxes)
+    if by_line:
+        noun = "point label lies" if len(by_line) == 1 else "point labels lie"
+        found.append(
+            f"{len(by_line)} {noun} across the least-squares line: {_listing(by_line)}"
+        )
+    if by_link:
+        noun = "point label is" if len(by_link) == 1 else "point labels are"
+        found.append(
+            f"{len(by_link)} {noun} crossed by the line joining another label "
+            f"to its point: {_listing(by_link)}"
+        )
     if labels.total > labels.limit:
         found.append(
             f"{labels.total:,} points are labelled, more than the {labels.limit:,} "
@@ -632,8 +773,91 @@ def _crowded_labels(
             "Label fewer points: set the label column (label_var) to None or '' "
             "for the points you do not need to name, as ggstatsplot's "
             "label.expression selects them; or draw into a larger Axes with ax= "
-            "(made with a larger figsize, marginal=False)."
+            "(made with a larger figsize, marginal=False). A label across the "
+            "least-squares line also clears it with smooth=False, which leaves "
+            "the line out."
         ),
+    )
+
+
+# inferplot's own figure: the plotting area (every panel) fills at least this
+# share of the figure, and the figure is at most _OVERSIZED_IN on a side (plus,
+# for the comparison figures, room for their levels and brackets). Measured on
+# every fixture figure (2026-11-10): the share is 0.55 to 0.70 for all four
+# functions (betweenstats 0.55 to 0.70, withinstats 0.56 to 0.67, histostats
+# 0.55 to 0.61, scatterstats 0.55 to 0.68, also over 300 random data sets from
+# 1e-6 to 1e9), the largest figure 12.2 x 4.6 in (nine levels). The bug these
+# catch made 80 to 19,000 in wide histograms whose Axes filled under 5%.
+_MIN_PLOT_SHARE: Final = 0.25
+_OVERSIZED_IN: Final = 30.0
+_PER_LEVEL_IN: Final = 3.0  # more than the widest level spacing seen (1.4 in)
+_PER_BRACKET_IN: Final = 0.5  # more than one bracket level (about 0.3 in)
+# barstats: room for each bar (the widest slot over the fixtures and 120 random
+# tables is 1.09 in; 20 bars make a 20 in figure, 40 bars 39 in).
+_PER_BAR_IN: Final = 1.5
+# A text longer than this (inches) is named as the cause; inferplot's own
+# texts (subtitles with large numbers) stay under 8 in.
+_LONG_TEXT_IN: Final = 12.0
+
+
+def _oversized(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> Issue | None:
+    """``figure_oversized``: inferplot's own figure much larger than the plotting
+    area it was laid out around, or larger than any of its layouts needs."""
+    if not fig.own:
+        return None
+    root = root_figure(fig.figure)
+    renderer = _renderer(fig)
+    dpi = float(root.dpi)
+    frame = Bbox.union([a.get_window_extent(renderer) for a in fig.axes.values()])
+    width, height = (float(v) for v in root.get_size_inches())
+    share = frame.width * frame.height / (width * height * dpi * dpi)
+    max_w = max_h = _OVERSIZED_IN
+    if not fig.data:  # betweenstats, withinstats: room for levels and brackets
+        max_w += _PER_LEVEL_IN * len(fig.result.levels)
+        max_h += _PER_BRACKET_IN * len(fig.brackets)
+    if fig.cell_labels:  # barstats: room for its bars
+        max_w += _PER_BAR_IN * len(fig.result.bars)
+    if share >= _MIN_PLOT_SHARE and width <= max_w and height <= max_h:
+        return None
+    # Texts longer than any inferplot draws itself, which the figure grows to
+    # hold (a title or caption line is not wrapped).
+    long = sorted(
+        (
+            (max(box.width, box.height) / dpi, described)
+            for _, described, box in extents
+            if max(box.width, box.height) / dpi > _LONG_TEXT_IN
+        ),
+        key=lambda r: -r[0],
+    )
+    if long:
+        why = "the figure grows to hold " + _listing(
+            [f"the {d} ({r:.1f} in long)" for r, d in long]
+        )
+        fix = (
+            "Shorten those texts (title=, caption=, xlab=, ylab=, or the column "
+            "names), or draw into an Axes of your own with ax=, where the figure "
+            "keeps its size."
+        )
+    else:
+        why = (
+            "no text needs that room, so inferplot's layout went wrong; please "
+            "report it as an inferplot bug, with the call that drew this figure"
+        )
+        fix = (
+            "Draw into an Axes of your own with ax= (for example "
+            "Figure(figsize=(7, 5)).add_subplot()), where the figure keeps its "
+            "size, and report the call."
+        )
+    return Issue(
+        code="figure_oversized",
+        severity="warning",
+        message=(
+            f"inferplot's own figure is {width:.1f} x {height:.1f} in, and its "
+            f"plotting area fills {share:.0%} of it (at least "
+            f"{_MIN_PLOT_SHARE:.0%} expected, at most {max_w:.0f} x {max_h:.0f} "
+            f"in): {why}."
+        ),
+        fix=fix,
     )
 
 
@@ -714,11 +938,17 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     crowded = _crowded_labels(fig, extents)
     if crowded is not None:
         issues.append(crowded)
+    oversized = _oversized(fig, extents)
+    if oversized is not None:
+        issues.append(oversized)
     hidden = cell_label_issue(fig, extents)  # barstats
     if hidden is not None:
         issues.append(hidden)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
+    if ambiguous is not None:
+        issues.append(ambiguous)
+    ambiguous = _ambiguous_line_labels(fig, extents)
     if ambiguous is not None:
         issues.append(ambiguous)
     issues += view_issues(fig, extents)
