@@ -147,3 +147,37 @@ def test_within_subsample_keeps_every_conditions_extremes() -> None:
     added = fig.result.warnings[len(result.warnings) :]
     (note,) = [w for w in added if "subsample" in w]
     assert "smallest and largest" in note
+
+
+def _with_outliers() -> tuple[list[np.ndarray], object]:
+    rng = np.random.default_rng(1)
+    groups = [np.append(rng.normal(m, 1, 30), m + 6) for m in (5, 6, 7.5)]
+    return groups, frame_result(["a", "b", "c"], groups)
+
+
+def _beyond_whiskers(x: np.ndarray) -> list[float]:
+    q1, q3 = np.percentile(x, [25, 75])
+    iqr = q3 - q1
+    low = x[x >= q1 - 1.5 * iqr].min()
+    high = x[x <= q3 + 1.5 * iqr].max()
+    return sorted(x[(x < low) | (x > high)].tolist())
+
+
+@pytest.mark.parametrize("layers", [("box",), ("violin", "box")])
+def test_without_points_a_box_marks_its_outliers(layers: tuple[str, ...]) -> None:
+    groups, result = _with_outliers()
+    fig = betweenstats(result, layers=layers)  # pyright: ignore[reportArgumentType]
+    for i, x in enumerate(groups):
+        expected = _beyond_whiskers(x)
+        assert expected  # each group has its far value
+        marks = by_gid(fig, f"outliers-{i}")
+        assert marks is not None
+        xy = np.asarray(marks.get_offsets())  # pyright: ignore[reportAttributeAccessIssue]
+        assert sorted(xy[:, 1].tolist()) == expected
+        assert np.all(xy[:, 0] == i)
+
+
+def test_with_points_the_points_show_the_outliers() -> None:
+    _, result = _with_outliers()
+    fig = betweenstats(result)  # pyright: ignore[reportArgumentType]
+    assert by_gid(fig, "outliers-0") is None

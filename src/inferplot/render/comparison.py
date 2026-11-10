@@ -614,12 +614,25 @@ def _density_outline(x: FloatArray) -> tuple[FloatArray, FloatArray] | str | Non
     return np.asarray(grid, dtype=np.float64), half
 
 
-def _box_path(x: FloatArray, center: float) -> Path:
-    """Box (quartiles, R's type 7), median line and Tukey whiskers as one path."""
+def _whiskers(x: FloatArray) -> tuple[float, float, float, float, float]:
+    """Quartiles (R's type 7), median and Tukey whisker ends: the most extreme
+    values within 1.5 IQR of the box."""
     q1, med, q3 = (float(q) for q in np.percentile(x, [25.0, 50.0, 75.0]))
     iqr = q3 - q1
     low = float(x[x >= q1 - 1.5 * iqr].min())
     high = float(x[x <= q3 + 1.5 * iqr].max())
+    return q1, med, q3, low, high
+
+
+def outliers(x: FloatArray) -> FloatArray:
+    """The values beyond the whiskers, in data order."""
+    _, _, _, low, high = _whiskers(x)
+    return x[(x < low) | (x > high)]
+
+
+def _box_path(x: FloatArray, center: float) -> Path:
+    """Box (quartiles, R's type 7), median line and Tukey whiskers as one path."""
+    q1, med, q3, low, high = _whiskers(x)
     a, b = center - BOX_HALF_WIDTH, center + BOX_HALF_WIDTH
     vertices = [
         (a, q1), (b, q1), (b, q3), (a, q3), (a, q1),
@@ -731,6 +744,7 @@ class Drawing:
         self.captions: list[Text] = []
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
+        self.outlier_marks: list[PathCollection] = []
         # The y layout's inputs: bracket levels used, room above and below (px).
         self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
         self.levels_of_brackets: list[int] = []
@@ -866,6 +880,8 @@ class Drawing:
                 box = _box_artist(x, float(i), i)
                 ax.add_patch(box)
                 apply_args(box, options.boxplot_args, "boxplot_args")
+                if "points" not in layers:
+                    self.draw_outliers(i, x)
             px_, py_ = points[i]
             if "points" in layers and py_.size > 0:
                 drawn = points_artist(ax, px_, py_, color, i)
@@ -880,6 +896,24 @@ class Drawing:
         if options.centrality:
             self.draw_centrality()
         self.make_bracket_labels()
+
+    def draw_outliers(self, i: int, x: FloatArray) -> None:
+        """Without a points layer, mark the values beyond the box's whiskers
+        (with one, the points show them): small open circles at the level."""
+        far = outliers(x)
+        if far.size == 0:
+            return
+        marks = self.ax.scatter(
+            np.full(far.size, float(i)),
+            far,
+            s=14.0,
+            facecolors="none",
+            edgecolors=theme.SOFT_INK,
+            linewidths=0.8,
+            zorder=2.5,
+            gid=f"outliers-{i}",
+        )
+        self.outlier_marks.append(marks)
 
     def draw_density(
         self, i: int, level: str, x: FloatArray, color: theme.Color
@@ -1424,8 +1458,9 @@ class Drawing:
         Texts and lines drawn inside the Axes (subtitle, caption, bracket lines
         and labels) take :func:`theme.ink_for` of the Axes background, and the
         axis texts and title outside it that of the figure background: the usual
-        near-black on a light background, a near-white on a dark one. The
-        centrality labels keep theirs, on their own white boxes. On a light
+        near-black on a light background, a near-white on a dark one; so do the
+        outlier markers. The centrality labels keep theirs, on their own white
+        boxes. On a light
         background nothing is changed.
         """
         inside = axes_background(self.ax)
@@ -1436,6 +1471,8 @@ class Drawing:
                 text.set_color(ink_in)
             for line in self.bracket_lines:
                 line.set_color(ink_in)
+            for marks in self.outlier_marks:
+                marks.set_edgecolor(ink_in)
         if ink_out != theme.INK:
             ax = self.ax
             ax.xaxis.label.set_color(ink_out)
