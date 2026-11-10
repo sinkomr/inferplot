@@ -32,10 +32,17 @@ env:
 
 jobs:
   generate:
-    name: Generate fixtures with ggstatsplot 1.1.4
+    # The bootstrap references take hours in one process, so the generator runs in
+    # parallel shards (ORACLE_SHARD, oracle/generate.R "Shards"); the merge job below
+    # checks that together they ran every probe and case once and writes the manifest.
+    name: Generate fixtures with ggstatsplot 1.1.4 (shard ${{ matrix.shard }} of 10)
     runs-on: ubuntu-24.04
     timeout-minutes: 300
-    env:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    env: &r_env
       # R links OpenBLAS, which picks its kernels by the runner's CPU. BayesFactor's
       # Bayes ANOVA depends on them in the last digits, and its posterior sampler can
       # amplify that to the printed digits: the Phase 0 and Phase 1 runs gave other
@@ -46,18 +53,21 @@ jobs:
       OPENBLAS_NUM_THREADS: "1"
       OPENBLAS_CORETYPE: "Haswell"
     steps:
-      - uses: actions/checkout@v7
+      - &checkout
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - &setup_r
+        uses: r-lib/actions/setup-r@v2
         with:
           # Exact patch release: R's own base and recommended packages come with it.
           r-version: "4.5.3"
           cran: ${{ env.RSPM }}
           Ncpus: "4"
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - &setup_r_dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'
           packages: |
@@ -79,7 +89,8 @@ jobs:
             any::digest
             any::sessioninfo
 
-      - name: Check R, repositories and installed versions
+      - &check_versions
+        name: Check R, repositories and installed versions
         shell: Rscript {0}
         run: |
           snapshot <- Sys.getenv("CRAN_SNAPSHOT_DATE")
@@ -115,17 +126,20 @@ jobs:
           sessioninfo::session_info(pkgs = "attached", include_base = TRUE)
           print(installed[, c("Package", "Version")], quote = FALSE)
 
-      - name: Runner CPU and the BLAS R uses
+      - &runner_cpu
+        name: Runner CPU and the BLAS R uses
         run: |
           lscpu
           Rscript -e 'print(La_library()); print(extSoftVersion()[["BLAS"]]); print(sessionInfo())'
           # OpenBLAS names the kernel family it uses ("Core: ...").
           OPENBLAS_VERBOSE=2 Rscript -e 'invisible(crossprod(matrix(1, 2, 2)))'
 
-      - name: Export R-provided datasets
+      - &export_datasets
+        name: Export R-provided datasets
         run: Rscript oracle/export_datasets.R oracle/datasets
 
-      - name: Committed datasets must be unchanged
+      - &datasets_unchanged
+        name: Committed datasets must be unchanged
         run: |
           git status --short -- oracle/datasets
           git diff --exit-code --stat -- oracle/datasets
@@ -140,6 +154,42 @@ jobs:
       - name: Generate fixtures
         env:
           ORACLE_SUBSET: ${{ inputs.subset }}
+          ORACLE_SHARD: ${{ matrix.shard }}/10
+        run: Rscript oracle/generate.R oracle/datasets oracle/out
+
+      - name: Upload this shard's fixtures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: oracle-shard-${{ matrix.shard }}
+          path: oracle/out/
+          if-no-files-found: error
+
+  merge:
+    name: Check the shards and write the manifest
+    needs: generate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env: *r_env
+    steps:
+      - *checkout
+      - *setup_r
+      - *setup_r_dependencies
+      - *check_versions
+      - *runner_cpu
+      - *export_datasets
+      - *datasets_unchanged
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: oracle-shard-*
+          merge-multiple: true
+          path: oracle/out
+
+      - name: Check the shards and write the manifest
+        env:
+          ORACLE_SUBSET: ${{ inputs.subset }}
+          ORACLE_MERGE: "true"
         run: Rscript oracle/generate.R oracle/datasets oracle/out
 
       - name: Upload fixtures
@@ -161,7 +211,7 @@ jobs:
   attest:
     # A separate job, so the R packages above never hold the signing token.
     name: Attest the fixtures
-    needs: generate
+    needs: merge
     runs-on: ubuntu-24.04
     permissions:
       contents: read

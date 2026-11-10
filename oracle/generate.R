@@ -3321,6 +3321,85 @@ if (nzchar(SUBSET)) {
   case_names <- vapply(CASES, function(case) case$name, character(1L))
 }
 
+# Shards ---------------------------------------------------------------------------
+#
+# The bootstrap references take hours in one process, so oracle.yml runs the
+# generator in parallel jobs: ORACLE_SHARD = "i/n" runs the i-th of n shares of the
+# probes and cases and writes shard-i.json (what it ran, R's version and library)
+# instead of a manifest. Cases that can share a bootstrap reference (same function,
+# dataset, declared levels, type, conf.level and tr) stay in one shard, and the groups
+# are spread by an estimate of their cost (one per case, 30 more for a bootstrap), the
+# largest first, each to the least loaded shard. Every case and probe sets its own
+# seeds, so a shard computes exactly what one process would. ORACLE_MERGE = "true"
+# then runs no probe and no case: it reads the shard files the shards' outputs were
+# merged with, checks that together they ran every probe and case exactly once, on
+# this R and this library, removes them and writes the manifest.
+SHARD <- Sys.getenv("ORACLE_SHARD")
+MERGE <- identical(Sys.getenv("ORACLE_MERGE"), "true")
+
+case_bootstraps <- function(case) {
+  if (isFALSE(case$args$results.subtitle)) {
+    return(FALSE)
+  }
+  type <- case$args$type
+  if (type == "robust") {
+    return(TRUE)
+  }
+  if (type != "nonparametric") {
+    return(FALSE)
+  }
+  nlevels(ANALYSES[[case$fun]](read_dataset(case)$data, case)$x) > 2L
+}
+
+assign_shards <- function(cases, n) {
+  keys <- vapply(cases, function(case) {
+    paste(
+      case$fun, case$dataset, paste(unlist(case$factor_levels), collapse = ","),
+      case$args$type, format(case_conf_level(case)), format(case_tr(case)),
+      sep = "|"
+    )
+  }, character(1L))
+  boots <- vapply(cases, case_bootstraps, logical(1L))
+  groups <- split(seq_along(cases), keys)
+  weights <- vapply(groups, function(ix) length(ix) + 30 * any(boots[ix]), numeric(1L))
+  load <- numeric(n)
+  out <- integer(length(cases))
+  for (g in names(groups)[order(-weights, names(groups))]) {
+    shard <- which.min(load)
+    out[groups[[g]]] <- shard
+    load[[shard]] <- load[[shard]] + weights[[g]]
+  }
+  out
+}
+
+library_listing <- function() {
+  packages <- utils::installed.packages(lib.loc = .libPaths())
+  packages <- packages[!duplicated(packages[, "Package"]), , drop = FALSE]
+  packages <- packages[order(packages[, "Package"]), , drop = FALSE]
+  stats::setNames(as.list(unname(packages[, "Version"])), unname(packages[, "Package"]))
+}
+
+if (nzchar(SHARD) && MERGE) stop("set ORACLE_SHARD or ORACLE_MERGE, not both")
+ALL_CASE_NAMES <- case_names
+ALL_PROBE_FILES <- paste0(names(PROBE_BUILDERS), ".json")
+if (nzchar(SHARD)) {
+  parts <- as.integer(strsplit(SHARD, "/", fixed = TRUE)[[1L]])
+  if (length(parts) != 2L || anyNA(parts) || parts[[1L]] < 1L || parts[[1L]] > parts[[2L]]) {
+    stop("ORACLE_SHARD must be i/n with 1 <= i <= n, not ", SHARD)
+  }
+  shard_index <- parts[[1L]]
+  shard_count <- parts[[2L]]
+  CASES <- CASES[assign_shards(CASES, shard_count) == shard_index]
+  case_names <- vapply(CASES, function(case) case$name, character(1L))
+  PROBE_BUILDERS <- PROBE_BUILDERS[
+    (seq_along(PROBE_BUILDERS) - 1L) %% shard_count + 1L == shard_index
+  ]
+}
+if (MERGE) {
+  PROBE_BUILDERS <- list()
+  CASES <- list()
+}
+
 probe_files <- character()
 for (probe_name in names(PROBE_BUILDERS)) {
   message("== ", probe_name)
@@ -3383,6 +3462,52 @@ if (length(problems) > 0L) {
   message("Unexpected case outcomes:\n", paste(problems, collapse = "\n"))
   quit(status = 1L)
 }
+if (nzchar(SHARD)) {
+  # What this shard ran, on which R and library; the merge checks it.
+  write_json_file(
+    list(
+      shard = SHARD, cases = as.list(case_names), probes = as.list(probe_files),
+      versions = VERSIONS, r_library = library_listing()
+    ),
+    file.path(out_dir, sprintf("shard-%d.json", shard_index))
+  )
+  message("ORACLE_SHARD is set: no manifest written")
+  quit(status = 0L)
+}
+if (MERGE) {
+  shard_paths <- list.files(out_dir, pattern = "^shard-[0-9]+\\.json$", full.names = TRUE)
+  if (length(shard_paths) == 0L) stop("ORACLE_MERGE: no shard files in ", out_dir)
+  shards <- lapply(shard_paths, jsonlite::fromJSON, simplifyVector = FALSE)
+  merged_cases <- unlist(lapply(shards, function(shard) unlist(shard$cases)))
+  merged_probes <- unlist(lapply(shards, function(shard) unlist(shard$probes)))
+  counts <- unique(vapply(shards, function(shard) {
+    as.integer(strsplit(shard$shard, "/", fixed = TRUE)[[1L]][[2L]])
+  }, integer(1L)))
+  if (length(counts) != 1L || counts != length(shards)) {
+    stop("ORACLE_MERGE: ", length(shards), " shard files for shard counts ", paste(counts, collapse = ", "))
+  }
+  if (anyDuplicated(merged_cases) || !setequal(merged_cases, ALL_CASE_NAMES)) {
+    stop("ORACLE_MERGE: the shards ran other cases than the generator lists")
+  }
+  if (anyDuplicated(merged_probes) || !setequal(merged_probes, ALL_PROBE_FILES)) {
+    stop("ORACLE_MERGE: the shards ran other probes than the generator lists")
+  }
+  here <- jsonlite::fromJSON(
+    jsonlite::toJSON(
+      list(versions = VERSIONS, r_library = library_listing()),
+      auto_unbox = TRUE, digits = NA, na = "null", null = "null"
+    ),
+    simplifyVector = FALSE
+  )
+  for (shard in shards) {
+    if (!identical(shard$versions, here$versions) || !identical(shard$r_library, here$r_library)) {
+      stop("ORACLE_MERGE: shard ", shard$shard, " ran on another R or library")
+    }
+  }
+  unlink(shard_paths)
+  case_names <- ALL_CASE_NAMES
+  probe_files <- ALL_PROBE_FILES
+}
 if (nzchar(SUBSET)) {
   message("ORACLE_SUBSET is set: no manifest written")
   quit(status = 0L)
@@ -3402,9 +3527,6 @@ env_or_null <- function(name) {
   value <- Sys.getenv(name)
   if (nzchar(value)) value else NULL
 }
-library_packages <- utils::installed.packages(lib.loc = .libPaths())
-library_packages <- library_packages[!duplicated(library_packages[, "Package"]), , drop = FALSE]
-library_packages <- library_packages[order(library_packages[, "Package"]), , drop = FALSE]
 manifest <- list(
   schema_version = SCHEMA_VERSION,
   generator = "oracle/generate.R",
@@ -3423,10 +3545,7 @@ manifest <- list(
   ),
   R = VERSIONS$R,
   rng_kind = VERSIONS$rng_kind,
-  r_library = stats::setNames(
-    as.list(unname(library_packages[, "Version"])),
-    unname(library_packages[, "Package"])
-  ),
+  r_library = library_listing(),
   fixtures = stats::setNames(
     lapply(fixture_files, function(f) file_sha256(file.path(out_dir, f))),
     fixture_files
