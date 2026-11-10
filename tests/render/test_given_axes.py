@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 from matplotlib.axes import Axes
@@ -177,3 +179,25 @@ def test_panels_with_room_report_no_overlap() -> None:
     axes[1].set_title("Second experiment")
     fig = betweenstats(_three(), ax=axes[0])
     assert not [i for i in fig.check() if i.code == "label_overlap"]
+
+
+@pytest.mark.parametrize(
+    ("layout", "words"),
+    [("constrained", "constrained layout"), ("tight", "tight layout"), (None, None)],
+)
+def test_a_layout_engine_is_named_as_the_cause(
+    layout: str | None, words: str | None
+) -> None:
+    figure = Figure(figsize=(4, 4), layout=layout)  # pyright: ignore[reportArgumentType]
+    FigureCanvasAgg(figure)
+    fig = betweenstats(_three(), ax=figure.add_subplot())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # matplotlib's own "not applied" warning
+        issues = [i for i in fig.check() if i.code in ("text_clipped", "label_overlap")]
+    assert issues
+    for issue in issues:
+        if words is None:
+            assert "layout" not in issue.fix
+        else:
+            assert words in issue.fix
+            assert "make the figure larger" in issue.fix

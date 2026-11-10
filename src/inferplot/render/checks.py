@@ -219,6 +219,28 @@ def _panel_overlaps(
     return found
 
 
+def _layout_cause(fig: StatsFigure) -> str:
+    """With ``ax=`` in a figure under constrained or tight layout: the advice that
+    names the layout engine as the cause; empty otherwise."""
+    if fig.own:
+        return ""
+    engine = type(root_figure(fig.figure).get_layout_engine()).__name__
+    names = {
+        "ConstrainedLayoutEngine": ("constrained", "layout='constrained'"),
+        "TightLayoutEngine": ("tight", "layout='tight' or tight_layout()"),
+    }
+    if engine not in names:
+        return ""
+    name, how = names[engine]
+    return (
+        f" The figure uses matplotlib's {name} layout, which counts the texts "
+        "inferplot draws inside the Axes (subtitle, caption, labels) as its "
+        "decorations and shrinks the Axes to make room for any wider than it, "
+        "down to nothing: make the figure larger, or make it without "
+        f"{how} and place the Axes yourself."
+    )
+
+
 def _listing(items: list[str]) -> str:
     listed = "; ".join(items[:_MAX_LISTED])
     if len(items) > _MAX_LISTED:
@@ -502,7 +524,7 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
         "Give the plot more room (a larger Axes passed as ax=, or inferplot's own "
         "figure by leaving ax out), shorten the texts, or draw fewer brackets "
         "with pairwise_display='significant' or 'none'."
-    )
+    ) + _layout_cause(fig)
     found: list[str] = []
     if overlaps:
         noun = (
