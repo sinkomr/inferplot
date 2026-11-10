@@ -197,3 +197,25 @@ def test_one_sample_against_the_exact_decimal_replay(
         (got.conf_high, want["conf_high"]),
     ):
         assert bound == pytest.approx(reference, rel=1e-12, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("x", "mu", "counts"),
+    [
+        ([2.2, 2.8, 2.5, 0.4, 2.8, 1.3], 2.2, (10, 47)),
+        ([0.11, 0.14, 0.18, 0.17, 0.11], 0.14, (57, 221)),
+        ([12.0, 10.3, 6.9, 15.4, 10.3, 15.4], 12.0, (9, 120)),
+    ],
+)
+def test_one_sample_decimal_data_against_the_exact_decimal_replay(
+    x: list[float], mu: float, counts: tuple[int, int]
+) -> None:
+    # Decimal data whose trimmed mean is one of their values as written: in
+    # floating point (the rounded deviation against the rounded trimmed mean of
+    # the deviations) every such resample came out infinite (planted bug N41's
+    # rule); the replay counts these 0 / 0.
+    got = trimmed_mean_bootstrap_t(np.array(x), mu=mu)
+    want = decimal_replay.one_sample(x, mu)
+    assert (want["undefined"], want["infinite"]) == counts
+    assert (got.undefined_resamples, got.infinite_resamples) == counts
+    assert got.p_value == want["p"]

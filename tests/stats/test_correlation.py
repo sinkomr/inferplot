@@ -409,9 +409,8 @@ def test_fisher_interval_from_the_exact_one_minus_r2() -> None:
     assert result.estimate == 1.0  # r itself rounds to 1
     q = 7.130506848  # the standard normal quantile at 1 - 0.5e-12
     w = math.log1p(1.0) - 0.5 * math.log(om) - q  # se = 1 at n = 4
-    assert 1.0 - result.conf_low == pytest.approx(
-        2.0 / (math.exp(2.0 * w) + 1.0), rel=0.1
-    )
+    expected = 2.0 / (math.exp(2.0 * w) + 1.0)  # 1.09e-15
+    assert 1.0 - result.conf_low == pytest.approx(expected, rel=0.1, abs=0.0)
 
 
 def test_spearman_refuses_a_column_constant_as_written() -> None:
