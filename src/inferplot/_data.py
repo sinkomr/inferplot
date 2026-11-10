@@ -700,11 +700,72 @@ def _grouping_labels(
     bad = ~np.isfinite(values) | (values != np.round(values))
     if bad.any():
         example = float(values[bad][0])
+        hint = group.role.not_whole_hint
+        distinct = len(set(values.tolist()))
+        if group.role is _X_ROLE and 2 * distinct > values.size:
+            # As text, most groups would hold one row: a measurement, not groups.
+            hint = (
+                f"its {values.size} values hold {distinct} different numbers, so "
+                "it looks like a measurement, not a column of groups (as text, most "
+                "groups would hold a single row). To relate two measurements use "
+                "scatterstats; if each row holds one subject's values in several "
+                "columns (wide format), reshape them to long format first and "
+                "compare them with withinstats(data, x, y, subject_id=...)."
+            )
         raise TypeError(
             f"{group.role.arg}={group.name!r} holds numbers that are not whole "
-            f"({example!r}); {group.role.not_whole_hint}"
+            f"({example!r}); {hint}"
         )
     return [str(int(v)) for v in values]
+
+
+def _reshape_example(
+    frame: nw.DataFrame[Any], subject_id: str, columns: Sequence[str]
+) -> str:
+    """The call that reshapes wide ``columns`` of ``frame`` to long format, in the
+    frame's own library, with the withinstats call that follows."""
+    melt = (
+        f"id_vars={subject_id!r}, value_vars={list(columns)!r}, "
+        "var_name='condition', value_name='value'"
+    )
+    implementation = frame.implementation
+    if implementation.is_polars():
+        reshape = (
+            f"long = data.unpivot(index={subject_id!r}, on={list(columns)!r}, "
+            "variable_name='condition', value_name='value')"
+        )
+    elif implementation.is_pyarrow():
+        reshape = f"long = data.to_pandas().melt({melt})"
+    else:
+        reshape = f"long = data.melt({melt})"
+    return (
+        f"{reshape}, then withinstats(long, 'condition', 'value', "
+        f"subject_id={subject_id!r})"
+    )
+
+
+def _wide_format(
+    frame: nw.DataFrame[Any], group: _Grouping, x_col: nw.Series[Any], y: str,
+    subject_id: str,
+) -> TypeError | None:  # fmt: skip
+    """withinstats with an ``x`` of measurements (numbers that are not whole) next
+    to a numeric ``y``: the data are very likely in wide format, one column per
+    condition. The error that says so and shows the reshape; None otherwise."""
+    if group.kind != "float":
+        return None
+    values = _float_values(x_col)[~group.missing]
+    bad = np.isfinite(values) & (values != np.round(values))
+    if not bad.any():
+        return None
+    x = group.name
+    return TypeError(
+        f"x={x!r} holds numbers that are not whole ({float(values[bad][0])!r}), "
+        f"like y={y!r}: it looks like a measurement, so the data are very likely in "
+        f"wide format, one row per subject and one column per condition ({x!r}, "
+        f"{y!r}). withinstats() needs long format: one row per subject and "
+        "condition, with a column naming the condition and a column of values. "
+        f"Reshape first: {_reshape_example(frame, subject_id, [x, y])}."
+    )
 
 
 def _grouping_order(
@@ -1091,6 +1152,7 @@ def _too_few_subjects(
     seen: int,
     first_lacking: tuple[str, list[str]] | None,
     min_subjects: int,
+    wide: str = "",
 ) -> ValueError:
     names = ", ".join(repr(level) for level in levels)
     if complete:
@@ -1113,7 +1175,7 @@ def _too_few_subjects(
         f"subject_id={subject_id!r}, {found} a value at every level after rows "
         f"with missing values were dropped.{example} Subjects missing a level are "
         "left out of a within-subjects analysis; check the levels and the subject "
-        "column."
+        f"column.{wide}"
     )
 
 
@@ -1168,6 +1230,9 @@ def read_within(
         )
     _check_y(y_col, y, x_col, x)
     x_group = _read_grouping(x_col, x, _X_ROLE)
+    wide = _wide_format(frame, x_group, x_col, y, subject_id)
+    if wide is not None:
+        raise wide
     s_group = _read_grouping(s_col, subject_id, _SUBJECT_ROLE)
     for group in (x_group, s_group):
         # Two categories that print alike would otherwise look like a repeat.
@@ -1231,6 +1296,17 @@ def read_within(
         if dropped:
             have = present.get(dropped[0], set())
             first_lacking = (dropped[0], [lv for lv in levels if lv not in have])
+        wide = ""
+        if x_group.kind in ("integer", "float") and all(
+            len(have) <= 1 for have in present.values()
+        ):
+            # One row per subject and numbers in x: very likely wide format.
+            wide = (
+                f" Every subject has a single row and x={x!r} holds numbers, so the "
+                "data are very likely in wide format, one row per subject and one "
+                f"column per condition ({x!r}, {y!r}). Reshape them to long format "
+                f"first: {_reshape_example(frame, subject_id, [x, y])}."
+            )
         raise _too_few_subjects(
             subject_id=subject_id,
             x=x,
@@ -1239,6 +1315,7 @@ def read_within(
             seen=len(seen_set),
             first_lacking=first_lacking,
             min_subjects=min_subjects,
+            wide=wide,
         )
 
     subject_index = {label: i for i, label in enumerate(subjects)}
