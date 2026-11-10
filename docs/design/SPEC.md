@@ -50,7 +50,7 @@ fig.save("score.svg")
 | `subtitle` | `None` | used only when `results_subtitle=False`; passing it with `results_subtitle=True` raises `ValueError` (ggstatsplot silently ignores it there) |
 | `caption` | `None` | user text drawn below the generated caption lines |
 | `palette` | `None` | list of colors or a matplotlib colormap name; default Okabe-Ito |
-| `ax` | `None` | draw into an existing Axes; subtitle and caption go inside that Axes; not allowed with marginal panels |
+| `ax` | `None` | draw into an existing Axes; subtitle and caption go inside that Axes; not allowed with marginal panels. It must be a plain rectangular 2D Axes whose x axis is not shared (each tick label carries that panel's n, so sharing them would show one panel's n under another's groups); both are refused before anything is drawn. A shared y axis gets limits that fit every panel sharing it, at one scale. inferplot's ink is near-black on a light background and near-white on a dark one |
 
 User texts (`title`, `subtitle`, `caption`, `xlab`, `ylab`) are matplotlib text and
 follow its convention: text between two `$` signs is mathtext (`r"Dose ($\mu$g)"`),
@@ -236,10 +236,14 @@ raise `ValueError` naming the label.
   column or `x` is a pandas categorical whose categories were built in row order (see
   Level order). An unordered pyarrow dictionary `subject_id` is sorted.
 - More than 5,000 points in one panel: draw a density layer plus a seeded subsample of
-  2,000 points; statistics always use all data; record it in `warnings`. In
-  `withinstats` whole subjects are sampled: every value of a seeded random `2000 // k`
-  of the subjects (1,000 at two conditions, 666 at three), so every drawn subject path
-  is complete; `warnings` and `points_subsampled` name the subjects drawn (D57).
+  the points, stratified by level: level g of n_g values (N in all) gets
+  max(round(2000 n_g / N), min(n_g, 50)) points, its smallest and largest value always
+  among them, so every level has marks and every extreme is drawn (D63); statistics
+  always use all data; record it in `warnings`. In `withinstats` whole subjects are
+  sampled: every value of a seeded random `2000 // k` of the subjects (1,000 at two
+  conditions, 666 at three), always including the subjects that hold each condition's
+  smallest and largest value, so every drawn subject path is complete; `warnings` and
+  `points_subsampled` name the subjects drawn (D57).
 
 ## 4. Statistical methods
 
@@ -500,11 +504,21 @@ Visual styling is not a parity target: same semantic layers (points, box, violin
 centrality label, brackets, subtitle content, caption content), our own look. Default
 palette Okabe-Ito; more than 8 levels uses `tab20` and adds a warning. Violins are
 Gaussian kernel densities with Silverman's bandwidth (R's `bw.nrd0`) trimmed to the
-data range; boxes use type-7 quartiles and Tukey whiskers without outlier markers (the
-points show them). A panel with more than 5,000 values draws a uniform seeded
-2,000-point subsample of the points; the violins (or, without a violin layer, unfilled
-density outlines) and boxes show all values. A level with fewer than two distinct
-values gets no violin, and `warnings` says so. withinstats (D57) jitters each subject's
+data range; boxes use type-7 quartiles and Tukey whiskers; values beyond the whiskers
+are shown by the points or, without a points layer, by small open circles at the level
+(D63). A panel with more than 5,000 values draws a stratified seeded subsample of the
+points (section 3); the violins (or, without a violin layer, unfilled density outlines)
+and boxes show all values. Where the kernel bandwidth is narrower than the spacing of
+the density grid (one value far from thousands of others), each grid point gets the
+density averaged over its cell. A level with fewer than two distinct values gets no
+violin, and a violin that cannot be drawn is named in `warnings`, never claimed as
+shown. A continuous colormap given as `palette` is sampled at (i + 0.5) / k, away from
+its near-white end; a listed colormap gives its colours in order. Centrality labels
+never cover a centrality point: each takes the first of its usual place, above or
+below the point's height on that side, or the same three on the other side, that
+covers no centrality point and no other centrality label. Tick labels wrap long level
+names on spaces into at most three lines of the narrowest level width (1.1 in) and
+shorten what does not fit with "…"; the result keeps the full name. withinstats (D57) jitters each subject's
 points by one seeded offset shared across its levels (ggwithinstats draws them
 unjittered), so a subject path ends on its points; subject paths are thin translucent
 grey lines in one collection, under the points; the centrality path is drawn in the
@@ -563,7 +577,25 @@ the PNG text chunk "Description", the SVG Dublin Core description and the PDF In
 "Subject". The embedded copy holds every number and text but not the analyzed
 observations or the subject labels, which can be large and are the user's data (D36,
 D56); a result read back from it has `values == ()` and `subjects == ()` and cannot be
-drawn again.
+drawn again. Text is drawn in DejaVu Sans, then the installed fonts of the user's
+`font.sans-serif` list that matplotlib's default list does not hold (so a configured
+CJK font supplies its glyphs), then the generic `sans-serif`. An SVG looks as drawn
+only where DejaVu Sans, and the STIX fonts mathtext uses for accents such as hats, are
+installed (macOS and Windows do not ship them): elsewhere the viewer substitutes fonts
+and an accent can land beside its letter. Its mathtext is written one positioned
+character per `<tspan>`, so the subtitle is not searchable or editable as running
+text. PDF embeds its fonts and is the faithful vector format. `save()` accepts a dpi up
+to 2,400 and a PNG of up to 100 million pixels. The figure is not pyplot's current
+figure, so `plt.savefig()` after an inferplot call writes pyplot's own, empty figure;
+`fig.figure.savefig()` works but writes text as paths and embeds no result.
+
+Drawing arguments (D63): `point_args`, `boxplot_args` and `violin_args` refuse
+properties that carry or move the data or detach the artist (`offsets`, `paths`,
+`path`, `xy`, `verts`, `segments`, `data`, `xdata`, `ydata`, `transform`,
+`offset_transform`, `figure`, `axes`, `clip_path`, `clip_box`, `animated`) with a
+`ValueError` naming the property and why; a dictionary that makes its layer invisible
+(`visible=False`, `alpha=0`, zero size) adds a `warnings` entry (D39). Every `palette`
+entry is validated, not only the first k.
 
 ## 7. Text formats
 
@@ -665,10 +697,20 @@ no problems.
 | `points_subsampled` | figure | info | large-n subsampling used |
 | `path_hidden` | figure | warning | withinstats: a text's rendered box covers more than 1 px of the centrality path or of a subject path (0.5 px slack at the box edges) |
 | `paths_crowded` | figure | warning | withinstats: the subject paths, rendered alone as drawn, are at least half opaque over more than 15% of the area between the two conditions (about 250 subjects in inferplot's own figure); the fix is `point_path=False` |
+| `centrality_label_overlap` | figure | warning | a centrality point at least half covered by a text's box |
+| `low_contrast` | figure | warning | a text under 3:1 (WCAG 2.1, large text and graphics) against its background, or a level's colour under 1.1:1 against the Axes background (WCAG's 3:1 would report the default palette's yellow, 1.32:1 on white) |
+| `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX) |
+| `axis_changed` | figure | warning | an inverted x or y axis, or a non-linear scale: brackets and labels were placed for an upright linear axis |
+| `data_outside_view` | figure | warning | values, levels or brackets outside the axis limits, whoever changed them |
+| `flat_data` | figure | warning | values that differ drawn within 2 px of height |
 
 `label_overlap` compares the rendered boxes of every drawn, non-empty text: title,
 subtitle, caption lines, axis labels, visible tick labels, centrality labels with their
-label boxes, bracket labels; with `ax=` only the texts of that Axes. `text_clipped`
+label boxes, bracket labels; with `ax=` the texts of that Axes, each also compared with
+the plotting areas and texts (titles, axis and tick labels) of the figure's other Axes
+and with figure texts such as a suptitle (an overlap there is a `label_overlap` naming
+the other panel's text). Under constrained or tight layout the advice names the layout
+engine as the cause. `text_clipped`
 fires when a text extends more than 0.5 px outside the figure, or a text drawn inside
 the Axes (centrality and bracket labels; with `ax=` also the subtitle and caption)
 extends outside it. For bracket labels only the drawn lines of the other brackets
