@@ -14,6 +14,7 @@ from inferplot.render import theme
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.collections import LineCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
     from matplotlib.text import Text
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from inferplot.check import Issue
     from inferplot.result import StatsResult
 
-__all__ = ["StatsFigure", "Subsample", "describe_text", "root_figure"]
+__all__ = ["DrawnPaths", "StatsFigure", "Subsample", "describe_text", "root_figure"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,23 @@ class Subsample:
     total: int
     seed: int
     density: str  # the layer that shows all values: "violins" or "density outlines"
+    # withinstats: (subjects drawn, subjects in all); whole subjects are sampled.
+    subjects: tuple[int, int] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DrawnPaths:
+    """The paths a withinstats figure draws, for ``check()``.
+
+    ``subjects`` joins each drawn subject's points (one path per subject), or None
+    when no subject paths are drawn; ``centrality`` runs through the centrality
+    points in level order (NaN at a level without one), or None; ``levels`` names
+    the levels, in x order.
+    """
+
+    subjects: LineCollection | None
+    centrality: Line2D | None
+    levels: tuple[str, ...]
 
 
 class StatsFigure:
@@ -50,6 +68,7 @@ class StatsFigure:
         "_figure",
         "_inside",
         "_own",
+        "_paths",
         "_result",
         "_roles",
         "_subsample",
@@ -66,6 +85,7 @@ class StatsFigure:
         inside: tuple[Text, ...],
         subsample: Subsample | None,
         brackets: tuple[tuple[Text, Line2D, str], ...] = (),
+        paths: DrawnPaths | None = None,
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -75,6 +95,7 @@ class StatsFigure:
         self._inside = inside
         self._subsample = subsample
         self._brackets = brackets
+        self._paths = paths
 
     @property
     def figure(self) -> Figure:
@@ -102,7 +123,9 @@ class StatsFigure:
         Rendering problems are measured on the drawn figure: overlapping texts, or a
         bracket label drawn across another bracket's line (``label_overlap``),
         texts outside the figure or, for texts drawn inside an Axes, outside that
-        Axes (``text_clipped``), and subsampled points (``points_subsampled``).
+        Axes (``text_clipped``), and subsampled points (``points_subsampled``);
+        for withinstats also a text drawn over a path (``path_hidden``) and
+        subject paths so many that they hide what lies beneath (``paths_crowded``).
         """
         from inferplot.render.checks import figure_issues
 
@@ -157,6 +180,11 @@ class StatsFigure:
     def brackets(self) -> tuple[tuple[Text, Line2D, str], ...]:
         """Each significance bracket: its label, its line, and what it is in words."""
         return self._brackets
+
+    @property
+    def paths(self) -> DrawnPaths | None:
+        """The subject and centrality paths (withinstats), or None."""
+        return self._paths
 
     def draw(self) -> None:
         """Draw the figure so text extents are current."""
