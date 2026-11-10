@@ -61,6 +61,17 @@ def test_measured_data_are_read_as_stored() -> None:
     assert written_values(x) == [Fraction(v) for v in x.tolist()]
 
 
+def test_readings_at_the_ends_of_the_double_range_warn_nothing() -> None:
+    import warnings
+
+    values = np.array([1.7e308, -1.7e308, 1e308, 1.79e308, 5e-324, 1e-310, 0.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        readings = written_values(values)
+    assert readings[0] == Fraction(17 * 10**307)
+    assert readings[4] == Fraction(5e-324)
+
+
 def test_readings_are_symmetric_and_follow_decimal_units() -> None:
     k = np.arange(-60, 61, dtype=np.float64)
     tenths = written_values(k / 10)

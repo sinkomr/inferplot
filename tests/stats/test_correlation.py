@@ -442,3 +442,12 @@ def test_moments_are_exact_at_any_range(power: int) -> None:
     assert math.isfinite(result.t)
     t_squared = 5 * sxy * sxy / (sxx * syy - sxy * sxy)
     assert float(Fraction(result.t) ** 2 / t_squared) == pytest.approx(1.0, rel=1e-14)
+
+
+def test_a_t_beyond_the_largest_double_is_explained() -> None:
+    # Review Z6 (7): values near the largest double on nearly one line; 1 - r^2 is
+    # about 1e-617 and t about 1e308 too large for a double.
+    x = np.array([1.7e308, -1.7e308, 1e308, 3.0, 5.0, 1, 2, 3, 4, 5, 6, 7.5])
+    y = np.array([1.7e308, -1.7e308, 1e308, 3.0, 5.0, 1, 2, 3, 4, 5, 6, 7.0])
+    with pytest.raises(ValueError, match="1 - r\\^2 is below about 1e-616"):
+        pearson(x, y)

@@ -348,8 +348,12 @@ def _t(m: CrossMoments) -> float:
     ratio = numerator / denominator
     log_t = 0.5 * (math.log(ratio.numerator) - math.log(ratio.denominator))
     if log_t > 709.0:
-        raise ValueError(  # pragma: no cover - needs 1 - r^2 below about 1e-616
-            "the correlation's t statistic exceeds the largest double"
+        raise ValueError(
+            "the correlation's t statistic exceeds the largest double (about "
+            "1.8e308): 1 - r^2 is below about 1e-616, so the pairs lie on one "
+            "straight line to within 1e-308 of their spread without lying on it "
+            "exactly (values near the largest double, or a column computed from "
+            "the other). Check the data for entry or unit errors"
         )
     return sign * math.sqrt(float(ratio)) if log_t < 300.0 else sign * math.exp(log_t)
 

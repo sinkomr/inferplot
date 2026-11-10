@@ -102,13 +102,16 @@ def written_values(values: FloatArray) -> list[Fraction]:
             if not bool(active.any()):
                 continue
             v = magnitude[active]
-            if q >= 0:
-                k = np.rint(v / unit)
-                residual = np.abs(v - k * unit)
-            else:
-                factor = 10.0 ** (-q)
-                k = np.rint(v * factor)
-                residual = np.abs(v - k / factor)
+            # Near the largest double k x unit can overflow: an infinite residual
+            # is simply not near.
+            with np.errstate(over="ignore", invalid="ignore"):
+                if q >= 0:
+                    k = np.rint(v / unit)
+                    residual = np.abs(v - k * unit)
+                else:
+                    factor = 10.0 ** (-q)
+                    k = np.rint(v * factor)
+                    residual = np.abs(v - k / factor)
             near = residual <= (READ_ULPS + 1) * ulps[active]
             if not bool(near.any()):
                 continue
