@@ -318,8 +318,14 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   lme4 message and one v0.2 posterior (8.1e-14). Every chi-square, McNemar-Bowker,
   goodness-of-fit and Fisher p, Cramér's V, Pearson's C and Cohen's g is reproduced
   independently, except 9 interval bounds where R's root search stops short (pinned;
-  D99, owner to confirm). SPEC §4 barstats rewritten (D98 to D101). Being merged
-  into main with the 25 edge cases handled (branch `phase4/oracle-barstats-merge`)
+  D99, owner to confirm). SPEC §4 barstats rewritten (D98 to D101). Merged (30e177a):
+  of the 25 edge cases 16 match on three backends (n = 2 and 3 one-sample, constant
+  data nonparametric, 3 pairs bayes, 4 pairs, a missing label) and 9 are refused with
+  R's side pinned (constant data parametric, bayes and robust; 3 pairs parametric,
+  nonparametric, robust; D102, D103). Constant-data histograms draw one 0.1-wide bin
+  (D89 amended). Open: two n = 2 subtitle ties pinned (t 1.13 and 0.68 in R, 1.12
+  and 0.67 in inferplot; the robust one is being fixed)
+- [ ] barstats: foundation and statistics in progress; then analyses, texts, figure
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
@@ -343,7 +349,10 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   backends, 717 results' texts re-derived, about 200 figures measured, 60 saved files,
   49 comparisons of the three forms: sound. Findings, being fixed on
   `fix/phase4-review-visible`:
-  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures): with the
+  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures; the cause is
+    fixed on main since 30e177a: 6.4 in for body temperatures, heights, negative data
+    and Unix timestamps; the layout-bounds tests and the figure-size check are still
+    to come with the fix branch): with the
     test value far outside the bars (the default 0 for data away from zero) the
     histogram's own figure is sized to reach the test value: 100 in wide for body
     temperatures, 25 in for heights, a FreeType crash for Unix timestamps; 118 of 300
