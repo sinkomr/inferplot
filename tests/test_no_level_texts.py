@@ -943,8 +943,8 @@ def test_figure_alt_text_histostats_without_a_map_estimate() -> None:
     )
     alt = tx.figure_alt_text(missing, test_value_line=True)
     assert (
-        "A vertical line marks the test value, 18. The MAP estimate could not be "
-        "estimated, so no line marks it. "
+        "A vertical line marks the test value, 18. No MAP estimate could be "
+        "computed, so no line marks it. "
     ) in alt
     assert 2 <= _sentences(alt) <= 4
 

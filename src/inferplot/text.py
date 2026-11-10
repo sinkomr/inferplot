@@ -2184,7 +2184,7 @@ def one_sample_alt_text(
         word = _centrality_word(descriptive.centrality, settings.tr)
         value = descriptive.value
         if value is None or math.isnan(value):
-            missing = f"The {word} could not be estimated, so no line marks it."
+            missing = f"No {word} could be computed, so no line marks it."
         else:
             marks.append(f"the {word}, {format_value(value, digits)}")
     if test_value_line:
@@ -2250,9 +2250,8 @@ def _correlation_direction(
 
 
 def _join_words(parts: Sequence[str]) -> str:
-    """ "a", "a, and b", "a, b, and c": the parts hold commas-free phrases with
-    "and" inside ("histograms of wt and mpg"), so each one is set off by a
-    comma."""
+    """ "a", "a, and b", "a, b, and c": the parts are phrases that hold an "and"
+    of their own ("histograms of wt and mpg"), so each is set off by a comma."""
     if len(parts) == 1:
         return parts[0]
     return f"{', '.join(parts[:-1])}, and {parts[-1]}"
