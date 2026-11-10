@@ -341,7 +341,7 @@ of complete subjects; the subtitle prints it as n_pairs.
 | --- | --- | --- | --- |
 | parametric | paired t (`stats::t.test`, paired), t signed as first level minus second, df n - 1 | Hedges' g of the differences: d_z x J(n - 1) with d_z = mean(d) / sd(d) (not d_av, which misses every fixture). CI: the noncentral-t interval at the paired t and n - 1 df, each bound divided by sqrt(n) and multiplied by J; it follows `alternative` (sleep-less: [-Inf, -0.50]) | mean |
 | nonparametric | Wilcoxon signed-rank (`stats::wilcox.test`, paired), always `exact = FALSE, correct = TRUE`: zero differences dropped, normal approximation with tie and continuity corrections, V reported (R's own default would be exact for small samples; probe-signrank) | matched-pairs rank-biserial r = (W+ - W-) / (W+ + W-) over the nonzero differences. CI analytic, not bootstrapped: tanh(atanh r -/+ z SE), SE = sqrt(n (n + 1) (2n + 1) / 6) / (n (n + 1) / 2) with n counting every pair, zeros included; \|r\| = 1 gives [r, r] (and a `warnings` entry that the interval has no width); follows `alternative`. All-zero differences raise (R: p NaN) | median |
-| robust | Yuen for dependent samples (`WRS2::yuend`): t signed (unlike `yuen`'s \|t\|), df h - 1, p = 2 (1 - pt) in R (probe-wrs2within, 84 of 84 rows); inferplot reports the accurate tail (D43) | `WRS2::dep.effect`, AKP row (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`); percentile bootstrap (ggstatsplot: 100 resamples), always a 95% interval: `conf.level` does not reach it (sleep-cl90-robust prints CI 95%); bounds can be infinite; 1.1.3 fixed this value | trimmed mean |
+| robust | Yuen for dependent samples (`WRS2::yuend`): t = (trimmed mean a - trimmed mean b) / sqrt((n - 1) var(W_a - W_b) / (h (h - 1))), each condition winsorized at its own order statistics with the pairs kept; t signed (unlike `yuen`'s \|t\|), df h - 1, p = 2 (1 - pt) in R (probe-wrs2within, 84 of 84 rows); inferplot reports the accurate tail (D43) | `WRS2::dep.effect`, AKP row: c(tr) x trimmed mean(d) / winsorized SD(d) of the paired differences, with `akp.effect`'s constant (statsExpressions 2.2.1 calls it for paired robust tests, not `wmcpAKP`). Percentile bootstrap (ggstatsplot: 100 resamples) that resamples subjects, pairs together, with the floor percentile rule; always a 95% interval: `conf.level` does not reach it (sleep-cl90-robust prints CI 95%), and inferplot records 0.95 with a `warnings` entry (D66); bounds can be infinite; 1.1.3 fixed this value | trimmed mean |
 | bayes | paired JZS Bayes factor (`ttestBF(x, y, paired = TRUE)`): the one-sample Bayes factor of the differences. BayesFactor misses the accurate value at large \|t\| (probe-pairedbf); inferplot reports the accurate one (D61) | posterior difference: v0.2 | MAP |
 
 `alternative` has no effect on the robust and bayes types in ggstatsplot (sleep-greater);
@@ -353,7 +353,7 @@ inferplot raises for them, as in betweenstats (section 2).
 | --- | --- | --- | --- | --- |
 | parametric | one-way repeated-measures ANOVA (`afex::aov_ez`) with the Greenhouse-Geisser correction, always (never Huynh-Feldt): corrected df and p; the subtitle prints the corrected df with 2 decimals (bugs_long: F(2.63, 228.95)) | partial omega squared from the error strata, df_c (MS_c - MS_e) / (SS_c + SS_e + SS_s + MS_s) (not `F_to_omega2`: 0.078 against 0.18 on bugs_long); one-sided CI [low, 1] through the noncentral F at the uncorrected df, although the subtitle shows the corrected df: F_w = omega df2 / ((1 - omega) df1) at df1 = k - 1, df2 = (k - 1)(n - 1), lambda with P(F' <= F_w) = `conf.level`, lower bound lambda / (lambda + df2) (bugs_long, cl90, probe-rmanova). A negative estimate is reported as 0 with [0, 1]. Epsilon lies in [1/(k - 1), 1] (D62) | paired t (`pairwise.t.test(paired = TRUE)`): each pair's own differences, df n - 1, t signed as group1 minus group2, R's label "Student's t" | mean |
 | nonparametric | Friedman (`stats::friedman.test`), tie-corrected chi-square on k - 1 df | Kendall's W = chi-square / (n (k - 1)) (`effectsize::kendalls_w`); bootstrap CI, one-sided [low, 1] at `conf.level` (ggstatsplot: 100 resamples): each resample draws n whole subjects; inferplot uses 2,000 seeded resamples in a canonical order of subjects and conditions and `boot.ci`'s percentile rule. When every subject ranks the conditions alike W = 1, R's bootstrap fails and ggstatsplot drops the subtitle silently (edge_within_small); inferplot reports W = 1 with [1, 1] and a `warnings` entry (D64) | Durbin-Conover (`PMCMRplus::durbinAllPairsTest`; Conover 1999, complete blocks): \|t\| = \|R_i - R_j\| / sqrt(2 (n A - sum R_j^2) / ((n - 1)(k - 1))) with A the sum of squared ranks, reported unsigned (121 fixture rows, 11 probe designs), two-sided on (n - 1)(k - 1) df; W = 1 gives t = Inf, p = 0, which inferplot reports with a `warnings` entry (D64) | median |
-| robust | trimmed-means RM ANOVA (`WRS2::rmanova`): fractional df when its sphericity correction applies, p = 1 - pf in R (84 of 84 probe rows; inferplot reports the accurate tail, D43) | average AKP (`WRS2::wmcpAKP`), percentile bootstrap, always a 95% interval (`conf.level` does not reach it; bugs_long-cl90-robust) | `WRS2::rmmcp`: per pair the trimmed mean of the differences, a one-sample trimmed t on n - 2g - 1 df, p = 2 (1 - pt), then `p_adjust_method` (rmmcp's own `p.crit` is in its table but ggstatsplot does not use it); its interval uses the Bonferroni t at alpha / (2C) | trimmed mean |
+| robust | trimmed-means RM ANOVA (`WRS2::rmanova`): Q_c = h sum (Xt_j - mean Xt)^2, Q_e the sum of squares of the doubly centred winsorized table, F = (Q_c / (J - 1)) / (Q_e / ((h - 1)(J - 1))); both df are multiplied by the Huynh-Feldt (1976) estimate from the winsorized covariance matrix, capped at 1 (so the df are whole when the cap applies; bugs_long (2.73, 144.71)); p = 1 - pf in R (84 of 84 probe rows; inferplot reports the accurate tail, D43) | average AKP (`WRS2::wmcpAKP`): the mean over pairs i < j of the dep.effect AKP, signed, so it depends on the level order. Its interval is the mean of the pairs' own percentile bounds (not the percentile interval of the averaged resamples, which misses R by 73 to 1,000 standard errors), all pairs on one shared resample of the subjects; always a 95% interval (`conf.level` does not reach it; bugs_long-cl90-robust; D66) | `WRS2::rmmcp`: per pair the trimmed mean of the differences, a one-sample trimmed t with se = winsorized SD(d) / ((1 - 2 tr) sqrt(n)) on h - 1 df, p = 2 (1 - pt), then `p_adjust_method` (rmmcp's own `p.crit` is in its table but ggstatsplot does not use it); its interval uses the Bonferroni t at alpha / (2C) and is always 95% | trimmed mean |
 | bayes | v0.2 (a Bayesian RM ANOVA with a random subject effect, `anovaBF`) | v0.2 | paired JZS Bayes factor per pair, prior 0.707 whatever `bf_prior` is (bugs_long-prior08), as in betweenstats | MAP |
 
 ### histostats (one sample against `test_value`)
@@ -411,8 +411,13 @@ it as parametric).
 - An AKP or xi resample (or, for xi with equal sizes, the data) whose winsorized
   variance is 0 while the trimmed means differ gives ±inf; inferplot keeps the value
   (WRS2's formulas give the same; no fixture has one), counts it in
-  `infinite_resamples`, warns and reports `infinite_effect_size`. A 0/0 resample
-  raises `ValueError`.
+  `infinite_resamples`, warns and reports `infinite_effect_size` (WRS2 returns the same
+  infinite bounds: edge_heavy_ties2, edge_within2_small). A 0/0 resample is left out
+  of the percentile, with the order statistics counted over the defined resamples,
+  and counted in `undefined_resamples`, with a `warnings` entry (D54's rule; D65); the
+  call raises only when too few defined resamples remain or the estimate itself is
+  undefined. With unequal group sizes xi resamples its groups in an order fixed by
+  their contents, so the group order does not change it (D65).
 - `alternative` has no effect on the robust and bayes types (ToothGrowth-greater-*).
 - One-sided `alternative` makes the two-group effect-size CIs one-sided; the Bayes
   caption stays two-sided.
@@ -548,11 +553,11 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `values` | per level, the analyzed `y` values in data order (betweenstats) or in `subjects` order (withinstats: entry i of every level belongs to `subjects[i]`); the renderer draws from them (D36) |
 | `subjects` | withinstats: labels of the complete subjects, in matrix row order (D56); empty for betweenstats |
 | `descriptives` | per level: `n`, centrality name (`mean`, `median`, `trimmed_mean`, `map`) and value |
-| `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45) |
-| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); `None` for type bayes (D45) |
+| `test` | name, R-style method string, statistic name and value, `df`, `df_error`, p-value, alternative; `None` for type bayes (D45). `alternative` "greater" tests whether `levels[0]` is greater than `levels[1]` (paired: the differences `levels[0]` - `levels[1]` are positive), "less" whether it is less (D68). Sign and df: Welch's t, the paired t and Yuen's dependent t signed first minus second, df in `df_error`; Mann-Whitney W the U of the first level and signed-rank V the positive rank sum, no df; Yuen's two-group t unsigned (\|t\|, as ggstatsplot reports it) while AKP keeps its sign, df in `df_error`; F tests numerator df in `df`, denominator in `df_error` (the repeated-measures ANOVAs: the corrected df); Kruskal-Wallis and Friedman chi-square df in `df_error` |
+| `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); a bootstrap interval records both counts (0 when there are none), so `bootstrap_resamples` - `undefined_resamples` is the number of values it comes from; `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
-| `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46) |
-| `n_obs`, `n_dropped`, `dropped_subjects` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; to confirm against ggstatsplot's `n.obs` when the first ggwithinstats fixture arrives); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level |
+| `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46). Signs: Games-Howell q group2 minus group1; lincon's and rmmcp's t and estimate, the paired t and a Bayes pair's t group1 minus group2; Dunn's z and Durbin-Conover's t unsigned |
+| `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: analyzed values minus distinct analyzed values, every level pooled (`heavy_ties` reads it) |
 | `warnings` | plain-English strings, no internal jargon |
 | `provenance` | inferplot, numpy, scipy, matplotlib and narwhals versions (read from package metadata, so matplotlib is not imported); seed; parity target `"ggstatsplot 1.1.4"`; method citations |
 | `settings` | the analysis arguments that shaped the numbers and texts, canonical values |
@@ -561,10 +566,16 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 Methods: `to_dict()`, `to_json()`, `from_dict()` and `from_json()` (rebuild an equal
 result), `to_frame(backend="pandas" | "polars")` (one row per test: the main test first,
 then each pair), `check()`, `__str__` (APA sentence plus pairwise table). `to_json()` is
-strict ASCII JSON: inf as `"Inf"`, -inf as `"-Inf"`, NaN as null. `to_frame()` columns:
+strict ASCII JSON: inf as `"Inf"`, -inf as `"-Inf"`, NaN as null. Its first key is
+`schema_version` (2; JSON without it is version 1, the field set before
+`undefined_resamples`, `dropped_subject_rows` and `n_tied`); `from_json()` refuses any
+other version with a `ValueError` naming both versions and saying to compute the
+result again (D67). `to_frame()` columns:
 test, label, group1, group2, statistic_name, statistic, df, df_error, p_value,
 p_adjusted, adjust_method, alternative, effect_size, estimate, conf_level, conf_low,
-conf_high, bf10, log_bf01, significant, displayed; missing values are nulls. Type bayes:
+conf_high, ci_sidedness (`EffectSize.sidedness` on the main row, "two-sided" for a
+pair's interval, null without one), bf10, log_bf01, significant, displayed; missing
+values are nulls. Type bayes:
 the main row is the two-group Bayes factor, and with three or more groups there is none;
 pair rows carry lincon's estimate and CI and a Bayes pair's bf10 and log_bf01. In a
 field that may be `None`, JSON null reads back as `None` (pandas uses
@@ -633,7 +644,10 @@ entry is validated, not only the first k.
 - **Caption:** Bayes factor line as ggstatsplot (log_e BF01, prior r) where §2's
   `bf_message` rule draws it; then the pairwise line for three or more groups unless
   `pairwise_display="none"`: "Pairwise: Games-Howell, Holm adjusted; showing 1 of 3
-  pairs (significant only).", "... showing 2 of 3 pairs (non-significant only)." or
+  pairs (significant only).", "... showing 2 of 3 pairs (non-significant only)." (when
+  `pairwise_alpha` is not 0.05 the note states it: "(significant only, adjusted p <
+  0.5)", "(non-significant only, adjusted p >= 0.1)", plain "p" for unadjusted
+  p-values) or
   "... showing all 3 pairs."; adjustments read Holm, Hochberg, Hommel, Bonferroni,
   Benjamini-Hochberg (BH, fdr), Benjamini-Yekutieli (BY), and "Games-Howell,
   unadjusted" for none. The test name is ggstatsplot's `test` column: "Pairwise: Dunn,
@@ -648,7 +662,10 @@ entry is validated, not only the first k.
   p to three decimals without leading zero, "p < .001" below .001; no leading zero for
   quantities bounded by 1 (omega and eta squared, epsilon squared, correlations,
   rank-biserial r, Cramér's V, Kendall's W); non-integer df to two decimals, integer df
-  bare; a one-sided test reads "Welch's t-test (one-sided, greater): ..."; ASCII only.
+  bare; a one-sided test names its direction with the level names, "Welch's t-test
+  (one-sided: control greater than treatment): ...", names over 40 characters
+  shortened with an ellipsis (U+2026) (D68); ASCII except level names, which are
+  printed as given.
   The other types: "Mann-Whitney U test: W = 575.50, p = .064, rank-biserial r = .28,
   95% CI [-.01, .52], n = 60."; "Kruskal-Wallis test: chi2(2) = 7.99, p = .018, rank
   epsilon squared = .28, 95% CI [.10, 1.00], n = 30."; "Yuen's t-test (20% trimmed
@@ -677,6 +694,11 @@ entry is validated, not only the first k.
   vs <g2>) to <max> (<g1> vs <g2>); brackets show log(BF01) for every pair.", pairs
   ranked by -log(BF01), level names shortened like the groups'; with
   `pairwise_display="none"` it ends "no brackets are drawn (pairwise_display='none')."
+  The alt text describes only what the figure shows (D70): with
+  `results_subtitle=False` the result sentence is "No test result is shown
+  (results_subtitle=False), n = <n>." (two-group type bayes: "No test was computed
+  ..."), and the pair sentence is left out with `pairwise_display="none"`; a
+  one-sided direction is named as in the APA sentence.
 
 ## 8. `check()`
 
@@ -687,10 +709,11 @@ no problems.
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once) |
-| `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.values`) |
+| `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.n_tied`, so the copy embedded in a saved figure reports it too; within designs pool all values, which is not what the signed-rank and Friedman tests rank: open) |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
-| `pairs_hidden` | result | info | some pairs not displayed |
+| `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |
 | `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |
+| `estimate_outside_interval` | result | warning | the effect size lies outside its own CI (percentile bootstrap intervals: rank epsilon squared, xi; 12 noise groups of 6: 0.074 with [0.107, 1]); the message explains the bootstrap's bias and that the p-value is unaffected |
 | `pairwise_conf_level` | result | info | the pairwise intervals are at a level other than `conf_level` (type robust with three or more groups: lincon's are always 95%, D53) |
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |

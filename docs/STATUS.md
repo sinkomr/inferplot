@@ -178,7 +178,10 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   pairs. 40 of 40 fixtures on three backends, probe-signrank and probe-friedman; worst
   7.8e-15 relative; W = 1 reported with a warning where ggstatsplot drops the subtitle
   (D64)
-- [ ] robust: Yuen for dependent samples, dep.effect; rmanova, average AKP, rmmcp pairs
+- [x] robust: Yuen for dependent samples with dep.effect's AKP; rmanova with the
+  average AKP (wmcpAKP) and rmmcp pairs. 41 of 41 fixtures on three backends and
+  probe-wrs2within's 252 rows; worst 2.5e-14 relative, bootstrap bounds at most 2.62
+  of 4 allowed Monte Carlo SDs (D66)
 - [x] bayes: paired JZS Bayes factor (two conditions); three or more conditions only
   with `results_subtitle=False` (MAP estimates and a pair Bayes factor at prior 0.707;
   the Bayesian RM ANOVA is v0.2). 34 of 34 fixtures (19 through the replay), worst
@@ -228,19 +231,23 @@ scheme found; scripts in the session scratch folder `reviewS/`). To fix:
   50: d 1.16, g 0.026); the formula is the documented one (J at Welch's df), but the
   warning fired only at df exactly 1. Now warns below 2 df. Still to do: pin
   effectsize's value with a two-group n = 2 case in the next oracle run (T7).
-- [ ] S3: `type="robust"`: one 0/0 bootstrap resample of 2,000 raises, so small rating-
+- [x] S3: `type="robust"`: one 0/0 bootstrap resample of 2,000 raises, so small rating-
   scale data are refused (5-point scale, n 8 per group: 33 of 40 data sets) and the
   outcome depends on the seed (fixture edge_ties raises at seed 3 only). Decide with
   the Phase 3 probe of WRS2's behaviour (D54 leaves undefined resamples out).
+  Fixed (D65): such a resample is left out and counted, with a warning; the call
+  fails only when too few remain. Which rule WRS2 itself uses awaits two oracle cases
+  (T7); the fixtures cannot tell the candidates apart.
 - [x] S4: AKP and xi intervals stopped widening above conf_level about 0.999 (the order
   statistics run out) without saying so. Now refused with a plain error, as rank
   epsilon squared does (SPEC §5 item 14).
-- [ ] S5: the explanatory effect size and its interval depend on the order of the
+- [x] S5: the explanatory effect size and its interval depend on the order of the
   groups when sizes differ (xi 0.5036 against 0.5125 with `order=` reversed), within
   Monte Carlo error: the groups draw from the random stream in level order. Fix:
   resample the groups in an order fixed by their contents, as rank epsilon squared
   does (tried: 5 lines). It changes every seed's stream, so do it together with S3,
   which decides what happens to the undefined resamples the pinned tests count.
+  Fixed (D65): the groups are resampled in an order fixed by their contents.
 - [x] S6: `smm_quantile` was off by up to 3e-12 relative between df 20 and 30 (4-term
   Stirling series from df/2 = 10) against a claimed 1.1e-14. Fixed with a seven-term
   series (within 3e-17 of 40-digit values from df 20); 36 reference rows added at df
@@ -289,7 +296,9 @@ held up; scripts in `reviewT/`). To fix:
   run: record R's sorted replicate values next to the bounds it returns for one case
   of each interval (AKP, xi, rank epsilon squared), so the percentile helpers are
   applied to R's own replicates and must give R's bound exactly.
-- [ ] T7: next oracle run, with T6: a Friedman design where every subject is fully
+- [ ] T7: next oracle run, with T6: the two cases that decide the 0/0 resample rule
+  (ggbetweenstats robust, a = c(5,5,5,5,5,5,6,7,8,9) against b = rep(5,10), and a =
+  c(rep(5,6),6:11) against b = c(rep(5,11),7); D65); a Friedman design where every subject is fully
   tied, and one with several fully tied subjects inside a bootstrap reference (D64); a ggwithinstats parametric case with fewer
   subjects than conditions (3 subjects, 4 conditions), to show afex's epsilon there
   (D62); a case that decides D54 in R itself (three tiny
@@ -314,8 +323,9 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
   names both orders; the same levels, t and p for every row order on six input kinds.
   A pandas categorical built in row order (polars `.to_pandas()`) still follows it,
   which U2 makes visible.
-- [ ] U2: nothing says which way a one-sided test points (`alternative="greater"` is
+- [x] U2: nothing says which way a one-sided test points (`alternative="greater"` is
   first level greater than second, and "control" sorts before "treatment").
+  Fixed (D68): the APA sentence and alt text name the direction with the level names.
 - [x] U3: hints that lead to another valid analysis: "benjamini-hochberg" suggests
   'hochberg', "holm-bonferroni" suggests 'bonferroni', "one-sided" suggests
   'two-sided', `tail=` suggests `title=`, `conf_level=5` suggests 0.05, `levels=`
@@ -325,18 +335,23 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
 - [x] U4: a text level whose y is all missing disappears without a warning (Welch's
   ANOVA becomes a t-test); the same data as a categorical does warn.
   Fixed (D60): the level is named in `warnings` for every column type.
-- [ ] U5: the caption says "significant only" without the threshold when
+- [x] U5: the caption says "significant only" without the threshold when
   `pairwise_alpha` is not 0.05.
-- [ ] U6: an effect size outside its own bootstrap interval is printed without a
+  Fixed: the caption states the threshold when it is not 0.05.
+- [x] U6: an effect size outside its own bootstrap interval is printed without a
   check (12 noise groups: rank epsilon squared 0.074, interval [0.107, 1]).
-- [ ] U7: result contract: `effect_size.undefined_resamples` is in SPEC §6 but not
+  Fixed (D69): new check `estimate_outside_interval`.
+- [x] U7: result contract: `effect_size.undefined_resamples` is in SPEC §6 but not
   in the result; the JSON has no schema version and `from_json` refuses a result
   saved before `subjects` existed; `to_frame()` has no column saying an interval is
   one-sided; the rows of dropped subjects are not in a within result, so its counts
   do not add up to the input rows.
-- [ ] U8: sign and df conventions differ between tests in the same columns (Welch t
+  Fixed (D67): `undefined_resamples`, `dropped_subject_rows`, `ci_sidedness`,
+  and a `schema_version` that `from_json` checks.
+- [x] U8: sign and df conventions differ between tests in the same columns (Welch t
   signed, Yuen t absolute, Games-Howell q as group2 minus group1, Dunn z unsigned)
   and are documented only in SPEC §4.
+  Fixed: stated in the result docstrings and SPEC §6.
 - [x] U9: messages: integer column labels have no way forward; a datetime or binned x
   is told to convert to a categorical, which fails too; a positional subject column
   gets a `pairwise_display` example; a Series passed as x is printed whole; swapped x
@@ -345,11 +360,13 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
 - [x] U10: `type="bayes"` with levels named like "group 7" and a pair that cannot be
   computed raised a bare IndexError (the inner message was renamed twice). Fixed: a
   pair's message is renamed once, in one pass.
-- [ ] U11: `pairs_hidden` fires for an explicit `pairwise_display="none"`; the copy
+- [x] U11: `pairs_hidden` fires for an explicit `pairwise_display="none"`; the copy
   embedded in a saved figure loses the `heavy_ties` check.
-- [ ] U12: partly fixed (D60): whitespace look-alikes warn, `digits` is at most 15,
-  float32 arguments are read as printed. Open: the alt text reports a test with
-  `results_subtitle=False`; the APA sentence is not ASCII when level names are not.
+  Fixed (D69). Open: `heavy_ties` for paired designs pools all values, which is
+  not what the signed-rank and Friedman tests rank.
+- [x] U12: fixed (D60, D70): whitespace look-alikes warn, `digits` is at most 15,
+  float32 arguments are read as printed, the alt text describes only what is drawn,
+  and the docs no longer claim an ASCII-only APA sentence.
 
 Drawing, saving and figure checks review (784 brackets over 72 figures: every one
 spans its pair with that pair's p; points, boxes and paths are the result's values;
@@ -450,7 +467,7 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - Robust: WRS2's yuen, t1way and lincon p are 1 - cdf (probe-wrs2p, 420 of 420);
   inferplot reports the accurate tail (D43, confirmed). lincon below df 2 raises
   `NotImplementedError` (WRS2 stops too). An AKP or xi resample whose effect size is
-  0/0 raises `ValueError`. Bootstrap time grows with n: about 5 s for xi at 10,000
+  0/0 is left out of the interval and counted (D65). Bootstrap time grows with n: about 5 s for xi at 10,000
   values per group; a counting-based sort could make it about 5 times faster.
 - MAP binning: the anchor threshold is pinned at 2^31 bin widths to within 2e-6
   (probe-map anchor_26027440 and anchor_26027507); `_ANCHOR_AT_MIN = 2**31` matches all
@@ -458,7 +475,8 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - WRS2 returns ±Inf for an infinite AKP resample and ggstatsplot prints it
   (edge_heavy_ties2, edge_within2_small, edge_within_small robust); 20,000 resamples
   can make the bound finite again (edge_within_small: -10.18). inferplot reproduces
-  edge_heavy_ties2's -Inf. What WRS2 does with a 0/0 resample is still open (S3).
+  edge_heavy_ties2's -Inf. A 0/0 resample is left out and counted (D65); which rule WRS2
+  uses awaits the oracle cases in T7.
 - Paired Bayes factors: BayesFactor misses large |t| by far more than its own error
   estimate (probe-pairedbf against 25-digit mpmath: +68% at n 5, t 1,000; +5.3% at
   n 10, t 1,000; -0.78% at n 30, t 50; within 2.6e-6 at |t| <= 12). Every paired
