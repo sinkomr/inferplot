@@ -867,6 +867,46 @@ entry is validated, not only the first k.
   applies to the one-sided direction in the APA sentence too.
   Shortening drops the group description, then the path clause.
 
+Designs without levels (histostats, scatterstats; D91, D92):
+
+- **Subtitle, caption, label:** histostats prints `t_Student(df)`, `V_Wilcoxon` or
+  `t_bootstrapped` with n_obs, and the centrality label `widehat(mu)[mean] == "18.81"`
+  (one entry of `text.centrality_labels`); scatterstats prints `t_Student(n - 2)`
+  (Pearson, winsorized) or `S` with n_pairs. Type bayes and the parametric caption
+  print log_e(BF01) and the prior (`r_Cauchy^JZS` = bf_prior; `r_beta^JZS` = 1 /
+  bf_prior), as D32 and D41. No tick or pairwise labels. Compared with ggstatsplot's
+  expressions on all 140 fixtures: 120 of 128 subtitles, 35 of 37 captions and 75 of
+  75 centrality labels are equal character for character (the 17 robust histostats
+  subtitles under §10's bootstrap rule); the 10 differences are pinned
+  (ToothGrowth-tv100's Hedges' g interval, D81; 9 exactly collinear texts, D85,
+  D86). A p of exactly 0 prints as 2.23e-308, as in ggstatsplot; where it is a
+  bootstrap p (no resample as extreme), `warnings` says that it only shows p below
+  about 1 in 2,000.
+- **APA sentence:** "One-sample t-test against 18: t(59) = 0.82, p = .413, Hedges' g =
+  0.10, 95% CI [-0.15, 0.36], n = 60."; "Wilcoxon signed-rank test against 18: V =
+  ..."; "Bootstrap-t test of the 20% trimmed mean against 18: t = 1.00, p = .331,
+  trimmed mean = 19.24, 95% CI [...], n = 60."; "Bayesian one-sample t-test against 18
+  (JZS prior, r = 0.707): BF10 = 0.20, log(BF01) = 1.63, n = 60."; one-sided:
+  "One-sample t-test (one-sided: len greater than 18): ...". "Pearson correlation:
+  t(30) = -9.56, p < .001, Pearson's r = -.87, 95% CI [-.93, -.74], n = 32 pairs.";
+  "Spearman correlation: S = ..."; "Winsorized Pearson correlation (20% winsorized):
+  ..., winsorized r = ..."; "Bayesian Pearson correlation (stretched beta prior,
+  r_beta = 1.41): ...". Exactly collinear data: "t(8) = Inf, p < .001", "S = 0.00",
+  "BF10 = Inf, log(BF01) = -Inf". A bootstrap p of 0 prints "p < .001".
+- **Alt text:** "Histogram of len (60 values, from 4.20 to 33.90). A vertical line
+  marks the mean, 18.81. <result>" ("Vertical lines mark the mean, 18.81, and the test
+  value, 18." when the figure marks the test value; the number of bins when the figure
+  gives it). "Scatter plot of mpg against wt (32 pairs): mpg tends to fall as wt
+  rises. It also shows a least-squares line with its 95% confidence band, marginal
+  histograms of wt and mpg, and labels from model on 9 of the 32 points. <result>".
+  The direction is stated only where the interval excludes 0, and "every point lies
+  on one straight line" only at a Pearson's r of exactly +/-1; no strength words.
+  Shortening drops the range and bins (histostats) or the layers sentence and then
+  the direction (scatterstats); the result sentence is never cut. The figure tells
+  `figure_alt_text` what it drew: `centrality`, `test_value_line`, `bins`
+  (histostats); `smooth`, `marginal`, `labelled_points`, `points_shown`
+  (scatterstats).
+
 ## 8. `check()`
 
 `result.check()` returns the statistical issues; `fig.check()` returns those plus the

@@ -274,7 +274,8 @@ def _collinear_warning(
     if args.type != "bayes":
         out.append(
             f"Its t is {'' if estimate > 0 else '-'}Inf and its p is 0 (the limit of "
-            "the t approximation, not an exact probability), and its confidence "
+            "the t approximation, not an exact probability; the subtitle prints "
+            "p = 2.23e-308, as ggstatsplot prints a p-value of 0), and its confidence "
             f"interval has no width: [{bound}, {bound}]."
         )
         example = (
