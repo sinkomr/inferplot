@@ -3,8 +3,7 @@
 Read this at the start of every session; update it at the end of every slice.
 A slice is done only when its definition of done in `CLAUDE.md` is met.
 
-Current phase: **3 — withinstats, all types** (Phase 2 merged to main 2026-11-09; D50
-and D52 await the owner's confirmation)
+Current phase: **3 — withinstats, all types** (Phase 2 merged to main 2026-11-09)
 
 ## Phase 0 — Scaffold
 
@@ -208,11 +207,12 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
   swallows errors into NA rows the recorders cannot see). Unused edge CSV:
   `edge_within_missing` (Phase 3). `ORACLE_SUBSET` limits a local debugging run (no
   manifest).
-- Awaiting the owner's confirmation (accuracy over R's numbers, like D31): D50, two
-  pairwise Bayes factors BayesFactor misses (iris Petal.Length, +1.16e-3 and -6.1e-5;
-  one label -133.68 for ggstatsplot's -133.69); D52, the exact SMM quantile for nine or
-  more robust groups, where WRS2's seeded simulation is off by -6.6% to +4.7% (only the
-  pairwise intervals differ, not the figure).
+- Deliberate differences confirmed by the owner on 2026-11-09 (accuracy over R's
+  numbers, like D31): D50, two pairwise Bayes factors BayesFactor misses (iris
+  Petal.Length, +1.16e-3 and -6.1e-5; one label -133.68 for ggstatsplot's -133.69);
+  D52, the exact SMM quantile for nine or more robust groups, where WRS2's seeded
+  simulation is off by -6.6% to +4.7% (only the pairwise intervals differ, not the
+  figure).
 - Robust: WRS2's yuen, t1way and lincon p are 1 - cdf (probe-wrs2p, 420 of 420);
   inferplot reports the accurate tail (D43, confirmed). lincon below df 2 raises
   `NotImplementedError` (WRS2 stops too). An AKP or xi resample whose effect size is
