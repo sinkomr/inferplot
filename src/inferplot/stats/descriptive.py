@@ -46,6 +46,14 @@ _SPLIT: Final = 2.0**27
 _CHUNK: Final = 1 << 26
 
 
+def ordinal(k: int) -> str:
+    """k as an English ordinal for messages: 1st, 2nd, 3rd, 4th, 11th, 21st."""
+    suffix = (
+        "th" if 10 <= k % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(k % 10, "th")
+    )
+    return f"{k}{suffix}"
+
+
 def as_sample(x: SampleLike, *, name: str = "x", min_size: int = 1) -> FloatArray:
     """``x`` as a one-dimensional float64 array of finite values (ValueError if not)."""
     arr = np.asarray(x, dtype=np.float64)

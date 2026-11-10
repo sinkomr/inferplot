@@ -643,6 +643,27 @@ def _chunks(total_rows: int, values_per_row: int) -> list[int]:
     return [size] * full + ([rest] if rest else [])
 
 
+def bootstrap_indices(
+    rng: np.random.Generator,
+    counts: Sequence[int],
+    sizes: Sequence[int],
+    statistic: Callable[[list[NDArray[np.int64]]], NDArray[np.float64]],
+) -> NDArray[np.float64]:
+    """``statistic`` on BOOTSTRAP_RESAMPLES resamples given as positions: in each
+    chunk of replicates, group by group, ``sizes[j]`` positions drawn with
+    replacement from the ``counts[j]`` values of group j (rows x sizes[j])."""
+    out = np.empty(BOOTSTRAP_RESAMPLES, dtype=np.float64)
+    start = 0
+    for rows in _chunks(BOOTSTRAP_RESAMPLES, sum(sizes)):
+        positions = [
+            rng.integers(0, count, size=(rows, size))
+            for count, size in zip(counts, sizes, strict=True)
+        ]
+        out[start : start + rows] = statistic(positions)
+        start += rows
+    return out
+
+
 def bootstrap_replicates(
     rng: np.random.Generator,
     sorted_groups: Sequence[FloatArray],
@@ -650,17 +671,19 @@ def bootstrap_replicates(
     statistic: Callable[[list[NDArray[np.float64]]], NDArray[np.float64]],
 ) -> NDArray[np.float64]:
     """``statistic`` on BOOTSTRAP_RESAMPLES resamples: in each chunk of
-    replicates, group by group, ``sizes[j]`` draws with replacement from group j."""
-    out = np.empty(BOOTSTRAP_RESAMPLES, dtype=np.float64)
-    start = 0
-    for rows in _chunks(BOOTSTRAP_RESAMPLES, sum(sizes)):
-        draws = [
-            values[rng.integers(0, values.size, size=(rows, size))]
-            for values, size in zip(sorted_groups, sizes, strict=True)
-        ]
-        out[start : start + rows] = statistic(draws)
-        start += rows
-    return out
+    replicates, group by group, ``sizes[j]`` draws with replacement from group j
+    (``bootstrap_indices``, the same stream)."""
+    return bootstrap_indices(
+        rng,
+        [values.size for values in sorted_groups],
+        sizes,
+        lambda positions: statistic(
+            [
+                values[index]
+                for values, index in zip(sorted_groups, positions, strict=True)
+            ]
+        ),
+    )
 
 
 def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:

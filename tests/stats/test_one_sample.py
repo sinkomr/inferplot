@@ -479,3 +479,30 @@ def test_degenerate_inputs() -> None:
         one_sample_t(SAMPLE, mu=0.0, alternative="two.sided")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="largest double"):
         one_sample_t([1.0, 1.0 + 2.0**-40], mu=-1e300)
+
+
+def test_bootstrap_t_statistic_is_rounded_once() -> None:
+    # Lead's finding (new fixture, n = 2): t from a rounded standard error was one
+    # unit in the last place low, 0.6749999999999999, printed "0.67" where R prints
+    # "0.68". From exact quantities, rounded once: (3.9 - 3) / (0.8 sqrt(2) /
+    # (0.6 sqrt(2))) = 0.675 on the doubles too.
+    result = trimmed_mean_bootstrap_t(np.array([3.1, 4.7]), mu=3.0)
+    assert result.statistic == 0.675
+    exact = Fraction(3.1) + Fraction(4.7)
+    t2 = (
+        (exact / 2 - 3) ** 2
+        * (1 - 2 * Fraction(0.2)) ** 2
+        * 2
+        / ((Fraction(4.7) - Fraction(3.1)) ** 2 / 2)
+    )
+    assert result.statistic == float(
+        Fraction(math.isqrt(t2.numerator * 4**80 // t2.denominator), 2**80)
+    )
+
+
+@pytest.mark.parametrize(("n", "word"), [(10, "3rd"), (5, "2nd"), (12, "3rd")])
+def test_winsorized_constant_message_uses_ordinals(n: int, word: str) -> None:
+    # Review Z6 (11): "the 2-th smallest".
+    x = np.array([1.0] + [5.0] * (n - 2) + [9.0])
+    with pytest.raises(ValueError, match=f"the {word} smallest to the {word} largest"):
+        trimmed_mean_bootstrap_t(x, tr=0.2)
