@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 import pytest
 from numpy.typing import NDArray
+from scipy import special
 
 from inferplot.stats.nonparametric import (
     _percentile_lower,  # pyright: ignore[reportPrivateUsage]
@@ -123,17 +124,38 @@ def _boot_t(row: Row) -> FloatArray:
     return _values(boot["t_hex"])
 
 
+# Units in the last place that R's qnorm and SciPy's ndtri may differ by, summed over
+# the three quantiles of an interpolated bound (measured: at most 2.2 on macOS and
+# 1.3 on the Linux and Windows row that a fixed 3e-15 relative allowance missed).
+_QUANTILE_ULPS = 8.0
+
+
 def _assert_percentile_lower(t: FloatArray, conf: float, low: float) -> None:
     """boot.ci's percentile bound: exact where (R + 1) alpha is a whole order
-    statistic; where it interpolates on the normal scale, within 3e-15 relative
-    (R's qnorm and SciPy's ndtri, and the order of the arithmetic)."""
+    statistic. Where it interpolates on the normal scale, the weight is a
+    difference of normal quantiles over another, so a rounding error of one unit
+    in a quantile (R's qnorm and each platform's ndtri differ by about that)
+    moves the bound by eps |z| / |z_(k+1) - z_k| times the gap between the two
+    order statistics. At 199 resamples and 95%, (R + 1) alpha is 10 + 9e-15, the
+    two quantiles in the weight's numerator differ in their last digits only, and
+    the bound is right to about 2e-16 absolute and no better, in R as here."""
     alpha = 1.0 - conf
     mine = _percentile_lower(t, alpha)
     position = (t.size + 1) * alpha
-    if position == math.floor(position):
+    k = math.floor(position)
+    if position == k:
         assert mine == low
-    else:
-        assert math.isclose(mine, low, rel_tol=3e-15, abs_tol=0.0), (mine, low)
+        return
+    ordered = np.sort(t)
+    z_k, z_k1, z_a = (
+        float(special.ndtri(p))
+        for p in (k / (t.size + 1), (k + 1) / (t.size + 1), alpha)
+    )
+    condition = max(abs(z_k), abs(z_k1), abs(z_a)) / abs(z_k1 - z_k)
+    gap = float(ordered[k] - ordered[k - 1])
+    allowed = _QUANTILE_ULPS * condition * float(np.finfo(np.float64).eps) * gap
+    allowed += 2.0 * float(np.spacing(abs(low)))
+    assert abs(mine - low) <= allowed, (mine, low, allowed)
 
 
 @pytest.mark.parametrize("name", ["rank_epsilon_squared", "kendalls_w"])
