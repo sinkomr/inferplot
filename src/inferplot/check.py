@@ -125,19 +125,22 @@ def _pairs_hidden(result: StatsResult) -> Issue | None:
 
 
 def _heavy_ties(result: StatsResult) -> Issue | None:
-    """Rank-based tests (type nonparametric) on data where more than
-    ``HEAVY_TIES`` of the values are ties: values beyond the first of each
-    distinct value, n minus the number of distinct values (DECISIONS.md D47).
+    """Rank-based tests (type nonparametric) where more than ``HEAVY_TIES`` of
+    what the test ranks are ties (DECISIONS.md D47): between groups, the values
+    beyond the first of each distinct value (n minus the distinct values); the
+    signed-rank test, the paired differences that are 0 (dropped) or repeat an
+    earlier one's size (subjects minus distinct nonzero sizes); Friedman's test,
+    the values tied with another of the same subject.
 
-    Read from ``result.n_tied``, stored at analysis time, so the copy without
-    observations (``to_json(include_values=False)``) gives the same answer. The
-    total is the sum of the levels' n (within designs: complete subjects times
-    levels). Every level's values are pooled, also in within designs, where the
-    signed-rank and Friedman tests rank differences or within-subject values
-    instead.
+    Read from ``result.n_tied``, stored at analysis time
+    (:func:`inferplot.result.paired_tied_count` for within designs), so the copy
+    without observations (``to_json(include_values=False)``) gives the same
+    answer.
     """
     if result.type != "nonparametric":
         return None
+    if result.design == "within":
+        return _paired_heavy_ties(result)
     total = sum(d.n for d in result.descriptives)
     tied = result.n_tied
     distinct = total - tied
@@ -155,6 +158,41 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
         fix=(
             "Report the ties. If y takes only a few values (a rating or a count), "
             "consider analyzing it as categories with barstats."
+        ),
+    )
+
+
+def _paired_heavy_ties(result: StatsResult) -> Issue | None:
+    """``heavy_ties`` for the signed-rank test (two conditions) and Friedman's
+    test (three or more), from ``n_tied`` (``paired_tied_count``)."""
+    n, k, tied = result.n_obs, len(result.levels), result.n_tied
+    total = n if k == 2 else n * k
+    if total == 0 or tied / total <= HEAVY_TIES:
+        return None
+    share = f"{tied / total:.0%}"
+    if k == 2:
+        message = (
+            f"{tied} of the {n} paired differences ({share}) are 0 or repeat "
+            "another difference's size, so the signed-rank test drops the zero "
+            f"ones and ranks only {n - tied} distinct sizes. Its normal "
+            "approximation corrects for ties, but with this many the p-value is "
+            "coarse and the ranks carry less information."
+        )
+    else:
+        message = (
+            f"{tied} of the {total} values ({share}) tie with another value of the "
+            "same subject, so Friedman's test, which ranks each subject's values, "
+            "gives many shared ranks. Its chi-square approximation corrects for "
+            "ties, but with this many the p-value is coarse and the ranks carry "
+            "less information."
+        )
+    return Issue(
+        code="heavy_ties",
+        severity="warning",
+        message=message,
+        fix=(
+            "Report the ties. If y takes only a few values (a rating or a count), "
+            "say so when you report the test."
         ),
     )
 
@@ -232,6 +270,11 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
     if any(math.isnan(x) for x in numbers):
         return None
     if es.conf_low <= es.estimate <= es.conf_high:
+        return None
+    # Outside by less than the three decimals the message prints (a bound that is
+    # the estimate up to its last digits): nothing a reader could see or act on.
+    crossed = es.conf_low if es.estimate < es.conf_low else es.conf_high
+    if _three(es.estimate) == _three(crossed):
         return None
     level = _percent(es.conf_level)
     head = (

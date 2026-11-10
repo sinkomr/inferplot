@@ -26,7 +26,7 @@ import json
 import math
 import types
 import typing
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypeVar, Union, cast
 
@@ -46,6 +46,7 @@ __all__ = [
     "TestResult",
     "Texts",
     "current_provenance",
+    "paired_tied_count",
     "tied_count",
 ]
 
@@ -536,6 +537,27 @@ def tied_count(values: Iterable[Iterable[float]]) -> int:
     return total - len(distinct)
 
 
+def paired_tied_count(columns: Sequence[Sequence[float]]) -> int:
+    """The ties among what a within-subjects rank test ranks (``StatsResult.n_tied``
+    of design "within"; ``columns`` holds each level's values in subject order).
+
+    Two conditions: the signed-rank test ranks the absolute paired differences
+    a - b and drops the zero ones, so the count is the subjects minus the distinct
+    nonzero |a - b| (a zero difference and each repeat of a size count once).
+    Three or more: Friedman's test ranks each subject's values, so the count is
+    the sum over subjects of the levels minus the subject's distinct values.
+    """
+    k = len(columns)
+    if k < 2:
+        raise ValueError(f"a within-subjects design has 2 or more levels, got {k}")
+    rows = list(zip(*columns, strict=True))
+    if k == 2:
+        sizes = {abs(a - b) for a, b in rows}
+        sizes.discard(0.0)
+        return len(rows) - len(sizes)
+    return sum(k - len(set(row)) for row in rows)
+
+
 # --------------------------------------------------------------------------- #
 # the result
 # --------------------------------------------------------------------------- #
@@ -589,8 +611,15 @@ class StatsResult(_Plain):
     ``subjects`` empty and ``dropped_subjects`` and ``dropped_subject_rows`` 0;
     its rows read are ``n_obs + n_dropped``.
 
-    ``n_tied`` counts the tied analyzed values: all of them (every level pooled)
-    minus the number of distinct ones. It is stored with the result, not derived
+    ``n_tied`` counts the ties among what the design's rank test ranks
+    (:func:`tied_count`, :func:`paired_tied_count`): design "between", every
+    analyzed value pooled minus the number of distinct ones; design "within" with
+    two conditions, the subjects minus the distinct nonzero absolute paired
+    differences (the signed-rank test drops zero differences and ranks the
+    others' sizes); with three or more, the sum over subjects of the levels minus
+    the subject's distinct values (Friedman's test ranks within each subject).
+    The denominators are ``n_obs``, ``n_obs`` and ``n_obs * len(levels)``. It is
+    stored with the result, not derived
     from ``values``, so ``check()`` gives the same answer on the copy without
     values that ``save()`` embeds (``heavy_ties``, SPEC section 8).
 

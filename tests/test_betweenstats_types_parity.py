@@ -595,7 +595,13 @@ EXPECTED_METHOD_WARNINGS: Mapping[str, str] = {
 
 
 def test_method_warnings() -> None:
-    markers = ("The pairwise confidence intervals are", "bootstrap resamples have")
+    # The rank-biserial bound (S9) fires on no fixture: the most extreme
+    # two-group r is -0.9644 (iris_no_setosa Petal.Length).
+    markers = (
+        "The pairwise confidence intervals are",
+        "bootstrap resamples have",
+        "so the rank-biserial r is at its bound",
+    )
     found = {
         case.name: warning
         for case in CASES

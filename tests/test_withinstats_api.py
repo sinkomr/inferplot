@@ -85,8 +85,9 @@ ANALYSIS_DEFAULTS = {
     "order": None,
 }
 DRAWING_DEFAULTS = {
-    "point_path": True,
-    "centrality_path": True,
+    # None: drawn where ggwithinstats draws them; an explicit value is told apart.
+    "point_path": None,
+    "centrality_path": None,
     "centrality_plotting": True,
     "layers": ("violin", "box", "points"),
     "xlab": None,
@@ -211,7 +212,10 @@ def test_paired_is_not_needed(two: pd.DataFrame, four: pd.DataFrame) -> None:
             == expected
         )
     result = _fake_result(four)
-    assert message(TypeError, lambda: draw(result, paired=True)) == expected
+    assert message(TypeError, lambda: draw(result, paired=True)) == (
+        "paired= is not needed: render.withinstats() draws a result whose "
+        "measurements are already paired by subject_id. Remove paired=."
+    )
 
 
 def test_extra_positional_argument_hints_subject_id(two: pd.DataFrame) -> None:
@@ -469,10 +473,10 @@ def test_render_checks_then_draws(four: pd.DataFrame) -> None:
     fig = draw(result)
     assert fig.result.analysis == "withinstats"
     assert fig.result.warnings == result.warnings
-    assert "point_path must be True or False" in message(
+    assert "point_path must be None, True or False" in message(
         TypeError, lambda: draw(result, point_path=1)
     )
-    assert "centrality_path must be True or False" in message(
+    assert "centrality_path must be None, True or False" in message(
         TypeError, lambda: draw(result, centrality_path="no")
     )
     assert "not a layer" in message(ValueError, lambda: draw(result, layers=("dots",)))
@@ -537,7 +541,9 @@ def test_result_contract(four: pd.DataFrame) -> None:
         "value of 'desire' at some level of 'condition'; 88 complete subjects remain.",
         "A note from the type's analysis.",
     )
-    assert result.text.apa == "No test was computed (results_subtitle=False), n = 88."
+    assert result.text.apa == (
+        "No test was computed (results_subtitle=False), n = 88 subjects."
+    )
 
 
 def test_result_json_round_trip_and_embedded_copy(four: pd.DataFrame) -> None:
@@ -609,3 +615,32 @@ def test_small_n_names_subjects_once() -> None:
     )
     assert math.isclose(result.descriptives[1].value or 0.0, 23 / 6)
     assert result.subjects == ("1", "2", "3")
+
+
+def test_docstrings_describe_every_type() -> None:
+    """The module and the public forms say what each type computes, as
+    betweenstats' do (review item 4c)."""
+    import importlib
+
+    module = importlib.import_module("inferplot.analyses.withinstats")
+    renderer = importlib.import_module("inferplot.render.withinstats")
+    names = (
+        "paired t-test",
+        "Greenhouse-Geisser",
+        "signed-rank",
+        "Friedman",
+        "Kendall's W",
+        "Durbin-Conover",
+        "Yuen",
+        "AKP",
+        "rmmcp",
+        "Bayes factor",
+        "MAP",
+    )
+    for doc in (module.__doc__, analyze.__doc__, top.__doc__):
+        assert doc is not None
+        for name in names:
+            assert name in doc, name
+    assert renderer.__doc__ is not None
+    for word in ("means", "medians", "trimmed means", "MAP estimates"):
+        assert word in renderer.__doc__

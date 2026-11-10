@@ -4,6 +4,12 @@
 """Draw a withinstats result: betweenstats' layers plus the subject and centrality
 paths of ggstatsplot's ``ggwithinstats()``.
 
+It draws a result of any type as the analysis computed it: the centrality points
+and labels are the type's (means for parametric, medians for nonparametric,
+trimmed means for robust, MAP estimates for bayes), the subtitle and caption the
+result's texts, and the brackets its pairwise comparisons (paired t,
+Durbin-Conover, rmmcp or paired Bayes factors).
+
 The drawing is :class:`inferplot.render.comparison.Drawing` with four changes:
 
 * points: each subject keeps one seeded horizontal offset at every level, so its
@@ -23,14 +29,17 @@ The drawing is :class:`inferplot.render.comparison.Drawing` with four changes:
   middle level sits above or below the point's height, on the side the path to
   the next level leaves free.
 
-An argument that then has no effect (``point_path=False`` with three or more
-conditions or without points, ``centrality_path=False`` with
-``centrality_plotting=False``) adds a ``warnings`` entry (D39); the defaults add
-nothing.
+``point_path`` and ``centrality_path`` default to None, "draw the path where
+ggwithinstats draws it", so that an explicit value can be told from the default
+(as ``pairwise_display="none"`` is: D69). An explicit value that then has no
+effect (``point_path=True`` or ``False`` with three or more conditions or without
+points, ``centrality_path=True`` or ``False`` with ``centrality_plotting=False``)
+adds a ``warnings`` entry (D39); the defaults add nothing.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Final
 
@@ -39,6 +48,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 
 from inferplot import _validate as v
+from inferplot import text
 from inferplot.render import comparison, theme
 from inferplot.render.comparison import (
     JITTER_HALF_WIDTH,
@@ -71,8 +81,8 @@ CENTRALITY_PATH_WIDTH: Final = 1.5
 def withinstats(
     result: StatsResult,
     *,
-    point_path: bool = True,
-    centrality_path: bool = True,
+    point_path: bool | None = None,
+    centrality_path: bool | None = None,
     centrality_plotting: bool = True,
     layers: Sequence[str] = ("violin", "box", "points"),
     xlab: str | None = None,
@@ -90,12 +100,14 @@ def withinstats(
 
     Args:
         result: the :class:`~inferplot.result.StatsResult` to draw.
-        point_path: join each subject's points with a line. Drawn only with two
-            conditions and the "points" layer, as ggwithinstats draws it only for
-            two conditions; ``fig.check()`` reports paths so many that they hide
-            the boxes and violins (then pass ``point_path=False``).
-        centrality_path: join the levels' centrality points with a line; drawn
-            only with ``centrality_plotting=True``.
+        point_path: join each subject's points with a line. None (the default)
+            and True draw the paths where ggwithinstats draws them: with two
+            conditions and the "points" layer; False leaves them out.
+            ``fig.check()`` reports paths so many that they hide the boxes and
+            violins (then pass ``point_path=False``).
+        centrality_path: join the levels' centrality points with a line. None
+            (the default) and True draw it with ``centrality_plotting=True``,
+            as ggwithinstats does; False leaves it out.
         centrality_plotting: draw each level's centrality point and label.
         layers, xlab, ylab, title, subtitle, caption, palette, point_args,
             boxplot_args, violin_args, ax: as for ``ip.render.betweenstats``.
@@ -103,9 +115,11 @@ def withinstats(
     Each subject's points share one seeded horizontal offset, so its path ends on
     them. With more than 5,000 values the points and paths show every value of a
     seeded random subsample of whole subjects (2,000 values in all, rounded down
-    to whole subjects); the violins and boxes show all values. ``point_path=False``
-    where no subject paths are drawn, and ``centrality_path=False`` with
-    ``centrality_plotting=False``, have no effect and add a ``warnings`` entry.
+    to whole subjects); the violins and boxes show all values. An explicit
+    ``point_path`` (True or False) where no subject paths can be drawn (three or
+    more conditions, or no "points" layer), and an explicit ``centrality_path``
+    with ``centrality_plotting=False``, have no effect and add a ``warnings``
+    entry. The returned figure's ``result.text.alt_text`` names the paths drawn.
 
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
@@ -135,8 +149,8 @@ def withinstats(
         point_args=v.check_artist_args(point_args, "point_args") or {},
         boxplot_args=v.check_artist_args(boxplot_args, "boxplot_args") or {},
         violin_args=v.check_artist_args(violin_args, "violin_args") or {},
-        point_path=v.check_bool(point_path, "point_path"),
-        centrality_path=v.check_bool(centrality_path, "centrality_path"),
+        point_path=v.check_optional_bool(point_path, "point_path"),
+        centrality_path=v.check_optional_bool(centrality_path, "centrality_path"),
     )
     comparison.check_options(result, options, ax)
     return comparison.draw(_WithinDrawing, result, options, palette, ax)
@@ -145,26 +159,28 @@ def withinstats(
 def _no_effect(result: StatsResult, options: comparison.Options) -> list[str]:
     """Warnings for path arguments that have no effect on this figure (D39).
 
-    Only a value other than the default can be such an argument; the defaults
-    add nothing.
+    Only an explicit value (True or False; the default is None) can be such an
+    argument; the defaults add nothing.
     """
     out: list[str] = []
     k = len(result.levels)
-    if not options.point_path:
+    if options.point_path is not None:
+        given = f"point_path={options.point_path!r}"
         if k >= 3:
             out.append(
-                f"point_path=False has no effect: subject paths are drawn only with "
-                f"two conditions (as in ggwithinstats), and x={result.x!r} has {k}."
+                f"{given} has no effect: subject paths are drawn only with two "
+                f"conditions (as in ggwithinstats), and x={result.x!r} has {k}."
             )
         elif "points" not in options.layers:
             out.append(
-                "point_path=False has no effect: subject paths join the points, and "
+                f"{given} has no effect: subject paths join the points, and "
                 f"layers={options.layers!r} draws no points."
             )
-    if not options.centrality_path and not options.centrality:
+    if options.centrality_path is not None and not options.centrality:
         out.append(
-            "centrality_path=False has no effect: the centrality path joins the "
-            "centrality points, which centrality_plotting=False leaves out."
+            f"centrality_path={options.centrality_path!r} has no effect: the "
+            "centrality path joins the centrality points, which "
+            "centrality_plotting=False leaves out."
         )
     return out
 
@@ -184,11 +200,15 @@ class _WithinDrawing(comparison.Drawing):
         self.warnings.extend(_no_effect(result, options))
         k = len(result.levels)
         self.with_subject_paths = (
-            options.point_path and k == 2 and "points" in options.layers
+            options.point_path is not False and k == 2 and "points" in options.layers
         )
-        self.with_centrality_path = options.centrality and options.centrality_path
+        self.with_centrality_path = (
+            options.centrality and options.centrality_path is not False
+        )
         self.subject_paths: LineCollection | None = None
         self.centrality_line: Line2D | None = None
+        # How many subjects' points (and paths) are drawn: all, or a sample.
+        self.drawn_subjects = len(result.subjects)
 
     def place_points(self, rng: np.random.Generator) -> list[tuple[FloatArray, ...]]:
         """Every subject's points share one offset; large panels draw whole
@@ -216,6 +236,7 @@ class _WithinDrawing(comparison.Drawing):
             self.subsample = Subsample(
                 shown=m * k, total=total, seed=seed, density=density, subjects=(m, n)
             )
+        self.drawn_subjects = int(keep.size)
         offsets = rng.uniform(-JITTER_HALF_WIDTH, JITTER_HALF_WIDTH, size=keep.size)
         return [(j + offsets, self.values[j][keep]) for j in range(k)]
 
@@ -282,6 +303,20 @@ class _WithinDrawing(comparison.Drawing):
         )
         self.ax.add_line(line)
         self.centrality_line = line
+
+    def finish_result(self, result: StatsResult) -> StatsResult:
+        """The result with an alt text that names the paths this figure draws
+        (the analysis describes the default figure: SPEC.md section 7)."""
+        alt = text.figure_alt_text(
+            result,
+            subject_paths=self.drawn_subjects if self.with_subject_paths else 0,
+            centrality_path=self.with_centrality_path,
+        )
+        if alt == result.text.alt_text:
+            return result
+        return dataclasses.replace(
+            result, text=dataclasses.replace(result.text, alt_text=alt)
+        )
 
     def drawn_paths(self) -> DrawnPaths:
         return DrawnPaths(

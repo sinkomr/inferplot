@@ -370,10 +370,28 @@ def test_constant_differences_raise_naming_the_levels() -> None:
     # Levels in sorted order: 'post' comes first.
     assert str(error.value) == (
         "Every subject's value at 'post' differs from its value at 'pre' by the same "
-        "amount (x='condition'), so the paired differences have no variability and "
+        "amount (exactly, or to within the rounding of y in double precision) "
+        "(x='condition'), so the paired differences have no variability and "
         "the paired t-test has no standard error. Check the data for entry errors, "
         "or use type='nonparametric'."
     )
+    # Decimal data in which every subject is 0.1 lower: the stored differences are
+    # 0.10000000000000009 and 0.09999999999999964, whose standard deviation is
+    # rounding, not data. Refused like exactly constant differences (R's t.test
+    # stops with "data are essentially constant"), where an exact computation on
+    # the doubles reported t = 1,007,035,491,024,313.
+    pre = [1.1, 2.3, 3.1, 4.7, 5.2, 6.3]
+    decimal = _long({"pre": pre, "post": [v - 0.1 for v in pre]})
+    assert len({a - b for a, b in zip(pre, [v - 0.1 for v in pre], strict=True)}) > 1
+    for kind in ("parametric", "bayes"):
+        with pytest.raises(ValueError, match="by the same amount"):
+            _within(decimal, type=kind)
+    # Differences that vary by more than the rounding of the values are computed.
+    drops = [0.1, 0.2, 0.1, 0.2, 0.1, 0.2]
+    varied = _long(
+        {"pre": pre, "post": [v - d for v, d in zip(pre, drops, strict=True)]}
+    )
+    assert _within(varied).test is not None
     tiny = _long({"pre": [1.0, 1.0, 1.0], "post": [0.0, 0.0, 1e-300]})
     with pytest.raises(ValueError, match="vary by less than double precision"):
         _within(tiny)
@@ -383,6 +401,14 @@ def test_rm_anova_data_errors() -> None:
     additive = _long({"a": [1.0, 2.0, 4.0], "b": [2.0, 3.0, 5.0], "c": [0.0, 1.0, 3.0]})
     with pytest.raises(ValueError, match="has no error variance"):
         _within(additive)
+    # The same in one decimal: each subject's level plus a condition effect. The
+    # residuals are rounding (an exact computation on the doubles gave F = 3.9e30).
+    level = [1.1, 2.3, 3.1, 4.7, 5.2, 6.3]
+    decimal = _long(
+        {"a": level, "b": [v + 0.3 for v in level], "c": [v - 0.1 for v in level]}
+    )
+    with pytest.raises(ValueError, match=r"no error variance|by the same amount"):
+        _within(decimal)
     # One pair with constant differences: the omnibus test exists, the pair does
     # not; nothing is returned in part.
     one_pair = _long(

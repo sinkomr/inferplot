@@ -268,7 +268,13 @@ def test_rmmcp_definition() -> None:
     g = math.floor(0.2 * n)
     pairs = rmmcp(columns, p_adjust_method="none")
     assert [(p.i, p.j) for p in pairs] == [(0, 1), (0, 2), (1, 2)]
-    critical = scipy_stats.t.ppf(1 - 0.05 / (2 * 3), n - 2 * g - 1)
+    # The Bonferroni t quantile, checked through its tail probability: SciPy 1.11's
+    # t.ppf itself is off by 8e-11 relative here (2.779473101554 for the exact
+    # 2.779473101781), SciPy's t.sf is accurate in every supported version.
+    df = n - 2 * g - 1
+    critical = pairs[0].critical_value
+    assert scipy_stats.t.sf(critical, df) == pytest.approx(0.05 / (2 * 3), rel=1e-12)
+    assert critical == pytest.approx(2.7794731017811013, rel=1e-13)  # 40-digit mpmath
     for pair in pairs:
         d = columns[pair.i] - columns[pair.j]
         se = math.sqrt(np.var(_winsorized(d), ddof=1)) / (0.6 * math.sqrt(n))
@@ -287,6 +293,48 @@ def test_rmmcp_definition() -> None:
     flat = [columns[0], columns[0] + 1.0, columns[1]]
     with pytest.raises(ValueError, match="conditions 1 and 2"):
         rmmcp(flat)
+
+
+def test_degenerate_resamples_are_classified_exactly() -> None:
+    # Rating-scale data: many resamples have every winsorized difference equal.
+    # Such a resample is 0 / 0 when that difference is 0 and infinite otherwise;
+    # computed in floating point, the variance of equal values is about 1e-33, not
+    # 0, and the resample came out as an arbitrary finite number or as +inf
+    # (Phase 3 review). Counts and bounds are those of the documented rule in
+    # exact rational arithmetic on the same random stream.
+    post = np.array([2.0, 2, 4, 1, 2, 3, 5, 4, 5])
+    pre = np.array([2.0, 2, 3, 1, 2, 3, 4, 3, 4])
+    result = dependent_akp(post, pre)
+    assert (result.undefined_resamples, result.infinite_resamples) == (86, 16)
+    assert result.conf_low == pytest.approx(0.2079689520546899, rel=1e-12)
+    assert result.conf_high == pytest.approx(1.2478137123281394, rel=1e-12)
+    # Eight of eleven subjects unchanged: 795 resamples are 0 / 0, none infinite.
+    a = np.array([3.0, 3, 2, 4, 5, 1, 2, 3, 4, 5, 2])
+    b = np.array([3.0, 3, 2, 4, 5, 1, 2, 3, 3, 4, 1])
+    unchanged = dependent_akp(a, b)
+    assert unchanged.undefined_resamples > 0
+    assert unchanged.infinite_resamples == 0
+    assert math.isfinite(unchanged.conf_low)
+    assert math.isfinite(unchanged.conf_high)
+
+
+def test_differences_equal_as_written_are_ties() -> None:
+    # 37.3 - 37.2 and 36.6 - 36.5 are different doubles; as written both are 0.1.
+    # A resample whose winsorized differences are all "0.1" has no spread: its
+    # AKP is infinite, not the 1.7e13 that the doubles' variance of 1e-29 gives.
+    a = np.array([36.5, 36.7, 37.3, 37.4, 36.3, 37.0])
+    b = np.array([36.5, 36.8, 37.3, 37.4, 36.5, 37.1])
+    assert len({x - y for x, y in zip(a.tolist(), b.tolist(), strict=True)}) == 4
+    result = dependent_akp(a, b)
+    # The rule replayed in exact decimal arithmetic: 195 undefined, 116 infinite.
+    assert (result.undefined_resamples, result.infinite_resamples) == (195, 116)
+    assert result.conf_low == -math.inf
+    assert result.conf_high == pytest.approx(-0.3107777768305904, rel=1e-12)
+    # A difference that the rounding of the values cannot tell from 0 is 0.
+    c = np.array([0.3, 0.6, 1.2, 2.0, 2.5, 3.1])
+    d = np.array([0.1 + 0.2, 0.5, 1.0, 2.2, 2.4, 3.3])
+    assert c[0] != d[0]
+    assert dependent_akp(c, d) == dependent_akp(np.r_[d[0], c[1:]], d)
 
 
 # ------------------------------------------------------------------ wmcpAKP

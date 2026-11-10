@@ -28,10 +28,12 @@ __all__ = [
     "as_sample",
     "common_scale",
     "deviations_from_weighted_mean",
+    "differences_same_within_rounding",
     "exact_mean",
     "exact_variance",
     "mean",
     "median",
+    "rounding_tolerance",
     "scaled_variance",
     "variance",
 ]
@@ -171,6 +173,62 @@ def common_scale(*samples: FloatArray) -> float:
         return 1.0
     exponent = math.frexp(peak)[1]
     return math.ldexp(1.0, min(-exponent, 1023))
+
+
+# A double whose 53-bit significand ends in at least this many zero bits is taken
+# as written exactly (see ``rounding_tolerance``): whole numbers up to 2^33, halves,
+# quarters. The double of a decimal fraction such as 4.7 has such an ending with
+# probability 2^-20.
+_EXACT_TRAILING_ZERO_BITS: Final = 20
+
+
+def rounding_tolerance(values: FloatArray) -> FloatArray:
+    """How far each stored double may lie from the number that was written: half a
+    unit in its last place, and 0 for a number that binary holds exactly.
+
+    A decimal such as 4.7 is not a binary fraction, so the double that holds it is
+    off by up to half a unit in the last place. A number with a short binary
+    expansion (a whole number such as a rating or a count, a half, a quarter) is
+    stored exactly; it is recognized by its significand, which ends in at least 20
+    zero bits, so the rule does not depend on the units of the data (a power of
+    two changes no significand).
+    """
+    significand, _ = np.frexp(values)
+    shifted: FloatArray = np.ldexp(significand, 53 - _EXACT_TRAILING_ZERO_BITS)
+    inexact: NDArray[np.bool_] = shifted != np.rint(shifted)
+    half: FloatArray = 0.5 * np.spacing(np.abs(values))
+    return half * inexact
+
+
+def differences_same_within_rounding(x: FloatArray, y: FloatArray) -> bool:
+    """Whether the paired differences x_i - y_i could all be one number, given
+    that each value is stored only to double precision.
+
+    The exact difference of the doubles of pair i lies within t_i =
+    ``rounding_tolerance``(x_i) + ``rounding_tolerance``(y_i) of the difference of
+    the numbers that were written. The differences cannot be told from a constant
+    when one number lies within t_i of every one of them:
+    max_i (d_i - t_i) <= min_i (d_i + t_i). True also when every difference is
+    exactly the same; whole-number data are compared exactly (t_i = 0).
+
+    This is what "every subject changes by the same amount" means for decimal
+    data: 1.1 - 1.0, 2.3 - 2.2 and 4.7 - 4.6 are three different doubles (they
+    differ in the 16th digit), and a standard deviation computed from them is
+    rounding, not data (R's ``t.test`` stops on such differences as "essentially
+    constant").
+
+    The differences are formed without rounding (Knuth's TwoSum on the values in
+    their common scale) and compared relative to the first, so the test is exact
+    wherever it is close, and does not depend on the units of the data.
+    """
+    scale = common_scale(x, y)
+    xs, ys = x * scale, y * scale
+    s = xs - ys
+    bb = s - xs
+    e = (xs - (s - bb)) + (-ys - bb)
+    tolerance = (rounding_tolerance(x) + rounding_tolerance(y)) * scale
+    relative: FloatArray = (s - s[0]) + e
+    return bool((relative - tolerance).max() <= (relative + tolerance).min())
 
 
 def scaled_variance(x: FloatArray) -> float:

@@ -599,16 +599,42 @@ def rows_trimmed(
     draws: NDArray[np.float64], tr: float
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Trimmed mean and winsorized variance of every row of ``draws`` (which is
-    reordered in place)."""
+    reordered in place: afterwards columns g to m - g - 1 of a row hold the values
+    its trimmed mean averages).
+
+    A row whose winsorized values are all the same number (its (g + 1)-th smallest
+    equals its (g + 1)-th largest) gets a variance of exactly 0 and that number as
+    its trimmed mean: computed in floating point, the mean of eleven copies of 0.9
+    is not 0.9 and their variance is about 1e-33, not 0, so a resample that is
+    0 / 0 or infinite by the definition would come out as an arbitrary finite
+    number. The callers decide such rows exactly (``exact_zero_sum``).
+    """
     m = draws.shape[1]
     g = trim_count(m, tr)
     draws.partition([g, m - g - 1], axis=1)
     part = draws
-    tmeans = part[:, g : m - g].mean(axis=1)
+    low: NDArray[np.float64] = part[:, g].copy()
+    flat: NDArray[np.bool_] = low == part[:, m - g - 1]
+    tmeans: NDArray[np.float64] = part[:, g : m - g].mean(axis=1)
     if g:
         part[:, :g] = part[:, g : g + 1]
         part[:, m - g :] = part[:, m - g - 1 : m - g]
-    return tmeans, part.var(axis=1, ddof=1)
+    wvars: NDArray[np.float64] = part.var(axis=1, ddof=1)
+    tmeans[flat] = low[flat]
+    wvars[flat] = 0.0
+    return tmeans, wvars
+
+
+def exact_zero_sum(positive: Sequence[float], negative: Sequence[float]) -> float:
+    """The sign of sum(positive) - sum(negative), exactly: 0.0, 1.0 or -1.0.
+
+    ``math.fsum`` returns the correctly rounded sum of the doubles, which is 0
+    only when the exact sum is 0 and has its sign otherwise. Used to decide
+    whether a resample with a winsorized variance of 0 is 0 / 0 (undefined) or
+    infinite, which a rounded difference of rounded means cannot decide.
+    """
+    total = math.fsum([*positive, *(-value for value in negative)])
+    return 0.0 if total == 0.0 else math.copysign(1.0, total)
 
 
 def _chunks(total_rows: int, values_per_row: int) -> list[int]:
@@ -802,11 +828,23 @@ def akp_effect(
     constant = math.sqrt(winsorized_normal_variance(t_trim))
     estimate = constant * float(ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
 
+    g_b = trim_count(y.size, t_trim)
+    h_b = y.size - 2 * g_b
+
     def deltas(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
         tm_a, wv_a = rows_trimmed(draws[0], t_trim)
         tm_b, _ = rows_trimmed(draws[1], t_trim)
         with np.errstate(divide="ignore", invalid="ignore"):
-            return constant * (tm_a - tm_b) / np.sqrt(wv_a)
+            out: NDArray[np.float64] = constant * (tm_a - tm_b) / np.sqrt(wv_a)
+        # A winsorized variance of 0: the resample is +/-inf, or 0 / 0 when the
+        # trimmed means are equal, decided exactly: tm_a is then one value of a,
+        # and h_b tm_a - sum(the values b's trimmed mean averages) has the sign of
+        # the difference of the exact trimmed means.
+        for row in (wv_a == 0.0).nonzero()[0].tolist():
+            middle = draws[1][row, g_b : y.size - g_b].tolist()
+            sign = exact_zero_sum([float(tm_a[row])] * h_b, middle)
+            out[row] = math.nan if sign == 0.0 else sign * math.inf
+        return out
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
     replicates = split_replicates(
@@ -888,12 +926,26 @@ def explanatory_effect(
     normal = winsorized_normal_variance(t_trim)
     k = len(ordered)
 
+    g_draw = trim_count(size, t_trim)
+
     def xis(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
         _, pooled = rows_trimmed(_joined(draws), t_trim)
         tmeans = _joined([rows_trimmed(d, t_trim)[0][:, None] for d in draws])
         top = tmeans.var(axis=1, ddof=1)
         with np.errstate(divide="ignore", invalid="ignore"):
-            return np.sqrt(top / (pooled / normal))
+            out: NDArray[np.float64] = np.sqrt(top / (pooled / normal))
+        # A pooled winsorized variance of 0: the resample is infinite, or 0 / 0
+        # when the trimmed means of all groups are equal, decided exactly (every
+        # group draws the same number of values, so equal trimmed means are equal
+        # sums of the values they average).
+        for row in (pooled == 0.0).nonzero()[0].tolist():
+            first = draws[0][row, g_draw : size - g_draw].tolist()
+            equal = all(
+                exact_zero_sum(d[row, g_draw : size - g_draw].tolist(), first) == 0.0
+                for d in draws[1:]
+            )
+            out[row] = math.nan if equal else math.inf
+        return out
 
     estimate: float | None = None
     if all(o.size == size for o in ordered):
