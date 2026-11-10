@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Final
 import numpy as np
 from matplotlib import font_manager
 from matplotlib.colors import to_hex, to_rgba
+from numpy.typing import NDArray
 
 from inferplot.check import Issue
 from inferplot.render import theme
@@ -51,6 +52,8 @@ _DOLLAR: Final = re.compile(r"(?<!\\)\$")
 # yellow on white 1.07:1). WCAG's 3:1 would report the colour-blind-safe default
 # Okabe-Ito palette (its yellow has 1.32:1 on white, its orange 2.25:1) and most
 # of matplotlib's qualitative colormaps, so marks get the lower floor.
+FloatArray = NDArray[np.float64]
+
 TEXT_CONTRAST: Final = 3.0
 COLOR_CONTRAST: Final = 1.1
 
@@ -58,6 +61,8 @@ __all__ = ["view_issues"]
 
 
 def _axis_changed(fig: StatsFigure) -> Issue | None:
+    if fig.data:
+        return _axis_changed_data(fig)
     ax = fig.axes["main"]
     found: list[str] = []
     undo: list[str] = []
@@ -99,6 +104,44 @@ def _axis_changed(fig: StatsFigure) -> Issue | None:
     )
 
 
+def _axis_changed_data(fig: StatsFigure) -> Issue | None:
+    """``axis_changed`` for histostats and scatterstats: an inverted axis or a
+    non-linear scale of the main panel (the marginal panels share its axes)."""
+    ax = fig.axes["main"]
+    found: list[str] = []
+    undo: list[str] = []
+    for name, inverted, setter in (
+        ("x", ax.xaxis_inverted(), "invert_xaxis"),
+        ("y", ax.yaxis_inverted(), "invert_yaxis"),
+    ):
+        if inverted:
+            found.append(f"the {name} axis is inverted")
+            undo.append(f"ax.{setter}()")
+    for name, scale, setter in (
+        ("x", ax.get_xscale(), "set_xscale"),
+        ("y", ax.get_yscale(), "set_yscale"),
+    ):
+        if scale != "linear":
+            found.append(f"the {name} axis has a {scale!r} scale")
+            undo.append(f"ax.{setter}('linear')")
+    if not found:
+        return None
+    return Issue(
+        code="axis_changed",
+        severity="warning",
+        message=(
+            "The axes were changed after inferplot drew them: "
+            + "; ".join(found)
+            + ". The labels were placed, and the bins and the line drawn, for "
+            "upright linear axes, so they may now cover the data or read wrongly."
+        ),
+        fix=(
+            f"Undo it with {' and '.join(undo)}. To show the values on another "
+            "scale, transform the column before the analysis."
+        ),
+    )
+
+
 def _interval(limits: tuple[float, float]) -> tuple[float, float]:
     """Sorted limits widened by a relative 1e-9 (rounding of the limits)."""
     lo, hi = sorted(float(v) for v in limits)
@@ -118,8 +161,84 @@ def _restore(fig: StatsFigure) -> str:
     )
 
 
+def _outside(
+    marks: FloatArray | None, limits: tuple[float, float]
+) -> NDArray[np.bool_] | None:
+    """Per mark (row): whether any of its points lies outside ``limits``; None
+    for marks that span that axis."""
+    if marks is None:
+        return None
+    lo, hi = _interval(limits)
+    return ((marks < lo) | (marks > hi)).any(axis=1)
+
+
+def _out_of_view_data(fig: StatsFigure) -> Issue | None:
+    """``data_outside_view`` for histostats and scatterstats: the marks of
+    ``fig.data`` (values, bars, points, lines, band, marginal bars) that are not
+    wholly in view of their panel."""
+    found: list[str] = []
+    views: list[str] = []
+    for panel in dict.fromkeys(d.panel for d in fig.data):
+        ax = fig.axes[panel]
+        hidden = False
+        for drawn in (d for d in fig.data if d.panel == panel):
+            masks = [
+                m
+                for m in (
+                    _outside(drawn.x, ax.get_xlim()),
+                    _outside(drawn.y, ax.get_ylim()),
+                )
+                if m is not None
+            ]
+            if not masks:
+                continue
+            out = np.logical_or.reduce(masks)
+            count, total = int(out.sum()), int(out.size)
+            if not count:
+                continue
+            hidden = True
+            where = "" if panel == "main" else f" of the {_PANELS[panel]}"
+            found.append(
+                f"{drawn.what}{where}"
+                if total == 1
+                else f"{count:,} of {total:,} {drawn.what}{where}"
+            )
+        if hidden:
+            (x0, x1), (y0, y1) = (_interval(ax.get_xlim()), _interval(ax.get_ylim()))
+            name = "" if panel == "main" else f" ({_PANELS[panel]})"
+            views.append(
+                f"x from {x0:.4g} to {x1:.4g} and y from {y0:.4g} to {y1:.4g}{name}"
+            )
+    if not found:
+        return None
+    return Issue(
+        code="data_outside_view",
+        severity="warning",
+        message=(
+            "Part of the plot lies outside the axis limits and is not shown: "
+            + ", ".join(found)
+            + f" (the view shows {'; '.join(views)}). The limits were changed "
+            "after inferplot drew: by ax.set_xlim or ax.set_ylim, or by a later "
+            "plot into an Axes that shares this one's axes."
+        ),
+        fix=(
+            f"{_restore(fig)[0].upper()}{_restore(fig)[1:]}, or for panels that "
+            "share an axis draw everything into them before setting limits."
+        ),
+    )
+
+
+_PANELS: Final = {
+    "main": "plot",
+    "xside": "marginal histogram of x",
+    "yside": "marginal histogram of y",
+}
+
+
 def _out_of_view(fig: StatsFigure) -> Issue | None:
     """Values, levels and brackets that lie outside the view."""
+    if fig.data:
+        return _out_of_view_data(fig)
     ax = fig.axes["main"]
     x_lo, x_hi = _interval(ax.get_xlim())
     y_lo, y_hi = _interval(ax.get_ylim())
@@ -188,12 +307,13 @@ def _low_contrast(
     inside = axes_background(ax)
     outside = figure_background(root_figure(fig.figure))
     found: list[str] = []
-    for level, color in zip(fig.result.levels, fig.colors, strict=False):
+    names = fig.color_names or tuple(repr(level) for level in fig.result.levels)
+    for name, color in zip(names, fig.colors, strict=False):
         drawn = theme.over(color, inside)
         ratio = theme.contrast(drawn, inside)
         if ratio < COLOR_CONTRAST:
             found.append(
-                f"the colour of {level!r} ({_hex(drawn)}) on the Axes background "
+                f"the colour of {name} ({_hex(drawn)}) on the Axes background "
                 f"{_hex(inside)} has {ratio:.2f}:1, below {COLOR_CONTRAST}:1"
             )
     frame = ax.get_window_extent()
@@ -235,8 +355,60 @@ def _low_contrast(
 FLAT_PX: Final = 2.0
 
 
+def _flat_data(fig: StatsFigure) -> Issue | None:
+    """``flat_data`` for histostats and scatterstats: marks whose values differ
+    along an axis drawn within FLAT_PX pixels of it."""
+    found: list[str] = []
+    for drawn in fig.data:
+        ax = fig.axes[drawn.panel]
+        for letter in drawn.spread:
+            marks = drawn.x if letter == "x" else drawn.y
+            if marks is None or marks.size == 0:
+                continue
+            lo, hi = float(marks.min()), float(marks.max())
+            scale = ax.get_xscale() if letter == "x" else ax.get_yscale()
+            if not hi > lo or scale != "linear":
+                continue
+            points = [(lo, 0.0), (hi, 0.0)] if letter == "x" else [(0.0, lo), (0.0, hi)]
+            ends = np.asarray(ax.transData.transform(points), dtype=np.float64)
+            size = abs(
+                float(
+                    ends[1, 0 if letter == "x" else 1]
+                    - ends[0, 0 if letter == "x" else 1]
+                )
+            )
+            if not np.isfinite(size) or size >= FLAT_PX:
+                continue
+            limits = sorted(
+                float(v) for v in (ax.get_xlim() if letter == "x" else ax.get_ylim())
+            )
+            where = "" if drawn.panel == "main" else f" of the {_PANELS[drawn.panel]}"
+            found.append(
+                f"the {drawn.what}{where}, from {lo:.6g} to {hi:.6g}, are drawn within "
+                f"{size:.2g} pixels along {letter}, whose axis spans {limits[0]:.4g} "
+                f"to {limits[1]:.4g}"
+            )
+    if not found:
+        return None
+    return Issue(
+        code="flat_data",
+        severity="warning",
+        message=(
+            "Values that differ are drawn as a flat line: " + "; ".join(found) + "."
+        ),
+        fix=(
+            f"If the axis limits were changed after drawing: {_restore(fig)}. If "
+            "the values differ only far beyond their leading digits (1e15 plus a "
+            "little), subtract a common offset from the column before the "
+            "analysis; the statistics do not change."
+        ),
+    )
+
+
 def _flat(fig: StatsFigure) -> Issue | None:
     """Values that differ but are drawn within FLAT_PX pixels of height."""
+    if fig.data:
+        return _flat_data(fig)
     ax = fig.axes["main"]
     values = [np.asarray(v, dtype=np.float64) for v in fig.result.values if len(v)]
     if not values:

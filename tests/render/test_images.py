@@ -187,3 +187,78 @@ def test_within_drawn_into_a_given_axes() -> Figure:
     assert fig.figure is figure
     assert figure.get_size_inches().tolist() == [8.0, 7.0]
     return _clean(fig)
+
+
+# histostats and scatterstats (Phase 4). Their subtitles and captions arrive with
+# the texts of Phase 4, so these baselines are generated after that
+# (mpl_generate=true) and looked at by the lead.
+
+
+@image
+def test_histostats_against_a_test_value() -> Figure:
+    """Tooth length against 18: bars, percent axis, the dashed mean line and the
+    test value line, their labels above the bars pointing away from each other."""
+    fig = ip.histostats(_read("ToothGrowth"), "len", test_value=18)
+    return _clean(fig)
+
+
+@image
+def test_histostats_test_value_beyond_the_bars() -> Figure:
+    """Tooth length against 100 (robust): the trimmed mean line, and an arrow at
+    the right edge naming the test value instead of a stretched view."""
+    fig = ip.histostats(_read("ToothGrowth"), "len", type="robust", test_value=100)
+    return _clean(fig)
+
+
+@image
+def test_scatterstats_with_marginals() -> Figure:
+    """mtcars mpg by weight: points, least-squares line with its 95% band, and the
+    marginal histograms aligned with the plot."""
+    fig = ip.scatterstats(_read("mtcars"), "wt", "mpg")
+    assert set(fig.axes) == {"main", "xside", "yside"}
+    return _clean(fig)
+
+
+@image
+def test_scatterstats_point_labels() -> Figure:
+    """Every car labelled: labels clear of each other, joined to their point by a
+    line where moved away."""
+    fig = ip.scatterstats(_read("mtcars"), "wt", "mpg", label_var="model")
+    assert not [i for i in fig.check() if i.code == "point_labels_crowded"]
+    return _clean(fig)
+
+
+def _many_pairs() -> pd.DataFrame:
+    """6,000 pairs from normal quantiles, no random numbers."""
+    n = 6_000
+    quantiles = norm.ppf((np.arange(n) + 0.5) / n)
+    order = np.argsort((np.arange(n) * 7_919) % n)
+    return pd.DataFrame({"x": quantiles, "y": 0.6 * quantiles + 0.8 * quantiles[order]})
+
+
+@image
+def test_scatterstats_subsampled_points() -> Figure:
+    """6,000 pairs: a seeded subsample of 2,000 points over a density layer of
+    all pairs; the marginal histograms show all values."""
+    fig = ip.scatterstats(_many_pairs(), "x", "y")
+    assert fig.subsample is not None
+    return _clean(fig)
+
+
+@image
+def test_histostats_and_scatterstats_in_a_grid() -> Figure:
+    """Both drawn with ax= into a 1 x 2 grid of the user's figure; the scatter
+    labels the cars of ggstatsplot's label.expression mpg > 25 | wt > 5."""
+    cars = _read("mtcars")
+    selected = cars.assign(
+        model=cars["model"].where((cars["mpg"] > 25) | (cars["wt"] > 5))
+    )
+    figure = Figure(figsize=(17.0, 5.5), dpi=100)
+    FigureCanvasAgg(figure)
+    left, right = figure.subplots(1, 2, gridspec_kw={"wspace": 0.45})
+    ip.histostats(cars, "mpg", type="robust", ax=left)
+    fig = ip.scatterstats(
+        selected, "wt", "mpg", label_var="model", ax=right, marginal=False
+    )
+    assert figure.get_size_inches().tolist() == [17.0, 5.5]
+    return _clean(fig)

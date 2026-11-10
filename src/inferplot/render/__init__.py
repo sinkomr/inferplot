@@ -3,9 +3,9 @@
 ``inferplot.render.betweenstats(result)`` draws a result of
 ``inferplot.analyze.betweenstats`` and returns a :class:`StatsFigure`;
 ``inferplot.render.withinstats(result)`` does the same for
-``inferplot.analyze.withinstats``. ``inferplot.render.histostats(result)`` and
-``inferplot.render.scatterstats(result)`` check their arguments; their drawing is
-not implemented yet.
+``inferplot.analyze.withinstats``; ``inferplot.render.histostats(result)`` and
+``inferplot.render.scatterstats(result)`` draw the results of
+``inferplot.analyze.histostats`` and ``inferplot.analyze.scatterstats``.
 """
 
 from __future__ import annotations

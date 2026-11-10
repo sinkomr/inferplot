@@ -265,8 +265,8 @@ def histostats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
-        NotImplementedError: the statistics and the drawing of histostats are not
-            in this version yet.
+        NotImplementedError: the statistics of the given type are not in this
+            version yet.
     """
     from inferplot import render  # imports matplotlib
     from inferplot.render.histostats import check_drawing
@@ -351,8 +351,8 @@ def scatterstats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
-        NotImplementedError: the statistics and the drawing of scatterstats are
-            not in this version yet.
+        NotImplementedError: the statistics of the given type are not in this
+            version yet.
     """
     from inferplot import render  # imports matplotlib
     from inferplot.render.scatterstats import check_drawing

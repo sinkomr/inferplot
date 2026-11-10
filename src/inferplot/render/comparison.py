@@ -29,19 +29,12 @@ centrality labels go).
 from __future__ import annotations
 
 import dataclasses
-import io
-import math
-import warnings
 from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 import numpy as np
-from matplotlib import cbook
-from matplotlib.artist import ArtistInspector
 from matplotlib.axes import Axes
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
-from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.path import Path
@@ -51,7 +44,18 @@ from numpy.typing import NDArray
 from scipy.special import ndtr
 
 from inferplot import _validate as v
-from inferplot.render import theme
+from inferplot.render import base, theme
+from inferplot.render.base import (
+    GAP_PT,
+    LABEL_BOX_PAD,
+    LABEL_PAD_PT,
+    MARGIN_PT,
+    LayerArgs,
+    apply_args,
+    check_axes,
+    px,
+    siblings,
+)
 from inferplot.render.brackets import Bracket, VerticalLayout, stack, vertical_layout
 from inferplot.render.figure import (
     CenterLabel,
@@ -59,13 +63,6 @@ from inferplot.render.figure import (
     DrawnView,
     StatsFigure,
     Subsample,
-    axes_background,
-    describe_text,
-    figure_background,
-    plain_text,
-    remember,
-    reported_glyphs,
-    root_figure,
     shows_all,
 )
 from inferplot.render.labels import ambiguities, covered
@@ -74,9 +71,12 @@ from inferplot.text import FigureTexts, drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
-    from matplotlib.backend_bases import RendererBase
 
 __all__ = [
+    "GAP_PT",
+    "LABEL_BOX_PAD",
+    "LABEL_PAD_PT",
+    "MARGIN_PT",
     "MAX_POINTS",
     "MIN_PER_LEVEL",
     "SUBSAMPLE_SIZE",
@@ -85,10 +85,12 @@ __all__ = [
     "LabelPlace",
     "Options",
     "apply_args",
+    "check_axes",
     "check_options",
     "checked_result",
     "draw",
     "points_artist",
+    "px",
     "wrap_tick_label",
 ]
 
@@ -107,11 +109,7 @@ LABEL_OFFSET: Final = 0.22  # centrality label starts this far right of its leve
 # Pixels of the paths a centrality label may cover and still count as clear of them.
 _PATH_SLACK: Final = 1.0
 
-# Geometry in points.
-MARGIN_PT: Final = 10.0
-GAP_PT: Final = 5.0
-LABEL_PAD_PT: Final = 3.0  # between a bracket and its label, and around labels
-LABEL_BOX_PAD: Final = 0.3  # centrality label box padding, in font sizes
+# Geometry in points (MARGIN_PT, GAP_PT, LABEL_PAD_PT and LABEL_BOX_PAD: base).
 BRACKET_TIP_PT: Final = 4.0  # length of a bracket's legs
 BRACKET_LINEWIDTH_PT: Final = 0.8
 MIN_LEVEL_SPACING_IN: Final = 1.1
@@ -208,17 +206,7 @@ def checked_result(result: StatsResult, analysis: str, call: str) -> int:
     ``call`` is how to recompute it, for the message about a result without
     observations.
     """
-    if not isinstance(result, StatsResult):  # pyright: ignore[reportUnnecessaryIsInstance]
-        raise TypeError(
-            f"render.{analysis}() draws the result of ip.analyze.{analysis}(); "
-            f"got {type(result).__name__}."
-        )
-    if result.analysis != analysis:
-        raise TypeError(
-            f"render.{analysis}() draws results of ip.analyze.{analysis}(); this "
-            f"result comes from ip.analyze.{result.analysis}(). Draw it with "
-            f"ip.render.{result.analysis}(result)."
-        )
+    base.check_result_type(result, analysis)
     k = len(result.levels)
     if k >= 1 and not result.values:
         raise ValueError(
@@ -253,68 +241,13 @@ def check_options(result: StatsResult, options: Options, ax: Axes | None) -> Non
     _check_scale(result)
 
 
-# The largest |y| inferplot draws must lie within these bounds: matplotlib treats
-# axis limits whose size is below about 1e21 times the smallest normal double
-# (2.2e-287) as zero and widens them to +-0.05, and above about 1e306 the room
-# for brackets above the data comes close to the largest double.
-_SMALLEST_DRAWN: Final = 1e-280
-_LARGEST_DRAWN: Final = 1e306
-
-
 def _check_scale(result: StatsResult) -> None:
     """Values matplotlib can draw on an axis; raised before anything is drawn."""
-    sizes = [abs(float(v)) for level in result.values for v in level]
-    sizes += [abs(d.value) for d in result.descriptives if d.value is not None]
-    largest = max(sizes, default=0.0)
-    if largest == 0.0 or _SMALLEST_DRAWN <= largest <= _LARGEST_DRAWN:
-        return
-    exponent = math.floor(math.log10(largest))
-    small = largest < _SMALLEST_DRAWN
-    if small:
-        why = (
-            f"the largest is {largest:.3g} in size, and matplotlib treats axis "
-            "limits below about 1e-287 as zero"
-        )
-        how = f"multiply y by 1e{-exponent}"
-    else:
-        why = (
-            f"the largest is {largest:.3g}, and the axis, with room for the "
-            "brackets above the data, would pass the largest double (1.8e308)"
-        )
-        how = f"divide y by 1e{exponent}"
-    raise ValueError(
-        f"The values of {result.y!r} are too {'small' if small else 'large'} "
-        f"for matplotlib to draw: {why}. The statistics do not depend on the "
-        f"units: {how} (change its units) before the analysis and draw that."
+    sizes = [float(v) for level in result.values for v in level]
+    sizes += [d.value for d in result.descriptives if d.value is not None]
+    base.check_scale(
+        sizes, result.y, "y", room="with room for the brackets above the data"
     )
-
-
-def check_axes(ax: Axes) -> None:
-    """A given Axes is a plain rectangular 2D one whose x axis it does not share;
-    checked before drawing."""
-    name = str(getattr(ax, "name", ""))
-    if name != "rectilinear":
-        raise ValueError(
-            f"ax is a {name!r} Axes; inferplot draws only into a plain rectangular "
-            "2D Axes, where the levels lie along x and the values along y. Pass an "
-            "Axes made without projection=, for example figure.add_subplot()."
-        )
-    if len(_siblings(ax, "x")) > 1:
-        raise ValueError(
-            "ax shares its x axis with another Axes (sharex=True, or twinx()), and "
-            "Axes that share an x axis share its tick labels; inferplot's tick "
-            "labels name each level with that panel's n, so one panel would show "
-            "the other's. Make the panels with sharex=False (the default), for "
-            "example figure.subplots(1, 2, sharey=True)."
-        )
-
-
-def _siblings(ax: Axes, which: Literal["x", "y"]) -> list[Axes]:
-    """The Axes that share ``ax``'s x or y axis, ``ax`` included."""
-    group = cast(
-        "Any", ax.get_shared_x_axes() if which == "x" else ax.get_shared_y_axes()
-    )
-    return list(cast("list[Axes]", group.get_siblings(ax)))
 
 
 def draw(
@@ -325,73 +258,13 @@ def draw(
     ax: Axes | None,
 ) -> StatsFigure:
     """Resolve the palette, check the artist dicts and user texts, then draw."""
-    colors, palette_warning = theme.resolve_palette(palette, len(result.levels))
-    fallbacks = theme.user_fallbacks()  # before context() resets the rcParams
-    with reported_glyphs(), theme.context(), theme.fallback_fonts(fallbacks):
-        invisible = _check_artist_args(options)
-        _check_mathtext(options)
-        made = drawing(result, options, colors, palette_warning, ax)
-        made.warnings.extend(invisible)
-        return made.run()
-
-
-def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
-    """``artist.set(**args)``, with a message naming the argument on failure.
-
-    A name the artist has no setter for is an unknown property (``TypeError``);
-    any error from setting a known property is a rejected value (``ValueError``),
-    whatever exception type matplotlib uses for it.
-    """
-    if not args:
-        return
-    kind = type(artist).__name__
-    for key in args:
-        if not callable(getattr(artist, f"set_{key}", None)):
-            close = v.closest_name(key, ArtistInspector(artist).get_setters())
-            shorthand = (
-                _SCATTER_SHORTHANDS.get(key) if kind == "PathCollection" else None
-            )
-            if shorthand is not None:
-                hint = f" {shorthand}"
-            elif close is not None:
-                hint = f" Did you mean {close!r}?"
-            else:
-                hint = f" matplotlib's documentation of {kind} lists its properties."
-            raise TypeError(
-                f"{name} has a property matplotlib's {kind} does not have: "
-                f"{key!r}.{hint}"
-            )
-    try:
-        artist.set(**args)
-    except Exception as error:
-        raise ValueError(f"{name} has a value matplotlib rejects: {error}") from error
-
-
-# scatter()'s argument names, which the points' PathCollection spells otherwise.
-_SCATTER_SHORTHANDS: Final = {
-    "s": (
-        "That is scatter()'s name for the marker size; the points' property is "
-        "'sizes', a list of areas in points squared, for example "
-        "point_args={'sizes': [30]}."
-    ),
-    "c": (
-        "That is scatter()'s name for the colour; the points' property is "
-        "'color' (one colour for every level, for example "
-        "point_args={'color': 'black'}), and palette= colours them by level."
-    ),
-}
-
-# The layer each artist dict styles (SPEC.md section 2).
-_ARTIST_LAYERS: Final = (
-    ("point_args", "points"),
-    ("boxplot_args", "box"),
-    ("violin_args", "violin"),
-)
-
-# The vector formats a scratch drawing is also written to: matplotlib checks some
-# values only there (a NaN line width passes Agg and fails in PDF).
-_SCRATCH_FORMATS: Final = ("svg", "pdf")
-_SCRATCH_VALUES: Final = (0.0, 1.0, 2.0, 3.0, 4.0)
+    return base.draw(
+        lambda colors, warning: drawing(result, options, colors, warning, ax),
+        palette=palette,
+        k=len(result.levels),
+        options=options,
+        artist_args=lambda: _check_artist_args(options),
+    )
 
 
 def points_artist(
@@ -435,169 +308,50 @@ def _violin_artist(outline: FloatArray, color: theme.Color, i: int) -> Polygon:
     )
 
 
-def _scratch(layer: str) -> tuple[Figure, Artist]:
-    """A scratch figure holding one artist of ``layer``, made as the drawing makes
-    it; nothing of it reaches the user."""
-    figure = Figure(figsize=(2.0, 2.0), dpi=100)
-    FigureCanvasAgg(figure)
-    figure.patch.set_visible(False)  # so that only the artist leaves pixels
-    ax = figure.add_axes((0.1, 0.1, 0.8, 0.8))
-    ax.set_axis_off()  # no texts, so writing it embeds no fonts; no background
-    ax.set_xlim(-0.5, 0.5)  # the whole artist in view
-    ax.set_ylim(-0.5, 4.5)
+_SCRATCH_VALUES: Final = (0.0, 1.0, 2.0, 3.0, 4.0)
+_BLACK: Final[theme.Color] = (0.0, 0.0, 0.0, 1.0)
+
+
+def _scratch_points(ax: Axes) -> Artist:
     values = np.array(_SCRATCH_VALUES)
-    color: theme.Color = (0.0, 0.0, 0.0, 1.0)
-    if layer == "points":
-        return figure, points_artist(ax, np.zeros_like(values), values, color, 0)
-    if layer == "box":
-        artist: Artist = _box_artist(values, 0.0, 0)
-    else:
-        outline = np.array([[-0.4, 0.0], [0.4, 0.0], [0.0, 4.0]])
-        artist = _violin_artist(outline, color, 0)
+    return points_artist(ax, np.zeros_like(values), values, _BLACK, 0)
+
+
+def _scratch_box(ax: Axes) -> Artist:
+    artist = _box_artist(np.array(_SCRATCH_VALUES), 0.0, 0)
     ax.add_artist(artist)
-    return figure, artist
+    return artist
 
 
-def _draw_error(figure: Figure) -> Exception | None:
-    """The error matplotlib raises when it draws ``figure`` (Agg) or writes it as
-    SVG or PDF; None when it draws. Warnings are left to the real drawing."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        try:
-            figure.canvas.draw()
-            for fmt in _SCRATCH_FORMATS:
-                figure.savefig(io.BytesIO(), format=fmt)
-        # The same scratch figure draws without the user's properties, so whatever
-        # fails here is one of their values.
-        except Exception as error:
-            return error
-    return None
+def _scratch_violin(ax: Axes) -> Artist:
+    outline = np.array([[-0.4, 0.0], [0.4, 0.0], [0.0, 4.0]])
+    artist = _violin_artist(outline, _BLACK, 0)
+    ax.add_artist(artist)
+    return artist
 
 
-def _check_drawn(name: str, layer: str, args: Mapping[str, object]) -> bool:
-    """Apply ``args`` to a scratch artist of ``layer`` and draw it; whether the
-    artist is then invisible (it leaves no pixel).
-
-    ``Artist.set`` stores some values without checking them (a line width of
-    "bad" for points); matplotlib rejects them only when drawing, which with ``ax=``
-    would be the user's later ``savefig``.
-    """
-    figure, artist = _scratch(layer)
-    apply_args(artist, args, name)
-    error = _draw_error(figure)
-    if error is None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            figure.canvas.draw()
-        return _invisible(figure)
-    culprits: list[str] = []
-    for key, value in args.items():
-        alone, single = _scratch(layer)
-        try:
-            single.set(**{key: value})
-        except Exception:  # this one value is then a culprit
-            culprits.append(key)
-            continue
-        if _draw_error(alone) is not None:
-            culprits.append(key)
-    shown = ", ".join(
-        f"{key}={v.describe_value(args[key])}" for key in culprits or args
+def _layer_args(
+    name: str, layer: str, noun: str, make: Callable[[Axes], Artist]
+) -> LayerArgs:
+    return LayerArgs(
+        name=name,
+        layer=layer,
+        noun=noun,
+        make=make,
+        asks=", although layers= asks for them",
+        advice=(
+            f"To leave the {noun} out, remove {layer!r} from layers= instead; "
+            "otherwise choose a visible style."
+        ),
     )
-    raise ValueError(
-        f"{name} has a value matplotlib rejects when it draws the {layer}: {shown} "
-        f"({type(error).__name__}: {error}). Use a value of the kind matplotlib "
-        f"documents for that property, or remove it from {name}."
-    ) from error
 
 
-# Properties an artist dict may not set (SPEC.md section 2), with why: they carry
-# or move the data, or detach the artist from the figure. Found by going through
-# the setters of the points' PathCollection, the box's PathPatch and the violin's
-# Polygon; names that are not properties of these artists (``data``, ``xdata``,
-# ``verts``, ...) are listed too, so they get this message rather than a
-# suggestion of a similar property.
-_DATA: Final = (
-    "would replace the positions or shape of the {layer}, which inferplot draws "
-    "from the result's values"
+# The layer each artist dict styles (SPEC.md section 2).
+_ARTIST_LAYERS: Final = (
+    _layer_args("point_args", "points", "points", _scratch_points),
+    _layer_args("boxplot_args", "box", "boxes", _scratch_box),
+    _layer_args("violin_args", "violin", "violins", _scratch_violin),
 )
-_MOVED: Final = (
-    "would draw the {layer} in other coordinates than the axes' data "
-    "coordinates, so it would no longer line up with the axis, the other layers "
-    "and the brackets"
-)
-_DETACHED: Final = "would detach the {layer} from the Axes inferplot draws into"
-_CLIPPED: Final = (
-    "would clip the {layer} to another region than the Axes, hiding values"
-)
-_REFUSED: Final[Mapping[str, str]] = {
-    "offsets": _DATA,
-    "paths": _DATA,
-    "path": _DATA,
-    "xy": _DATA,
-    "verts": _DATA,
-    "segments": _DATA,
-    "data": _DATA,
-    "xdata": _DATA,
-    "ydata": _DATA,
-    "transform": _MOVED,
-    "offset_transform": _MOVED,
-    "figure": _DETACHED,
-    "axes": _DETACHED,
-    "clip_path": _CLIPPED,
-    "clip_box": _CLIPPED,
-    "animated": (
-        "would leave the {layer} out of every ordinary drawing and saved file "
-        "(matplotlib draws animated artists only for blitting)"
-    ),
-}
-
-
-def _refuse_moving_args(name: str, layer: str, args: Mapping[str, object]) -> None:
-    """Refuse a property that carries or moves the data or detaches the artist.
-
-    Aliases are read as the property they stand for.
-    """
-    figure, artist = _scratch(layer)
-    del figure
-    for key in args:
-        prop = key
-        if key not in _REFUSED:
-            try:
-                (prop,) = cbook.normalize_kwargs({key: None}, artist)
-            except TypeError:
-                continue  # a property of two names at once; Artist.set reports it
-        why = _REFUSED.get(prop)
-        if why is not None:
-            raise ValueError(
-                f"{name} sets {key!r}, which {why.format(layer=_LAYER_NOUN[layer])}. "
-                f"Remove {key!r} from {name}"
-                + (
-                    "; to draw other values, change the data before the analysis."
-                    if why is _DATA
-                    else "."
-                )
-            )
-
-
-_LAYER_NOUN: Final = {"points": "points", "box": "boxes", "violin": "violins"}
-
-
-def _invisible(figure: Figure) -> bool:
-    """Whether a scratch figure (transparent but for its one artist) drew nothing:
-    every pixel of the Agg buffer is fully transparent."""
-    canvas = cast("FigureCanvasAgg", figure.canvas)
-    alpha = np.asarray(canvas.buffer_rgba())[..., 3]
-    return not bool(alpha.any())
-
-
-def _invisible_warning(name: str, layer: str, args: Mapping[str, object]) -> str:
-    noun = _LAYER_NOUN[layer]
-    shown = ", ".join(f"{key}={v.describe_value(value)}" for key, value in args.items())
-    return (
-        f"{name}={{{shown}}} makes the {noun} invisible: nothing of them is drawn, "
-        f"although layers= asks for them. To leave the {noun} out, remove "
-        f"{layer!r} from layers= instead; otherwise choose a visible style."
-    )
 
 
 def _check_artist_args(options: Options) -> list[str]:
@@ -607,52 +361,22 @@ def _check_artist_args(options: Options) -> list[str]:
 
     Returns a warning for each dict that leaves its layer invisible (D39).
     """
-    found: list[str] = []
-    for name, layer in _ARTIST_LAYERS:
+    given: list[tuple[LayerArgs, Mapping[str, object], str | None]] = []
+    for spec in _ARTIST_LAYERS:
+        name, layer = spec.name, spec.layer
         args: dict[str, object] = getattr(options, name)
-        if not args:
-            continue
-        if layer not in options.layers:
+        refusal = None
+        if args and layer not in options.layers:
             with_layer = tuple(
                 item for item in v.LAYERS if item in options.layers or item == layer
             )
-            raise ValueError(
+            refusal = (
                 f"{name} styles the {layer} layer, which layers={options.layers!r} "
                 f"does not draw. To style it, add {layer!r} to layers, for example "
                 f"layers={with_layer!r}; otherwise remove {name}=."
             )
-        _refuse_moving_args(name, layer, args)
-        if _check_drawn(name, layer, args):
-            found.append(_invisible_warning(name, layer, args))
-    return found
-
-
-_USER_TEXTS: Final = ("title", "subtitle", "caption", "xlab", "ylab")
-
-
-def _check_mathtext(options: Options) -> None:
-    """Lay out each user text once, so an expression matplotlib cannot read raises
-    here, before anything is drawn (with ``ax=`` it would otherwise surface only
-    when the figure is drawn)."""
-    given = [(name, getattr(options, name)) for name in _USER_TEXTS]
-    given = [(name, value) for name, value in given if value is not None]
-    if not given:
-        return
-    figure = Figure()
-    renderer = FigureCanvasAgg(figure).get_renderer()
-    for name, value in given:
-        text = figure.text(0.0, 0.0, value, fontproperties=theme.font(theme.SIZE_LABEL))
-        try:
-            text.get_window_extent(renderer)
-        except ValueError as error:
-            lines = [line.strip() for line in str(error).splitlines() if line.strip()]
-            detail = lines[-1] if lines else type(error).__name__
-            raise ValueError(
-                f"{name} is drawn as matplotlib mathtext, where text between two $ "
-                f"signs is a math expression, and matplotlib cannot read it: "
-                f"{detail}. Fix the expression, or write \\$ for a literal dollar "
-                f"sign; got {name}={value!r}."
-            ) from error
+        given.append((spec, args, refusal))
+    return base.check_artist_args(given)
 
 
 # --------------------------------------------------------------------------- #
@@ -853,17 +577,13 @@ def wrap_tick_label(label: str, fits: Callable[[str], bool]) -> str:
     return f"{wrapped}\n{count}" if sep else wrapped
 
 
-def px(points: float, dpi: float) -> float:
-    return points * dpi / 72.0
-
-
 _EMPTY: Final = np.empty(0, dtype=np.float64)
 # The attribute of a given Axes that holds its drawing, so that a later drawing
 # into an Axes sharing its y axis can lay it out again at the shared scale.
 _PANEL_ATTR: Final = "_inferplot_drawing"
 
 
-class Drawing:
+class Drawing(base.BaseDrawing):
     """One rendering of a result; holds the artists while laying them out.
 
     Draws a betweenstats result. The hooks ``place_points``, ``draw_paths``,
@@ -879,23 +599,10 @@ class Drawing:
         palette_warning: str | None,
         ax: Axes | None,
     ) -> None:
-        self.result = result
+        super().__init__(result, options, colors, palette_warning, ax)
         self.options = options
-        self.colors = colors
         self.texts: FigureTexts = figure_texts(result)
-        self.own = ax is None
-        if ax is None:
-            self.figure = Figure(figsize=(6.0, 4.5), dpi=100)
-            FigureCanvasAgg(self.figure)
-            self.ax = self.figure.add_axes((0.15, 0.2, 0.7, 0.6))
-        else:
-            self.figure = root_figure(ax.figure)
-            self.ax = ax
-        self.dpi = float(self.figure.dpi)
         self.values = [np.asarray(x, dtype=np.float64) for x in result.values]
-        self.warnings: list[str] = [] if palette_warning is None else [palette_warning]
-        self.roles: dict[int, str] = {}
-        self.inside: list[Text] = []
         self.subsample: Subsample | None = None
         self.centrality_labels: list[Text] = []
         self.left_labels: list[Text] = []  # centrality labels left of their point
@@ -904,8 +611,6 @@ class Drawing:
         self.bracket_labels: list[Text] = []
         self.bracket_pairs: list[tuple[int, int]] = []
         self.bracket_names: list[str] = []
-        self.header: list[Text] = []  # title, subtitle (own figure)
-        self.captions: list[Text] = []
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
         self.outlier_marks: list[PathCollection] = []
@@ -921,21 +626,6 @@ class Drawing:
         self.levels_of_brackets: list[int] = []
 
     # -- helpers ---------------------------------------------------------------
-
-    def renderer(self) -> RendererBase | None:
-        get = getattr(self.figure.canvas, "get_renderer", None)
-        return cast("RendererBase", get()) if callable(get) else None
-
-    def extent(self, text: Text) -> Bbox:
-        """Rendered box of ``text`` in pixels, its label box included."""
-        renderer = self.renderer()
-        box = text.get_window_extent(renderer)
-        patch = text.get_bbox_patch()
-        if patch is not None:
-            pad = 2 * px(LABEL_BOX_PAD * float(text.get_fontsize()), self.dpi)
-            box = Bbox.from_bounds(box.x0 - pad / 2, box.y0 - pad / 2,
-                                   box.width + pad, box.height + pad)  # fmt: skip
-        return box
 
     def tick_labels(self) -> list[str]:
         """The x tick labels as drawn: :func:`wrap_tick_label` with lines as wide
@@ -958,13 +648,6 @@ class Drawing:
         finally:
             probe.remove()
         return self.tick_texts
-
-    def role(self, text: Text, name: str, plain: str | None = None) -> Text:
-        """Record what ``text`` is (and its plain wording) for check() messages."""
-        described = describe_text(name, plain_text(text) if plain is None else plain)
-        self.roles[id(text)] = described
-        remember(text, described)
-        return text
 
     # -- hooks -------------------------------------------------------------------
 
@@ -1435,72 +1118,8 @@ class Drawing:
             parse_math=options.ylab is not None,
         )
 
-    def draw_text_blocks(self) -> None:
-        """Title, subtitle and caption lines (positions set by the layout).
-
-        With inferplot's own figure they are figure texts; with ``ax=`` the title
-        is the Axes title and the subtitle and caption go inside the Axes.
-        """
-        options, result = self.options, self.result
-        title = options.title
-        if options.subtitle is None:
-            subtitle, plain_subtitle = self.texts.subtitle, result.text.subtitle
-        else:
-            subtitle, plain_subtitle = options.subtitle, None
-        plain_captions = [] if result.text.caption is None else (
-            result.text.caption.split("\n")
-        )  # fmt: skip
-        lines: list[tuple[str, bool, str | None]] = [
-            (line, line.startswith("$") and line.endswith("$"), plain)
-            for line, plain in zip(
-                self.texts.caption_lines, plain_captions, strict=True
-            )
-        ]
-        if options.caption is not None:
-            lines.append((options.caption, True, None))
-        ax = self.ax
-        place = self.figure if self.own else ax
-        where: dict[str, Any] = {} if self.own else {"transform": ax.transAxes}
-        if title is not None:
-            title_font = theme.font(theme.SIZE_TITLE, weight="bold")
-            if self.own:
-                text = self.figure.text(
-                    0.0, 1.0, title, ha="left", va="top", fontproperties=title_font
-                )
-                self.header.append(text)
-            else:
-                text = ax.set_title(title, loc="left", fontproperties=title_font)
-            text.set_gid("title")
-            self.role(text, "title")
-        if subtitle is not None:
-            text = place.text(
-                0.0,
-                1.0,
-                subtitle,
-                ha="left",
-                va="top",
-                fontproperties=theme.font(theme.SIZE_SUBTITLE),
-                gid="subtitle",
-                **where,
-            )
-            self.header.append(self.role(text, "subtitle", plain_subtitle))
-            if not self.own:
-                self.inside.append(text)
-        for n, (line, math_, plain) in enumerate(lines):
-            text = place.text(
-                0.0,
-                0.0,
-                line,
-                ha="left",
-                va="top" if self.own else "bottom",
-                fontproperties=theme.font(theme.SIZE_CAPTION),
-                parse_math=math_,
-                gid=f"caption-{n}",
-                **where,
-            )
-            self.captions.append(self.role(text, f"caption line {n + 1}", plain))
-            if not self.own:
-                self.inside.append(text)
+    def generated_texts(self) -> tuple[str | None, str | None, Sequence[str]]:
+        return self.texts.subtitle, self.result.text.subtitle, self.texts.caption_lines
 
     # -- layout ----------------------------------------------------------------
 
@@ -1682,88 +1301,13 @@ class Drawing:
         left, right, n_levels, levels = self.place_brackets(left, right, spacing)
         layout = self.y_layout(n_levels)
         self.apply_limits(left, right, layout, levels)
-        axes_w = spacing * (right - left)
-        axes_h = layout.height_px
-        margin, gap = px(MARGIN_PT, dpi), px(GAP_PT, dpi)
-        header = [self.extent(t) for t in self.header]
-        captions = [self.extent(t) for t in self.captions]
-        widths = [b.width for b in header + captions]
-        top_block = sum(b.height + gap for b in header)
-        bottom_block = (
-            sum(b.height for b in captions) + gap * len(captions) if captions else 0.0
-        )
-        # Room the Axes decorations need around the plotting area (measured).
-        extra = [0.8 * dpi, 0.1 * dpi, 0.7 * dpi, 0.1 * dpi]  # left right bottom top
-        canvas = self.figure.canvas
-        for _ in range(5):
-            le, re, be, te = extra
-            content_w = max([le + axes_w + re, *widths])
-            ax_w = content_w - le - re
-            width = 2 * margin + content_w
-            height = 2 * margin + top_block + te + axes_h + be + bottom_block
-            self.figure.set_size_inches(width / dpi, height / dpi)
-            x0, y0 = margin + le, margin + bottom_block + be
-            self.ax.set_position(
-                (x0 / width, y0 / height, ax_w / width, axes_h / height)
-            )
-            top = height - margin
-            for text, box in zip(self.header, header, strict=True):
-                text.set_position((margin / width, top / height))
-                top -= box.height + gap
-            top = margin + bottom_block - gap
-            for text, box in zip(self.captions, captions, strict=True):
-                text.set_position((margin / width, top / height))
-                top -= box.height + gap
-            canvas.draw()
-            measured = self.decoration_extra()
-            if all(abs(a - b) <= 0.5 for a, b in zip(measured, extra, strict=True)):
-                break
-            extra = measured
+        self.fit_figure(spacing * (right - left), layout.height_px)
 
-    def decoration_extra(self) -> list[float]:
-        """Pixels the Axes' texts reach beyond its plotting area on each side."""
-        ax = self.ax
-        renderer = self.renderer()
-        frame = ax.get_window_extent(renderer)
-        boxes = [ax.get_tightbbox(renderer)]
-        boxes += [self.extent(t) for t in self.centrality_labels + self.bracket_labels]
-        union = Bbox.union([b for b in boxes if b is not None])
-        pad = 1.0
-        return [
-            max(0.0, frame.x0 - union.x0) + pad,
-            max(0.0, union.x1 - frame.x1) + pad,
-            max(0.0, frame.y0 - union.y0) + pad,
-            max(0.0, union.y1 - frame.y1) + pad,
-        ]
+    def decoration_texts(self) -> list[Text]:
+        return self.centrality_labels + self.bracket_labels
 
     def layout_in_axes(self) -> None:
-        dpi = self.dpi
-        pad, gap = px(LABEL_PAD_PT, dpi), px(GAP_PT, dpi)
-        header = [self.extent(t) for t in self.header]
-        captions = [self.extent(t) for t in self.captions]
-        top_px = sum(b.height for b in header) + 2 * pad if header else 0.0
-        bottom_px = (
-            sum(b.height for b in captions) + gap * (len(captions) - 1) + 2 * pad
-            if captions
-            else 0.0
-        )
-        to_pt = 72.0 / dpi
-        for text in self.header:
-            text.set_transform(
-                offset_copy(
-                    self.ax.transAxes, fig=self.figure, x=pad * to_pt, y=-pad * to_pt,
-                    units="points",
-                )
-            )  # fmt: skip
-        rise = pad
-        for text, box in zip(reversed(self.captions), reversed(captions), strict=True):
-            text.set_transform(
-                offset_copy(
-                    self.ax.transAxes, fig=self.figure, x=pad * to_pt, y=rise * to_pt,
-                    units="points",
-                )
-            )  # fmt: skip
-            rise += box.height + gap
+        top_px, bottom_px = self.place_blocks_in_axes()
         left, right, spacing = self.x_layout(None)
         left, right, n_levels, levels = self.place_brackets(left, right, spacing)
         layout = self.y_layout(
@@ -1793,12 +1337,12 @@ class Drawing:
         texts and brackets take less than each Axes' height.
         """
         ax = self.ax
-        siblings = [a for a in _siblings(ax, "y") if a is not ax]
-        if not siblings:
+        others = [a for a in siblings(ax, "y") if a is not ax]
+        if not others:
             return
         panels: list[Drawing] = [self]
         fixed: list[float] = []
-        for other in siblings:
+        for other in others:
             drawn = getattr(other, _PANEL_ATTR, None)
             if not other.has_data():
                 continue
@@ -1826,54 +1370,13 @@ class Drawing:
             panel.place_bracket_levels(lay)
             panel.view.ylim = (lo, hi)
 
-    def finish_ink(self) -> None:
-        """With ``ax=``: inferplot's ink in contrast with what it is drawn on.
-
-        Texts and lines drawn inside the Axes (subtitle, caption, bracket lines
-        and labels) take :func:`theme.ink_for` of the Axes background, and the
-        axis texts and title outside it that of the figure background: the usual
-        near-black on a light background, a near-white on a dark one; so do the
-        outlier markers. The centrality labels keep theirs, on their own white
-        boxes. On a light
-        background nothing is changed.
-        """
-        inside = axes_background(self.ax)
-        outside = figure_background(self.figure)
-        ink_in, ink_out = theme.ink_for(inside), theme.ink_for(outside)
-        if ink_in != theme.INK:
-            for text in [*self.header, *self.captions, *self.bracket_labels]:
-                text.set_color(ink_in)
-            for line in self.bracket_lines:
-                line.set_color(ink_in)
-            for marks in self.outlier_marks:
-                marks.set_edgecolor(ink_in)
-        if ink_out != theme.INK:
-            ax = self.ax
-            ax.xaxis.label.set_color(ink_out)
-            ax.yaxis.label.set_color(ink_out)
-            ax.tick_params(axis="both", labelcolor=ink_out)
-            for text in ax.findobj(Text):
-                if self.roles.get(id(text), "").startswith("title"):
-                    text.set_color(ink_out)
-
-    def finish_fonts(self) -> None:
-        """DejaVu Sans, also for mathtext, on every text inferplot draws.
-
-        With inferplot's own figure that is every text of the figure. With ``ax=``
-        it is the axis texts (labels and tick labels, which inferplot sets) and the
-        texts this drawing created; texts the user placed before the call, such as
-        their own title or annotations, keep their font.
-        """
-        # The own figure was drawn by the layout, so its tick labels exist; tick
-        # labels made later copy their font from the existing ones.
-        if self.own:
-            texts = self.figure.findobj(Text)
-        else:
-            texts = [
-                *self.ax.xaxis.findobj(Text),
-                *self.ax.yaxis.findobj(Text),
-                *(t for t in self.ax.findobj(Text) if id(t) in self.roles),
-            ]
-        for item in texts:
-            item.set_fontfamily(theme.families())
-            item.set_math_fontfamily(theme.MATH_FONT_FAMILY)
+    def ink_inside(self, ink: str) -> None:
+        """Subtitle, caption, bracket lines and labels, and the outlier markers;
+        the centrality labels keep theirs, on their own white boxes."""
+        super().ink_inside(ink)
+        for text in self.bracket_labels:
+            text.set_color(ink)
+        for line in self.bracket_lines:
+            line.set_color(ink)
+        for marks in self.outlier_marks:
+            marks.set_edgecolor(ink)

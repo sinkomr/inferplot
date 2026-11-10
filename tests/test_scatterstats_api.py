@@ -138,7 +138,7 @@ def test_signatures() -> None:
 @pytest.mark.parametrize(
     "type_name", ["parametric", "nonparametric", "robust", "bayes"]
 )
-def test_each_type_returns_a_result_and_drawing_is_not_implemented(
+def test_each_type_returns_a_result_and_draws(
     cars: pd.DataFrame, type_name: str
 ) -> None:
     result = analyze(cars, "wt", "mpg", type=type_name)
@@ -148,17 +148,14 @@ def test_each_type_returns_a_result_and_drawing_is_not_implemented(
         32,
     )
     assert result.text.apa.endswith("n = 32 pairs.")
-    text = message(
-        NotImplementedError,
-        lambda: top(cars, "wt", "mpg", type=type_name, marginal=False),
-    )
-    assert text.startswith("render.scatterstats(): drawing a scatterstats result")
+    fig = top(cars, "wt", "mpg", type=type_name, marginal=False)
+    assert fig.result.text.apa == result.text.apa
+    assert set(fig.axes) == {"main"}
 
 
-def test_render_checks_its_arguments_then_says_it_is_not_implemented() -> None:
+def test_render_checks_its_arguments_then_draws() -> None:
     result = made("mtcars-parametric")
-    text = message(NotImplementedError, lambda: draw(result))
-    assert text.startswith("render.scatterstats(): drawing a scatterstats result")
+    assert isinstance(draw(result), ip.render.StatsFigure)
     assert message(TypeError, lambda: draw(result, marginal="yes")) == (
         "marginal must be True or False; got 'yes'."
     )
@@ -188,9 +185,9 @@ def test_ax_needs_marginal_false(cars: pd.DataFrame) -> None:
     )
     # ip.scatterstats says so before analyzing.
     assert message(ValueError, lambda: top(cars, "wt", "mpg", ax=object())) == text
-    assert message(
-        NotImplementedError, lambda: draw(result, ax=object(), marginal=False)
-    ).startswith("render.scatterstats()")
+    assert message(TypeError, lambda: draw(result, ax=object(), marginal=False)) == (
+        "ax must be a matplotlib Axes or None; got object."
+    )
 
 
 def test_analysis_imports_no_matplotlib() -> None:
