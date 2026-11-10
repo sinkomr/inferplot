@@ -54,12 +54,15 @@ def test_public_api() -> None:
         "analyze",
         "betweenstats",
         "render",
+        "withinstats",
     ]
     for name in inferplot.__all__:
         assert hasattr(inferplot, name)
     assert callable(inferplot.analyze.betweenstats)
-    assert inferplot.analyze.__all__ == ["betweenstats"]
+    assert callable(inferplot.analyze.withinstats)
+    assert inferplot.analyze.__all__ == ["betweenstats", "withinstats"]
     assert callable(inferplot.render.betweenstats)
+    assert callable(inferplot.render.withinstats)
     assert set(inferplot.__all__) <= set(dir(inferplot))
 
 
@@ -107,6 +110,13 @@ def test_analysis_does_not_load_matplotlib() -> None:
             result.to_json()
             result.check()
             str(result)
+        paired = pd.DataFrame(
+            {"s": [1, 2, 3, 1, 2, 3], "g": list("aaabbb"), "y": [1.0, 2, 4, 3, 5, 8]}
+        )
+        try:  # reads the data, then: no within-subjects statistics yet
+            inferplot.analyze.withinstats(paired, "g", "y", subject_id="s")
+        except NotImplementedError:
+            pass
         assert "matplotlib" not in sys.modules, "running an analysis"
         """
     )

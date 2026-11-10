@@ -300,6 +300,40 @@ def test_subject_names_point_to_subject_id_where_it_exists() -> None:
     assert withinstats("frame", "x", "y", subject_id="person") == "person"
 
 
+def test_a_required_subject_id_is_never_left_to_python() -> None:
+    @checked
+    def withinstats(data: object, x: str, y: str, *, subject_id: str) -> str:
+        del data, x, y
+        return subject_id
+
+    loose = cast("Callable[..., object]", withinstats)
+    assert message(TypeError, lambda: loose("frame", "x", "y")) == str(
+        v.subject_id_required("withinstats")
+    )
+    assert "never by row order" in str(v.subject_id_required("withinstats"))
+    assert withinstats("frame", "x", "y", subject_id="s") == "s"
+    # Keyword problems come first; another required keyword keeps Python's message.
+    with pytest.raises(TypeError, match="use subject_id='s'"):
+        loose("frame", "x", "y", subject="s")
+
+    @checked
+    def other(data: object, *, column: str) -> str:
+        del data
+        return column
+
+    with pytest.raises(TypeError, match="missing 1 required keyword-only argument"):
+        cast("Callable[..., object]", other)("frame")
+
+
+def test_withinstats_names_do_not_change_betweenstats_messages() -> None:
+    # paired= and the path-styling arguments get withinstats' messages only there.
+    for name in ("paired", "point.path.args", "centrality_path_args"):
+        text = message(TypeError, lambda name=name: call(**{name: 1}))
+        assert text.startswith(
+            f"betweenstats() got an unexpected keyword argument {name!r}."
+        )
+
+
 def test_layout_messages_adapt_to_the_function() -> None:
     # A drawing function (it takes ax=) without layers= or pairwise comparisons.
     @checked

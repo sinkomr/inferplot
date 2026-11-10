@@ -7,5 +7,6 @@ Nothing here imports matplotlib.
 from __future__ import annotations
 
 from inferplot.analyses.betweenstats import betweenstats
+from inferplot.analyses.withinstats import withinstats
 
-__all__ = ["betweenstats"]
+__all__ = ["betweenstats", "withinstats"]
