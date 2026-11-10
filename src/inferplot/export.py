@@ -93,8 +93,9 @@ def save(
 ) -> None:
     """Write ``fig`` to ``path``; the extension (.svg, .pdf, .png) picks the format.
 
-    The figure is not pyplot's, so ``plt.savefig()`` after an inferplot call writes
-    pyplot's own, empty figure; save with this function or ``fig.save(path)``.
+    The figure is not pyplot's current figure, so saving with pyplot after an
+    inferplot call writes pyplot's own, empty figure; save with this function or
+    ``fig.save(path)``.
 
     Raises:
         ValueError: the extension is not .svg, .pdf or .png, ``dpi`` is not a
