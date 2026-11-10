@@ -267,6 +267,16 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 
 ## Phase 4 — histostats, scatterstats, barstats
 
+- [x] oracle: fixtures from run 42829005373 (generator at 85d6c2f): the 322 earlier
+  cases, 6 review cases (T7), 76 gghistostats and 64 ggscatterstats cases, and 4 new
+  probes (probe-bootrules, probe-corr, probe-onesamplebf, probe-heldout); 468 cases
+  and 18 probes in all. All 17 trimcibt references replay ggstatsplot's 200-resample
+  values exactly. Earlier fixtures are byte-identical except 7 where an lme4 start-up
+  message moved to another case and 2 v0.2 Bayes ANOVA outputs no test reads (8.1e-14
+  and 8.3e-11). SPEC §4 holds each method as read from the fixtures. R is measurably
+  off at very large |t| (ToothGrowth against 100, t = -82: Hedges' g interval -0.30%
+  and -0.55%, one-sample Bayes factor +6.1e-4); inferplot will report the accurate
+  values (D81, owner to confirm)
 - [ ] histostats, all types
 - [ ] scatterstats, all types (line, band, marginals)
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)
@@ -359,21 +369,40 @@ held up; scripts in `reviewT/`). To fix:
 - [x] T5: the slow tests (simulations, random layouts: 161) ran in no workflow; CI job
   `slow` runs them. R warnings recorded in fixtures and stale keys in the exception
   lists now fail a test.
-- [ ] T6: the 4-SD bootstrap rule cannot tell the documented percentile rule from one
-  order statistic outward (passes 99 to 100%), or 2,000 resamples from 500 reported
-  as 2,000 (passes 89 to 95%). The order-statistic rules are pinned only by two unit
-  tests whose expected values came from an R replay no fixture records. Next oracle
-  run: record R's sorted replicate values next to the bounds it returns for one case
-  of each interval (AKP, xi, rank epsilon squared), so the percentile helpers are
-  applied to R's own replicates and must give R's bound exactly.
-- [ ] T7: next oracle run, with T6: the two cases that decide the 0/0 resample rule
-  (ggbetweenstats robust, a = c(5,5,5,5,5,5,6,7,8,9) against b = rep(5,10), and a =
-  c(rep(5,6),6:11) against b = c(rep(5,11),7); D65); a Friedman design where every subject is fully
-  tied, and one with several fully tied subjects inside a bootstrap reference (D64); a ggwithinstats parametric case with fewer
-  subjects than conditions (3 subjects, 4 conditions), to show afex's epsilon there
-  (D62); a case that decides D54 in R itself (three tiny
-  groups sharing a value, more than 5% of resamples tied); tr 0.29 with n = 100 (T3);
-  the n = 2 group of S2.
+- [x] T6: the 4-SD bootstrap rule could not tell the documented percentile rule from
+  its neighbours. Done (probe-bootrules, run 42829005373): R's own sorted replicates
+  are recorded at 39, 40, 99, 100, 199 and 200 resamples and 95%/90%, and inferplot's
+  helpers return R's bounds from them exactly (akp.effect's floor rule 12 of 12, bar
+  the 39-resample 95% case inferplot refuses, S4; t1way's xi rounded rule 12 of 12;
+  `boot.ci`'s percentile rule for rank epsilon squared and Kendall's W within 3e-15;
+  trimcibt 12 of 12). New: dep.effect and wmcpAKP use the rounded rule at alpha 0.05,
+  not the floor rule D66 documents (the two coincide at inferplot's 2,000 resamples, so
+  no number changes), and wmcpAKP takes its two bounds from separate bootstrap runs
+  per pair (D66 said one shared resample). To do in Phase 4: use the rounded rule in
+  the within helpers and pin it on the probe (closes W8).
+- [x] T7: the review's oracle cases (run 42829005373). Results:
+  - 0/0 AKP resamples (D65): WRS2 leaves them out of the sort but counts the bound
+    positions over all resamples, so its upper bound moves up and is NA once more than
+    2.5% are undefined: `edge_akp_undefined` (17% undefined) prints CI [0.22, NA],
+    where inferplot gives [0.22, 0.88] with a warning; `edge_akp_undefined2` (2%) has
+    R's upper bound at 1.23 against inferplot's 0.94. An accident of R's NaN handling,
+    not a method: inferplot keeps D65 (owner to confirm). `edge_akp_undefined` is
+    held out of the parity tests in probe-heldout; a test that reproduces R's printed
+    bound under R's rule is to do in Phase 4.
+  - D54 confirmed in R itself: on `edge_tied3_small` 7 to 9% of resamples are fully
+    tied and R's lower bound is 0.1458, not 0; inferplot matches.
+  - Trim count: R trims 28 from each end at tr 0.29, n 100; inferplot matches.
+  - Hedges' g at Welch df 1.0023 (`edge_n2_vs50`): inferplot matches R and warns.
+  - Fewer subjects than conditions (`edge_rm_n3k4`, 3 subjects, 4 conditions; D62):
+    afex cannot compute the sphericity correction and ggstatsplot prints the
+    uncorrected F(3, 6) = 7.70, p = 0.018 without a word; inferplot applies the
+    Greenhouse-Geisser correction it documents, F(1.05, 2.10), p = 0.104. inferplot
+    keeps the correction (owner to confirm); a `warnings` entry naming the
+    difference and a test pinning both sides are to do in Phase 4. Held out in
+    probe-heldout.
+  - Friedman: every subject tied, R fails (declared), inferplot raises plainly (D64);
+    some subjects tied, R completes and inferplot matches (52 of 2,000 resamples left
+    out, with a warning).
 - [ ] T8 (owner): `fixtures.yml` is the only guard against a fixture and the manifest
   edited together, and main is not protected, so it is advisory. Making it a required
   check is a repository setting.
@@ -511,11 +540,11 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - R's `pt` with a noncentrality parameter is documented as less accurate for large ncp
   (`?TDist`); the largest two-group \|t\| in the fixtures is 5.65 (mtcars `am` x `drat`),
   whose Hedges' g CI matches within `noncentral_ci`; parity above that is untested.
-- The generator handles ggbetweenstats and ggwithinstats; histostats, scatterstats and
-  barstats still stop in `ANALYSES`, `bootstrap_candidates` and the hidden-call rules
-  (histostats needs one-sample bookkeeping and a `trimcibt` replay; barstats computes
-  its pairwise tests through a hidden helper, and `.chisq_test_safe` swallows errors
-  into NA rows the recorders cannot see). `ORACLE_SUBSET` limits a debugging run (no
+- The generator handles ggbetweenstats, ggwithinstats, gghistostats and
+  ggscatterstats; barstats still stops (it computes its pairwise tests through a
+  hidden helper, and `.chisq_test_safe` swallows errors into NA rows the recorders
+  cannot see). An NA among the subtitle or caption numbers and an empty plot layer
+  stop the run unless the case declares them. `ORACLE_SUBSET` limits a debugging run (no
   manifest, never attested).
 - betweenstats does not warn for `bf_message=False` where no Bayes caption can be
   drawn (withinstats does since D72); align it when betweenstats' warnings next change.
@@ -536,8 +565,9 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - WRS2 returns ±Inf for an infinite AKP resample and ggstatsplot prints it
   (edge_heavy_ties2, edge_within2_small, edge_within_small robust); 20,000 resamples
   can make the bound finite again (edge_within_small: -10.18). inferplot reproduces
-  edge_heavy_ties2's -Inf. A 0/0 resample is left out and counted (D65); which rule WRS2
-  uses awaits the oracle cases in T7.
+  edge_heavy_ties2's -Inf. A 0/0 resample is left out and counted (D65); WRS2 counts the bound
+  positions over all resamples instead, which gives an NA upper bound on
+  edge_akp_undefined (T7).
 - Paired Bayes factors: BayesFactor misses large |t| by far more than its own error
   estimate (probe-pairedbf against 25-digit mpmath: +68% at n 5, t 1,000; +5.3% at
   n 10, t 1,000; -0.78% at n 30, t 50; within 2.6e-6 at |t| <= 12). Every paired

@@ -389,23 +389,58 @@ inferplot raises for them, as in betweenstats (section 2).
 
 ### histostats (one sample against `test_value`)
 
+Read from the Phase 4 fixtures and probes (oracle run 42829005373). n counts the non-missing
+values of x, in file order (rows with a missing x are dropped; bugs_long desire: 367 of
+372).
+
 | type | Test | Effect size + CI | Centrality |
 | --- | --- | --- | --- |
-| parametric | one-sample t | Hedges' g (1.1.4: one-sided CI when `alternative` is one-sided) | mean |
-| nonparametric | one-sample Wilcoxon signed-rank | rank-biserial r (1.1.4: one-sided CI when `alternative` is one-sided, statsExpressions 2.2.1) | median |
-| robust | bootstrap-t trimmed-mean test (`WRS2::trimcibt`); statistic exact, p and CI bootstrap | trimmed mean with CI | trimmed mean |
-| bayes | one-sample JZS Bayes factor | posterior: v0.2 | MAP |
+| parametric | one-sample t (`stats::t.test(x, mu = test.value)`), df n - 1; p follows `alternative` | Hedges' g = (mean - mu) / sd x J(n - 1) (`effectsize::hedges_g(x, mu)`); noncentral-t CI at the one-sample t and n - 1 df, each bound / sqrt(n) x J; one-sided when `alternative` is (ToothGrowth-greater: [-0.11, Inf]). R's bounds are off at large \|t\| (ToothGrowth-tv100, t = -82.2: -0.30% and -0.55%, R's pt with a large ncp); inferplot reports the accurate interval (§5, D81) | mean |
+| nonparametric | one-sample Wilcoxon signed-rank on x - mu (`stats::wilcox.test(x, mu, exact = FALSE)`): zeros dropped, always the normal approximation with tie and continuity corrections, V reported | rank-biserial r = (W+ - W-) / (W+ + W-) over the nonzero x - mu (`effectsize::rank_biserial(x, mu)`); CI tanh(atanh r -/+ z SE), SE = sqrt(m(m + 1)(2m + 1) / 6) / (m(m + 1) / 2) with m the number of NONZERO x - mu (unlike the paired r, whose m counts every pair: edge_one_ties, 6 zeros, and edge_one_outlier, 1 zero, miss with every value counted); one-sided with `alternative` ([low, 1] or [-1, high]) | median |
+| robust | bootstrap-t test of the trimmed mean (`WRS2::trimcibt(x, nv = test.value, tr, alpha = 1 - conf.level)`, nboot left at its documented default 200; the replay with nboot left out and with nboot = 200 both reproduce every fixture): t = (trimmed mean - mu) / (winsorized SD / ((1 - 2 tr) sqrt(n))) exact; one sample() call draws all n B values and resample b takes draws b, b + B, ...; T*_b = \|trimmed mean*_b - trimmed mean\| / se*_b; CI trimmed mean -/+ c se with c the round((1 - alpha) B)-th smallest T* (alpha = 1 - conf.level as computed; probe-bootrules, exact at B = 39 to 200, 95% and 90%); p = share of T* >= \|t\| (symmetric). `alternative` has no effect (ToothGrowth-greater-robust equals the two-sided case); conf.level and tr reach it. ggstatsplot prints t_bootstrapped, p, the trimmed mean and its CI | trimmed mean with that CI (the effect size row) | trimmed mean (tr) |
+| bayes | one-sample JZS Bayes factor (`BayesFactor::ttestBF(x, mu = test.value, rscale = bf.prior)`), at the one-sample t, N = n, df n - 1; `alternative` has no effect; bf.prior reaches it (ToothGrowth-prior08). BayesFactor misses at large \|t\| as for paired data (probe-onesamplebf: within 5.2e-9 up to \|t\| 8, 2.6e-6 at 12, up to 68% at n 5, \|t\| 1,000; ToothGrowth-tv100 6.1e-4); inferplot reports the accurate value (D61's rule, D81) | posterior difference: v0.2 | MAP |
+
+The parametric caption is the full one-sample Bayes expression (log BF01, posterior
+difference with its 95% ETI, r_Cauchy^JZS), as the bayes subtitle.
+
+Plot. Histogram (`stat_bin`) of the analyzed values: bin width `binwidth`, else
+(max - min) / sqrt(n) (ggstatsplot's .binwidth(); 0.1 or |x|/1000 for zero range);
+bins edge to edge on the grid (k + 1/2) w, every value counted once; the right axis is
+count / n as a percentage. The centrality line (dashed) sits at the type's centrality
+value (mean, median, trimmed mean at tr, MAP) with its label
+`widehat(mu)[mean] == "18.81"` on a secondary x axis at that value; with
+`centrality_plotting=False` neither the line nor the label is computed. ggstatsplot
+1.1.4 has no `normal.curve` argument (its `...` swallows one silently).
 
 ### scatterstats
 
+Every row comes from `correlation::correlation()` on the complete pairs (rows with x
+and y present, file order), as `statsExpressions::corr_test()` calls it; the fixture
+records its whole row (`correlation`), which reproduces the subtitle row exactly after
+the case's seed (the Bayes posterior too). `alternative` does not exist.
+
 | type | Test | Estimate + CI |
 | --- | --- | --- |
-| parametric | Pearson r, t test (`correlation::correlation`) | r, Fisher z CI |
-| nonparametric | Spearman rho | rho *(verify CI method)* |
-| robust | 20% Winsorized Pearson | r_w *(verify df and CI)* |
-| bayes | Bayesian Pearson Bayes factor (`correlation`, BayesFactor) *(verify prior scale)* | posterior rho: v0.2 |
+| parametric | Pearson r; t = r sqrt((n - 2) / (1 - r^2)) on n - 2 df, two-sided p | r, CI tanh(atanh r -/+ z / sqrt(n - 3)) (Fisher z) |
+| nonparametric | Spearman's rho (Pearson's r of mid-ranks); S = (n^3 - n)(1 - rho) / 6; p from the t approximation on n - 2 df, `cor.test(exact = FALSE)`, also without ties and for small n (edge_corr_small: 0.037, where the exact p is 0.083) | rho, CI tanh(atanh rho -/+ z sqrt(1.06 / (n - 3))) (Fieller, Hartley & Pearson 1957); Fisher's 1 / sqrt(n - 3) misses |
+| robust | the Pearson correlation of x and y each winsorized at its own floor(tr n)-th smallest and largest values (`winsorize = tr`; tr reaches it: mtcars 0.2 gives -0.864, 0.1 gives -0.897; the same r as `WRS2::wincor`), tested as Pearson's r: t on n - 2 df (not wincor's h - 2, whose p differs) | r_w, Fisher-z CI at 1 / sqrt(n - 3) |
+| bayes | Bayesian Pearson Bayes factor: `BayesFactor::correlationBF(y, x, rscale = bf.prior)` exactly (probe-corr), a stretched beta prior; ggstatsplot prints the prior parameter 1 / bf.prior (`r_beta^JZS == 1.41` for 0.707, 1.25 for 0.8), not bf.prior; bf.prior reaches it (mtcars-prior08); not BayesFactor's "medium" (1/3) | posterior rho: v0.2 |
 
-Plot: points, OLS line with `conf_level` band, marginal histograms.
+At r = +-1 the Bayes factor is NaN and ggstatsplot prints `log[e](BF01) == ""`; the
+t statistic is +-Inf or about 1e8 and p 2.2e-308 (statsExpressions stores a p of 0 as
+.Machine$double.xmin) or 1e-62. On constant x every number is NA ("the standard
+deviation is zero") and ggstatsplot prints "NA"; the Bayesian correlation stops and
+ggstatsplot drops the caption (parametric) or subtitle (bayes) silently; the OLS line
+is not drawn.
+
+Plot: points; `geom_smooth(method = "lm", formula = y ~ x, level = conf.level, na.rm =
+TRUE)`: 80 points from min x to max x, the OLS line and its pointwise band fit -/+
+t(1 - (1 - level)/2, n - 2) x se (every lm fixture to 1e-8); `smooth.line.args`
+replaces the whole default list (method "loess" accepted, colour and width then
+ggplot2's); marginal histograms (ggside, 30 bins each of x and y, built through
+ggstatsplot's error-swallowing helper); `label.var` labels every analyzed point,
+`label.expression` (a dplyr filter) the points it selects (mtcars `mpg > 25 | wt > 5`:
+9 of 32).
 
 ### barstats (`x` = rows / fill, `y` = columns / bars)
 
@@ -544,6 +579,24 @@ Statistical and behavioral differences are exactly these:
     resample whose winsorized values are all one number is 0/0 or infinite exactly.
     R's `t.test` stops on such data ("data are essentially constant"); WRS2 computes
     in floating point. The signed-rank test still ranks R's rounded differences (D64).
+17. A robust bootstrap resample whose effect size is 0/0 is left out, and the
+    percentile bounds are counted over the resamples that remain (D65). WRS2 leaves
+    such resamples out of the sort but counts the bound positions over all
+    resamples, so its upper bound moves outward and is NA once more than 2.5% of the
+    resamples are undefined: ggstatsplot prints CI [0.22, NA] on edge_akp_undefined
+    (17% undefined), where inferplot reports [0.22, 0.88] with a `warnings` entry
+    (review case T7; held out of the parity tests in probe-heldout).
+18. With fewer subjects than conditions afex cannot compute the sphericity
+    correction and ggstatsplot prints the uncorrected repeated-measures F without a
+    word (edge_rm_n3k4, 3 subjects and 4 conditions: F(3, 6) = 7.70, p = 0.018).
+    inferplot applies the Greenhouse-Geisser correction it documents, whose
+    estimate is defined there (F(1.05, 2.10), p = 0.104), and says in `warnings`
+    what ggstatsplot prints (D62).
+19. At very large |t| R's one-sample Hedges' g interval (effectsize inverts R's
+    noncentral `pt`) and BayesFactor's one-sample Bayes factor are measurably off
+    (ToothGrowth against 100, t = -82.2: bounds -0.30% and -0.55%, Bayes factor
+    +6.1e-4; up to 68% at n 5, |t| 1,000 on probe-onesamplebf). inferplot reports
+    the accurate values; both sides are pinned (D81; D31's and D61's rule).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default

@@ -230,6 +230,17 @@ def _parametric(data: WithinData, args: _Args) -> _Parts:
             _STUDENT_1908,
             *_within_adjustment_citation(args.p_adjust_method),
         ]
+        if anova.n < anova.k:
+            # D62; oracle case edge_rm_n3k4 (3 subjects, 4 conditions).
+            warnings.append(
+                f"With fewer subjects ({anova.n}) than conditions ({anova.k}) "
+                "ggstatsplot reports the repeated-measures ANOVA without a "
+                "sphericity correction, because afex cannot compute one there: "
+                f"F({anova.df1:g}, {anova.df2:g}), p = {anova.p_uncorrected:.3g}. "
+                "inferplot applies the Greenhouse-Geisser correction as with more "
+                f"subjects (epsilon = {anova.epsilon:.3g}), so its degrees of "
+                "freedom and p differ from ggstatsplot's; F is the same."
+            )
         if args.results_subtitle and args.bf_message is None:
             warnings.append(_BAYES_K3_WARNING)
     warnings += _within_no_effect_warnings(data, args, bayes_computed=bayes is not None)

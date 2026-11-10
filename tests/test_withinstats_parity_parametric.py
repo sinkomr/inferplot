@@ -14,6 +14,7 @@ separately).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pandas as pd
@@ -24,7 +25,7 @@ import inferplot as ip
 from inferplot import stats
 from inferplot.result import StatsResult
 from tests import within_pb_cases as wc
-from tests.oracle_fixtures import cases_for, number
+from tests.oracle_fixtures import DATASET_DIR, FIXTURE_DIR, cases_for, number
 from tests.tolerances import assert_close, is_close
 
 CASES = wc.cases_of("parametric")
@@ -420,3 +421,48 @@ def test_rm_anova_data_errors() -> None:
     )
     with pytest.raises(ValueError, match="value at 'a' differs from its value at 'b'"):
         _within(one_pair)
+
+
+def test_fewer_subjects_than_conditions_keeps_the_correction() -> None:
+    # Review case T7 (D62), held out of the fixture list in probe-heldout: afex
+    # cannot compute a sphericity correction with 3 subjects and 4 conditions, and
+    # ggstatsplot prints the uncorrected F(3, 6). inferplot keeps the
+    # Greenhouse-Geisser correction and says what ggstatsplot prints. Both sides
+    # are pinned: R's F, uncorrected df, p and effect size from the probe.
+    held_out = json.loads(
+        (FIXTURE_DIR / "probe-heldout.json").read_text(encoding="utf-8")
+    )
+    (held,) = [
+        case["fixture"]
+        for case in held_out["cases"]
+        if case["name"] == "ggwithinstats-edge_rm_n3k4-parametric"
+    ]
+    (row,) = held["stats"]["subtitle_data"]
+    data = pd.read_csv(DATASET_DIR / "edge_rm_n3k4.csv")
+    result = ip.analyze.withinstats(data, "condition", "value", subject_id="subject")
+    test, es = result.test, result.effect_size
+    assert test is not None
+    assert es is not None
+    assert (number(row["df"]), number(row["df.error"])) == (3.0, 6.0)
+    assert_close("closed_form", test.statistic, number(row["statistic"]), what="F")
+    assert_close("closed_form", es.estimate, number(row["estimate"]), what="omega")
+    assert (es.conf_low, es.conf_high) == (row["conf.low"], row["conf.high"])
+    wide = data.pivot(index="subject", columns="condition", values="value")
+    anova = stats.rm_anova([wide[c].to_numpy(dtype=float) for c in wide.columns])
+    assert (anova.n, anova.k, anova.df1, anova.df2) == (3, 4, 3.0, 6.0)
+    assert_close(
+        "closed_form", anova.p_uncorrected, number(row["p.value"]), what="R's p"
+    )
+    # inferplot's own numbers: epsilon 0.350, F(1.05, 2.10), p = 0.104.
+    assert anova.epsilon == pytest.approx(0.34973459244281, rel=1e-12)
+    assert test.df == pytest.approx(3 * anova.epsilon)
+    assert test.df_error == pytest.approx(6 * anova.epsilon)
+    assert test.p_value == pytest.approx(0.10382469558640772, rel=1e-10)
+    (note,) = [w for w in result.warnings if "fewer subjects" in w]
+    assert note == (
+        "With fewer subjects (3) than conditions (4) ggstatsplot reports the "
+        "repeated-measures ANOVA without a sphericity correction, because afex "
+        "cannot compute one there: F(3, 6), p = 0.0176. inferplot applies the "
+        "Greenhouse-Geisser correction as with more subjects (epsilon = 0.35), so "
+        "its degrees of freedom and p differ from ggstatsplot's; F is the same."
+    )

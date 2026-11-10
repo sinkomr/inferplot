@@ -89,8 +89,9 @@ def test_missing_glyphs_check_does_not_report_still_warn() -> None:
         fig = ip.withinstats(
             _long(["a", "b"]), "cond", "y", subject_id="id", title="mark "
         )
-        fig.check()
-    assert "glyph_missing" not in [c.code for c in fig.check()]
+        codes = [c.code for c in fig.check()]
+    # (matplotlib 3.8 warns on every draw, later versions once per text.)
+    assert "glyph_missing" not in codes
     assert any("57344" in message for message in _glyph_warnings(caught))
 
 
