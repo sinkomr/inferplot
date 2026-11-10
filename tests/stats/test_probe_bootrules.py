@@ -25,6 +25,7 @@ from numpy.typing import NDArray
 from inferplot.stats.nonparametric import (
     _percentile_lower,  # pyright: ignore[reportPrivateUsage]
 )
+from inferplot.stats.one_sample import bootstrap_t_critical_value
 from inferplot.stats.robust import (
     _akp_replicates,  # pyright: ignore[reportPrivateUsage]
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
@@ -247,6 +248,7 @@ def test_trimcibt_is_a_symmetric_bootstrap_t(row: Row) -> None:
     se = (estimate - 0.5) / statistic  # nv = 0.5
     alpha = 1.0 - _conf(row)
     c = float(abs_t[round((1.0 - alpha) * abs_t.size) - 1])
+    assert bootstrap_t_critical_value(abs_t, _conf(row)) == c
     assert math.isclose(estimate - c * se, low, rel_tol=1e-14)
     assert math.isclose(estimate + c * se, high, rel_tol=1e-14)
     assert p_value == float(np.mean(abs_t >= abs(statistic)))

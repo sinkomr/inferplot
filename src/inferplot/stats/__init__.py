@@ -36,6 +36,17 @@ from inferplot.stats.nonparametric import (
     rank_biserial,
     rank_epsilon_squared,
 )
+from inferplot.stats.one_sample import (
+    BootstrapTrimmedMeanTest,
+    OneSampleT,
+    bootstrap_t_critical_value,
+    jzs_bf10_one_sample,
+    one_sample_hedges_g,
+    one_sample_rank_biserial,
+    one_sample_signed_rank,
+    one_sample_t,
+    trimmed_mean_bootstrap_t,
+)
 from inferplot.stats.padjust import P_ADJUST_METHODS, PAdjustMethod, p_adjust
 from inferplot.stats.pairwise import PairResult, games_howell
 from inferplot.stats.parametric import (
@@ -106,6 +117,7 @@ __all__ = [
     "P_ADJUST_METHODS",
     "Alternative",
     "BootstrapEffectSizeCI",
+    "BootstrapTrimmedMeanTest",
     "DunnPair",
     "DurbinConoverPair",
     "EffectSizeCI",
@@ -114,6 +126,7 @@ __all__ = [
     "LinconPair",
     "MannWhitney",
     "MapEstimate",
+    "OneSampleT",
     "PAdjustMethod",
     "PairResult",
     "PairedT",
@@ -132,6 +145,7 @@ __all__ = [
     "YuenT",
     "akp_effect",
     "average_dependent_akp",
+    "bootstrap_t_critical_value",
     "bw_sj",
     "common_scale",
     "dependent_akp",
@@ -143,6 +157,7 @@ __all__ = [
     "games_howell",
     "hedges_g",
     "hedges_j",
+    "jzs_bf10_one_sample",
     "jzs_bf10_paired",
     "jzs_bf10_two_sample",
     "jzs_log_bf10",
@@ -153,6 +168,10 @@ __all__ = [
     "map_estimate",
     "mean",
     "median",
+    "one_sample_hedges_g",
+    "one_sample_rank_biserial",
+    "one_sample_signed_rank",
+    "one_sample_t",
     "p_adjust",
     "paired_differences_constant",
     "paired_differences_winsorize_to_constant",
@@ -177,6 +196,7 @@ __all__ = [
     "t_ncp_interval",
     "t_p_value",
     "trimmed_mean",
+    "trimmed_mean_bootstrap_t",
     "trimmed_means_anova",
     "trimmed_rm_anova",
     "variance",
