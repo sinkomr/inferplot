@@ -289,20 +289,27 @@ within frames on up to seven column types matched plain-Python grouping, 40 rand
 results matched SciPy field by field, 108 results round-trip through JSON; scripts in
 `reviewU/`). Reproduced by the lead; to fix:
 
-- [ ] U1: a pyarrow dictionary column (`dictionary_encode()`, `auto_dict_encode`) and
+- [x] U1: a pyarrow dictionary column (`dictionary_encode()`, `auto_dict_encode`) and
   a pandas categorical made by polars `.to_pandas()` hold their categories in order of
   first appearance, which inferplot takes as the declared order: shuffling the rows
   swaps the levels (t 4.32, p .0001 against t -4.32, p .9999 with
   `alternative="greater"`) and, in withinstats, the subject order. SPEC §3's "does
   not depend on the input row order" is false for these columns.
+  Fixed (D58): an unordered pyarrow dictionary is read as its values and a warning
+  names both orders; the same levels, t and p for every row order on six input kinds.
+  A pandas categorical built in row order (polars `.to_pandas()`) still follows it,
+  which U2 makes visible.
 - [ ] U2: nothing says which way a one-sided test points (`alternative="greater"` is
   first level greater than second, and "control" sorts before "treatment").
-- [ ] U3: hints that lead to another valid analysis: "benjamini-hochberg" suggests
+- [x] U3: hints that lead to another valid analysis: "benjamini-hochberg" suggests
   'hochberg', "holm-bonferroni" suggests 'bonferroni', "one-sided" suggests
   'two-sided', `tail=` suggests `title=`, `conf_level=5` suggests 0.05, `levels=`
   suggests `conf_level=`; `paired=` and `alpha=` in betweenstats get no pointer.
-- [ ] U4: a text level whose y is all missing disappears without a warning (Welch's
+  Fixed (D59): suggestions only for likely names; targeted messages for these and
+  other common names, on all six public entry points.
+- [x] U4: a text level whose y is all missing disappears without a warning (Welch's
   ANOVA becomes a t-test); the same data as a categorical does warn.
+  Fixed (D60): the level is named in `warnings` for every column type.
 - [ ] U5: the caption says "significant only" without the threshold when
   `pairwise_alpha` is not 0.05.
 - [ ] U6: an effect size outside its own bootstrap interval is printed without a
@@ -315,19 +322,19 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
 - [ ] U8: sign and df conventions differ between tests in the same columns (Welch t
   signed, Yuen t absolute, Games-Howell q as group2 minus group1, Dunn z unsigned)
   and are documented only in SPEC §4.
-- [ ] U9: messages: integer column labels have no way forward; a datetime or binned x
+- [x] U9: messages: integer column labels have no way forward; a datetime or binned x
   is told to convert to a categorical, which fails too; a positional subject column
   gets a `pairwise_display` example; a Series passed as x is printed whole; swapped x
   and y; duplicate column names raise narwhals' own error.
+  Fixed: each message now gives a fix that works.
 - [x] U10: `type="bayes"` with levels named like "group 7" and a pair that cannot be
   computed raised a bare IndexError (the inner message was renamed twice). Fixed: a
   pair's message is renamed once, in one pass.
 - [ ] U11: `pairs_hidden` fires for an explicit `pairwise_display="none"`; the copy
   embedded in a saved figure loses the `heavy_ties` check.
-- [ ] U12: minor: `digits` has no upper limit; NumPy float32 arguments print as
-  0.899999976158142; the alt text reports a test with `results_subtitle=False`; level
-  names that differ only in surrounding whitespace become separate groups silently;
-  the APA sentence is not ASCII when level names are not.
+- [ ] U12: partly fixed (D60): whitespace look-alikes warn, `digits` is at most 15,
+  float32 arguments are read as printed. Open: the alt text reports a test with
+  `results_subtitle=False`; the APA sentence is not ASCII when level names are not.
 
 Drawing, saving and figure checks review (784 brackets over 72 figures: every one
 spans its pair with that pair's p; points, boxes and paths are the result's values;

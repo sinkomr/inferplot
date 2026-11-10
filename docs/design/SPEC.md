@@ -84,7 +84,21 @@ instead, because they would change what the reported numbers mean.
 
 ### API errors (exact behavior)
 
-Unknown keyword → `TypeError` naming the closest valid keyword (difflib, cutoff 0.6).
+Unknown keyword → `TypeError` with a did-you-mean only when the suggestion is very
+likely what was meant; otherwise the message lists the function's arguments. An AI
+agent follows a suggestion literally, so an unlikely one is worse than none (D59). Very
+likely means, in turn: equal ignoring case and separators (`.`, `-`, `_`, spaces); a
+synonym (`trim`, `trimming` → `tr`; `conf`, `confidence`, `confidence_level`,
+`ci_level`, `level` → `conf_level`; `decimals` → `digits`; `prior` → `bf_prior`;
+`display` → `pairwise_display`; `axes` → `ax`); a misspelling within one edit for names
+of 4 to 6 letters or two for longer names, where swapping two neighbouring letters
+counts as one edit; the name plus up to 4 letters, not a separate word (`seeds`,
+`bayesian`, `boxplot`); or the start of exactly one name, either its first two or more
+whole parts (`p_adjust`) or at least 5 letters ending inside a part (`param`,
+`centrality_plot`). The same rule applies to the values of `type`, `pairwise_display`,
+`p_adjust_method`, `alternative` and `layers`, and to matplotlib property names in
+`point_args`, `boxplot_args` and `violin_args`. Column names keep a case-insensitive
+match first, then difflib with cutoff 0.6.
 These names get a targeted message instead:
 
 | Keyword (dotted or snake_case) | Message must say |
@@ -103,7 +117,14 @@ These names get a targeted message instead:
 | `hue` | no second grouping in this function; `grouping_var` arrives in v0.2 |
 | `ci`, `errorbar` | intervals are always `conf_level` confidence intervals |
 | `subject`, `id`, `subject.id` | use `subject_id` |
-| `paired` | withinstats: not needed; measurements are always paired by `subject_id` |
+| `paired` | withinstats: not needed; measurements are always paired by `subject_id`. betweenstats: the groups are independent; for repeated measures use `withinstats(data, x, y, subject_id=...)` |
+| `tail`, `tails`, `sided`, `sides`, `alternative_hypothesis`, `one_sided` | use `alternative=`: 'two-sided' (default), 'greater' (the first level of x is greater than the second), 'less'; the first level is the first in `order=`, else the first declared category, else the first sorted |
+| `alpha` | `pairwise_alpha=` sets the threshold for the brackets, `conf_level=` the interval level; for transparency `point_args={'alpha': 0.5}`, `boxplot_args`, `violin_args` (where the function draws) |
+| `levels`, `categories`, `x_order`, `level_order` | use `order=` (the given list as the example) |
+| `legend` | there is no legend; colors follow the levels of x |
+| `bayes` | `type='bayes'`, or `bf_message=` for the caption |
+| `label`, `labels` | `xlab=`, `ylab=`, `title=` |
+| `point_path`, `centrality_path` | betweenstats: arguments of withinstats; independent groups have no paths |
 | `centrality.path.args`, `point.path.args` | withinstats: no equivalent; `centrality_path` and `point_path` switch the paths |
 
 Other ggbetweenstats 1.1.4 arguments with no inferplot equivalent (`centrality.type`,
@@ -114,8 +135,12 @@ lowercase underscores) is a valid argument raises `TypeError` naming that spelli
 `subject`, `id`, `subject.id` point to `subject_id` in functions that have it; in
 `betweenstats` they, and `subject_id`, say the groups are independent and point to
 `withinstats(..., subject_id=...)`. `ip.render.withinstats` says the subject column is an
-argument of the analysis (`subject_id=`). An extra positional string given to a
-function with `subject_id` gets the hint `subject_id='<value>'`. When several keywords are wrong, the first in call
+argument of the analysis (`subject_id=`). An extra positional argument to a
+function with `subject_id`, when `subject_id=` is not given, gets the hint
+`subject_id='<value>'` whatever the value (a non-string gets `subject_id='<its name>'`
+or `'subject'`); a value that is also a valid `type` or `pairwise_display` adds that
+option after the subject hint. For each row of the table, a function that lacks the
+named argument points to the analysis function or the drawing function that has it. When several keywords are wrong, the first in call
 order is reported. Did-you-mean never suggests an argument the call already gives; a
 snake_case spelling of one says it is already given. A drawing keyword given to
 `ip.analyze.<name>` (`ax`, `palette`, `layers`, `title`, `subtitle`, `caption`, `xlab`,
@@ -136,6 +161,20 @@ Passing a numpy array, list or dict as `data` → `TypeError` saying to build a 
 or polars DataFrame in long format. `withinstats` without `subject_id` → `TypeError`
 explaining that pairing by row order is not allowed.
 
+Values (D59, D60). `p_adjust_method`: other names of R's methods get R's spelling,
+ignoring case and separators (`benjamini-hochberg`, `fdr_bh`, `b-h` → 'BH';
+`benjamini-yekutieli`, `fdr_by`, `b-y` → 'BY'; `holm-bonferroni`, `bonferroni-holm` →
+'holm'); `sidak`, `holm-sidak`, `tukey` and `tukey-hsd` are said to be unavailable.
+`alternative`: `one-sided` and its spellings (`one.sided`, `onesided`, `one-side`,
+`one-tailed`) say that the direction must be given and that 'greater' tests the first
+level of x against the second; `two-tailed` → 'two-sided'. `conf_level` at or above 1:
+only 90, 95, 99 and 99.9 are told the value divided by 100; other values (5, 1.96) get
+the rule alone. `digits` is 0 to 15. A NumPy float32 or float16 number is read as the
+number it prints as (`np.float32(0.9)` is 0.9). A column argument that is not a string
+is named by its type, never printed; a frame whose column labels are not strings is
+told to use `data.rename(columns=str)` or to name the columns. Duplicate column labels
+raise `ValueError` naming the label.
+
 ## 3. Data handling
 
 - Accept any eager frame `narwhals.from_native(data, eager_only=True)` accepts (pandas,
@@ -143,21 +182,38 @@ explaining that pairing by row order is not allowed.
   (`_data.py`); nothing downstream sees a dataframe.
 - Missing column → `KeyError` listing available columns and the closest match.
 - `y` must be numeric (boolean rejected). `x` may be text, categorical, integer, or
-  float when every value is whole (boolean rejected) (D35).
+  float when every value is whole (boolean rejected) (D35). Dates, times, durations
+  and pandas Intervals (`pandas.cut`, `pandas.qcut`), also as a categorical, raise
+  `TypeError` saying to convert them to text (`.astype(str)`; for bins,
+  `cat.rename_categories(str)` keeps their order). A non-numeric `y` next to a numeric
+  `x` says that x and y may be swapped.
 - Rows with missing values in used columns are dropped and counted (`n_dropped`).
   An infinite `y` in a complete row raises `ValueError`, and so does an integer `y`
   above 2^53 that a double cannot hold exactly (it would be rounded into ties; the
   message says to subtract an offset). At least two levels need data.
-- Level order: the declared order of a pandas `Categorical`, polars `Enum` or pyarrow
-  dictionary column, else sorted unique values (a polars `Categorical` counts as text:
-  its category order changed within polars 1.x); `order=` must be a permutation of the
-  present levels. It is any ordered collection other than a string (list, tuple, NumPy
+- Level order (D35, D58): the declared order of a pandas `Categorical`, a polars
+  `Enum`, or a pyarrow dictionary whose type is marked `ordered=True`; otherwise the
+  sorted unique values. A polars `Categorical` counts as text, because its category
+  order changed within polars 1.x. A pyarrow dictionary not marked ordered counts as
+  its values (text sorted, numbers numerically, floats whole), because
+  `dictionary_encode()`, `pyarrow.csv` with `auto_dict_encode` and polars `.to_arrow()`
+  list values in order of first appearance. When such a dictionary's order differs
+  from the sorted levels and `order=` is not given, `warnings` names both orders
+  (shortened after 6 levels) and says that `order=` or an ordered dictionary sets the
+  order. A pandas `Categorical` declares its order whether or not it is marked ordered,
+  as pandas, seaborn and R read it; a categorical whose categories were built in row
+  order (polars `.to_pandas()` of a Categorical, pyarrow `.to_pandas()` of an unordered
+  dictionary) cannot be told apart from a declared one, so it follows the row order.
+  `order=` must be a permutation of the present levels. It is any ordered collection other than a string (list, tuple, NumPy
   array, pandas Index or Series, polars Series, pyarrow array, generator) of level
   names or of the values `x` holds: any integer (Python or NumPy), any finite float
   (8.0 names level "8") or a pyarrow scalar. A set or a mapping raises `TypeError`
   (no order, or an ambiguous one). Empty declared levels are dropped before analysis and listed in
   `warnings`; they must never suppress results (ggstatsplot 1.1.4 fixed a bug where
-  they did).
+  they did). A level of an `x` without declared categories whose rows all miss `y` (in
+  withinstats `y` or `subject_id`) is also dropped and named in `warnings` (D60); with
+  fewer than two levels left, the usual error applies. Levels that differ only in
+  leading or trailing whitespace stay separate groups and are named in `warnings`.
 - Parametric type (Welch's t and ANOVA, Games-Howell): every level needs n >= 2, two
   groups may not both be constant, and with three or more groups every level needs a
   variance above 0. The error names the levels (D35). A group that varies by less
@@ -176,7 +232,9 @@ explaining that pairing by row order is not allowed.
   missing. Fewer than two complete subjects raise. The analyzed data are a
   subjects-by-levels matrix whose rows follow the subject column's order (declared
   categories, else sorted: text by code point, numbers numerically), so results do not
-  depend on the input row order or the data frame library.
+  depend on the input row order or the data frame library, except when the subject
+  column or `x` is a pandas categorical whose categories were built in row order (see
+  Level order). An unordered pyarrow dictionary `subject_id` is sorted.
 - More than 5,000 points in one panel: draw a density layer plus a seeded subsample of
   2,000 points; statistics always use all data; record it in `warnings`. In
   `withinstats` whole subjects are sampled: every value of a seeded random `2000 // k`
