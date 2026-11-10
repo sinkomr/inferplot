@@ -271,7 +271,8 @@ def draw(
 ) -> StatsFigure:
     """Resolve the palette, check the artist dicts and user texts, then draw."""
     colors, palette_warning = theme.resolve_palette(palette, len(result.levels))
-    with theme.context():
+    fallbacks = theme.user_fallbacks()  # before context() resets the rcParams
+    with theme.context(), theme.fallback_fonts(fallbacks):
         invisible = _check_artist_args(options)
         _check_mathtext(options)
         made = drawing(result, options, colors, palette_warning, ax)
@@ -1614,5 +1615,5 @@ class Drawing:
                 *(t for t in self.ax.findobj(Text) if id(t) in self.roles),
             ]
         for item in texts:
-            item.set_fontfamily(theme.FONT_FAMILY)
+            item.set_fontfamily(theme.families())
             item.set_math_fontfamily(theme.MATH_FONT_FAMILY)

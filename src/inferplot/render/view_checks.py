@@ -11,15 +11,21 @@ Measured on the drawn figure, after anything the user changed:
   shares the y axis);
 * ``flat_data`` (warning): values that differ drawn within two pixels of height
   (axis limits far wider than the data);
+* ``glyph_missing`` (warning): characters no font of a text can draw (shown as
+  empty boxes);
 * ``low_contrast`` (warning): a level's colour or a text that can hardly be told
   from what it is drawn on (WCAG 2.1 contrast ratio; thresholds below).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+import functools
+import re
+import unicodedata
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
+from matplotlib import font_manager
 from matplotlib.colors import to_hex, to_rgba
 
 from inferplot.check import Issue
@@ -27,10 +33,14 @@ from inferplot.render import theme
 from inferplot.render.figure import axes_background, figure_background, root_figure
 
 if TYPE_CHECKING:
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.ft2font import FT2Font
     from matplotlib.text import Text
     from matplotlib.transforms import Bbox
 
     from inferplot.render.figure import StatsFigure
+
+_DOLLAR: Final = re.compile(r"(?<!\\)\$")
 
 # Contrast ratios (WCAG 2.1) below which something counts as hard to see. Text:
 # 3:1, WCAG's minimum for large text (SC 1.4.3) and for graphical objects (SC
@@ -256,6 +266,83 @@ def _flat(fig: StatsFigure) -> Issue | None:
     )
 
 
+def _fonts(prop: FontProperties) -> list[FT2Font]:
+    """The font files matplotlib draws a text of ``prop`` with: its families in
+    order, as its font fallback uses them."""
+    manager: Any = font_manager.fontManager
+    paths = manager._find_fonts_by_props(prop)  # matplotlib >= 3.6, used by Agg
+    return [font_manager.get_font(path) for path in paths]
+
+
+@functools.cache
+def _math_fonts() -> tuple[FT2Font, ...]:
+    """The fonts of inferplot's mathtext: DejaVu Sans, then STIX (the fallback
+    of matplotlib's "dejavusans" fontset)."""
+    return tuple(
+        font_manager.get_font(font_manager.findfont(name))
+        for name in ("DejaVu Sans", "STIXGeneral")
+    )
+
+
+def _is_math(text: Text) -> bool:
+    shown = text.get_text()
+    return bool(text.get_parse_math()) and len(_DOLLAR.findall(shown)) >= 2
+
+
+def _missing_glyphs(text: Text) -> list[str]:
+    """Characters of ``text`` that none of the fonts it is drawn with has.
+
+    Plain text uses its families with matplotlib's font fallback; a mathtext
+    string (all of it, also outside the dollar signs) uses the mathtext fonts,
+    whose ASCII is complete, so only its other characters are looked up.
+    """
+    math = _is_math(text)
+    fonts = list(_math_fonts()) if math else _fonts(text.get_fontproperties())
+    found: list[str] = []
+    for char in dict.fromkeys(text.get_text()):
+        if unicodedata.category(char)[0] in "CZ" or (math and char.isascii()):
+            continue
+        if not any(font.get_char_index(ord(char)) for font in fonts):
+            found.append(char)
+    return found
+
+
+def _glyph_missing(extents: list[tuple[Text, str, Bbox]]) -> Issue | None:
+    found: list[str] = []
+    chars: dict[str, None] = {}
+    for text, described, _ in extents:
+        missing = _missing_glyphs(text)
+        if missing:
+            chars.update(dict.fromkeys(missing))
+            shown = ", ".join(repr(c) for c in missing[:5])
+            more = f" and {len(missing) - 5} more" if len(missing) > 5 else ""
+            found.append(f"{shown}{more} in the {described}")
+    if not found:
+        return None
+    listed = "; ".join(found[:5]) + (
+        f"; and {len(found) - 5} more texts" if len(found) > 5 else ""
+    )
+    return Issue(
+        code="glyph_missing",
+        severity="warning",
+        message=(
+            f"{len(chars)} character{'s' if len(chars) > 1 else ''} cannot be drawn "
+            "by any font the texts use (DejaVu Sans, then the fonts listed under "
+            "'font.sans-serif' in matplotlib's rcParams beyond matplotlib's "
+            "default list; inside $...$ DejaVu Sans and STIX), so they show as "
+            f"empty boxes: {listed}."
+        ),
+        fix=(
+            "Install a font that has them and list it under 'font.sans-serif' in "
+            "matplotlib's rcParams before drawing, for example "
+            "matplotlib.rcParams.update({'font.sans-serif': ['Noto Sans CJK JP']}); "
+            "inferplot draws Latin text with DejaVu Sans and the rest with the "
+            "first of those fonts that has it. Characters inside $...$ need "
+            "DejaVu Sans or STIX."
+        ),
+    )
+
+
 def view_issues(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list[Issue]:
     """The view checks, in order; call after drawing."""
     issues: list[Issue] = []
@@ -263,7 +350,7 @@ def view_issues(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> list
         issue = check(fig)
         if issue is not None:
             issues.append(issue)
-    low = _low_contrast(fig, extents)
-    if low is not None:
-        issues.append(low)
+    for issue in (_low_contrast(fig, extents), _glyph_missing(extents)):
+        if issue is not None:
+            issues.append(issue)
     return issues

@@ -486,7 +486,7 @@ def test_every_text_uses_dejavu_sans() -> None:
     texts = [t for t in fig.figure.findobj(Text) if t.get_text()]
     assert len(texts) > 15
     for text in texts:
-        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_fontfamily() == ["DejaVu Sans", "sans-serif"], text.get_text()
         assert text.get_math_fontfamily() == "dejavusans", text.get_text()
 
 
@@ -646,7 +646,7 @@ def test_texts_the_user_drew_before_keep_their_font() -> None:
     own = [t for t in [*own, title] if t.get_text()]
     assert len(own) > 10
     for text in own:
-        assert text.get_fontfamily() == ["DejaVu Sans"], text.get_text()
+        assert text.get_fontfamily() == ["DejaVu Sans", "sans-serif"], text.get_text()
         assert text.get_math_fontfamily() == "dejavusans", text.get_text()
     assert figure_codes(fig) == []
 

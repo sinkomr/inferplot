@@ -11,11 +11,13 @@ from __future__ import annotations
 import difflib
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from typing import Final, cast
+from contextvars import ContextVar
+from typing import Any, Final, cast
 
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.style
+from matplotlib import font_manager
 from matplotlib.font_manager import FontProperties
 
 __all__ = [
@@ -95,10 +97,68 @@ def context() -> Generator[None]:
         yield
 
 
+# The user's fallback fonts for the drawing in progress (see fallback_fonts).
+_FALLBACKS: ContextVar[tuple[str, ...]] = ContextVar(
+    "inferplot_fallback_fonts", default=()
+)
+# A family name every SVG viewer knows, after the named fonts (matplotlib writes
+# it into the SVG's font-family lists; for drawing it resolves to DejaVu Sans
+# inside :func:`context`).
+GENERIC_FAMILY: Final = "sans-serif"
+
+
+def _installed(name: str) -> bool:
+    """Whether matplotlib finds a font of family ``name`` (without falling back)."""
+    try:
+        manager = cast("Any", font_manager)
+        manager.findfont(FontProperties(family=name), fallback_to_default=False)
+    except ValueError:
+        return False
+    return True
+
+
+def user_fallbacks() -> tuple[str, ...]:
+    """The installed families of the user's ``font.sans-serif`` rcParam that
+    are not in matplotlib's default list, in their order.
+
+    Read from the global rcParams (never changed) before :func:`context` resets
+    them. matplotlib's default list is left out: its fonts are Latin ones, and
+    naming whichever of them a machine has would make saved files differ by
+    machine.
+    """
+    names = cast("list[str]", matplotlib.rcParams.get("font.sans-serif", []))
+    default = set(cast("list[str]", matplotlib.rcParamsDefault["font.sans-serif"]))
+    found: list[str] = []
+    for name in names:
+        if name in default or name in font_manager.font_family_aliases:
+            continue
+        if name not in found and name != FONT_FAMILY and _installed(name):
+            found.append(name)
+    return tuple(found)
+
+
+@contextmanager
+def fallback_fonts(names: tuple[str, ...]) -> Generator[None]:
+    """Use ``names`` after DejaVu Sans in :func:`font` and :func:`families`."""
+    token = _FALLBACKS.set(names)
+    try:
+        yield
+    finally:
+        _FALLBACKS.reset(token)
+
+
+def families() -> list[str]:
+    """The font families of every text inferplot draws: DejaVu Sans, then the
+    user's fallback fonts (matplotlib's font fallback draws a character missing
+    from DejaVu Sans with the first that has it), then a generic family."""
+    return [FONT_FAMILY, *_FALLBACKS.get(), GENERIC_FAMILY]
+
+
 def font(size: float, *, weight: str = "normal") -> FontProperties:
-    """DejaVu Sans at ``size`` points, with DejaVu Sans for mathtext too."""
+    """DejaVu Sans (then :func:`families`' fallbacks) at ``size`` points, with
+    DejaVu Sans for mathtext."""
     return FontProperties(
-        family=FONT_FAMILY, size=size, weight=weight, math_fontfamily=MATH_FONT_FAMILY
+        family=families(), size=size, weight=weight, math_fontfamily=MATH_FONT_FAMILY
     )
 
 
