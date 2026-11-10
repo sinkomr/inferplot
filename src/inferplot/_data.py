@@ -43,6 +43,7 @@ import datetime
 import difflib
 import math
 import numbers
+import re
 from collections.abc import Hashable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from typing import Any, Final, Literal, cast
@@ -124,6 +125,10 @@ class BetweenData:
     sorted; not analyzed. (Declared ones are in ``empty_levels``.)"""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """Sets of analyzed levels that differ only in leading or trailing whitespace."""
+    natural_order: tuple[str, ...] = ()
+    """``levels`` ordered by the numbers in their names (digits compared as
+    numbers), when the levels are text in sorted order and that order differs
+    ("week 2" before "week 10"); empty otherwise, and with ``order=``."""
 
     def counts(self) -> dict[str, int]:
         """``{level: n}`` in level order."""
@@ -168,6 +173,8 @@ class WithinData:
     ``subject_id``, sorted; not analyzed."""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """As ``BetweenData.lookalike_levels``."""
+    natural_order: tuple[str, ...] = ()
+    """As ``BetweenData.natural_order``."""
 
     @property
     def n_subjects(self) -> int:
@@ -725,6 +732,26 @@ def _grouping_order(
     return sorted(present, key=int), [], "sorted"
 
 
+_DIGITS: Final = re.compile(r"([0-9]+)")
+
+
+def _natural_key(label: str) -> tuple[str | int, ...]:
+    """``label`` split into text and runs of ASCII digits, the digits as numbers:
+    text at even places, numbers at odd ones, so two keys compare place by place."""
+    parts = _DIGITS.split(label)
+    return tuple(int(part) if n % 2 else part for n, part in enumerate(parts))
+
+
+def _natural_order(group: _Grouping, levels: Sequence[str]) -> tuple[str, ...]:
+    """Text ``levels`` in sorted order, ordered by the numbers in their names when
+    that differs ("week 2" before "week 10"); empty otherwise. Numbers sort
+    numerically and declared categories keep their order, so neither has one."""
+    if group.kind != "text":
+        return ()
+    natural = sorted(levels, key=lambda label: (_natural_key(label), label))
+    return tuple(natural) if natural != list(levels) else ()
+
+
 def _quiet_labels(group: _Grouping, series: nw.Series[Any], rows: IntArray) -> set[str]:
     """The labels of ``rows`` that can be made, without raising for the others.
 
@@ -959,6 +986,7 @@ def read_between(
     row_labels = _grouping_labels(group, x_col, rows)
     levels, empty, source = _grouping_order(group, set(row_labels))
     dictionary_order = _dictionary_order(x_dictionary, levels)
+    natural_order = _natural_order(group, levels)
     lost = np.nonzero(~missing_x & missing_y)[0]
     vanished = _vanished(group, _quiet_labels(group, x_col, lost), set(levels))
 
@@ -966,6 +994,7 @@ def read_between(
         levels = _check_order(order, levels, [*empty, *vanished])
         source = "order"
         dictionary_order = ()
+        natural_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} groups with data; found "
@@ -997,6 +1026,7 @@ def read_between(
         dictionary_order=dictionary_order,
         vanished_levels=tuple(vanished),
         lookalike_levels=_lookalikes(levels),
+        natural_order=natural_order,
     )
 
 
@@ -1173,6 +1203,7 @@ def read_within(
     row_subjects = [subject_of[r] for r in rows.tolist()]
     levels, empty, source = _grouping_order(x_group, set(row_levels))
     dictionary_order = _dictionary_order(x_dictionary, levels)
+    natural_order = _natural_order(x_group, levels)
     vanished = _vanished(x_group, set(level_of.values()), set(levels))
     if order is not None:
         levels = _check_order(
@@ -1180,6 +1211,7 @@ def read_within(
         )
         source = "order"
         dictionary_order = ()
+        natural_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} conditions with data; found "
@@ -1239,6 +1271,7 @@ def read_within(
         dictionary_order=dictionary_order,
         vanished_levels=tuple(vanished),
         lookalike_levels=_lookalikes(levels),
+        natural_order=natural_order,
     )
 
 
@@ -1281,6 +1314,8 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "does not declare an order. To choose the order, pass order= (a list "
             "of the levels) or mark the dictionary ordered."
         )
+    if data.natural_order:
+        notes.append(_natural_order_note(x, data.levels, data.natural_order))
     vanished = data.vanished_levels
     if vanished:
         needs = (
@@ -1302,3 +1337,28 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "example with .str.strip() in pandas or .str.strip_chars() in polars."
         )
     return notes
+
+
+# An order= example longer than this is described instead of written out.
+_MAX_EXAMPLE: Final = 120
+
+
+def _natural_order_note(x: str, levels: Sequence[str], natural: Sequence[str]) -> str:
+    """The note for text levels sorted as text where the numbers in their names
+    give another order: the first place they differ, and how order= sets it."""
+    first = next(
+        n for n, (a, b) in enumerate(zip(levels, natural, strict=True)) if a != b
+    )
+    example = f"order={list(natural)!r}"
+    how = (
+        f"pass {example}"
+        if len(example) <= _MAX_EXAMPLE
+        else "pass order= with the levels in the order you want (for example by "
+        "the numbers in their names)"
+    )
+    return (
+        f"The levels of {x!r} are text, sorted as text (as R sorts them), so "
+        f"{levels[first]!r} comes before {natural[first]!r}: {_listed(levels)}. "
+        "The analysis and the figure use this order. To order them by the numbers "
+        f"in their names, {how}."
+    )
