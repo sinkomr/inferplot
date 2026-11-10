@@ -175,8 +175,14 @@ class StatsFigure:
         Axes (``text_clipped``), and subsampled points (``points_subsampled``);
         for withinstats also a text drawn over a path (``path_hidden``) and
         subject paths so many that they hide what lies beneath (``paths_crowded``).
-        Changes made after drawing are measured too: an inverted axis or a
-        non-linear scale (``axis_changed``).
+        Also: a centrality point at least half under a text
+        (``centrality_label_overlap``), a level colour or text that can hardly be
+        told from its background (``low_contrast``), characters no font can draw
+        (``glyph_missing``), and, whatever changed the figure after drawing, an
+        inverted axis or a non-linear scale (``axis_changed``), values or
+        brackets outside the axis limits (``data_outside_view``) and values
+        drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
+        panels' texts and a figure title count as ``label_overlap``.
         """
         from inferplot.render.checks import figure_issues
 
