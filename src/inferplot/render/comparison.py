@@ -347,11 +347,15 @@ def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
     for key in args:
         if not callable(getattr(artist, f"set_{key}", None)):
             close = v.closest_name(key, ArtistInspector(artist).get_setters())
-            hint = (
-                f" Did you mean {close!r}?"
-                if close is not None
-                else f" matplotlib's documentation of {kind} lists its properties."
+            shorthand = (
+                _SCATTER_SHORTHANDS.get(key) if kind == "PathCollection" else None
             )
+            if shorthand is not None:
+                hint = f" {shorthand}"
+            elif close is not None:
+                hint = f" Did you mean {close!r}?"
+            else:
+                hint = f" matplotlib's documentation of {kind} lists its properties."
             raise TypeError(
                 f"{name} has a property matplotlib's {kind} does not have: "
                 f"{key!r}.{hint}"
@@ -361,6 +365,20 @@ def apply_args(artist: Artist, args: Mapping[str, object], name: str) -> None:
     except Exception as error:
         raise ValueError(f"{name} has a value matplotlib rejects: {error}") from error
 
+
+# scatter()'s argument names, which the points' PathCollection spells otherwise.
+_SCATTER_SHORTHANDS: Final = {
+    "s": (
+        "That is scatter()'s name for the marker size; the points' property is "
+        "'sizes', a list of areas in points squared, for example "
+        "point_args={'sizes': [30]}."
+    ),
+    "c": (
+        "That is scatter()'s name for the colour; the points' property is "
+        "'color' (one colour for every level, for example "
+        "point_args={'color': 'black'}), and palette= colours them by level."
+    ),
+}
 
 # The layer each artist dict styles (SPEC.md section 2).
 _ARTIST_LAYERS: Final = (

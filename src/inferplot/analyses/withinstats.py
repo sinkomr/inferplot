@@ -314,6 +314,30 @@ def _pair_names(first: str, second: str, x: str) -> str:
     return f"{first!r} and {second!r} of x={x!r}"
 
 
+def _no_difference(columns: Sequence[FloatArray]) -> bool:
+    """Whether every subject has the same value at every level, so that no type
+    has a difference to test (the rank tests fail as well)."""
+    first = columns[0]
+    return all(bool((column == first).all()) for column in columns[1:])
+
+
+def _remedy(
+    columns: Sequence[FloatArray], *, smaller_tr: bool = False
+) -> str:  # fmt: skip
+    """What to do when a method cannot be computed on these conditions: another
+    type only where one can (the rank tests need a subject whose values differ),
+    a smaller tr only where trimming is the cause."""
+    if _no_difference(columns):
+        return (
+            "Every subject has the same value at every level, so there is no "
+            "difference between the conditions for any type to test; check the "
+            "data for entry errors."
+        )
+    if smaller_tr:
+        return "Pass a smaller tr, or use type='nonparametric'."
+    return "Check the data for entry errors, or use type='nonparametric'."
+
+
 def _checked_paired_t(
     x: str,
     first: str,
@@ -323,9 +347,12 @@ def _checked_paired_t(
     *,
     side: stats.Alternative = "two-sided",
     method: str = "the paired t-test",
+    columns: Sequence[FloatArray] | None = None,
 ) -> stats.PairedT:
     """The paired t-test of ``first`` minus ``second``, or a plain ValueError naming
-    the two levels and ``method`` when the differences have no usable spread."""
+    the two levels and ``method`` when the differences have no usable spread;
+    ``columns`` (all conditions; default the two) decide what the message
+    advises."""
     if stats.paired_differences_constant(a, b):
         what = (
             f"Every subject has the same value at {first!r} as at {second!r}"
@@ -334,10 +361,10 @@ def _checked_paired_t(
             f"{second!r} by the same amount (exactly, or to within the rounding of "
             "y in double precision)"
         )
+        remedy = _remedy([a, b] if columns is None else columns)
         raise ValueError(
             f"{what} (x={x!r}), so the paired differences have no variability and "
-            f"{method} has no standard error. Check the data for entry errors, or "
-            "use type='nonparametric'."
+            f"{method} has no standard error. {remedy}"
         )
     try:
         return stats.paired_t(a, b, alternative=side)
@@ -365,8 +392,8 @@ def _checked_rm_anova(
                 f"Every subject's values at the levels of x={x!r} are the condition "
                 "means plus a constant of the subject's own (the conditions differ "
                 "by the same amounts for every subject), so the repeated-measures "
-                "ANOVA has no error variance and its F cannot be computed. Check "
-                "the data for entry errors, or use type='nonparametric'."
+                f"ANOVA has no error variance and its F cannot be computed. "
+                f"{_remedy(columns)}"
             ) from None
         raise ValueError(
             f"The repeated-measures ANOVA of the levels of x={x!r} cannot be "
@@ -400,7 +427,9 @@ def _paired_t_pairs(
     k = len(levels)
     for i in range(k):
         for j in range(i + 1, k):
-            _checked_paired_t(x, levels[i], levels[j], columns[i], columns[j])
+            _checked_paired_t(
+                x, levels[i], levels[j], columns[i], columns[j], columns=columns
+            )
     rows: list[PairwiseComparison] = []
     for pair in stats.paired_t_pairs(columns, p_adjust_method=args.p_adjust_method):
         significant = pair.p_adjusted < args.pairwise_alpha
@@ -650,8 +679,8 @@ def _durbin_conover_pairs(
             f"Every subject ranks the levels of x={x!r} in the same order, and "
             f"{tied} share their rank in every subject, so the Durbin-Conover "
             "comparison of that pair has no difference and no error variance (its t "
-            "is 0/0). Check the data for entry errors, or compare the other levels "
-            "without one of these two."
+            "is 0/0). Check the data for entry errors, or leave the rows of one of "
+            "these two levels out of the data and compare the others."
         ) from None
     rows: list[PairwiseComparison] = []
     for pair in pairs:
@@ -922,8 +951,14 @@ def _check_within_robust(data: WithinData, args: _Args) -> None:
                 f"{levels[j]!r} of x={args.x!r} is the same (exactly, or to within "
                 "the rounding of y in double precision), so the AKP effect size "
                 "of the paired differences (their trimmed mean over their winsorized "
-                "standard deviation) is undefined. Pass a smaller tr, or use "
-                "type='nonparametric'."
+                "standard deviation) is undefined. "
+                + _remedy(
+                    columns,
+                    # Equal before winsorizing too: trimming less does not help.
+                    smaller_tr=not stats.paired_differences_constant(
+                        columns[i], columns[j]
+                    ),
+                )
             )
 
 
@@ -1125,7 +1160,9 @@ def _paired_bayes_pairs(
     for i in range(k):
         for j in range(i + 1, k):
             a, b = columns[i], columns[j]
-            paired = _checked_paired_t(x, levels[i], levels[j], a, b, method=_BF_METHOD)
+            paired = _checked_paired_t(
+                x, levels[i], levels[j], a, b, method=_BF_METHOD, columns=columns
+            )
             bf10, log_bf01 = stats.jzs_bf10_paired(a, b, prior_scale=_PAIRWISE_BF_PRIOR)
             rows.append(
                 PairwiseComparison(
@@ -1306,28 +1343,18 @@ def _assemble(
 
 
 def _check_type_arguments(
-    type_name: str, *, tr: object, trim: float, side: str, show_bf: bool | None
+    type_name: str, *, tr: object, trim: float, show_bf: bool | None
 ) -> None:
     """Arguments that cannot apply to ``type_name`` whatever the data (SPEC.md
     section 2): they would change what the reported numbers mean, so they raise
-    instead of being ignored as ggstatsplot ignores them."""
+    instead of being ignored as ggstatsplot ignores them. ``alternative`` is
+    checked with the conditions (:func:`_check_design`), so its message can point
+    to a call that works."""
     if trim != _DEFAULT_TR and type_name != "robust":
         raise ValueError(
             f"tr={tr!r} sets the trimming of the robust methods (type='robust'), but "
             f"type={type_name!r} trims nothing, so it would have no effect. Remove "
             "tr=, or pass type='robust' to compare trimmed means."
-        )
-    if side != "two-sided" and type_name in ("robust", "bayes"):
-        why = (
-            "the trimmed-means tests are always two-sided"
-            if type_name == "robust"
-            else "the Bayes factor is always two-sided"
-        )
-        raise ValueError(
-            f"alternative={side!r} applies to type='parametric' and "
-            f"type='nonparametric' only: with type={type_name!r} {why} (ggstatsplot "
-            "silently ignores alternative there). Remove alternative=, or use "
-            "type='nonparametric' for a one-sided signed-rank test."
         )
     if show_bf is True and type_name != "parametric":
         raise ValueError(
@@ -1352,11 +1379,31 @@ def _check_design(data: WithinData, args: _Args) -> None:
             "comparisons are always two-sided. Remove alternative= or compare two "
             "conditions."
         )
+    side = args.alternative
+    if side != "two-sided" and args.type in ("robust", "bayes"):
+        why = (
+            "the trimmed-means tests are always two-sided"
+            if args.type == "robust"
+            else "the Bayes factor is always two-sided"
+        )
+        raise ValueError(
+            f"alternative={side!r} applies to type='parametric' and "
+            f"type='nonparametric' only: with type={args.type!r} {why} (ggstatsplot "
+            "silently ignores alternative there). Remove alternative=, or use "
+            "type='parametric' (the paired t-test) or type='nonparametric' (the "
+            "signed-rank test) for a one-sided test."
+        )
     if k >= 3 and args.type == "parametric" and args.bf_message is True:
         raise NotImplementedError(
             "bf_message=True: the Bayes factor caption for three or more conditions "
             "(a Bayesian repeated-measures ANOVA) arrives in inferplot 0.2. Remove "
             "bf_message=True."
+        )
+    if args.bf_message is True and not args.results_subtitle:
+        raise ValueError(
+            "bf_message=True asks for the Bayes factor caption, which is drawn only "
+            "together with the results subtitle; results_subtitle=False turns both "
+            "off. Pass results_subtitle=True, or drop bf_message=True."
         )
 
 
@@ -1489,13 +1536,7 @@ def withinstats(
     subtitle_on = check_bool(results_subtitle, "results_subtitle")
     side = _alternative(check_alternative(alternative))
     rng_seed = check_seed(seed)
-    if show_bf is True and not subtitle_on:
-        raise ValueError(
-            "bf_message=True asks for the Bayes factor caption, which is drawn only "
-            "together with the results subtitle; results_subtitle=False turns both "
-            "off. Pass results_subtitle=True, or drop bf_message=True."
-        )
-    _check_type_arguments(type_name, tr=tr, trim=trim, side=side, show_bf=show_bf)
+    _check_type_arguments(type_name, tr=tr, trim=trim, show_bf=show_bf)
 
     within = read_within(data, x, y, subject_id, order=order)
     args = _Args(

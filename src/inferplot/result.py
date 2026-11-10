@@ -754,7 +754,11 @@ class StatsResult(_Plain):
                 {
                     **dict.fromkeys(name for name, _ in _FRAME_COLUMNS),
                     "test": bayes.test,
-                    "label": "Bayesian t-test",
+                    "label": (
+                        "Bayesian paired t-test"
+                        if self.design == "within"
+                        else "Bayesian t-test"
+                    ),
                     "alternative": "two-sided",
                     "bf10": bayes.bf10,
                     "log_bf01": bayes.log_bf01,

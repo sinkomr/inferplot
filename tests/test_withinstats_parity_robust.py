@@ -467,8 +467,9 @@ def test_data_errors_name_the_levels() -> None:
         "levels 'post' and 'pre' of x='condition' is the same (exactly, or to "
         "within the rounding of y in double precision), so the AKP effect size of "
         "the paired differences (their trimmed mean over their winsorized standard "
-        "deviation) is undefined. Pass a smaller tr, or use type='nonparametric'."
-    )
+        "deviation) is undefined. Check the data for entry errors, or use "
+        "type='nonparametric'."
+    )  # every difference is 1 before winsorizing too: a smaller tr cannot help
     # Every subject 0.1 lower, in decimals: the stored differences vary in their
     # 16th digit only. Refused like the exactly constant case, where an exact
     # computation on the doubles reported t = 6.4e14 and an AKP of 2.6e14.

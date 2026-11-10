@@ -256,7 +256,7 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
         return None
     parts: list[str] = []
     if estimate_infinite:
-        parts.append(f"The {es.label} is infinite.")
+        parts.append(f"{_named(es.label)} is infinite.")
     if infinite:
         total = es.bootstrap_resamples or 0
         interval = (
@@ -309,12 +309,13 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
         return None
     level = _percent(es.conf_level)
     head = (
-        f"The {es.label}, {_three(es.estimate)}, lies outside its own {level} CI "
-        f"[{_three(es.conf_low)}, {_three(es.conf_high)}]."
+        f"{_named(es.label)}, {_three(es.estimate)}, lies outside its own {level} "
+        f"CI [{_three(es.conf_low)}, {_three(es.conf_high)}]."
     )
     if es.bootstrap_resamples is not None:
+        between = "conditions" if result.design == "within" else "groups"
         shift = (
-            "resampling adds chance differences between the groups, so the "
+            f"resampling adds chance differences between the {between}, so the "
             "resampled effect sizes run larger than the estimate"
             if es.estimate < es.conf_low
             else "the resampled effect sizes run smaller than the estimate"
@@ -337,6 +338,16 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             "test's p-value does not come from the bootstrap and is unaffected."
         ),
     )
+
+
+def _named(label: str) -> str:
+    """An effect size's name at the start of a sentence: "Kendall's W" and
+    "Hedges' g" as they are (a name with an owner takes no article), "The partial
+    omega squared"."""
+    first = label.split(" ", 1)[0]
+    if first.endswith(("'s", "'")):
+        return label
+    return f"The {label}"
 
 
 def _three(x: float) -> str:
