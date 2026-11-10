@@ -139,8 +139,10 @@ def test_pairs_counts_and_labels(name: str, backend: nl.Backend) -> None:
         assert result.point_labels == ()
     else:
         ((drawn),) = case.layer_data("GeomLabelRepel")
+        # A missing label stays in R's label layer as NA, which ggrepel draws as
+        # nothing (edge_corr_label_missing); inferplot holds "" for it.
         assert [label for label in result.point_labels if label] == [
-            str(row[label_var]) for row in drawn
+            str(row[label_var]) for row in drawn if row[label_var] is not None
         ]
 
 
