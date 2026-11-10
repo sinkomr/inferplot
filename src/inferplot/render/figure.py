@@ -252,7 +252,9 @@ class StatsFigure:
         inverted axis or a non-linear scale (``axis_changed``), values or
         brackets outside the axis limits (``data_outside_view``) and values
         drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
-        panels' texts and a figure title count as ``label_overlap``.
+        panels' texts and a figure title count as ``label_overlap``. inferplot's
+        own figure far larger than its plotting area, or than any of its layouts
+        needs, is ``figure_oversized``.
         """
         from inferplot.render.checks import figure_issues
 

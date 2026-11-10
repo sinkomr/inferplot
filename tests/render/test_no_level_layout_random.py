@@ -7,7 +7,9 @@ in inferplot's own figure and into a given Axes at 72, 100 and 200 dpi, sized fr
 the own figure times a random factor from 1.05 to 1.5 (with room for the margins
 ``add_subplot`` leaves). ``fig.check()`` must report neither ``label_overlap`` nor
 ``text_clipped``, and with no more labels than the plot has room for, no
-``point_labels_crowded`` in inferplot's own figure.
+``point_labels_crowded`` in inferplot's own figure. Inferplot's own figure stays
+within the size bounds of ``test_own_figure_size`` (its plotting area filling at
+least 45% of it) and reports no ``figure_oversized``.
 """
 
 from __future__ import annotations
@@ -21,10 +23,11 @@ from matplotlib.figure import Figure
 from inferplot.render import StatsFigure, histostats, scatterstats
 from inferplot.result import StatsResult
 from tests.render._no_levels import hist_result, scatter_result
+from tests.render.test_own_figure_size import assert_size
 
 N_DATA_SETS = 60
 QUICK = (0, 1, 2)
-CODES = frozenset({"label_overlap", "text_clipped"})
+CODES = frozenset({"label_overlap", "text_clipped", "figure_oversized"})
 TYPES = ("parametric", "nonparametric", "robust", "bayes")
 
 
@@ -103,6 +106,7 @@ def _check(make: str, seed: int) -> None:
         found = [i for i in fig.check() if i.code in CODES]
         assert found == [], (make, seed, where, found)
         if where == "own figure":
+            assert_size(fig, make, (make, seed))
             crowded = [i for i in fig.check() if i.code == "point_labels_crowded"]
             assert crowded == [], (make, seed, crowded)
 

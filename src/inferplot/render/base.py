@@ -25,6 +25,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import math
+import re
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast
@@ -511,6 +512,29 @@ def check_scale(
     )
 
 
+_MATH_SPAN: Final = re.compile(r"(?<!\\)\$.*?(?<!\\)\$")
+
+
+def wrap_words(text: str, fits: Callable[[str], bool]) -> str:
+    """``text`` broken into lines at spaces (never inside a mathtext span
+    between two dollar signs), each line as long as ``fits`` accepts; a word
+    that does not fit alone is a line of its own. Existing line breaks stay."""
+    out: list[str] = []
+    for paragraph in text.split("\n"):
+        # Spaces inside $...$ are protected so that the split keeps the span.
+        protected = _MATH_SPAN.sub(lambda m: m.group(0).replace(" ", "\0"), paragraph)
+        current = ""
+        for word in protected.split(" "):
+            joined = f"{current} {word}" if current else word
+            if not current or fits(joined.replace("\0", " ")):
+                current = joined
+            else:
+                out.append(current)
+                current = word
+        out.append(current)
+    return "\n".join(out).replace("\0", " ")
+
+
 def shared_limits(
     ax: Axes, which: Literal["x", "y"], low: float, high: float
 ) -> tuple[float, float]:
@@ -736,6 +760,7 @@ class BaseDrawing:
         the header above, the caption lines below and room for the Axes'
         decorations, measured from the rendered figure until it holds."""
         dpi = self.dpi
+        self.wrap_axis_labels(*self.label_room(axes_w, axes_h))
         margin, gap = px(MARGIN_PT, dpi), px(GAP_PT, dpi)
         header = [self.extent(t) for t in self.header]
         captions = [self.extent(t) for t in self.captions]
@@ -769,6 +794,43 @@ class BaseDrawing:
             if all(abs(a - b) <= 0.5 for a, b in zip(measured, extra, strict=True)):
                 break
             extra = measured
+
+    def label_room(self, axes_w: float, axes_h: float) -> tuple[float, float]:
+        """Hook: the width of the x-axis label's line and the height of the
+        y-axis label's line, in pixels, for a plotting area of ``axes_w`` by
+        ``axes_h``: the main Axes' sides."""
+        return axes_w, axes_h
+
+    def wrap_axis_labels(self, width: float, height: float) -> None:
+        """Wrap an axis label longer than its side of the plotting area on its
+        spaces (outside mathtext), so that a long name does not widen the figure
+        to its length; a label that fits is left as it is. A word longer than the
+        side stays whole."""
+        renderer = self.renderer()
+        for label, room in (
+            (self.ax.xaxis.label, width),
+            (self.ax.yaxis.label, height),
+        ):
+            shown = label.get_text()
+            if " " not in shown:
+                continue
+            probe = self.figure.text(
+                0.0, 0.0, "", fontproperties=label.get_fontproperties(),
+                parse_math=bool(label.get_parse_math()),
+            )  # fmt: skip
+
+            def fits(
+                line: str, probe: Text = probe, room: float = room,
+                renderer: RendererBase | None = renderer,
+            ) -> bool:  # fmt: skip
+                probe.set_text(line)
+                return float(probe.get_window_extent(renderer).width) <= room
+
+            try:
+                if not fits(shown):
+                    label.set_text(wrap_words(shown, fits))
+            finally:
+                probe.remove()
 
     def decoration_extra(self) -> list[float]:
         """Pixels the Axes' texts reach beyond its plotting area on each side."""

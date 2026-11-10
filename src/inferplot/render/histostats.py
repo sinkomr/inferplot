@@ -374,7 +374,7 @@ class _HistDrawing(base.BaseDrawing):
                 gid="centrality-line",
             )
             text = ax.text(
-                center,
+                0.5,
                 1.0,
                 self.texts.centrality_labels[0],
                 fontproperties=theme.font(theme.SIZE_LABEL),
@@ -386,6 +386,7 @@ class _HistDrawing(base.BaseDrawing):
                 },
                 zorder=6.0,
                 gid="centrality-label",
+                transform=ax.transAxes,
             )
             plain = self.result.text.centrality_labels
             self.role(text, "centrality label", plain[0] if plain else None)
@@ -407,7 +408,7 @@ class _HistDrawing(base.BaseDrawing):
             words = f"← test value {shown}" if below else f"test value {shown} →"
             where = None
         text = ax.text(
-            tv if where is not None else 0.0,
+            0.5,
             1.0,
             words,
             fontproperties=theme.font(theme.SIZE_LABEL),
@@ -415,6 +416,7 @@ class _HistDrawing(base.BaseDrawing):
             parse_math=False,
             zorder=6.0,
             gid="test-value-label",
+            transform=ax.transAxes,
         )
         self.role(text, "test value label")
         label = _StripLabel(text=text, x=where, side="right")
@@ -428,6 +430,12 @@ class _HistDrawing(base.BaseDrawing):
             above = tv > center
             texts[0].side = "left" if above else "right"
             texts[1].side = "right" if above else "left"
+        # Every label starts in its strip, at its line or edge: the layout
+        # measures the Axes with its texts, and a text left at a data
+        # coordinate far outside the view (a test value of 0 for data near
+        # 1e9) would size the figure to reach it.
+        for label in texts:
+            self.put_label(label, 0.0)
 
     def draw_axes_texts(self) -> None:
         ax, result, options = self.ax, self.result, self.options
@@ -493,9 +501,15 @@ class _HistDrawing(base.BaseDrawing):
         return self.rows * self.row_px() + px(LABEL_PAD_PT, self.dpi)
 
     def layout(self) -> None:
-        for _ in range(2):
+        for _ in range(3):
             if self.own:
                 self.set_limits(BARS_HEIGHT_IN * self.dpi + self.strip_px())
+                # The labels in their places before the figure is fitted around
+                # the Axes and its texts, so that it is measured with them there.
+                rows = self.place_labels()
+                if rows != self.rows:
+                    self.rows = rows
+                    continue
                 self.fit_figure(
                     AXES_WIDTH_IN * self.dpi,
                     BARS_HEIGHT_IN * self.dpi + self.strip_px(),
@@ -545,7 +559,6 @@ class _HistDrawing(base.BaseDrawing):
         the other side where it would reach out of the Axes; the rows needed (2
         where the two labels would still touch)."""
         frame = self.ax.bbox
-        gap = LINE_GAP_PT
         to_pt = 72.0 / self.dpi
         down = (self.top_px + px(LABEL_PAD_PT, self.dpi)) * to_pt
         row_pt = self.row_px() * to_pt
@@ -553,16 +566,7 @@ class _HistDrawing(base.BaseDrawing):
         for label in self.labels:
             y = -(down + label.row * row_pt)
             if label.x is None:
-                at_left = label.edge == "left"
-                label.text.set_transform(
-                    offset_copy(
-                        self.ax.transAxes, fig=self.figure,
-                        x=gap if at_left else -gap, y=y, units="points",
-                    )
-                )  # fmt: skip
-                label.text.set_position((0.0 if at_left else 1.0, 1.0))
-                label.text.set_horizontalalignment("left" if at_left else "right")
-                label.text.set_verticalalignment("top")
+                self.put_label(label, y)
                 boxes.append(self.extent(label.text))
                 continue
             tried: list[tuple[float, Side]] = []
@@ -594,6 +598,23 @@ class _HistDrawing(base.BaseDrawing):
                 self.labels[-1].row = 1
                 return 2
         return self.rows
+
+    def put_label(self, label: _StripLabel, y: float) -> None:
+        """Put ``label`` ``y`` points below the top of the Axes: at its edge
+        (the test value beyond the bars), or on its side of its line."""
+        if label.x is not None:
+            self.put(label, label.side, y)
+            return
+        at_left = label.edge == "left"
+        label.text.set_transform(
+            offset_copy(
+                self.ax.transAxes, fig=self.figure,
+                x=LINE_GAP_PT if at_left else -LINE_GAP_PT, y=y, units="points",
+            )
+        )  # fmt: skip
+        label.text.set_position((0.0 if at_left else 1.0, 1.0))
+        label.text.set_horizontalalignment("left" if at_left else "right")
+        label.text.set_verticalalignment("top")
 
     def put(
         self, label: _StripLabel, side: Side, y: float, *, at: float | None = None

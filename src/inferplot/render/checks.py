@@ -18,6 +18,11 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
   opaque over more than 15% of the area between the two conditions, measured on
   the paths alone rendered as drawn, so they hide the boxes and violins beneath
   them;
+* ``figure_oversized`` (warning): inferplot's own figure is far larger than the
+  plotting area it was laid out around (the panels fill under 25% of it) or
+  larger than any of its layouts needs (30 in a side, plus 3 in a level and 0.5
+  in a bracket for the comparison figures); the message names the long texts
+  that widen it, or says that the layout went wrong;
 * ``centrality_label_ambiguous`` (warning): a centrality label that reads as
   another level's (:func:`inferplot.render.labels.ambiguities`): mostly beyond
   the neighbouring point on its usual side, past the middle toward the
@@ -636,6 +641,82 @@ def _crowded_labels(
     )
 
 
+# inferplot's own figure: the plotting area (every panel) fills at least this
+# share of the figure, and the figure is at most _OVERSIZED_IN on a side (plus,
+# for the comparison figures, room for their levels and brackets). Measured on
+# every fixture figure (2026-11-10): the share is 0.55 to 0.70 for all four
+# functions (betweenstats 0.55 to 0.70, withinstats 0.56 to 0.67, histostats
+# 0.55 to 0.61, scatterstats 0.55 to 0.68, also over 300 random data sets from
+# 1e-6 to 1e9), the largest figure 12.2 x 4.6 in (nine levels). The bug these
+# catch made 80 to 19,000 in wide histograms whose Axes filled under 5%.
+_MIN_PLOT_SHARE: Final = 0.25
+_OVERSIZED_IN: Final = 30.0
+_PER_LEVEL_IN: Final = 3.0  # more than the widest level spacing seen (1.4 in)
+_PER_BRACKET_IN: Final = 0.5  # more than one bracket level (about 0.3 in)
+# A text longer than this (inches) is named as the cause; inferplot's own
+# texts (subtitles with large numbers) stay under 8 in.
+_LONG_TEXT_IN: Final = 12.0
+
+
+def _oversized(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> Issue | None:
+    """``figure_oversized``: inferplot's own figure much larger than the plotting
+    area it was laid out around, or larger than any of its layouts needs."""
+    if not fig.own:
+        return None
+    root = root_figure(fig.figure)
+    renderer = _renderer(fig)
+    dpi = float(root.dpi)
+    frame = Bbox.union([a.get_window_extent(renderer) for a in fig.axes.values()])
+    width, height = (float(v) for v in root.get_size_inches())
+    share = frame.width * frame.height / (width * height * dpi * dpi)
+    max_w = max_h = _OVERSIZED_IN
+    if not fig.data:  # betweenstats, withinstats: room for levels and brackets
+        max_w += _PER_LEVEL_IN * len(fig.result.levels)
+        max_h += _PER_BRACKET_IN * len(fig.brackets)
+    if share >= _MIN_PLOT_SHARE and width <= max_w and height <= max_h:
+        return None
+    # Texts longer than any inferplot draws itself, which the figure grows to
+    # hold (a title or caption line is not wrapped).
+    long = sorted(
+        (
+            (max(box.width, box.height) / dpi, described)
+            for _, described, box in extents
+            if max(box.width, box.height) / dpi > _LONG_TEXT_IN
+        ),
+        key=lambda r: -r[0],
+    )
+    if long:
+        why = "the figure grows to hold " + _listing(
+            [f"the {d} ({r:.1f} in long)" for r, d in long]
+        )
+        fix = (
+            "Shorten those texts (title=, caption=, xlab=, ylab=, or the column "
+            "names), or draw into an Axes of your own with ax=, where the figure "
+            "keeps its size."
+        )
+    else:
+        why = (
+            "no text needs that room, so inferplot's layout went wrong; please "
+            "report it as an inferplot bug, with the call that drew this figure"
+        )
+        fix = (
+            "Draw into an Axes of your own with ax= (for example "
+            "Figure(figsize=(7, 5)).add_subplot()), where the figure keeps its "
+            "size, and report the call."
+        )
+    return Issue(
+        code="figure_oversized",
+        severity="warning",
+        message=(
+            f"inferplot's own figure is {width:.1f} x {height:.1f} in, and its "
+            f"plotting area fills {share:.0%} of it (at least "
+            f"{_MIN_PLOT_SHARE:.0%} expected, at most {max_w:.0f} x {max_h:.0f} "
+            f"in): {why}."
+        ),
+        fix=fix,
+    )
+
+
 def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     """Rendering issues: label_overlap, text_clipped, points_subsampled, and for
     withinstats path_hidden and paths_crowded."""
@@ -713,6 +794,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     crowded = _crowded_labels(fig, extents)
     if crowded is not None:
         issues.append(crowded)
+    oversized = _oversized(fig, extents)
+    if oversized is not None:
+        issues.append(oversized)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
     if ambiguous is not None:

@@ -648,6 +648,12 @@ class _ScatterDrawing(base.BaseDrawing):
             ((x0 + main_w + gap) / fig_w, y0 / fig_h, side / fig_w, main_h / fig_h)
         )
 
+    def label_room(self, axes_w: float, axes_h: float) -> tuple[float, float]:
+        if self.xside is None:
+            return axes_w, axes_h
+        less = (SIDE_IN + SIDE_GAP_IN) * self.dpi
+        return axes_w - less, axes_h - less
+
     def panels(self) -> list[Axes]:
         return [a for a in (self.ax, self.xside, self.yside) if a is not None]
 
