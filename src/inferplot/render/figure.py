@@ -9,7 +9,7 @@ import weakref
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.text import Text
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from inferplot.result import StatsResult
 
 __all__ = [
+    "CenterLabel",
     "DrawnPaths",
     "DrawnView",
     "StatsFigure",
@@ -83,6 +84,19 @@ class DrawnPaths:
     levels: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class CenterLabel:
+    """A drawn centrality label, for ``check()``: its level (position ``index``
+    on the x axis), its text and point, and the side of its point it goes on
+    unless something is in the way (``usual``)."""
+
+    index: int
+    level: str
+    text: Text
+    point: PathCollection
+    usual: Literal["right", "left"]
+
+
 @dataclass(slots=True)
 class DrawnView:
     """The axis limits inferplot set for a panel (updated when a later drawing
@@ -109,6 +123,7 @@ class StatsFigure:
         "_colors",
         "_figure",
         "_inside",
+        "_labels",
         "_own",
         "_paths",
         "_result",
@@ -132,6 +147,7 @@ class StatsFigure:
         view: DrawnView | None = None,
         colors: tuple[theme.Color, ...] = (),
         centers: tuple[tuple[str, PathCollection], ...] = (),
+        labels: tuple[CenterLabel, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -145,6 +161,7 @@ class StatsFigure:
         self._view = view
         self._colors = colors
         self._centers = centers
+        self._labels = labels
 
     @property
     def figure(self) -> Figure:
@@ -176,9 +193,10 @@ class StatsFigure:
         for withinstats also a text drawn over a path (``path_hidden``) and
         subject paths so many that they hide what lies beneath (``paths_crowded``).
         Also: a centrality point at least half under a text
-        (``centrality_label_overlap``), a level colour or text that can hardly be
-        told from its background (``low_contrast``), characters no font can draw
-        (``glyph_missing``), and, whatever changed the figure after drawing, an
+        (``centrality_label_overlap``), a centrality label that reads as another
+        level's (``centrality_label_ambiguous``), a level colour or text that can
+        hardly be told from its background (``low_contrast``), characters no font
+        can draw (``glyph_missing``), and, whatever changed the figure after drawing, an
         inverted axis or a non-linear scale (``axis_changed``), values or
         brackets outside the axis limits (``data_outside_view``) and values
         drawn as a flat line (``flat_data``). With ``ax=``, overlaps with other
@@ -262,6 +280,11 @@ class StatsFigure:
     def centers(self) -> tuple[tuple[str, PathCollection], ...]:
         """Each drawn centrality point, with its level."""
         return self._centers
+
+    @property
+    def labels(self) -> tuple[CenterLabel, ...]:
+        """Each drawn centrality label, in level order."""
+        return self._labels
 
     @property
     def colors(self) -> tuple[theme.Color, ...]:

@@ -17,7 +17,12 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
 * ``paths_crowded`` (warning, withinstats): the subject paths are at least half
   opaque over more than 15% of the area between the two conditions, measured on
   the paths alone rendered as drawn, so they hide the boxes and violins beneath
-  them.
+  them;
+* ``centrality_label_ambiguous`` (warning): a centrality label that reads as
+  another level's (:func:`inferplot.render.labels.ambiguities`): mostly beyond
+  the neighbouring point on its usual side, past the middle toward the
+  neighbouring point on the other side, or over the centrality path between two
+  other conditions.
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ from inferplot.render.figure import (
     root_figure,
     shows_all,
 )
+from inferplot.render.labels import ambiguities, covered
 from inferplot.render.view_checks import view_issues
 
 if TYPE_CHECKING:
@@ -58,7 +64,6 @@ _MAX_LISTED: Final = 5
 # Pixels of a path's length a text may cover before it counts (an end of the path
 # touching a text's box by anti-aliasing slack).
 _HIDDEN_TOLERANCE: Final = 1.0
-_PATH_STEP: Final = 0.25  # pixels between the samples along a path
 # The subject paths are crowded when they are at least _CROWDED_OPACITY opaque over
 # more than _CROWDED_SHARE of the area between the two conditions (calibrated by
 # eye on figures of 10 to 2,500 subjects: 200 subjects cover 10% and still read,
@@ -357,40 +362,6 @@ def _clipped(
 FloatArray = NDArray[np.float64]
 
 
-def _covered(pieces: FloatArray, boxes: list[Bbox]) -> FloatArray:
-    """Pixels of each straight piece that lie under each box.
-
-    ``pieces`` is (m, 2, 2): m pieces from (x0, y0) to (x1, y1) in pixels. Returns
-    an (m, len(boxes)) array of covered lengths, sampled at the midpoints of
-    stretches of at most _PATH_STEP pixels; a piece with a NaN end (where a path
-    breaks) covers nothing. A box counts only where a sample is more than
-    _CLIP_TOLERANCE inside it.
-    """
-    out = np.zeros((pieces.shape[0], len(boxes)), dtype=np.float64)
-    finite = np.isfinite(pieces).all(axis=(1, 2))
-    if not boxes or not finite.any():
-        return out
-    start, stop = pieces[finite, 0, :], pieces[finite, 1, :]
-    delta = stop - start
-    length = np.hypot(delta[:, 0], delta[:, 1])
-    steps = max(1, int(np.ceil(float(length.max()) / _PATH_STEP)))
-    t = (np.arange(steps) + 0.5) / steps
-    xs = start[:, None, 0] + delta[:, None, 0] * t[None, :]
-    ys = start[:, None, 1] + delta[:, None, 1] * t[None, :]
-    covered = np.empty((start.shape[0], len(boxes)), dtype=np.float64)
-    tol = _CLIP_TOLERANCE
-    for b, box in enumerate(boxes):
-        inside = (
-            (xs > box.x0 + tol)
-            & (xs < box.x1 - tol)
-            & (ys > box.y0 + tol)
-            & (ys < box.y1 - tol)
-        )
-        covered[:, b] = inside.mean(axis=1) * length
-    out[finite] = covered
-    return out
-
-
 def _pixels(ax: Axes, points: FloatArray) -> FloatArray:
     return np.asarray(cast("Any", ax.transData).transform(points), dtype=np.float64)
 
@@ -406,9 +377,9 @@ def _hidden(
     line = paths.centrality
     if line is not None and line.get_visible() and line.axes is not None:
         xy = _pixels(ax, np.asarray(cast("Any", line).get_xydata(), dtype=np.float64))
-        covered = _covered(np.stack([xy[:-1], xy[1:]], axis=1), boxes)
-        for j in range(covered.shape[0]):
-            texts = [names[b] for b in np.flatnonzero(covered[j] > _HIDDEN_TOLERANCE)]
+        lengths = covered(np.stack([xy[:-1], xy[1:]], axis=1), boxes)
+        for j in range(lengths.shape[0]):
+            texts = [names[b] for b in np.flatnonzero(lengths[j] > _HIDDEN_TOLERANCE)]
             if texts:
                 found.append(
                     f"the centrality path between {paths.levels[j]!r} and "
@@ -420,8 +391,8 @@ def _hidden(
         if segments:
             xy = np.stack([_pixels(ax, s) for s in segments])  # (paths, levels, 2)
             pieces = np.stack([xy[:, :-1], xy[:, 1:]], axis=2).reshape(-1, 2, 2)
-            covered = _covered(pieces, boxes)
-            per_path = covered.reshape(xy.shape[0], -1, len(boxes)).sum(axis=1)
+            lengths = covered(pieces, boxes)
+            per_path = lengths.reshape(xy.shape[0], -1, len(boxes)).sum(axis=1)
             under = per_path > _HIDDEN_TOLERANCE
             if under.any():
                 texts = [names[b] for b in np.flatnonzero(under.any(axis=0))]
@@ -512,6 +483,88 @@ def _path_issues(
     return issues
 
 
+def _ambiguous_labels(fig: StatsFigure) -> Issue | None:
+    """Centrality labels that read as another level's, wherever they are now."""
+    renderer = _renderer(fig)
+    ax = fig.axes["main"]
+    shown = [
+        label
+        for label in fig.labels
+        if label.text.get_visible()
+        and label.text.axes is not None
+        and label.point.get_visible()
+        and label.point.axes is not None
+    ]
+    if len(shown) < 2:
+        return None
+    points: dict[int, float] = {}
+    for label in fig.labels:
+        if label.point.get_visible() and label.point.axes is not None:
+            offsets = np.asarray(
+                cast("Any", label.point).get_offsets(), dtype=np.float64
+            )
+            transform = label.point.get_offset_transform()
+            points[label.index] = float(transform.transform(offsets)[0][0])
+    path: FloatArray | None = None
+    line = fig.paths.centrality if fig.paths is not None else None
+    if line is not None and line.get_visible() and line.axes is not None:
+        xy = _pixels(ax, np.asarray(cast("Any", line).get_xydata(), dtype=np.float64))
+        path = np.stack([xy[:-1], xy[1:]], axis=1)
+    levels = fig.result.levels
+    found: list[str] = []
+    for label in shown:
+        if label.index not in points:
+            continue
+        box = label.text.get_window_extent(renderer)
+        patch = label.text.get_bbox_patch()
+        if patch is not None:
+            box = Bbox.union([box, patch.get_window_extent(renderer)])
+        name = f"the centrality label of {label.level!r}"
+        for why in ambiguities(label.index, box, label.usual, points, path):
+            other = levels[why.other]
+            if why.kind == "beyond":
+                found.append(
+                    f"{name} lies mostly beyond the centrality point of {other!r}"
+                )
+            elif why.kind == "beside":
+                found.append(
+                    f"{name} sits beside the centrality point of {other!r}, past "
+                    "the middle between the two points"
+                )
+            else:
+                found.append(
+                    f"{name} lies over the centrality path between {other!r} and "
+                    f"{levels[why.other + 1]!r}"
+                )
+    if not found:
+        return None
+    if fig.own:
+        room = (
+            "draw it into a wider Axes of your own with ax= (made with a larger "
+            "figsize), where each label fits between its point and the next"
+        )
+    else:
+        room = (
+            "make this Axes wider (a larger figsize when you create the figure, or "
+            "fewer panels side by side), so that each label fits between its point "
+            "and the next"
+        )
+    return Issue(
+        code="centrality_label_ambiguous",
+        severity="warning",
+        message=(
+            f"A centrality label can be read as another level's: {_listing(found)}."
+        ),
+        fix=(
+            f"To keep the labels, {room}, or show fewer digits with the analysis' "
+            "digits= (for example digits=1). Or leave the labels out with "
+            "centrality_plotting=False and report the values from "
+            "fig.result.descriptives. If you moved a label, move it back beside "
+            "its own point."
+        ),
+    )
+
+
 def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     """Rendering issues: label_overlap, text_clipped, points_subsampled, and for
     withinstats path_hidden and paths_crowded."""
@@ -583,6 +636,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
             )
         )
     issues += _path_issues(fig, extents)
+    ambiguous = _ambiguous_labels(fig)
+    if ambiguous is not None:
+        issues.append(ambiguous)
     issues += view_issues(fig, extents)
     sub = fig.subsample
     if sub is not None:

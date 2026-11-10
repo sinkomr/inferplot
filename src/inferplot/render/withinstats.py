@@ -27,7 +27,9 @@ The drawing is :class:`inferplot.render.comparison.Drawing` with four changes:
 * centrality labels stay off the paths: with two conditions the first level's
   label goes to the left of its point, and with three or more each label of a
   middle level sits above or below the point's height, on the side the path to
-  the next level leaves free.
+  the next level leaves free; a link line that leaves its point along the
+  centrality path is drawn over a casing of the background colour, so it stays
+  visible there.
 
 ``point_path`` and ``centrality_path`` default to None, "draw the path where
 ggwithinstats draws it", so that an explicit value can be told from the default
@@ -44,6 +46,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Final
 
 import numpy as np
+from matplotlib import patheffects
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 
@@ -57,7 +60,12 @@ from inferplot.render.comparison import (
     FloatArray,
     LabelPlace,
 )
-from inferplot.render.figure import DrawnPaths, Subsample, shows_all
+from inferplot.render.figure import (
+    DrawnPaths,
+    Subsample,
+    axes_background,
+    shows_all,
+)
 from inferplot.result import StatsResult
 
 if TYPE_CHECKING:
@@ -75,6 +83,9 @@ SUBJECT_PATH_WIDTH: Final = 0.6
 # The centrality path: ggwithinstats' red path, in the centrality color.
 CENTRALITY_PATH_ALPHA: Final = 0.6
 CENTRALITY_PATH_WIDTH: Final = 1.5
+# A label's link line leaving its point along the centrality path is drawn over a
+# casing of the background colour this wide (points), so that it stays visible.
+LINK_CASING_WIDTH: Final = CENTRALITY_PATH_WIDTH + 1.0
 
 
 @v.checked
@@ -317,6 +328,42 @@ class _WithinDrawing(comparison.Drawing):
         return dataclasses.replace(
             result, text=dataclasses.replace(result.text, alt_text=alt)
         )
+
+    def path_pieces(self) -> tuple[FloatArray | None, FloatArray | None]:
+        transform = self.ax.transData
+        path: FloatArray | None = None
+        if self.centrality_line is not None:
+            xy = np.asarray(transform.transform(self.centrality_line.get_xydata()))
+            path = np.stack([xy[:-1], xy[1:]], axis=1).astype(np.float64)
+        subjects: FloatArray | None = None
+        if self.subject_paths is not None:
+            segments = [
+                np.asarray(s, dtype=np.float64)
+                for s in self.subject_paths.get_segments()
+            ]
+            if segments:
+                xy = np.stack([transform.transform(s) for s in segments])
+                pieces = np.stack([xy[:, :-1], xy[:, 1:]], axis=2).reshape(-1, 2, 2)
+                subjects = pieces.astype(np.float64)
+        return path, subjects
+
+    def style_link(self, entry: comparison.LabelEntry) -> None:
+        """A link line that leaves its point on the side the centrality path
+        leaves it is drawn over a casing of the background colour, so it shows
+        where it runs along the path; other links are left as they are."""
+        if not self.with_centrality_path:
+            return
+        values = [d.value for d in self.result.descriptives]
+        i = entry.i
+        j = i + 1 if entry.place.side == "right" else i - 1
+        along = 0 <= j < len(values) and values[j] is not None
+        if not along:
+            entry.link.set_path_effects([])
+            return
+        casing = patheffects.withStroke(
+            linewidth=LINK_CASING_WIDTH, foreground=axes_background(self.ax)
+        )
+        entry.link.set_path_effects([casing])
 
     def drawn_paths(self) -> DrawnPaths:
         return DrawnPaths(
