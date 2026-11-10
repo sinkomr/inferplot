@@ -40,15 +40,19 @@ CODES = frozenset(
     }
 )
 # inferplot's own figure (inches): at most WIDTH_FIXED + WIDTH_PER_BAR per bar
-# wide (or the subtitle's width, at most SUBTITLE_IN), at most MAX_HEIGHT high,
-# and the plotting area at least MIN_AXES_SHARE of the figure. Measured over
-# these tables: widest slot 1.07 in, figure 1.27 to 23.5 in wide, at most 5.6 in
-# high, plotting area at least 0.21 of the figure (one bar with long names).
+# wide (or SUBTITLE_IN, which a wide subtitle may reach with few bars), at most
+# MAX_HEIGHT high, and the plotting area at least MIN_AXES_SHARE of the figure.
+# Measured over these 120 tables on macOS (1 to 20 bars, 2 to 12 levels of x, n
+# 3 to 910,625): 5.3 to 25.7 in wide, at most 4 + 1.09 in per bar with three or
+# more bars and 6.26 in with one or two, 3.9 to 6.6 in high (12 levels with
+# names wrapped into three lines make the legend, and so the bars, taller), the
+# plotting area at least 0.35 of the figure. The bounds leave room for fonts
+# that rasterize differently on Linux and Windows.
 WIDTH_FIXED = 4.0
 WIDTH_PER_BAR = 1.25
 SUBTITLE_IN = 7.5
-MAX_HEIGHT = 7.0
-MIN_AXES_SHARE = 0.12
+MAX_HEIGHT = 8.0
+MIN_AXES_SHARE = 0.25
 
 
 def _name(rng: np.random.Generator, stem: str) -> str:
