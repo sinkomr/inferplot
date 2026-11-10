@@ -60,13 +60,17 @@ __all__ = [
     "ColumnNotFoundError",
     "OneData",
     "PairData",
+    "TableData",
+    "TableLevels",
     "WithinData",
     "data_notes",
     "level_label",
     "read_between",
     "read_one",
     "read_pair",
+    "read_table",
     "read_within",
+    "table_notes",
     "to_frame",
 ]
 
@@ -1845,4 +1849,678 @@ def _natural_order_note(x: str, levels: Sequence[str], natural: Sequence[str]) -
         f"{levels[first]!r} comes before {natural[first]!r}: {_listed(levels)}. "
         "The analysis and the figure use this order. To order them by the numbers "
         f"in their names, {how}."
+    )
+
+
+# --- barstats: a table of counts from categorical columns ---------------------------
+#
+# ``read_table`` reads what ggstatsplot 1.1.4's ``.pie_bar_data_prep()`` keeps for
+# ggbarstats and ggpiestats: the rows with x, y and counts present
+# (``tidyr::drop_na`` on those columns only), each repeated ``counts`` times
+# (``tidyr::uncount``: a count of 0 removes the row), then every column
+# ``as.factor()`` (declared levels kept, empty ones included; otherwise the sorted
+# values). Rows are never repeated here: each row adds its count to its cell.
+
+
+@dataclass(frozen=True, slots=True)
+class TableLevels:
+    """The levels of one column of a count table (``x`` or ``y``) and how they
+    were read.
+
+    ``levels`` holds every level in order: the declared categories, empty ones
+    included (also listed in ``empty``), else the sorted values that hold a
+    count. ``vanished`` names undeclared values seen only in rows left out (a
+    missing value in another used column, or a count of 0), which R's
+    ``as.factor()`` never sees.
+    """
+
+    name: str
+    levels: tuple[str, ...]
+    source: LevelSource
+    empty: tuple[str, ...] = ()
+    """Declared levels without any count, in declared order (kept in ``levels``)."""
+    vanished: tuple[str, ...] = ()
+    dictionary_order: tuple[str, ...] = ()
+    """As ``BetweenData.dictionary_order`` (of the levels that hold a count)."""
+    natural_order: tuple[str, ...] = ()
+    """As ``BetweenData.natural_order`` (of the levels that hold a count)."""
+    lookalike_levels: tuple[tuple[str, ...], ...] = ()
+    """Sets of levels that differ only in leading or trailing whitespace."""
+
+    @property
+    def present(self) -> tuple[str, ...]:
+        """The levels that hold a count, in order."""
+        return tuple(level for level in self.levels if level not in self.empty)
+
+
+@dataclass(frozen=True, slots=True)
+class TableData:
+    """The table of counts a barstats design analyzes.
+
+    ``counts[i][j]`` is the number of observations at level i of ``x`` (the fill;
+    rows of the table) and level j of ``y`` (the bars; columns), as Python ints;
+    without ``y`` (one-way) every row has a single entry. Rows and columns follow
+    ``x_levels.levels`` and ``y_levels.levels``, declared empty levels included, as
+    ggstatsplot holds them. With ``paired`` the table is square over the same
+    levels in the same order (``x`` and ``y`` are the two measurements of each
+    unit).
+    """
+
+    x: str
+    y: str | None
+    counts_var: str | None
+    paired: bool
+    x_levels: TableLevels
+    y_levels: TableLevels | None
+    counts: tuple[tuple[int, ...], ...]
+    n_rows: int
+    """Rows with ``x``, ``y`` and ``counts`` present (zero counts included)."""
+    n_dropped: int
+    """Rows left out because ``x``, ``y`` or ``counts`` is missing (once each)."""
+    n_missing_x: int
+    n_missing_y: int
+    n_missing_counts: int
+    """Rows missing each column; a row missing several counts in each."""
+    n_zero_rows: int
+    """Rows with every column present whose count is 0: they add nothing
+    (``tidyr::uncount``)."""
+
+    @property
+    def n(self) -> int:
+        """The table total: observations (pairs with ``paired``)."""
+        return sum(sum(row) for row in self.counts)
+
+    def table(self) -> npt.NDArray[np.int64]:
+        """``counts`` as a read-only int64 array (rows ``x``, columns ``y``)."""
+        out = np.array(self.counts, dtype=np.int64)
+        out.setflags(write=False)
+        return out
+
+    def column_totals(self) -> tuple[int, ...]:
+        """The observations in each level of ``y`` (one entry without ``y``)."""
+        return tuple(sum(column) for column in zip(*self.counts, strict=True))
+
+    def row_totals(self) -> tuple[int, ...]:
+        """The observations in each level of ``x``."""
+        return tuple(sum(row) for row in self.counts)
+
+
+_TABLE_ROLES: Final = {
+    arg: _Role(
+        arg=arg,
+        purpose="be counted as categories",
+        bool_hint="",  # booleans are categories here (_read_category reads them)
+        not_whole_hint=(
+            "barstats counts observations in categories (text, categorical, "
+            "booleans or whole-number codes), not measurements."
+        ),
+    )
+    for arg in ("x", "y")
+}
+# Whole numbers with more distinct values than this, over fewer than twice as many
+# observations, look like a measurement rather than category codes.
+_MANY_CODES: Final = 10
+
+
+def _boolean_label(value: object) -> str:
+    return "True" if value else "False"
+
+
+def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
+    """A column of categories: text, categoricals, booleans or numbers.
+
+    Booleans are the categories "False" and "True" (in that order, as R sorts its
+    logical values; Python's names); a declared categorical of booleans keeps its
+    declared order. Everything else is read as betweenstats reads ``x``.
+    """
+    if isinstance(series.dtype, nw.Boolean):
+        missing = _missing(series)
+        values: list[object] = series.to_list()
+        raw: list[object] = [
+            None if gone else _boolean_label(v)
+            for v, gone in zip(values, missing.tolist(), strict=True)
+        ]
+        return _Grouping(name, role, "text", missing, [], raw)
+    group = _read_grouping(series, name, role)
+    categories = group.categories
+    if (
+        group.kind == "declared"
+        and categories
+        and all(isinstance(c, bool | np.bool_) for c in categories)
+    ):
+        labels: list[object] = [_boolean_label(c) for c in categories]
+        raw = [
+            None if gone else _boolean_label(v)
+            for v, gone in zip(group.raw, group.missing.tolist(), strict=True)
+        ]
+        return _Grouping(name, role, "declared", group.missing, labels, raw)
+    return group
+
+
+def _is_categorical(series: nw.Series[Any]) -> bool:
+    """Whether a column reads as categories whatever its values: text,
+    categorical or boolean (numbers are judged by their values)."""
+    dtype = series.dtype
+    return not dtype.is_numeric() or isinstance(dtype, nw.Boolean)
+
+
+def _measurement_advice(
+    arg: str, x: str, y: str | None, other: nw.Series[Any] | None
+) -> str:
+    """Which function fits when ``arg`` holds measurements, given the other
+    column (``other``; None without y)."""
+    other_numeric = other is not None and not _is_categorical(other)
+    if other_numeric:
+        return (
+            f"To relate two numeric columns use scatterstats(data, x={x!r}, y={y!r})."
+        )
+    if arg == "y":
+        return (
+            f"To compare {y!r} across the groups of {x!r} (for example its mean in "
+            f"each group), use betweenstats(data, x={x!r}, y={y!r})."
+        )
+    if y is None:
+        return (
+            f"To test one numeric column against a value use histostats(data, "
+            f"x={x!r}, test_value=...)."
+        )
+    return (
+        f"To compare {x!r} across the groups of {y!r}, use betweenstats(data, "
+        f"x={y!r}, y={x!r})."
+    )
+
+
+def _check_codes(
+    group: _Grouping, series: nw.Series[Any], rows: IntArray, n: int, advice: str
+) -> None:
+    """A numeric column of ``read_table`` must hold category codes: whole numbers
+    with few distinct values. Numbers that are not whole, or more than
+    ``_MANY_CODES`` distinct whole numbers over fewer than twice as many of the
+    ``n`` observations, are a measurement: ``TypeError`` with ``advice``."""
+    if group.kind not in ("integer", "float") or rows.size == 0:
+        return
+    arg, name = group.role.arg, group.name
+    if group.kind == "float":
+        values = _float_values(series)[rows]
+        bad = ~np.isfinite(values) | (values != np.round(values))
+        if bad.any():
+            raise TypeError(
+                f"{arg}={name!r} holds numbers that are not whole "
+                f"({float(values[bad][0])!r}), so it looks like a measurement: "
+                "barstats counts observations in categories (text, categorical, "
+                f"booleans or whole-number codes). {advice}"
+            )
+        distinct = int(np.unique(values).size)
+    else:
+        full: list[Any] = series.to_list()
+        distinct = len({int(full[i]) for i in rows.tolist()})
+    if distinct > _MANY_CODES and 2 * distinct > n:
+        raise TypeError(
+            f"{arg}={name!r} holds {distinct} different numbers over {n:,} "
+            "observations, so it looks like a measurement, not a column of "
+            "categories (most categories would hold a single observation). "
+            f"{advice} To count these values as categories anyway, convert them to "
+            f"text first, for example data[{name!r}].astype(str) in pandas."
+        )
+
+
+def _bad_rows(rows: IntArray, bad: BoolArray) -> str:
+    shown = ", ".join(str(r) for r in rows[bad][:_MAX_ROWS_SHOWN])
+    return shown + (", ..." if bad.sum() > _MAX_ROWS_SHOWN else "")
+
+
+def _table_weights(series: nw.Series[Any], name: str, rows: IntArray) -> Any:
+    """The counts of ``rows`` (present in every used column): an int64 array, or
+    an object array of Python ints where a total could pass 2**62.
+
+    Whole numbers only: an integer column, or floats that are whole (a pandas
+    integer column with a missing value is float). Booleans, text and other
+    types raise ``TypeError``; a negative, infinite or non-whole count raises
+    ``ValueError`` naming its row positions (ggbarstats fails outright on 2.5:
+    ``tidyr::uncount`` cannot repeat a row 2.5 times).
+    """
+    dtype = series.dtype
+    what = (
+        f"counts={name!r} names the column that says how many observations each "
+        "row stands for (data given as a table, one row per combination of "
+        "categories), so it must hold whole numbers >= 0"
+    )
+    if isinstance(dtype, nw.Boolean):
+        raise TypeError(
+            f"{what}; it holds True/False values. To count the rows themselves, "
+            "leave counts= out."
+        )
+    if not dtype.is_numeric():
+        first = _first_value(series)
+        hint = (
+            f" It holds numbers stored as text (for example {first!r}); convert it "
+            f"first, for example pandas.to_numeric(data[{name!r}])."
+            if _numbers_as_text(first)
+            else " Convert it with pandas.to_numeric() or .cast(int) first."
+        )
+        raise TypeError(f"{what}; its type is {dtype}.{hint}")
+    values: Any
+    if dtype.is_integer() and _beyond_exact_integers(series):
+        full: list[Any] = series.to_list()
+        exact = [int(full[r]) for r in rows.tolist()]
+        values = np.array(exact, dtype=object)
+        negative = np.array([v < 0 for v in exact], dtype=np.bool_)
+    elif dtype.is_integer():
+        as_int = series.cast(nw.Int64()).fill_null(value=0)
+        values = np.asarray(as_int.to_numpy(), dtype=np.int64)[rows]
+        negative = values < 0
+    else:
+        floats = _float_values(series)[rows]
+        problem = ~np.isfinite(floats) | (floats != np.round(floats))
+        if problem.any():
+            first_bad = float(floats[problem][0])
+            kind = "infinite" if math.isinf(first_bad) else "not whole"
+            raise ValueError(
+                f"{what}; {int(problem.sum())} of its values are not whole numbers "
+                f"(for example {first_bad!r}, {kind}; row positions "
+                f"{_bad_rows(rows, problem)}). ggbarstats fails on such counts too. "
+                "If they are weights or proportions rather than numbers of "
+                "observations, barstats cannot use them: its tests need counts."
+            )
+        negative = floats < 0
+        if floats.size and float(np.abs(floats).max()) >= 2.0**62:
+            values = np.array([int(v) for v in floats.tolist()], dtype=object)
+        else:
+            values = floats.astype(np.int64)
+    if negative.any():
+        raise ValueError(
+            f"{what}; {int(negative.sum())} of its values are negative (row "
+            f"positions {_bad_rows(rows, negative)})."
+        )
+    # Totals stay exact in int64 below 2**62; beyond that, Python ints.
+    if (
+        values.dtype == np.int64
+        and values.size
+        and int(values.max()) > (2**62) // values.size
+    ):
+        values = np.array([int(v) for v in values.tolist()], dtype=object)
+    return values
+
+
+def _table_levels(
+    group: _Grouping,
+    series: nw.Series[Any],
+    labels: Sequence[str],
+    lost: IntArray,
+    dictionary: list[object] | None,
+) -> TableLevels:
+    """The levels of one column: the declared categories (empty ones kept) or
+    the sorted labels that hold a count, and the notes about them. ``lost`` are
+    the rows with this column present that add nothing to the table."""
+    present = set(labels)
+    ordered, empty, source = _grouping_order(group, present)
+    if group.kind == "declared":
+        levels = _labels_in_order(group.categories, group.name, group.role)
+    else:
+        levels = ordered
+    vanished = _vanished(group, _quiet_labels(group, series, lost), present)
+    return TableLevels(
+        name=group.name,
+        levels=tuple(levels),
+        source=source,
+        empty=tuple(empty),
+        vanished=tuple(vanished),
+        dictionary_order=_dictionary_order(dictionary, ordered),
+        natural_order=_natural_order(group, ordered),
+        lookalike_levels=_lookalikes(levels),
+    )
+
+
+def _declare_example(
+    frame: nw.DataFrame[Any],
+    columns: tuple[str, str],
+    categories: Sequence[str],
+    numeric: bool,
+) -> str:
+    """The code that declares both ``columns`` on the same ``categories``, in the
+    frame's own library."""
+    x, y = columns
+    if frame.implementation.is_polars():
+        to_text = ".cast(pl.Int64).cast(pl.String)" if numeric else ".cast(pl.String)"
+        enum = f"pl.Enum({list(categories)!r})"
+        return (
+            f"data = data.with_columns(pl.col({x!r}){to_text}.cast({enum}), "
+            f"pl.col({y!r}){to_text}.cast({enum}))"
+        )
+    shown: list[object] = [int(c) for c in categories] if numeric else [*categories]
+    start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+    return (
+        f"{start}categories = {shown!r}; "
+        f"data[{x!r}] = pd.Categorical(data[{x!r}], categories=categories); "
+        f"data[{y!r}] = pd.Categorical(data[{y!r}], categories=categories)"
+    )
+
+
+def _paired_categories(
+    x_levels: TableLevels, y_levels: TableLevels, numeric: bool
+) -> list[str]:
+    """The categories both paired columns can be declared on: a declared
+    column's order first, then the other's further levels; else sorted."""
+    xs, ys = x_levels.levels, y_levels.levels
+    if x_levels.source == "declared":
+        return [*xs, *(level for level in ys if level not in xs)]
+    if y_levels.source == "declared":
+        return [*ys, *(level for level in xs if level not in ys)]
+    union = set(xs) | set(ys)
+    return sorted(union, key=int) if numeric else sorted(union)
+
+
+def _check_paired_levels(
+    frame: nw.DataFrame[Any],
+    x_levels: TableLevels,
+    y_levels: TableLevels,
+    numeric: bool,
+) -> None:
+    """``paired=True`` needs the same levels in the same order in ``x`` and
+    ``y``: McNemar's test reads the table's cells by position, and
+    ``mcnemar.test`` needs a square table (ggstatsplot leaves the subtitle out
+    silently when it is not, D101)."""
+    xs, ys = x_levels.levels, y_levels.levels
+    if xs == ys:
+        return
+    x, y = x_levels.name, y_levels.name
+    start = (
+        f"paired=True: x={x!r} and y={y!r} are two measurements of the same units, "
+        "so they need the same categories in the same order, and they differ"
+    )
+    if set(xs) == set(ys):
+        detail = (
+            f": they hold the same categories in different orders ({x!r}: "
+            f"{_listed(xs)}; {y!r}: {_listed(ys)}). McNemar's test pairs the "
+            "categories by position, so declare both in the same order"
+        )
+        categories = list(xs)
+    else:
+        only_x = [level for level in xs if level not in ys]
+        only_y = [level for level in ys if level not in xs]
+        parts: list[str] = []
+        if only_x:
+            parts.append(f"{_quoted(only_x)} only in {x!r}")
+        if only_y:
+            parts.append(f"{_quoted(only_y)} only in {y!r}")
+        detail = (
+            f" ({'; '.join(parts)}), so the table of the pairs is not square and "
+            "McNemar's test cannot run (ggstatsplot leaves out its subtitle "
+            "silently). If every category is possible in both, declare both "
+            "columns on the same categories, which keeps a category without rows "
+            "as a level with a count of 0"
+        )
+        categories = _paired_categories(x_levels, y_levels, numeric)
+    example = _declare_example(frame, (x, y), categories, numeric)
+    raise ValueError(f"{start}{detail}: {example}.")
+
+
+def _sum(values: Any) -> int:
+    """The exact total of an int64 or object array of whole counts."""
+    if values.dtype == object:
+        return sum(int(v) for v in values.tolist())
+    return int(values.sum())
+
+
+def read_table(
+    data: object,
+    x: str,
+    y: str | None = None,
+    *,
+    counts: str | None = None,
+    paired: bool = False,
+) -> TableData:
+    """Read a count table for ``barstats``: ``x`` (rows; the fill) by ``y``
+    (columns; the bars), or ``x`` alone (one-way).
+
+    Rules (SPEC.md section 4, "barstats", as ggstatsplot 1.1.4 prepares the data):
+
+    * ``x`` and ``y`` hold categories: text, categoricals, booleans ("False",
+      "True") or whole numbers (labelled without ".0", ordered numerically).
+      Numbers that are not whole, or more than 10 distinct whole numbers over
+      fewer than twice as many observations, are a measurement and raise
+      ``TypeError`` naming the function that fits.
+    * Only ``x``, ``y`` and ``counts`` are checked for missing values: a row
+      missing any of them is dropped and counted (``n_dropped``).
+    * ``counts`` names a column of whole numbers >= 0 (integers, or floats that are
+      whole): each row adds its count to its cell, so very large counts work
+      without repeating rows. A count of 0 adds nothing, and a value seen only in
+      such rows is not a level (unless declared). A negative, infinite or
+      non-whole count raises ``ValueError`` (ggbarstats fails on 2.5).
+    * Levels: the declared categories (pandas Categorical, polars Enum, pyarrow
+      dictionary marked ordered), empty ones included; otherwise the sorted
+      values that hold a count (text as R sorts it in the C locale, numbers
+      numerically). An unordered pyarrow dictionary is read as its values.
+    * ``paired=True``: ``x`` and ``y`` are the two measurements of each unit
+      (``counts`` then counts units, as ggstatsplot reads it: it uncounts before
+      pairing), and the table must be square over the same levels in the same
+      order; otherwise ``ValueError`` shows how to declare both columns on the
+      same categories in the frame's own library.
+
+    Raises ``TypeError`` for unsupported data or column types,
+    ``ColumnNotFoundError`` (a ``KeyError``) for a missing column, and
+    ``ValueError`` for the data errors above, a column named twice, or no
+    observation left.
+    """
+    frame = to_frame(data)
+    x_raw = _column(frame, x, "x")
+    y_raw = None if y is None else _column(frame, y, "y")
+    counts_col = None if counts is None else _column(frame, counts, "counts")
+    if y is not None and x == y:
+        raise ValueError(
+            f"x and y must be different columns; both are {x!r}. To count the "
+            f"categories of one column, leave y out: barstats(data, x={x!r})."
+        )
+    if counts is not None and counts in (x, y):
+        role = "x" if counts == x else "y"
+        raise ValueError(
+            f"counts={counts!r} is also {role}=; counts names the column of how "
+            "many observations each row stands for, not a column of categories."
+        )
+    x_col, x_dictionary = _undeclared_dictionary(x_raw)
+    x_group = _read_category(x_col, x, _TABLE_ROLES["x"])
+    y_col: nw.Series[Any] | None = None
+    y_dictionary: list[object] | None = None
+    y_group: _Grouping | None = None
+    if y_raw is not None and y is not None:
+        y_col, y_dictionary = _undeclared_dictionary(y_raw)
+        y_group = _read_category(y_col, y, _TABLE_ROLES["y"])
+
+    size = len(x_group.missing)
+    none = np.zeros(size, dtype=np.bool_)
+    missing_x = x_group.missing
+    missing_y = none if y_group is None else y_group.missing
+    missing_counts = none if counts_col is None else _missing(counts_col)
+    rows = np.nonzero(~(missing_x | missing_y | missing_counts))[0]
+    weights: Any = np.ones(rows.size, dtype=np.int64)
+    if counts_col is not None and counts is not None:
+        weights = _table_weights(counts_col, counts, rows)
+    positive = np.asarray(weights > 0, dtype=np.bool_)
+    used, used_weights = rows[positive], weights[positive]
+    n_total = _sum(used_weights)
+
+    _check_codes(x_group, x_col, used, n_total, _measurement_advice("x", x, y, y_col))
+    if y_group is not None and y_col is not None:
+        advice = _measurement_advice("y", x, y, x_col)
+        _check_codes(y_group, y_col, used, n_total, advice)
+
+    unused = np.ones(size, dtype=np.bool_)
+    unused[used] = False
+    x_labels = _grouping_labels(x_group, x_col, used)
+    x_levels = _table_levels(
+        x_group, x_col, x_labels, np.nonzero(~missing_x & unused)[0], x_dictionary
+    )
+    y_levels: TableLevels | None = None
+    y_labels: list[str] = []
+    if y_group is not None and y_col is not None:
+        y_labels = _grouping_labels(y_group, y_col, used)
+        y_levels = _table_levels(
+            y_group, y_col, y_labels, np.nonzero(~missing_y & unused)[0], y_dictionary
+        )
+        if paired:
+            numeric = {x_group.kind, y_group.kind} <= {"integer", "float"}
+            _check_paired_levels(frame, x_levels, y_levels, numeric)
+
+    if n_total == 0:
+        needs = _quoted([c for c in (x, y, counts) if c is not None])
+        zero = f", and a count above 0 in {counts!r}" if counts is not None else ""
+        raise ValueError(
+            f"barstats needs at least one observation; no row of data has {needs} "
+            f"present{zero} (data has {size:,} {'row' if size == 1 else 'rows'})."
+        )
+
+    x_index = {label: i for i, label in enumerate(x_levels.levels)}
+    cells = np.fromiter((x_index[v] for v in x_labels), np.intp, len(x_labels))
+    n_columns = 1
+    if y_levels is not None:
+        n_columns = len(y_levels.levels)
+        y_index = {label: j for j, label in enumerate(y_levels.levels)}
+        y_codes = np.fromiter((y_index[v] for v in y_labels), np.intp, len(y_labels))
+        cells = cells * n_columns + y_codes
+    n_cells = len(x_levels.levels) * n_columns
+    flat: Any
+    if counts_col is None:
+        flat = np.bincount(cells, minlength=n_cells).astype(np.int64)
+    else:
+        flat = np.zeros(n_cells, dtype=used_weights.dtype)
+        if flat.dtype == object:
+            flat[:] = 0
+        np.add.at(flat, cells, used_weights)
+    as_rows: list[list[Any]] = flat.reshape(len(x_levels.levels), n_columns).tolist()
+    return TableData(
+        x=x,
+        y=y,
+        counts_var=counts,
+        paired=paired,
+        x_levels=x_levels,
+        y_levels=y_levels,
+        counts=tuple(tuple(int(v) for v in row) for row in as_rows),
+        n_rows=int(rows.size),
+        n_dropped=int(size - rows.size),
+        n_missing_x=int(missing_x.sum()),
+        n_missing_y=int(missing_y.sum()),
+        n_missing_counts=int(missing_counts.sum()),
+        n_zero_rows=int(rows.size - used.size),
+    )
+
+
+def _or_listed(names: Sequence[str]) -> str:
+    """``'a'``, ``'a' or 'b'``, ``'a', 'b' or 'c'``."""
+    quoted = [repr(name) for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return ", ".join(quoted[:-1]) + " or " + quoted[-1]
+
+
+def table_notes(data: TableData) -> list[str]:
+    """Plain-English notes on how a count table was read, for the result's
+    ``warnings``: the rows left out for a missing value, an unordered dictionary
+    whose order was not used, text levels in another order than their numbers,
+    levels seen only in rows left out, levels that differ only in surrounding
+    whitespace, and control characters in level and column names. barstats has
+    no ``order=``: a declared categorical sets the order of its levels. Declared
+    empty levels are the analysis' to word (what they mean depends on the
+    design)."""
+    notes: list[str] = []
+    used = [(data.x, data.n_missing_x)]
+    if data.y is not None:
+        used.append((data.y, data.n_missing_y))
+    if data.counts_var is not None:
+        used.append((data.counts_var, data.n_missing_counts))
+    dropped = data.n_dropped
+    if dropped:
+        detail = ""
+        if len(used) > 1:
+            detail = (
+                " ("
+                + ", ".join(f"{count:,} without {name!r}" for name, count in used)
+                + ")"
+            )
+        rows = f"{dropped:,} {'row was' if dropped == 1 else 'rows were'}"
+        notes.append(
+            f"{rows} left out because {_or_listed([name for name, _ in used])} is "
+            f"missing{detail}; {data.n:,} observations remain."
+        )
+    for column in (data.x_levels, data.y_levels):
+        if column is None:
+            continue
+        notes.extend(_table_level_notes(data, column))
+    names = [("x", data.x)]
+    if data.y is not None:
+        names.append(("y", data.y))
+    for arg, name in names:
+        drawn = _control_characters(name)
+        if drawn is not None:
+            notes.append(
+                f"The column name {arg}={name!r} holds control characters {drawn} "
+                "in the figure's labels; the result keeps the name as given."
+            )
+    return notes
+
+
+def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
+    """``table_notes`` for the levels of one column."""
+    notes: list[str] = []
+    name = column.name
+    if column.dictionary_order:
+        notes.append(
+            f"The levels of {name!r} are in sorted order ({_listed(column.present)}), "
+            f"not in the order of its pyarrow dictionary "
+            f"({_listed(column.dictionary_order)}): a dictionary that is not marked "
+            "ordered, as dictionary_encode(), pyarrow.csv and polars' .to_arrow() "
+            "make, lists values in the order they first appear in the rows, so it "
+            "does not declare an order. To choose the order, mark the dictionary "
+            "ordered, or pass the column as a pandas Categorical or a polars Enum "
+            "with the categories in the order you want."
+        )
+    if column.natural_order:
+        notes.append(_table_natural_order_note(column))
+    vanished = column.vanished
+    if vanished:
+        one = len(vanished) == 1
+        others = [c for c in (data.x, data.y, data.counts_var) if c not in (None, name)]
+        causes = [f"a missing {_or_listed([str(c) for c in others])}"] if others else []
+        if data.counts_var is not None:
+            causes.append("a count of 0")
+        notes.append(
+            f"The {'level' if one else 'levels'} {_quoted(vanished)} of {name!r} "
+            f"{'was' if one else 'were'} left out of the analysis: every row of "
+            f"{'it' if one else 'them'} has {' or '.join(causes)}."
+        )
+    for level in column.levels:
+        drawn = _control_characters(level)
+        if drawn is not None:
+            notes.append(
+                f"The level {level!r} of {name!r} holds control characters {drawn}; "
+                "the result keeps the name as given."
+            )
+    for same in column.lookalike_levels:
+        notes.append(
+            f"The levels {_quoted(same)} of {name!r} differ only in spaces at their "
+            "start or end, so they are counted as separate categories whose labels "
+            "look alike. If they are the same category, remove the spaces first, "
+            "for example with .str.strip() in pandas or .str.strip_chars() in polars."
+        )
+    return notes
+
+
+def _table_natural_order_note(column: TableLevels) -> str:
+    """The natural-order note of a barstats column: barstats has no ``order=``,
+    so another order comes from a declared categorical."""
+    levels, natural = column.present, column.natural_order
+    first = next(
+        n for n, (a, b) in enumerate(zip(levels, natural, strict=True)) if a != b
+    )
+    example = f"categories={list(natural)!r}"
+    how = (
+        f"pd.Categorical(data[{column.name!r}], {example})"
+        if len(example) <= _MAX_EXAMPLE
+        else "with the categories in the order you want"
+    )
+    return (
+        f"The levels of {column.name!r} are text, sorted as text (as R sorts "
+        f"them), so {levels[first]!r} comes before {natural[first]!r}: "
+        f"{_listed(levels)}. The analysis and the figure use this order. To order "
+        f"them by the numbers in their names, pass the column as a pandas "
+        f"Categorical ({how}) or a polars Enum in that order."
     )
