@@ -68,6 +68,12 @@ def test_a_short_natural_order_is_the_example() -> None:
         ["a", "b", "c"],  # no numbers
         ["week 1", "week 2", "week 3"],  # numbers that sort alike either way
         ["t01", "t02", "t10"],  # zero-padded
+        # Names that can be read two ways get no advice: decimals already in
+        # order (as whole numbers 0.5 would go before 0.25), and "1.10", which is
+        # after "1.5" as a version and before it as a decimal.
+        ["0.25", "0.5", "1"],
+        ["1.10", "1.5"],
+        ["v1.10", "v1.2"],
     ],
 )
 def test_no_note_where_the_orders_agree(names: list[str]) -> None:
@@ -85,3 +91,17 @@ def test_no_note_with_order_or_declared_or_numeric_levels() -> None:
     numeric = data.assign(time=data["time"].str.removeprefix("dose ").astype(int))
     assert read_between(numeric, "time", "score").natural_order == ()
     assert read_between(numeric, "time", "score").levels == ("5", "10", "20")
+
+
+def test_decimals_and_signs_are_read_as_numbers() -> None:
+    data = _within(["2.5", "10"])
+    (note,) = _notes(ip.analyze.betweenstats(data, "time", "score").warnings)
+    assert note.endswith("pass order=['2.5', '10'].")
+    # A minus sign at the start of a name is part of the number; a hyphen inside
+    # a name ("1-5") is not.
+    signed = read_between(_within(["-1", "-10", "2"]), "time", "score")
+    assert signed.levels == ("-1", "-10", "2")
+    assert signed.natural_order == ("-10", "-1", "2")
+    ranges = read_between(_within(["1-5", "6-10", "11-15"]), "time", "score")
+    assert ranges.levels == ("1-5", "11-15", "6-10")
+    assert ranges.natural_order == ("1-5", "6-10", "11-15")

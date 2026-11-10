@@ -70,7 +70,7 @@ from inferplot.render.figure import (
 )
 from inferplot.render.labels import ambiguities, covered
 from inferplot.result import StatsResult
-from inferplot.text import FigureTexts, figure_alt_text, figure_texts
+from inferplot.text import FigureTexts, drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -1423,12 +1423,12 @@ class Drawing:
         ax.tick_params(axis="x", length=0.0, pad=6.0)
         ax.tick_params(axis="y", labelsize=theme.SIZE_TICK)
         ax.set_xlabel(
-            result.x if options.xlab is None else options.xlab,
+            drawable(result.x) if options.xlab is None else options.xlab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.xlab is not None,
         )
         ax.set_ylabel(
-            result.y if options.ylab is None else options.ylab,
+            drawable(result.y) if options.ylab is None else options.ylab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.ylab is not None,
         )

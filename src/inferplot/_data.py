@@ -47,6 +47,7 @@ import re
 import unicodedata
 from collections.abc import Hashable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any, Final, Literal, cast
 
 import narwhals.stable.v2 as nw
@@ -794,24 +795,42 @@ def _grouping_order(
     return sorted(present, key=int), [], "sorted"
 
 
-_DIGITS: Final = re.compile(r"([0-9]+)")
+# A number in a level name: a run of ASCII digits, with a minus sign where the name
+# or a word starts with it ("-10", not the hyphen of "group-10" or "1-5"); read as
+# a whole number, or together with the decimals that follow it.
+_WHOLE_NUMBERS: Final = re.compile(r"((?:(?<!\S)-)?[0-9]+)")
+_DECIMAL_NUMBERS: Final = re.compile(r"((?:(?<!\S)-)?[0-9]+(?:\.[0-9]+)?)")
 
 
-def _natural_key(label: str) -> tuple[str | int, ...]:
-    """``label`` split into text and runs of ASCII digits, the digits as numbers:
-    text at even places, numbers at odd ones, so two keys compare place by place."""
-    parts = _DIGITS.split(label)
-    return tuple(int(part) if n % 2 else part for n, part in enumerate(parts))
+def _natural_key(label: str, numbers: re.Pattern[str]) -> tuple[str | Fraction, ...]:
+    """``label`` split into text and the numbers ``numbers`` finds, the numbers as
+    exact values: text at even places, numbers at odd ones, so two keys compare
+    place by place."""
+    parts = numbers.split(label)
+    return tuple(Fraction(part) if n % 2 else part for n, part in enumerate(parts))
+
+
+def _by_numbers(levels: Sequence[str], numbers: re.Pattern[str]) -> list[str]:
+    return sorted(levels, key=lambda label: (_natural_key(label, numbers), label))
 
 
 def _natural_order(group: _Grouping, levels: Sequence[str]) -> tuple[str, ...]:
     """Text ``levels`` in sorted order, ordered by the numbers in their names when
     that differs ("week 2" before "week 10"); empty otherwise. Numbers sort
-    numerically and declared categories keep their order, so neither has one."""
+    numerically and declared categories keep their order, so neither has one.
+
+    Empty too where the names can be read two ways: "1.10" is after "1.5" as a
+    version and before it as a decimal, and "0.25", "0.5" are in order as
+    decimals. The order is given only when reading every run of digits as a
+    whole number and reading digits, a point and digits as one decimal number
+    agree.
+    """
     if group.kind != "text":
         return ()
-    natural = sorted(levels, key=lambda label: (_natural_key(label), label))
-    return tuple(natural) if natural != list(levels) else ()
+    natural = _by_numbers(levels, _WHOLE_NUMBERS)
+    if natural == list(levels) or natural != _by_numbers(levels, _DECIMAL_NUMBERS):
+        return ()
+    return tuple(natural)
 
 
 def _quiet_labels(group: _Grouping, series: nw.Series[Any], rows: IntArray) -> set[str]:
@@ -1408,22 +1427,18 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             f"{'it' if one else 'them'} has a missing {needs}."
         )
     for level in data.levels:
-        controls = sorted(
-            {c for c in level if c != "\n" and unicodedata.category(c) == "Cc"}
-        )
-        if controls:
-            codes = ", ".join(f"U+{ord(c):04X}" for c in controls)
-            drawn = (
-                "a tab as a space"
-                if controls == ["\t"]
-                else "a tab as a space and any other as \ufffd (U+FFFD)"
-                if "\t" in controls
-                else "each as \ufffd (U+FFFD)"
-            )
+        drawn = _control_characters(level)
+        if drawn is not None:
             notes.append(
-                f"The level {level!r} of {x!r} holds control characters ({codes}), "
-                f"which the figure draws {drawn}; the result keeps the name as "
-                "given."
+                f"The level {level!r} of {x!r} holds control characters {drawn}; the "
+                "result keeps the name as given."
+            )
+    for arg, name in (("x", x), ("y", data.y)):
+        drawn = _control_characters(name)
+        if drawn is not None:
+            notes.append(
+                f"The column name {arg}={name!r} holds control characters {drawn} "
+                "in the axis label; the result keeps the name as given."
             )
     for same in data.lookalike_levels:
         notes.append(
@@ -1433,6 +1448,25 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "example with .str.strip() in pandas or .str.strip_chars() in polars."
         )
     return notes
+
+
+def _control_characters(name: str) -> str | None:
+    """How the figure draws the control characters of ``name`` (all but the line
+    break), "(U+0007), which the figure draws each as ...", or None without any."""
+    controls = sorted(
+        {c for c in name if c != "\n" and unicodedata.category(c) == "Cc"}
+    )
+    if not controls:
+        return None
+    codes = ", ".join(f"U+{ord(c):04X}" for c in controls)
+    drawn = (
+        "a tab as a space"
+        if controls == ["\t"]
+        else "a tab as a space and any other as \ufffd (U+FFFD)"
+        if "\t" in controls
+        else "each as \ufffd (U+FFFD)"
+    )
+    return f"({codes}), which the figure draws {drawn}"
 
 
 # An order= example longer than this is described instead of written out.

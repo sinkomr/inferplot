@@ -105,3 +105,27 @@ def test_another_panels_subtitle_is_quoted_as_text() -> None:
     subtitle = first.result.text.subtitle
     assert subtitle is not None
     assert f"{describe_text('subtitle', subtitle)} of another panel" in issue.message
+
+
+def test_control_characters_in_column_names(tmp_path: Path) -> None:
+    # The axis labels draw the column names: the same rule, and an SVG that
+    # parses (lead's check of the review fixes).
+    data = _long(["a", "b", "c"]).rename(columns={"cond": "co\x01nd", "y": "y\tval"})
+    for fig in (
+        ip.withinstats(data, "co\x01nd", "y\tval", subject_id="id"),
+        ip.betweenstats(data, "co\x01nd", "y\tval"),
+    ):
+        assert (fig.result.x, fig.result.y) == ("co\x01nd", "y\tval")
+        ax = fig.axes["main"]
+        assert (ax.get_xlabel(), ax.get_ylabel()) == ("co�nd", "y val")
+        assert [w for w in fig.result.warnings if "control characters" in w] == [
+            "The column name x='co\\x01nd' holds control characters (U+0001), "
+            "which the figure draws each as � (U+FFFD) in the axis label; the "
+            "result keeps the name as given.",
+            "The column name y='y\\tval' holds control characters (U+0009), which "
+            "the figure draws a tab as a space in the axis label; the result keeps "
+            "the name as given.",
+        ]
+        path = tmp_path / "columns.svg"
+        fig.save(path)
+        ET.parse(path)  # well-formed
