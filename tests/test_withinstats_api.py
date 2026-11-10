@@ -390,7 +390,6 @@ def test_arguments_a_type_cannot_use(two: pd.DataFrame, four: pd.DataFrame) -> N
 @pytest.mark.parametrize(
     ("kind", "k", "method", "later"),
     [
-        ("nonparametric", 2, "the Wilcoxon signed-rank test", "is not implemented yet"),
         (
             "robust",
             2,
@@ -428,9 +427,9 @@ def test_each_type_raises_not_implemented(
 
 
 def test_type_aliases_reach_the_same_type(two: pd.DataFrame) -> None:
-    for alias, kind in (("p", "parametric"), ("bf", "bayes")):
+    for alias, kind in (("p", "parametric"), ("bf", "bayes"), ("np", "nonparametric")):
         assert call(two, type=alias).type == kind
-    for alias, kind in (("np", "nonparametric"), ("r", "robust")):
+    for alias, kind in (("r", "robust"),):
         text = message(NotImplementedError, lambda alias=alias: call(two, type=alias))
         assert text.startswith(f"withinstats(type={kind!r})")
 

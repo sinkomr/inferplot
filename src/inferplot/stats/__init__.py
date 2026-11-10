@@ -67,6 +67,11 @@ from inferplot.stats.robust import (
 )
 from inferplot.stats.smm import smm_cdf, smm_quantile
 from inferplot.stats.srange import srange_logsf, srange_sf
+from inferplot.stats.within_nonparametric import (
+    SignedRank,
+    paired_rank_biserial,
+    signed_rank,
+)
 from inferplot.stats.within_parametric import (
     PairedT,
     PairedTPair,
@@ -98,6 +103,7 @@ __all__ = [
     "RepeatedMeasuresAnova",
     "ScaledWelch",
     "Sidedness",
+    "SignedRank",
     "StudentT",
     "TrimmedMeansAnova",
     "WelchAnova",
@@ -124,6 +130,7 @@ __all__ = [
     "p_adjust",
     "paired_differences_constant",
     "paired_hedges_g",
+    "paired_rank_biserial",
     "paired_t",
     "paired_t_pairs",
     "partial_omega_squared",
@@ -132,6 +139,7 @@ __all__ = [
     "rm_anova",
     "rm_partial_omega_squared",
     "scaled_variance",
+    "signed_rank",
     "smm_cdf",
     "smm_critical_value",
     "smm_quantile",

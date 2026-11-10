@@ -463,8 +463,82 @@ def _within_no_effect_warnings(
 
 def _nonparametric(data: WithinData, args: _Args) -> _Parts:
     """Wilcoxon signed-rank test with the rank-biserial r (two conditions);
-    Friedman test with Kendall's W and Durbin-Conover comparisons (three or more)."""
-    raise _not_implemented(args.type, data)
+    Friedman test with Kendall's W and Durbin-Conover comparisons (three or more).
+    Medians of the complete subjects' values as centrality."""
+    x, levels, columns = args.x, data.levels, data.by_level()
+    if len(levels) != 2:
+        raise _not_implemented(args.type, data)
+    side, level = args.alternative, args.conf_level
+    warnings: list[str] = []
+    a, b = columns
+    if bool((a == b).all()):
+        raise ValueError(
+            f"Every subject has the same value at {levels[0]!r} as at {levels[1]!r} "
+            f"(x={x!r}), so every paired difference is 0 and the signed-rank test "
+            "has nothing to rank: its statistic and the rank-biserial r are 0/0. "
+            "There is no difference to test; check the data for entry errors."
+        )
+    wilcoxon = stats.signed_rank(a, b, alternative=side)
+    r = stats.paired_rank_biserial(a, b, conf_level=level, alternative=side)
+    test = TestResult(
+        name="wilcoxon_signed_rank",
+        label="Wilcoxon signed-rank test",
+        method="Wilcoxon signed rank test",
+        statistic_name="V",
+        statistic=wilcoxon.statistic,
+        df=None,
+        df_error=None,
+        p_value=wilcoxon.p_value,
+        alternative=side,
+    )
+    effect_size = EffectSize(
+        name="rank_biserial",
+        label="rank-biserial r",
+        estimate=r.estimate,
+        conf_level=r.conf_level,
+        conf_low=r.conf_low,
+        conf_high=r.conf_high,
+        ci_method="normal approximation (Fisher z)",
+        sidedness=r.sidedness,
+    )
+    if abs(r.estimate) == 1.0 and r.conf_low == r.conf_high:
+        warnings.append(_rank_biserial_bound_warning(x, levels[0], levels[1], r))
+    warnings += _within_no_effect_warnings(data, args, bayes_computed=False)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        pairwise=(),
+        centrality="median",
+        centers=tuple(stats.median(column) for column in columns),
+        warnings=tuple(warnings),
+        citations=(_WILCOXON_1945, _KERBY_2014),
+    )
+
+
+# Short references for the methods of type nonparametric (SPEC.md section 4).
+_WILCOXON_1945: Final = (
+    "Wilcoxon, F. (1945). Biometrics Bulletin 1: 80-83 (the signed-rank test)."
+)
+_KERBY_2014: Final = (
+    "Kerby, D. S. (2014). Comprehensive Psychology 3: 11.IT.3.1 (the matched-pairs "
+    "rank-biserial correlation)."
+)
+
+
+def _rank_biserial_bound_warning(
+    x: str, first: str, second: str, r: stats.EffectSizeCI
+) -> str:
+    """|r| = 1 collapses the Fisher-z interval to the point r."""
+    bound = "1" if r.estimate > 0 else "-1"
+    return (
+        f"Every nonzero difference between {first!r} and {second!r} of x={x!r} has "
+        f"the same sign, so the rank-biserial r is at its bound ({bound}) and its "
+        f"confidence interval has no width: [{bound}, {bound}]. The interval is "
+        "built on the Fisher z scale, where r = 1 or -1 lies infinitely far out; "
+        "it does not mean the effect is known exactly. ggstatsplot prints the "
+        "same interval."
+    )
 
 
 def _robust(data: WithinData, args: _Args) -> _Parts:
