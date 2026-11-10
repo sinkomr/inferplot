@@ -65,7 +65,7 @@ labels and the texts it draws; texts already in that Axes keep their font.
 | Function | Positional | Specific keywords (defaults) |
 | --- | --- | --- |
 | `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. Before anything is drawn, each is applied to a scratch artist made as the drawing makes it, which is drawn and written as SVG and PDF (matplotlib checks some values only then); a property name the artist does not have raises `TypeError` with the closest property name, and any value matplotlib rejects, when setting it or only when drawing, raises `ValueError` naming the argument, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
-| `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=True`, `centrality_path=True` |
+| `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=True` (join each subject's points with a line; drawn only with two conditions and the `"points"` layer, as ggwithinstats draws it only for two conditions), `centrality_path=True` (join the centrality points; drawn only with `centrality_plotting=True`, as in ggwithinstats). `point_path=False` where no subject paths are drawn and `centrality_path=False` with `centrality_plotting=False` have no effect and add a `warnings` entry each (D39); the defaults add nothing (D57) |
 | `histostats` | `data, x` | `test_value=0.0`, `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True` |
 | `scatterstats` | `data, x, y` | `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `label_var=None` |
 | `barstats` | `data, x, y=None` | `counts=None`, `paired=False`, `ratio=None`, `label="percentage"` (`"counts"`, `"both"`), `proportion_test=True`, `p_adjust_method="holm"`, `digits_perc=0` |
@@ -176,7 +176,10 @@ explaining that pairing by row order is not allowed.
   categories, else sorted: text by code point, numbers numerically), so results do not
   depend on the input row order or the data frame library.
 - More than 5,000 points in one panel: draw a density layer plus a seeded subsample of
-  2,000 points; statistics always use all data; record it in `warnings`.
+  2,000 points; statistics always use all data; record it in `warnings`. In
+  `withinstats` whole subjects are sampled: every value of a seeded random `2000 // k`
+  of the subjects (1,000 at two conditions, 666 at three), so every drawn subject path
+  is complete; `warnings` and `points_subsampled` name the subjects drawn (D57).
 
 ## 4. Statistical methods
 
@@ -421,7 +424,14 @@ data range; boxes use type-7 quartiles and Tukey whiskers without outlier marker
 points show them). A panel with more than 5,000 values draws a uniform seeded
 2,000-point subsample of the points; the violins (or, without a violin layer, unfilled
 density outlines) and boxes show all values. A level with fewer than two distinct
-values gets no violin, and `warnings` says so. inferplot sizes its own figure from the
+values gets no violin, and `warnings` says so. withinstats (D57) jitters each subject's
+points by one seeded offset shared across its levels (ggwithinstats draws them
+unjittered), so a subject path ends on its points; subject paths are thin translucent
+grey lines in one collection, under the points; the centrality path is drawn in the
+centrality colour. Centrality labels avoid the paths: with two conditions the first
+level's label is left of its point, and with three or more a middle level's label sits
+above or below the point's height on the side the path to the next level leaves free.
+inferplot sizes its own figure from the
 rendered text extents, so no text is clipped or overlaps (D38): significance brackets
 are stacked in points on top of a data region of at least 2.5 in, so the figure grows
 only by the height the brackets need; with `ax=` nothing is
@@ -573,6 +583,8 @@ no problems.
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |
 | `points_subsampled` | figure | info | large-n subsampling used |
+| `path_hidden` | figure | warning | withinstats: a text's rendered box covers more than 1 px of the centrality path or of a subject path (0.5 px slack at the box edges) |
+| `paths_crowded` | figure | warning | withinstats: the subject paths, rendered alone as drawn, are at least half opaque over more than 15% of the area between the two conditions (about 250 subjects in inferplot's own figure); the fix is `point_path=False` |
 
 `label_overlap` compares the rendered boxes of every drawn, non-empty text: title,
 subtitle, caption lines, axis labels, visible tick labels, centrality labels with their
