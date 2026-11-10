@@ -131,7 +131,7 @@ def test_signatures() -> None:
 @pytest.mark.parametrize(
     "type_name", ["parametric", "nonparametric", "robust", "bayes"]
 )
-def test_each_type_returns_a_result_and_drawing_is_not_implemented(
+def test_each_type_returns_a_result_and_draws(
     tooth: pd.DataFrame, type_name: str
 ) -> None:
     result = analyze(tooth, "len", type=type_name, test_value=18)
@@ -141,11 +141,9 @@ def test_each_type_returns_a_result_and_drawing_is_not_implemented(
         60,
     )
     assert result.text.apa.endswith("n = 60.")
-    # ip.histostats analyzes, then stops where the drawing starts.
-    text = message(
-        NotImplementedError, lambda: top(tooth, "len", type=type_name, test_value=18)
-    )
-    assert text.startswith("render.histostats(): drawing a histostats result")
+    # ip.histostats analyzes, then draws the same result.
+    fig = top(tooth, "len", type=type_name, test_value=18)
+    assert fig.result.text.apa == result.text.apa
 
 
 def test_aliases_are_canonical(tooth: pd.DataFrame) -> None:

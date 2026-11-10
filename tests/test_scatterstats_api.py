@@ -138,7 +138,7 @@ def test_signatures() -> None:
 @pytest.mark.parametrize(
     "type_name", ["parametric", "nonparametric", "robust", "bayes"]
 )
-def test_each_type_returns_a_result_and_drawing_is_not_implemented(
+def test_each_type_returns_a_result_and_draws(
     cars: pd.DataFrame, type_name: str
 ) -> None:
     result = analyze(cars, "wt", "mpg", type=type_name)
@@ -148,11 +148,9 @@ def test_each_type_returns_a_result_and_drawing_is_not_implemented(
         32,
     )
     assert result.text.apa.endswith("n = 32 pairs.")
-    text = message(
-        NotImplementedError,
-        lambda: top(cars, "wt", "mpg", type=type_name, marginal=False),
-    )
-    assert text.startswith("render.scatterstats(): drawing a scatterstats result")
+    fig = top(cars, "wt", "mpg", type=type_name, marginal=False)
+    assert fig.result.text.apa == result.text.apa
+    assert set(fig.axes) == {"main"}
 
 
 def test_render_checks_its_arguments_then_draws() -> None:
