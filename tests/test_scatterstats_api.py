@@ -155,10 +155,9 @@ def test_each_type_returns_a_result_and_drawing_is_not_implemented(
     assert text.startswith("render.scatterstats(): drawing a scatterstats result")
 
 
-def test_render_checks_its_arguments_then_says_it_is_not_implemented() -> None:
+def test_render_checks_its_arguments_then_draws() -> None:
     result = made("mtcars-parametric")
-    text = message(NotImplementedError, lambda: draw(result))
-    assert text.startswith("render.scatterstats(): drawing a scatterstats result")
+    assert isinstance(draw(result), ip.render.StatsFigure)
     assert message(TypeError, lambda: draw(result, marginal="yes")) == (
         "marginal must be True or False; got 'yes'."
     )
@@ -188,9 +187,9 @@ def test_ax_needs_marginal_false(cars: pd.DataFrame) -> None:
     )
     # ip.scatterstats says so before analyzing.
     assert message(ValueError, lambda: top(cars, "wt", "mpg", ax=object())) == text
-    assert message(
-        NotImplementedError, lambda: draw(result, ax=object(), marginal=False)
-    ).startswith("render.scatterstats()")
+    assert message(TypeError, lambda: draw(result, ax=object(), marginal=False)) == (
+        "ax must be a matplotlib Axes or None; got object."
+    )
 
 
 def test_analysis_imports_no_matplotlib() -> None:

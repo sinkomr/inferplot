@@ -595,8 +595,9 @@ def _ambiguous_labels(fig: StatsFigure) -> Issue | None:
 def _crowded_labels(
     fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
 ) -> Issue | None:
-    """scatterstats' point labels that overlap each other or hide points, or that
-    were too many to place."""
+    """scatterstats' point labels that overlap each other, or that were too many
+    to place. (Labels on points of a dense cloud are not reported: the placement
+    covers as few points as it can, and some labels must lie over points.)"""
     labels = fig.point_labels
     if labels is None:
         return None
@@ -614,30 +615,6 @@ def _crowded_labels(
             "pairs of point labels overlap"
         )  # fmt: skip
         found.append(f"{len(pairs)} {noun}: {_listing(pairs)}")
-    points = labels.points
-    if (
-        points is not None
-        and points.get_visible()
-        and points.axes is not None
-        and shown
-    ):
-        offsets = np.asarray(cast("Any", points).get_offsets(), dtype=np.float64)
-        if offsets.size:
-            xy = np.asarray(points.get_offset_transform().transform(offsets))
-            tol = _CLIP_TOLERANCE
-            hidden = np.zeros(xy.shape[0], dtype=bool)
-            for _, box in shown:
-                hidden |= (
-                    (xy[:, 0] > box.x0 + tol)
-                    & (xy[:, 0] < box.x1 - tol)
-                    & (xy[:, 1] > box.y0 + tol)
-                    & (xy[:, 1] < box.y1 - tol)
-                )
-            count = int(hidden.sum())
-            if count:
-                found.append(
-                    f"{count:,} of the {xy.shape[0]:,} points lie under a point label"
-                )
     if labels.total > labels.limit:
         found.append(
             f"{labels.total:,} points are labelled, more than the {labels.limit:,} "

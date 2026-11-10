@@ -31,7 +31,6 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import numpy as np
-from matplotlib import patheffects
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
 from matplotlib.colors import ListedColormap
@@ -51,7 +50,6 @@ from inferplot.render.figure import (
     PointLabels,
     StatsFigure,
     Subsample,
-    axes_background,
 )
 from inferplot.render.histostats import checked_result
 from inferplot.render.point_labels import place_labels
@@ -458,7 +456,6 @@ class _ScatterDrawing(base.BaseDrawing):
             point_labels=(
                 PointLabels(
                     texts=tuple(self.label_texts),
-                    points=self.points,
                     total=len(self.label_texts),
                     limit=MAX_LABELS,
                 )
@@ -607,9 +604,6 @@ class _ScatterDrawing(base.BaseDrawing):
         """The point labels, at their points for now (placed after the layout)."""
         labels = self.result.point_labels
         changed = 0
-        halo = patheffects.withStroke(
-            linewidth=2.5, foreground=axes_background(self.ax)
-        )
         for i in self.labelled:
             shown = drawable(labels[i])
             changed += shown != labels[i]
@@ -621,7 +615,6 @@ class _ScatterDrawing(base.BaseDrawing):
                 parse_math=False,
                 zorder=6.0,
                 gid=f"point-label-{len(self.label_texts)}",
-                path_effects=[halo],
             )
             self.role(text, "point label", labels[i])
             self.label_texts.append(text)

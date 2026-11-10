@@ -158,11 +158,9 @@ def test_aliases_are_canonical(tooth: pd.DataFrame) -> None:
     assert args.type == "bayes"
 
 
-def test_render_checks_its_arguments_then_says_it_is_not_implemented() -> None:
+def test_render_checks_its_arguments_then_draws() -> None:
     result = made("ToothGrowth-parametric")
-    text = message(NotImplementedError, lambda: draw(result))
-    assert text.startswith("render.histostats(): drawing a histostats result")
-    assert "result.to_json()" in text
+    assert isinstance(draw(result), ip.render.StatsFigure)
     assert "binwidth must be a finite number greater than 0" in message(
         ValueError, lambda: draw(result, binwidth=0)
     )

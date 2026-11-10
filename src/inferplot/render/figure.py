@@ -117,12 +117,11 @@ class DrawnData:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PointLabels:
-    """The point labels of a scatterstats figure, for ``check()``: the texts, the
-    drawn points they must not hide (``points``, or None), how many labels there
-    are and the most inferplot places clear of each other (``limit``)."""
+    """The point labels of a scatterstats figure, for ``check()``: the texts, how
+    many there are and the most inferplot places clear of each other
+    (``limit``)."""
 
     texts: tuple[Text, ...]
-    points: PathCollection | None
     total: int
     limit: int
 
