@@ -109,6 +109,7 @@ __all__ = [
     "pairwise_p_expression",
     "r_number_text",
     "results_sentence",
+    "shown_test_value",
     "subtitle_expression",
     "tick_label",
     "to_mathtext",
@@ -1959,15 +1960,39 @@ def caption_lines(
 # designs (SPEC section 7).
 
 
+# The longest test value printed as written (R's 15-significant-digit print).
+TEST_VALUE_CHARS: Final = 8
+
+
+def shown_test_value(test_value: float, digits: int) -> tuple[str, bool]:
+    """The test value as the texts print it, and whether that is rounded.
+
+    As written (R's print of the double, :func:`r_number_text`: "18", "5.8",
+    "-10", "1.7e+09", "0.001") when that takes at most TEST_VALUE_CHARS
+    characters; otherwise rounded with the subtitle's number rule
+    (:func:`format_value` with ``digits``: "0.33" for 1/3, "36.12" for
+    36.123456789, "1.23e+05" for 123456.789) and marked as rounded by the
+    caller ("test value ≈ 0.33", "about 0.33"), so that a printed value never
+    stands for a different one. The result keeps the exact value
+    (``settings.test_value``).
+    """
+    written = r_number_text(test_value)
+    if len(written) <= TEST_VALUE_CHARS or not math.isfinite(test_value):
+        return written, False
+    return format_value(test_value, digits), True
+
+
 def _test_value_text(settings: Settings) -> str:
-    """The value a one-sample test is tested against, as R prints it ("18",
-    "5.8", "-10")."""
+    """The value a one-sample test is tested against, in the APA sentence and
+    the alt text: "18", or "about 0.33" where it is rounded
+    (:func:`shown_test_value`)."""
     if settings.test_value is None:
         raise ValueError(
             "a one-sample result needs settings.test_value, the value its test is "
             "tested against"
         )
-    return r_number_text(settings.test_value)
+    shown, rounded = shown_test_value(settings.test_value, settings.digits)
+    return f"about {shown}" if rounded else shown
 
 
 def _no_level_n(n_obs: int, design: str) -> str:

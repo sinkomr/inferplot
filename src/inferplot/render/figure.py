@@ -34,6 +34,7 @@ __all__ = [
     "DrawnData",
     "DrawnPaths",
     "DrawnView",
+    "LineLabel",
     "PointLabels",
     "StatsFigure",
     "Subsample",
@@ -126,6 +127,17 @@ class PointLabels:
     limit: int
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class LineLabel:
+    """A label of a vertical line (histostats' centrality and test value lines),
+    for ``check()``: its text, its own line, and what the line is in words
+    ("the centrality line")."""
+
+    text: Text
+    line: Line2D
+    name: str
+
+
 @dataclass(frozen=True, slots=True)
 class CenterLabel:
     """A drawn centrality label, for ``check()``: its level (position ``index``
@@ -168,6 +180,7 @@ class StatsFigure:
         "_figure",
         "_inside",
         "_labels",
+        "_line_labels",
         "_own",
         "_paths",
         "_point_labels",
@@ -196,6 +209,7 @@ class StatsFigure:
         data: tuple[DrawnData, ...] = (),
         color_names: tuple[str, ...] = (),
         point_labels: PointLabels | None = None,
+        line_labels: tuple[LineLabel, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -213,6 +227,7 @@ class StatsFigure:
         self._data = data
         self._color_names = color_names
         self._point_labels = point_labels
+        self._line_labels = line_labels
 
     @property
     def figure(self) -> Figure:
@@ -363,6 +378,11 @@ class StatsFigure:
         """What each of ``colors`` paints, in words ("the bars"); empty where the
         colours follow the levels."""
         return self._color_names
+
+    @property
+    def line_labels(self) -> tuple[LineLabel, ...]:
+        """histostats' labels of its vertical lines, with their lines."""
+        return self._line_labels
 
     @property
     def point_labels(self) -> PointLabels | None:

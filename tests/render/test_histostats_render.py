@@ -58,6 +58,7 @@ FIGURE_CODES = frozenset(
         "paths_crowded",
         "point_labels_crowded",
         "figure_oversized",
+        "line_label_ambiguous",
     }
 )
 
@@ -427,17 +428,33 @@ def test_labels_sit_above_the_tallest_bar() -> None:
     assert max(center.y1, tv.y1) <= ax.bbox.y1
 
 
-def test_close_labels_take_two_rows() -> None:
-    # The trimmed mean (10.39) next to the test value (10) near the left edge:
-    # the test value's label cannot go left, so it takes a second row.
-    fig = figure("gghistostats-edge_one_outlier-robust")
+@pytest.mark.parametrize("type_name", ["robust", "bayes", "nonparametric"])
+def test_close_labels_take_two_rows(type_name: str) -> None:
+    # The centrality value (10.19 to 10.39) next to the test value (10) near the
+    # left edge: the test value's label cannot go left, so it reaches toward the
+    # centrality line. It takes the top row, beside its own line; the
+    # centrality line ends at its own label in the row below, so that no line
+    # runs through the other's label and each label is nearest its own line.
+    fig = figure(f"gghistostats-edge_one_outlier-{type_name}")
     center, tv = _boxes(fig, "centrality-label", "test-value-label")
-    assert tv.y1 <= center.y0 + 0.5
-    line = by_gid(fig, "centrality-line")
-    assert isinstance(line, Line2D)
-    # It starts beyond the centrality line, which does not run through it.
-    x_line = fig.axes["main"].transData.transform((line.get_xdata()[0], 0))[0]  # pyright: ignore[reportIndexIssue, reportUnknownArgumentType]
-    assert tv.x0 > x_line
+    assert tv.y0 >= center.y1 - 0.5
+    ax = fig.axes["main"]
+    lines = {}
+    for gid in ("centrality-line", "test-value-line"):
+        line = by_gid(fig, gid)
+        assert isinstance(line, Line2D)
+        x = float(line.get_xdata()[0])  # pyright: ignore[reportIndexIssue, reportArgumentType]
+        top = ax.transAxes.transform((0.0, float(line.get_ydata()[1])))[1]  # pyright: ignore[reportIndexIssue, reportArgumentType]
+        lines[gid] = (ax.transData.transform((x, 0.0))[0], top)
+    tv_x, tv_top = lines["test-value-line"]
+    _center_x, center_top = lines["centrality-line"]
+    # The test value's label starts at its own line ...
+    assert tv.x0 > tv_x
+    assert tv.x0 - tv_x < 6.0
+    # ... and the centrality line stops below it, at its own label.
+    assert center_top < tv.y0 - 3.0
+    assert center.y0 < center_top < center.y1
+    assert tv_top >= tv.y1
     assert figure_codes(fig) == []
 
 

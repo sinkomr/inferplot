@@ -18,6 +18,9 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
   opaque over more than 15% of the area between the two conditions, measured on
   the paths alone rendered as drawn, so they hide the boxes and violins beneath
   them;
+* ``line_label_ambiguous`` (warning, histostats): the label of the centrality
+  line or of the test value line lies nearer to the other line than to its
+  own, or the other line runs through it;
 * ``figure_oversized`` (warning): inferplot's own figure is far larger than the
   plotting area it was laid out around (the panels fill under 25% of it) or
   larger than any of its layouts needs (30 in a side, plus 3 in a level and 0.5
@@ -597,6 +600,74 @@ def _ambiguous_labels(fig: StatsFigure) -> Issue | None:
     )
 
 
+def _distance(box: BboxBase, piece: FloatArray) -> float:
+    """Pixels between a box and a straight piece of line ((2, 2): its ends),
+    sampled along the piece; 0 where the line runs through the box."""
+    t = np.linspace(0.0, 1.0, 65)[:, None]
+    points = piece[0] + t * (piece[1] - piece[0])
+    dx = np.maximum(np.maximum(box.x0 - points[:, 0], points[:, 0] - box.x1), 0.0)
+    dy = np.maximum(np.maximum(box.y0 - points[:, 1], points[:, 1] - box.y1), 0.0)
+    return float(np.hypot(dx, dy).min())
+
+
+def _line_distance(box: BboxBase, line: Line2D) -> float:
+    data = np.asarray(cast("Any", line).get_xydata(), dtype=np.float64)
+    xy = np.asarray(cast("Any", line.get_transform()).transform(data), dtype=np.float64)
+    return min(
+        (_distance(box, np.stack([a, b])) for a, b in itertools.pairwise(xy)),
+        default=float("inf"),
+    )
+
+
+def _ambiguous_line_labels(
+    fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
+) -> Issue | None:
+    """``line_label_ambiguous``: a label of one of histostats' lines that lies
+    nearer to another line than to its own, or that another line runs through."""
+    boxes = {id(text): (described, box) for text, described, box in extents}
+    shown = [
+        label
+        for label in fig.line_labels
+        if id(label.text) in boxes
+        and label.line.get_visible()
+        and label.line.axes is not None
+    ]
+    if len(shown) < 2:
+        return None
+    dpi = float(root_figure(fig.figure).dpi)
+    to_pt = 72.0 / dpi
+    found: list[str] = []
+    for label in shown:
+        described, box = boxes[id(label.text)]
+        own = _line_distance(box, label.line)
+        for other in shown:
+            if other is label:
+                continue
+            near = _line_distance(box, other.line)
+            if near == 0.0:
+                found.append(f"{other.name} runs through the {described}")
+            elif near + _CLIP_TOLERANCE < own:
+                found.append(
+                    f"the {described} lies nearer to {other.name} ({near * to_pt:.0f} "
+                    f"pt) than to its own, {label.name} ({own * to_pt:.0f} pt)"
+                )
+    if not found:
+        return None
+    return Issue(
+        code="line_label_ambiguous",
+        severity="warning",
+        message=f"A line's label can be read as another line's: {_listing(found)}.",
+        fix=(
+            "Give the plot more room (a wider Axes passed as ax=, made with a larger "
+            "figsize, or inferplot's own figure by leaving ax out) so that each "
+            "label fits beside its own line; if you moved a label, move it back "
+            "beside its line. Or leave the centrality line out with "
+            "centrality_plotting=False and report the value from "
+            "fig.result.descriptives."
+        ),
+    )
+
+
 def _crowded_labels(
     fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]
 ) -> Issue | None:
@@ -799,6 +870,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
         issues.append(oversized)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
+    if ambiguous is not None:
+        issues.append(ambiguous)
+    ambiguous = _ambiguous_line_labels(fig, extents)
     if ambiguous is not None:
         issues.append(ambiguous)
     issues += view_issues(fig, extents)
