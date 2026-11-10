@@ -139,3 +139,20 @@ def test_within_akp_against_the_exact_decimal_replay(
     assert (got.pair_infinite or (got.infinite_resamples,)) == want["infinite"]
     assert got.conf_low == pytest.approx(want["conf_low"], rel=1e-9, abs=1e-12)
     assert got.conf_high == pytest.approx(want["conf_high"], rel=1e-9, abs=1e-12)
+
+
+def test_within_differences_computed_in_binary_are_read_as_written() -> None:
+    # Ratings times 0.3 computed in binary (0.8999999999999999 for 0.9) are up to
+    # 0.8 units in the last place off the decimals; the paired differences equal as
+    # written were tied only within half a unit per value, and 5 of 2,000
+    # resamples were counted differently from the whole numbers. Differences are
+    # now tied on the values as written (``written_values``).
+    a = np.array([3.0, 3, 3, 4, 4, 1, 5])
+    b = np.array([2.0, 5, 3, 5, 5, 3, 5])
+    whole = dependent_akp(a, b)
+    assert (whole.undefined_resamples, whole.infinite_resamples) == (17, 32)
+    for factor in (0.3, 2.54, 1.1):
+        got = dependent_akp(a * factor, b * factor)
+        assert (got.undefined_resamples, got.infinite_resamples) == (17, 32), factor
+        assert got.conf_low == pytest.approx(whole.conf_low, rel=1e-12)
+        assert got.conf_high == pytest.approx(whole.conf_high, rel=1e-12)
