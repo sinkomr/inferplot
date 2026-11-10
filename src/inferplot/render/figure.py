@@ -126,6 +126,8 @@ class StatsFigure:
         Axes (``text_clipped``), and subsampled points (``points_subsampled``);
         for withinstats also a text drawn over a path (``path_hidden``) and
         subject paths so many that they hide what lies beneath (``paths_crowded``).
+        Changes made after drawing are measured too: an inverted axis or a
+        non-linear scale (``axis_changed``).
         """
         from inferplot.render.checks import figure_issues
 

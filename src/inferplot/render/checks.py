@@ -36,6 +36,7 @@ from numpy.typing import NDArray
 
 from inferplot.check import Issue
 from inferplot.render.figure import describe_text, root_figure
+from inferplot.render.view_checks import view_issues
 
 if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
@@ -459,6 +460,7 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
             )
         )
     issues += _path_issues(fig, extents)
+    issues += view_issues(fig)
     sub = fig.subsample
     if sub is not None:
         whole = (
