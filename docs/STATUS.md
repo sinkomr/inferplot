@@ -328,6 +328,33 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   reports nothing about the figure on any fixture; 120 random data sets clean in the
   own figure and in `ax=` at three dpi; passes on matplotlib 3.8.0. Six new image
   baselines. Open, small: a link line can cross another label in a crowded figure
+- [ ] end-of-phase review of histostats and scatterstats (two fresh reviewers).
+  Visible half done (2026-11-10; scripts and images in `reviewP4B/`): about 230 first
+  attempts with other libraries' argument names, 70 hand-built frames on three
+  backends, 717 results' texts re-derived, about 200 figures measured, 60 saved files,
+  49 comparisons of the three forms: sound. Findings, being fixed on
+  `fix/phase4-review-visible`:
+  - [ ] Y1 (high; reproduced by the lead: 82.7 in for body temperatures): with the
+    test value far outside the bars (the default 0 for data away from zero) the
+    histogram's own figure is sized to reach the test value: 100 in wide for body
+    temperatures, 25 in for heights, a FreeType crash for Unix timestamps; 118 of 300
+    random figures; `fig.check()` silent. The edge label is created at the data
+    coordinate before the layout runs. The lead's own check missed it (it read check
+    codes, not figure sizes).
+  - [ ] Y2: the "test value" label is sometimes drawn beside the centrality line, 40
+    to 72 pt from its own line (8 of 120 figures; 169 of 398 with 15-digit labels).
+  - [ ] Y3: point labels are crossed by the regression line and by other labels' link
+    lines (mtcars: 7 and 5 of 32), unreported.
+  - [ ] Y4: the robust histostats APA sentence prints the trimmed mean and its interval
+    with two fixed decimals ("0.00, 95% CI [0.00, 0.00]" for data in 1e-9 units).
+  - [ ] Y5: four hints that lead to another error (constant column to nonparametric to
+    binwidth; `to_numeric` on text with "NA"; polars Categorical cast; sparse columns).
+  - [ ] Y6: the y axis offset text ("1e12") lands on the top marginal histogram.
+  - [ ] Y7 (low, eight items): percent axis above 100%; `save(dpi<7)` crashes in
+    FreeType; the test value label prints 15 digits; two messages for too small a bin
+    width; layers made invisible by colour not noticed; whitespace-only labels count
+    as labels; alt text names layers the caller made invisible; wording slips.
+  Statistics half: in progress.
 - [x] histostats, all types: reference data, statistics, analysis, texts, figure
 - [x] scatterstats, all types (line, band, marginals): the same
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)
