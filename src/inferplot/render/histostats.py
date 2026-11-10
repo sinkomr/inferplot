@@ -45,7 +45,6 @@ from inferplot.render.figure import DrawnData, DrawnView, StatsFigure
 from inferplot.result import StatsResult
 from inferplot.stats.plot_geometry import HistogramBins, histogram_bins
 from inferplot.text import (
-    DrawnLayers,
     drawable,
     figure_alt_text,
     figure_texts,
@@ -465,6 +464,9 @@ class _HistDrawing(base.BaseDrawing):
 
     # -- layout ----------------------------------------------------------------
 
+    def generated_texts(self) -> tuple[str | None, str | None, Sequence[str]]:
+        return self.texts.subtitle, self.result.text.subtitle, self.texts.caption_lines
+
     def font_axes(self) -> list[Axes]:
         return [self.ax] if self.percent is None else [self.ax, self.percent]
 
@@ -530,6 +532,13 @@ class _HistDrawing(base.BaseDrawing):
         self.ax.set_ylim(bottom, top)
         self.view.xlim = (left, right)
         self.view.ylim = (bottom, top)
+        # The lines span the bars and the label strip, not the subtitle and
+        # caption that ax= puts inside the Axes (in Axes fractions, so they keep
+        # their span when the Axes is resized).
+        span = [below / height, 1.0 - self.top_px / height]
+        for line in (self.center_line, self.test_line):
+            if line is not None:
+                line.set_ydata(span)
 
     def place_labels(self) -> int:
         """Put the labels in the strip, each beside its line on its side, or on
@@ -633,14 +642,16 @@ class _HistDrawing(base.BaseDrawing):
         return tuple(data)
 
     def finish_result(self, result: StatsResult) -> StatsResult:
-        """The result told what the figure draws (its alt text is the result's
-        own until the texts of histostats are final)."""
-        drawn = DrawnLayers(
-            bars=len(self.bins.counts),
+        """The result with the alt text of what this figure draws: the
+        centrality line, the test value line (where the test value lies beyond
+        the bars an arrow at the edge names it instead, and no line is named) and
+        the number of bars."""
+        alt = figure_alt_text(
+            result,
             centrality=self.center is not None,
-            test_value=self.test_mark,
+            test_value_line=self.test_mark == "line",
+            bins=len(self.bins.counts),
         )
-        alt = figure_alt_text(result, drawn=drawn)
         if alt == result.text.alt_text:
             return result
         return dataclasses.replace(

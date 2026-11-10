@@ -421,8 +421,12 @@ def test_result_contract_of_each_fixture(case: OracleCase) -> None:
     assert result.label_var == label_var
     if label_var is None:
         assert result.point_labels == ()
-    # The texts stay provisional until the text package: no subtitle or caption.
-    assert (result.text.subtitle, result.text.caption) == (None, None)
+    # A subtitle exactly where the call asks for one; the texts themselves are
+    # compared with ggstatsplot's in tests/test_no_level_texts.py.
+    assert (result.text.subtitle is None) == (not settings.results_subtitle)
+    assert (result.text.subtitle is None) == (case.subtitle is None)
+    assert (result.text.caption is None) == (case.caption is None)
+    assert result.text.tick_labels == result.text.pairwise_labels == ()
     assert result.text.apa.endswith(f"n = {n:,} pairs.")
     assert len(result.text.alt_text) <= 400
     for text in (result.text.apa, result.text.alt_text, *result.warnings):

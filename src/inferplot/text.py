@@ -73,7 +73,6 @@ __all__ = [
     "UNPINNED_KEEP_NEGATIVE_ZERO",
     "BinOp",
     "Call",
-    "DrawnLayers",
     "FigureTexts",
     "Index",
     "Node",
@@ -89,6 +88,8 @@ __all__ = [
     "build_texts",
     "caption_lines",
     "centrality_expression",
+    "correlation_alt_text",
+    "correlation_sentence",
     "figure_alt_text",
     "figure_texts",
     "format_bf01_log",
@@ -99,6 +100,8 @@ __all__ = [
     "format_p_subtitle",
     "format_value",
     "frequentist_expression",
+    "one_sample_alt_text",
+    "one_sample_sentence",
     "p_adjust_label",
     "pairwise_bayes_sentence",
     "pairwise_bf_expression",
@@ -476,6 +479,17 @@ _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "friedman": ("friedman_chi2", False, False),
     "yuen_dependent_t": ("yuen_t", False, False),
     "trimmed_rm_anova": ("trimmed_means_f", True, True),
+    # One sample (gghistostats): ``stats::t.test``'s method ends in "t-test", so
+    # statsExpressions prints t_Student with its integer df; WRS2's trimcibt
+    # ("Bootstrap-t method ...") prints t_bootstrapped without a df; the
+    # signed-rank test is the paired one's V_Wilcoxon (key above).
+    "one_sample_t": ("student_t", False, False),
+    "trimmed_mean_bootstrap_t": ("bootstrap_t", False, False),
+    # Correlation (ggscatterstats): every method ends in "correlation", so the
+    # Pearson and winsorized t is t_Student on n - 2 df; Spearman prints S alone.
+    "pearson_correlation": ("student_t", False, False),
+    "winsorized_correlation": ("student_t", False, False),
+    "spearman_correlation": ("spearman_s", False, False),
 }
 
 
@@ -763,8 +777,10 @@ def subtitle_expression(
 ) -> Call:
     """The frequentist subtitle of a result's main test, as ggstatsplot builds it.
 
-    ``paired`` (a within-subjects result) prints n as ``italic("n")["pairs"]``, the
-    number of complete subjects, as ggwithinstats does; otherwise ``["obs"]``.
+    ``paired`` prints n as ``italic("n")["pairs"]``: the number of complete
+    subjects of a within-subjects result (ggwithinstats) or of complete pairs of a
+    correlation (ggscatterstats); otherwise ``["obs"]`` (ggbetweenstats,
+    gghistostats).
     """
     try:
         statistic, frac_df, frac_df_error = _TEST_TEMPLATES[test.name]
@@ -1686,51 +1702,108 @@ def alt_text(
     return f"{head}. {result}{pairs}"
 
 
-@dataclass(frozen=True, slots=True)
-class DrawnLayers:
-    """What a histostats or scatterstats figure draws, for its alt text.
-
-    histostats: ``bars`` (the number of histogram bars), ``centrality`` (the
-    centrality line and its label), ``test_value`` ("line" where the test value
-    is marked by a line, "edge" where it lies beyond the view and an arrow at the
-    edge names it). scatterstats: ``points`` (the points drawn; fewer than the
-    pairs when a random subsample is drawn), ``smooth`` (the least-squares line
-    with its band), ``marginal`` (the marginal histograms), ``labels`` (the
-    labelled points).
-    """
-
-    bars: int = 0
-    centrality: bool = False
-    test_value: str | None = None
-    points: int = 0
-    smooth: bool = False
-    marginal: bool = False
-    labels: int = 0
-
-
 def figure_alt_text(
     result: StatsResult,
     *,
     subject_paths: int | None = None,
     centrality_path: bool | None = None,
     centrality: bool = True,
-    drawn: DrawnLayers | None = None,
+    test_value_line: bool | None = None,
+    bins: int | None = None,
+    smooth: bool | None = None,
+    marginal: bool | None = None,
+    labelled_points: int | None = None,
+    points_shown: int | None = None,
 ) -> str:
-    """The alt text of a figure that draws ``subject_paths`` subjects' paths (0
-    for none) and the centrality path or not (within subjects; None for
-    independent groups), with or without the ``centrality`` points and labels
-    (:func:`alt_text`); the renderer gives it to the result it returns.
+    """The alt text of the figure the renderer drew for ``result``; it gives the
+    text to the result it returns. Every keyword describes what the figure
+    draws, and its default is what the default figure of the result's function
+    draws (so ``figure_alt_text(result)`` equals ``result.text.alt_text`` for a
+    result fresh from its analysis). A keyword of another design raises
+    ``ValueError``.
 
-    Designs "one-sample" and "correlation" (histostats, scatterstats) pass what
-    their figure draws as ``drawn``; until their texts are compared with
-    ggstatsplot's (PROVISIONAL, see ``_provisional_texts``) the alt text is the
-    result's own, which describes the analysis, not the figure.
+    betweenstats and withinstats (:func:`alt_text`): ``centrality``, the
+    centrality points and labels; withinstats only: ``subject_paths``, the number
+    of subjects whose paths are drawn (0 for none), and ``centrality_path``.
+
+    histostats (:func:`one_sample_alt_text`): ``centrality``, the centrality line
+    and its label (``centrality_plotting``); ``test_value_line``, whether a line
+    marks the test value (default False: ggstatsplot draws none); ``bins``, the
+    number of bars drawn (default None: not named).
+
+    scatterstats (:func:`correlation_alt_text`): ``smooth``, the least-squares
+    line with its band (default True; pass False where none is drawn);
+    ``marginal``, the marginal histograms (default True); ``labelled_points``,
+    the number of points that carry a label (default: every non-empty entry of
+    ``result.point_labels``); ``points_shown``, the number of points drawn when
+    the figure draws a random sample of them (default None: every point).
     """
-    if result.design in _PROVISIONAL_DESIGNS:
-        del drawn
-        return result.text.alt_text
-    if result.y is None:
-        raise ValueError(f"design {result.design!r} has no figure alt text yet")
+    design = result.design
+    _check_design(design)
+    passed = {
+        "subject_paths": subject_paths,
+        "centrality_path": centrality_path,
+        "test_value_line": test_value_line,
+        "bins": bins,
+        "smooth": smooth,
+        "marginal": marginal,
+        "labelled_points": labelled_points,
+        "points_shown": points_shown,
+    }
+    own = {
+        "between": (),
+        "within": ("subject_paths", "centrality_path"),
+        "one-sample": ("test_value_line", "bins"),
+        "correlation": ("smooth", "marginal", "labelled_points", "points_shown"),
+    }[design]
+    foreign = [k for k, v in passed.items() if v is not None and k not in own]
+    if design == "correlation" and not centrality:
+        foreign.insert(0, "centrality")
+    if foreign:
+        raise ValueError(
+            f"{', '.join(foreign)} {'does' if len(foreign) == 1 else 'do'} not "
+            f"describe a {result.analysis} figure (design {design!r})"
+            + (f"; its keywords: {', '.join(own)}" if own else "")
+        )
+    for name in ("bins", "labelled_points", "points_shown"):
+        count = passed[name]
+        if count is not None and (isinstance(count, bool) or count < 0):
+            raise ValueError(f"{name} must be a count of 0 or more, got {count!r}")
+    if design == "one-sample":
+        return one_sample_alt_text(
+            x=result.x,
+            descriptive=result.descriptives[0],
+            values=result.values[0] if result.values else (),
+            test=result.test,
+            effect_size=result.effect_size,
+            bayes=result.bayes,
+            n_obs=result.n_obs,
+            settings=result.settings,
+            centrality=centrality,
+            test_value_line=bool(test_value_line),
+            bins=bins,
+        )
+    if design == "correlation":
+        assert result.y is not None
+        return correlation_alt_text(
+            x=result.x,
+            y=result.y,
+            test=result.test,
+            effect_size=result.effect_size,
+            bayes=result.bayes,
+            n_obs=result.n_obs,
+            settings=result.settings,
+            label_var=result.label_var,
+            labelled_points=(
+                sum(1 for label in result.point_labels if label)
+                if labelled_points is None
+                else labelled_points
+            ),
+            smooth=True if smooth is None else smooth,
+            marginal=True if marginal is None else marginal,
+            points_shown=points_shown,
+        )
+    assert result.y is not None
     return alt_text(
         x=result.x,
         y=result.y,
@@ -1814,12 +1887,37 @@ def _expressions(
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
 
 
+_DESIGNS: Final = ("between", "within", "one-sample", "correlation")
+
+
+def _check_design(design: str) -> None:
+    if design not in _DESIGNS:
+        known = ", ".join(repr(d) for d in _DESIGNS)
+        raise ValueError(f"unknown design {design!r}; known: {known}")
+
+
 def _paired(design: str) -> bool:
-    """Whether a result's design pairs its measurements: "within" (withinstats)
-    does, "between" (betweenstats) does not."""
-    if design not in ("between", "within"):
-        raise ValueError(f"unknown design {design!r}; known: 'between', 'within'")
+    """Whether a result's design measures the same subjects in every level:
+    "within" (withinstats) does; "between", "one-sample" and "correlation" do
+    not."""
+    _check_design(design)
     return design == "within"
+
+
+def _n_pairs(design: str) -> bool:
+    """Whether the subtitle prints n as ``italic("n")["pairs"]``: the complete
+    subjects of "within" (ggwithinstats) and the complete pairs of "correlation"
+    (ggscatterstats); ``["obs"]`` for "between" and "one-sample"."""
+    _check_design(design)
+    return design in ("within", "correlation")
+
+
+def _grouped(design: str) -> bool:
+    """Whether the design compares levels (groups or conditions): "between" and
+    "within". "one-sample" (histostats) and "correlation" (scatterstats) have no
+    levels, tick labels or pairs."""
+    _check_design(design)
+    return design in ("between", "within")
 
 
 def _pair_label(pair: PairwiseComparison, digits: int) -> Call:
@@ -1852,126 +1950,400 @@ def caption_lines(
 
 
 # --------------------------------------------------------------------------- #
-# Provisional texts of the designs without groups (one-sample, correlation)
+# Designs without levels: one sample (histostats) and correlation (scatterstats)
 # --------------------------------------------------------------------------- #
 #
-# PROVISIONAL. histostats and scatterstats get their final subtitle, caption,
-# centrality label, APA sentence and alt text in a later step, which compares every
-# text with ggstatsplot's. Until then the result carries a plain APA-style sentence
-# and an alt text built from its own numbers (no group words, nothing about a
-# figure), and None for the subtitle and the caption.
-
-_PROVISIONAL_DESIGNS: Final = frozenset({"one-sample", "correlation"})
+# The subtitle, Bayes caption and centrality label are ggstatsplot's expressions
+# (the shared builders above, with the templates of _TEST_TEMPLATES); the APA
+# sentence and the alt text are inferplot's own, in the style of the other
+# designs (SPEC section 7).
 
 
-def _provisional_effect_size(effect_size: EffectSize, *, bounded: bool) -> str:
-    estimate = _apa_number(effect_size.estimate, bounded=bounded)
-    low = _apa_number(effect_size.conf_low, bounded=bounded)
-    high = _apa_number(effect_size.conf_high, bounded=bounded)
-    level = format_conf_level(effect_size.conf_level)
-    return f"{effect_size.label} = {estimate}, {level} CI [{low}, {high}]"
+def _test_value_text(settings: Settings) -> str:
+    """The value a one-sample test is tested against, as R prints it ("18",
+    "5.8", "-10")."""
+    if settings.test_value is None:
+        raise ValueError(
+            "a one-sample result needs settings.test_value, the value its test is "
+            "tested against"
+        )
+    return r_number_text(settings.test_value)
 
 
-def _provisional_sentence(
+def _no_level_n(n_obs: int, design: str) -> str:
+    """What n counts without levels: "n = 60" (the values of one sample) or
+    "n = 32 pairs" (the complete pairs of a correlation)."""
+    n = f"n = {format_n(n_obs)}"
+    return n if design == "one-sample" else f"{n} pairs"
+
+
+def one_sample_sentence(
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
     *,
+    x: str,
+    n_obs: int,
+    settings: Settings,
+    name_limit: int = APA_NAME_LIMIT,
+) -> str:
+    """The APA 7 results sentence of a one-sample result (histostats).
+
+    "One-sample t-test against 18: t(59) = 0.82, p = .413, Hedges' g = 0.10, 95%
+    CI [-0.15, 0.36], n = 60." The other types: "Wilcoxon signed-rank test against
+    18: V = 1030.50, p = .397, rank-biserial r = .13, 95% CI [-.16, .40], n = 60.";
+    "Bootstrap-t test of the 20% trimmed mean against 18: t = 1.00, p = .331,
+    trimmed mean = 19.24, 95% CI [16.61, 21.88], n = 60."; "Bayesian one-sample
+    t-test against 18 (JZS prior, r = 0.707): BF10 = 0.20, log(BF01) = 1.63, n =
+    60." A one-sided test names its direction with the column ``x`` (shortened to
+    ``name_limit`` characters with an ellipsis, as D68 names levels): "One-sample
+    t-test (one-sided: len greater than 18): ...". Without a computed test (type
+    bayes, ``results_subtitle=False``): "No test was computed
+    (results_subtitle=False), n = 60."
+
+    Numbers follow :func:`apa_sentence`: an infinite statistic or bound prints
+    "Inf" or "-Inf" (a one-sided Hedges' g interval [-0.11, Inf], an unbounded
+    bootstrap-t interval [-Inf, Inf]), and every p below .001 prints "p < .001",
+    also a bootstrap p of 0: no resample of the 2,000 was as extreme as the data,
+    so the estimate is 0 and the true p is below about 1/2,000 (R's 200 resamples
+    give the same 0, which ggstatsplot prints as 2.23e-308). The sentence is ASCII
+    except the column name of a one-sided test and the ellipsis that shortens it.
+    """
+    against = _test_value_text(settings)
+    n = _no_level_n(n_obs, "one-sample")
+    if test is not None and effect_size is not None:
+        if test.alternative == "two-sided":
+            heading = f"{test.label} against {against}"
+        elif test.alternative in ("greater", "less"):
+            heading = (
+                f"{test.label} (one-sided: {_short(x, name_limit)} "
+                f"{test.alternative} than {against})"
+            )
+        else:
+            raise ValueError(f"unknown alternative {test.alternative!r}")
+        return f"{heading}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, {n}."
+    if bayes is not None:
+        return (
+            f"Bayesian one-sample t-test against {against} ({_prior_text(bayes)}): "
+            f"BF10 = {_apa_bf(bayes)}, log(BF01) = {_apa_number(bayes.log_bf01)}, "
+            f"{n}."
+        )
+    return f"No test was computed (results_subtitle=False), {n}."
+
+
+def _beta_prior_text(bayes: BayesFactor) -> str:
+    """The correlation prior as the figure prints it: the stretched beta
+    distribution's parameter 1 / bf_prior to two decimals ("r_beta = 1.41" for
+    bf_prior 0.707), which ggstatsplot's caption shows as r_beta^JZS (D86)."""
+    return f"stretched beta prior, r_beta = {format_value(bayes.prior_scale, 2)}"
+
+
+def correlation_sentence(
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    *,
+    n_obs: int,
+) -> str:
+    """The APA 7 results sentence of a correlation (scatterstats), ASCII.
+
+    "Pearson correlation: t(30) = -9.56, p < .001, Pearson's r = -.87, 95% CI
+    [-.93, -.74], n = 32 pairs."; "Spearman correlation: S = 10292.32, p < .001,
+    Spearman's rho = -.89, 95% CI [-.94, -.77], n = 32 pairs."; "Winsorized
+    Pearson correlation (20% winsorized): t(30) = -9.41, ..., winsorized r =
+    -.86, ..."; "Bayesian Pearson correlation (stretched beta prior, r_beta =
+    1.41): BF10 = 5.62e+07, log(BF01) = -17.84, n = 32 pairs." Correlations drop
+    the leading zero (bounded by 1). Exactly collinear data print their limits
+    (D85, D86): "t(8) = Inf, p < .001, Pearson's r = 1.00, 95% CI [1.00, 1.00]";
+    "S = 0.00"; "BF10 = Inf, log(BF01) = -Inf". Without a computed test (type
+    bayes, ``results_subtitle=False``): "No test was computed
+    (results_subtitle=False), n = 32 pairs."
+    """
+    n = _no_level_n(n_obs, "correlation")
+    if test is not None and effect_size is not None:
+        if test.alternative != "two-sided":
+            raise ValueError(
+                f"a correlation test is two-sided; got alternative={test.alternative!r}"
+            )
+        return f"{test.label}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, {n}."
+    if bayes is not None:
+        return (
+            f"Bayesian Pearson correlation ({_beta_prior_text(bayes)}): BF10 = "
+            f"{_apa_bf(bayes)}, log(BF01) = {_apa_number(bayes.log_bf01)}, {n}."
+        )
+    return f"No test was computed (results_subtitle=False), {n}."
+
+
+def _no_level_sentence(
+    *,
+    x: str,
     test: TestResult | None,
     effect_size: EffectSize | None,
     bayes: BayesFactor | None,
     n_obs: int,
     settings: Settings,
     design: str,
+    name_limit: int = APA_NAME_LIMIT,
 ) -> str:
-    """The provisional APA-style sentence of a one-sample or correlation result.
-
-    "One-sample t-test against 18: t(59) = 0.82, p = .413, Hedges' g = 0.10, 95% CI
-    [-0.15, 0.36], n = 60."; a one-sided test: "... (one-sided: greater than 18):
-    ..."; "Pearson correlation: t(30) = -9.56, p < .001, Pearson's r = -.87, 95% CI
-    [-.93, -.74], n = 32 pairs." (a correlation drops the leading zero, being
-    bounded by 1). ASCII except the test's own label.
-    """
-    one_sample = design == "one-sample"
-    n = f"n = {format_n(n_obs)}" if one_sample else f"n = {format_n(n_obs)} pairs"
-    against = ""
-    if one_sample:
-        if settings.test_value is None:
-            raise ValueError("a one-sample result needs settings.test_value")
-        against = r_number_text(settings.test_value)
-    if test is not None and effect_size is not None:
-        if one_sample and test.alternative != "two-sided":
-            heading = f"{test.label} (one-sided: {test.alternative} than {against})"
-        elif one_sample:
-            heading = f"{test.label} against {against}"
-        else:
-            heading = test.label
-        effect = _provisional_effect_size(
+    if design == "one-sample":
+        return one_sample_sentence(
+            test,
             effect_size,
-            bounded=not one_sample or effect_size.name in _BOUNDED_EFFECT_SIZES,
+            bayes,
+            x=x,
+            n_obs=n_obs,
+            settings=settings,
+            name_limit=name_limit,
         )
-        return f"{heading}: {_apa_test(test)}, {effect}, {n}."
-    if bayes is not None:
-        scale = r_number_text(bayes.prior_scale)
-        name = (
-            f"Bayesian one-sample t-test against {against} (JZS prior, r = {scale})"
-            if one_sample
-            # The beta prior's parameter 1 / bf_prior, to digits as ggstatsplot
-            # prints it (r_beta^JZS = 1.41).
-            else "Bayesian Pearson correlation (stretched beta prior, r = "
-            f"{format_value(bayes.prior_scale, 2)})"
-        )
-        return (
-            f"{name}: BF10 = {_apa_bf(bayes)}, log(BF01) = "
-            f"{_apa_number(bayes.log_bf01)}, {n}."
-        )
-    return f"No test was computed (results_subtitle=False), {n}."
+    return correlation_sentence(test, effect_size, bayes, n_obs=n_obs)
 
 
-def _provisional_alt_text(
+def _shown_result(
     *,
     x: str,
-    y: str | None,
-    descriptives: Sequence[Descriptive],
-    sentence: str,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
     n_obs: int,
     settings: Settings,
     design: str,
+    name_limit: int,
 ) -> str:
-    """A description of the analysis, then the result sentence, at most
-    ``ALT_TEXT_MAX_CHARS`` where the sentence allows: "Values of len (n = 60, mean
-    18.81) tested against 18. <sentence>"; "Correlation of mpg with wt over 32
-    complete pairs. <sentence>". Column names are shortened (40, 20, 12
-    characters) until it fits, else the description is left out; the sentence is
-    never cut."""
-    text = sentence
-    for limit in (40, 20, 12):
-        if design == "one-sample":
-            assert settings.test_value is not None
-            center = ""
-            if descriptives:
-                d = descriptives[0]
-                word = _centrality_word(d.centrality, settings.tr)
-                center = (
-                    f", no {word}"
-                    if d.value is None or math.isnan(d.value)
-                    else f", {word} {format_value(d.value, settings.digits)}"
-                )
-            head = (
-                f"Values of {_short(x, limit)} (n = {format_n(n_obs)}{center}) "
-                f"tested against {r_number_text(settings.test_value)}."
-            )
+    """The alt text's result sentence: the APA sentence where the figure shows the
+    result, "No test result is shown (results_subtitle=False), n = ..." where a
+    computed test is not drawn (D70)."""
+    if not settings.results_subtitle and (test is not None or bayes is not None):
+        return (
+            "No test result is shown (results_subtitle=False), "
+            f"{_no_level_n(n_obs, design)}."
+        )
+    return _no_level_sentence(
+        x=x,
+        test=test,
+        effect_size=effect_size,
+        bayes=bayes,
+        n_obs=n_obs,
+        settings=settings,
+        design=design,
+        name_limit=name_limit,
+    )
+
+
+def _fits(text: str) -> bool:
+    return len(text) <= ALT_TEXT_MAX_CHARS
+
+
+def _marks_sentence(marks: Sequence[str]) -> str:
+    """ "A vertical line marks the mean, 18.81." or "Vertical lines mark the
+    mean, 18.81, and the test value, 18." ("" without marks)."""
+    if not marks:
+        return ""
+    if len(marks) == 1:
+        return f"A vertical line marks {marks[0]}."
+    return f"Vertical lines mark {', '.join(marks[:-1])}, and {marks[-1]}."
+
+
+def one_sample_alt_text(
+    *,
+    x: str,
+    descriptive: Descriptive,
+    values: Sequence[float],
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    n_obs: int,
+    settings: Settings,
+    centrality: bool = True,
+    test_value_line: bool = False,
+    bins: int | None = None,
+) -> str:
+    """Alt text of a histostats figure: 2 or 3 sentences, at most 400 characters.
+
+    "Histogram of len (60 values, from 4.20 to 33.90, in 8 bins). A vertical line
+    marks the mean, 18.81. One-sample t-test against 18: t(59) = 0.82, ..., n =
+    60." The head names the column, the number of values, their range (from
+    ``values``; left out when they are not at hand, as in a result read back from
+    a saved file) and the number of ``bins`` drawn (when the figure gives it).
+    The marks sentence names what the vertical lines show: the centrality line
+    with its value (``centrality``: drawn unless ``centrality_plotting=False``;
+    "the 20% trimmed mean, 19.24", "the MAP estimate, 24.12"; a MAP that could
+    not be estimated draws no line and is named as missing) and the test value
+    (``test_value_line``: when the figure marks it). The result sentence is the
+    APA sentence (:func:`one_sample_sentence`), or with ``results_subtitle=False``
+    "No test result is shown (results_subtitle=False), n = 60." (D70).
+
+    The column name is shortened (40, 20, then 12 characters) until the text
+    fits; then the range and bins are left out, then the marks sentence; the
+    result sentence is never cut.
+    """
+    digits = settings.digits
+    against = _test_value_text(settings)
+    marks: list[str] = []
+    missing = ""
+    if centrality:
+        word = _centrality_word(descriptive.centrality, settings.tr)
+        value = descriptive.value
+        if value is None or math.isnan(value):
+            missing = f"No {word} could be computed, so no line marks it."
         else:
-            assert y is not None
-            head = (
-                f"Correlation of {_short(y, limit)} with {_short(x, limit)} over "
-                f"{format_n(n_obs)} complete pairs."
+            marks.append(f"the {word}, {format_value(value, digits)}")
+    if test_value_line:
+        marks.append(f"the test value, {against}")
+    lines = " ".join(part for part in (_marks_sentence(marks), missing) if part)
+    details: list[str] = []
+    if values:
+        low, high = min(values), max(values)
+        details.append(
+            f"from {format_value(low, digits)} to {format_value(high, digits)}"
+        )
+    if bins is not None:
+        details.append(f"in {format_n(bins)} {'bin' if bins == 1 else 'bins'}")
+    count = f"{format_n(n_obs)} {'value' if n_obs == 1 else 'values'}"
+    head = ""
+    result = ""
+    for limit in (40, 20, 12):
+        result = _shown_result(
+            x=x,
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
+            n_obs=n_obs,
+            settings=settings,
+            design="one-sample",
+            name_limit=limit,
+        )
+        name = _short(x, limit)
+        head = f"Histogram of {name} ({count})."
+        detailed = f"Histogram of {name} ({', '.join([count, *details])})."
+        for start in (detailed, head):
+            text = " ".join(part for part in (start, lines, result) if part)
+            if _fits(text):
+                return text
+    # Still too long: the marks go, the result sentence stays whole.
+    return f"{head} {result}"
+
+
+def _correlation_direction(
+    effect_size: EffectSize | None, *, x: str, y: str, limit: int
+) -> str:
+    """The direction of a correlation in words, only as far as its numbers say
+    it: "mpg tends to fall as wt rises" where the interval lies below 0, "... to
+    rise ..." where it lies above 0, "every point lies on one rising straight
+    line" at a Pearson's r of exactly +/-1, and "" where the interval includes 0
+    (the data do not settle the direction) or there is no interval (type bayes).
+    Strength is left to the number in the result sentence."""
+    if effect_size is None:
+        return ""
+    estimate, low, high = (
+        effect_size.estimate,
+        effect_size.conf_low,
+        effect_size.conf_high,
+    )
+    if effect_size.name == "pearson_r" and abs(estimate) == 1.0:
+        way = "rising" if estimate > 0 else "falling"
+        return f"every point lies on one {way} straight line"
+    if low > 0:
+        return f"{_short(y, limit)} tends to rise as {_short(x, limit)} rises"
+    if high < 0:
+        return f"{_short(y, limit)} tends to fall as {_short(x, limit)} rises"
+    return ""
+
+
+def _join_words(parts: Sequence[str]) -> str:
+    """ "a", "a, and b", "a, b, and c": the parts are phrases that hold an "and"
+    of their own ("histograms of wt and mpg"), so each is set off by a comma."""
+    if len(parts) == 1:
+        return parts[0]
+    return f"{', '.join(parts[:-1])}, and {parts[-1]}"
+
+
+def correlation_alt_text(
+    *,
+    x: str,
+    y: str,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    n_obs: int,
+    settings: Settings,
+    label_var: str | None = None,
+    labelled_points: int = 0,
+    smooth: bool = True,
+    marginal: bool = True,
+    points_shown: int | None = None,
+) -> str:
+    """Alt text of a scatterstats figure: 2 or 3 sentences, at most 400 characters.
+
+    "Scatter plot of mpg against wt (32 pairs): mpg tends to fall as wt rises. It
+    also shows a least-squares line with its 95% confidence band, and marginal
+    histograms of wt and mpg. Pearson correlation: t(30) = -9.56, ..., n = 32
+    pairs." The head names the variables, the number of pairs and, when the
+    figure draws ``points_shown`` of them as a random sample, says so; the
+    direction is said in words only where the figure shows the result and its
+    interval excludes 0 (:func:`_correlation_direction`). The layers sentence
+    names what the figure draws besides the points: the least-squares line with its
+    ``conf_level`` band (``smooth``), the ``marginal`` histograms, and the
+    ``labelled_points`` points labelled from ``label_var``. The result sentence is
+    the APA sentence (:func:`correlation_sentence`), or with
+    ``results_subtitle=False`` "No test result is shown (results_subtitle=False),
+    n = 32 pairs." (D70).
+
+    Column names are shortened (40, 20, then 12 characters) until the text fits;
+    then the layers sentence is left out, then the direction; the result sentence
+    is never cut.
+    """
+    level = format_conf_level(settings.conf_level)
+    head = ""
+    result = ""
+    for limit in (40, 20, 12):
+        sx, sy = _short(x, limit), _short(y, limit)
+        result = _shown_result(
+            x=x,
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
+            n_obs=n_obs,
+            settings=settings,
+            design="correlation",
+            name_limit=limit,
+        )
+        sample = (
+            ""
+            if points_shown is None or points_shown >= n_obs
+            else f"; a random sample of {format_n(points_shown)} is drawn as points"
+        )
+        head = f"Scatter plot of {sy} against {sx} ({format_n(n_obs)} pairs{sample})"
+        shown = settings.results_subtitle and test is not None
+        direction = _correlation_direction(
+            effect_size if shown else None, x=x, y=y, limit=limit
+        )
+        layers: list[str] = []
+        if smooth:
+            layers.append(f"a least-squares line with its {level} confidence band")
+        if marginal:
+            layers.append(f"marginal histograms of {sx} and {sy}")
+        if labelled_points:
+            where = (
+                "every point"
+                if labelled_points >= n_obs
+                else f"{format_n(labelled_points)} of the {format_n(n_obs)} points"
             )
-        text = f"{head} {sentence}"
-        if len(text) <= ALT_TEXT_MAX_CHARS:
-            return text
-    # Still too long: the description goes, the result sentence stays whole.
-    return sentence
+            source = "" if label_var is None else f" from {_short(label_var, limit)}"
+            layers.append(f"labels{source} on {where}")
+        also = f"It also shows {_join_words(layers)}." if layers else ""
+        with_direction = f"{head}: {direction}." if direction else f"{head}."
+        for start, middle in (
+            (with_direction, also),
+            (with_direction, ""),
+            (f"{head}.", ""),
+        ):
+            text = " ".join(part for part in (start, middle, result) if part)
+            if _fits(text):
+                return text
+    return f"{head}. {result}"
 
 
-def _provisional_texts(
+def _no_level_texts(
     *,
     x: str,
     y: str | None,
@@ -1983,34 +2355,76 @@ def _provisional_texts(
     n_obs: int,
     settings: Settings,
     design: str,
+    values: Sequence[Sequence[float]],
+    point_labels: Sequence[str],
+    label_var: str | None,
 ) -> Texts:
-    """``build_texts`` for designs "one-sample" and "correlation" (PROVISIONAL, see
-    above): subtitle and caption None, no labels, the APA sentence and alt text
-    from the result's numbers."""
+    """``build_texts`` for designs "one-sample" (histostats) and "correlation"
+    (scatterstats): ggstatsplot's subtitle, Bayes caption and (one sample) its
+    centrality label; the APA sentence; the alt text of the default figure; no
+    tick or pairwise labels."""
     if pairwise:
         raise ValueError(f"design {design!r} has no pairwise comparisons")
-    sentence = _provisional_sentence(
+    one_sample = design == "one-sample"
+    if one_sample and len(descriptives) != 1:
+        raise ValueError(
+            "a one-sample result has one descriptive (its column), got "
+            f"{len(descriptives)}"
+        )
+    if not one_sample and (descriptives or y is None):
+        raise ValueError("a correlation has no descriptives and needs y")
+    ex = _expressions(
+        descriptives=descriptives,
         test=test,
         effect_size=effect_size,
         bayes=bayes,
+        pairwise=(),
         n_obs=n_obs,
         settings=settings,
-        design=design,
+        paired=_n_pairs(design),
     )
-    return Texts(
-        subtitle=None,
-        caption=None,
-        apa=sentence,
-        alt_text=_provisional_alt_text(
+    lines = caption_lines(ex.bayes_caption, None, mathtext=False)
+    if one_sample:
+        alt = one_sample_alt_text(
+            x=x,
+            descriptive=descriptives[0],
+            values=values[0] if values else (),
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
+            n_obs=n_obs,
+            settings=settings,
+        )
+    else:
+        assert y is not None
+        alt = correlation_alt_text(
             x=x,
             y=y,
-            descriptives=descriptives,
-            sentence=sentence,
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
+            n_obs=n_obs,
+            settings=settings,
+            label_var=label_var,
+            labelled_points=sum(1 for label in point_labels if label),
+        )
+    return Texts(
+        subtitle=None if ex.subtitle is None else to_plain(ex.subtitle),
+        caption="\n".join(lines) if lines else None,
+        apa=_no_level_sentence(
+            x=x,
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
             n_obs=n_obs,
             settings=settings,
             design=design,
         ),
-        centrality_labels=(),
+        alt_text=alt,
+        centrality_labels=tuple(
+            "" if d.value is None else to_plain(node)
+            for d, node in zip(descriptives, ex.centrality, strict=True)
+        ),
         tick_labels=(),
         pairwise_labels=(),
     )
@@ -2028,6 +2442,9 @@ def build_texts(
     n_obs: int,
     settings: Settings,
     design: str = "between",
+    values: Sequence[Sequence[float]] = (),
+    point_labels: Sequence[str] = (),
+    label_var: str | None = None,
 ) -> Texts:
     """Every plain text of a result, from the parts the analysis computed.
 
@@ -2040,14 +2457,18 @@ def build_texts(
     joined by a newline, or None when there is neither. The user's own caption is
     not part of it.
 
-    Designs "one-sample" (histostats) and "correlation" (scatterstats) take a
-    PROVISIONAL path until their texts are compared with ggstatsplot's: subtitle
-    and caption None, no labels, and a plain APA sentence and alt text from the
-    result's numbers (``_provisional_texts``). ``y`` is None only for
-    "one-sample".
+    Designs "one-sample" (histostats) and "correlation" (scatterstats): the
+    subtitle and Bayes caption as ggstatsplot prints them (n as ``n["obs"]`` and
+    ``n["pairs"]``), one centrality label for histostats and none for
+    scatterstats, no tick or pairwise labels, :func:`one_sample_sentence` or
+    :func:`correlation_sentence`, and the alt text of the default figure
+    (:func:`one_sample_alt_text`, :func:`correlation_alt_text`), which reads the
+    analyzed ``values`` (the range of a histogram) and, for a correlation, the
+    ``point_labels`` and their column ``label_var`` (the labelled points). ``y``
+    is None only for "one-sample".
     """
-    if design in _PROVISIONAL_DESIGNS:
-        return _provisional_texts(
+    if not _grouped(design):
+        return _no_level_texts(
             x=x,
             y=y,
             descriptives=descriptives,
@@ -2058,6 +2479,14 @@ def build_texts(
             n_obs=n_obs,
             settings=settings,
             design=design,
+            values=values,
+            point_labels=point_labels,
+            label_var=label_var,
+        )
+    if values or point_labels or label_var is not None:
+        raise ValueError(
+            f"values, point_labels and label_var describe the designs without "
+            f"levels; design {design!r} reads its texts from its descriptives"
         )
     if y is None:
         raise ValueError(f"design {design!r} needs y, the measured column")
@@ -2069,7 +2498,7 @@ def build_texts(
         pairwise=pairwise,
         n_obs=n_obs,
         settings=settings,
-        paired=_paired(design),
+        paired=_n_pairs(design),
     )
     lines = caption_lines(ex.bayes_caption, ex.pairwise_line, mathtext=False)
     return Texts(
@@ -2113,9 +2542,11 @@ class FigureTexts:
 
     ``subtitle`` is mathtext (``$...$``) or None; ``caption_lines`` holds the Bayes
     line as mathtext and the pairwise line as plain text (draw it with
-    ``parse_math=False``); ``centrality_labels`` is mathtext per level;
-    ``tick_labels`` is plain text per level (``parse_math=False``);
-    ``pairwise_labels`` is mathtext per pair, in the order of ``result.pairwise``.
+    ``parse_math=False``); ``centrality_labels`` is mathtext per level (one for
+    histostats: the centrality line's label; none for scatterstats);
+    ``tick_labels`` is plain text per level (``parse_math=False``; none for
+    histostats and scatterstats); ``pairwise_labels`` is mathtext per pair, in
+    the order of ``result.pairwise``.
     """
 
     subtitle: str | None
@@ -2128,33 +2559,13 @@ class FigureTexts:
 def figure_texts(result: StatsResult) -> FigureTexts:
     """The renderer's texts for ``result``, rebuilt from its numbers and settings.
 
-    Designs "one-sample" and "correlation" (PROVISIONAL, see
-    ``_provisional_texts``): no subtitle and no caption lines yet, no tick or
-    bracket labels, and for "one-sample" the centrality label ggstatsplot draws
-    (``widehat(mu)[mean] == "18.81"``), empty where the value is missing.
+    histostats ("one-sample"): the subtitle, the Bayes caption (type parametric),
+    one centrality label (the line's: ``widehat(mu)[mean] == "18.81"``, drawn
+    at the centrality value unless ``centrality_plotting=False``) and no tick or
+    pairwise labels. scatterstats ("correlation"): the subtitle, the Bayes
+    caption, and no centrality, tick or pairwise labels.
     """
-    if result.design in _PROVISIONAL_DESIGNS:
-        centrality = (
-            tuple(
-                to_mathtext(
-                    centrality_expression(
-                        centrality=d.centrality,
-                        value=d.value,
-                        digits=result.settings.digits,
-                    )
-                )
-                for d in result.descriptives
-            )
-            if result.design == "one-sample"
-            else ()
-        )
-        return FigureTexts(
-            subtitle=None,
-            caption_lines=(),
-            centrality_labels=centrality,
-            tick_labels=(),
-            pairwise_labels=(),
-        )
+    grouped = _grouped(result.design)
     ex = _expressions(
         descriptives=result.descriptives,
         test=result.test,
@@ -2163,12 +2574,16 @@ def figure_texts(result: StatsResult) -> FigureTexts:
         pairwise=result.pairwise,
         n_obs=result.n_obs,
         settings=result.settings,
-        paired=_paired(result.design),
+        paired=_n_pairs(result.design),
     )
     return FigureTexts(
         subtitle=None if ex.subtitle is None else to_mathtext(ex.subtitle),
         caption_lines=caption_lines(ex.bayes_caption, ex.pairwise_line, mathtext=True),
         centrality_labels=tuple(to_mathtext(node) for node in ex.centrality),
-        tick_labels=tuple(tick_label(d.level, d.n) for d in result.descriptives),
+        tick_labels=(
+            tuple(tick_label(d.level, d.n) for d in result.descriptives)
+            if grouped
+            else ()
+        ),
         pairwise_labels=tuple(to_mathtext(node) for node in ex.pairwise),
     )

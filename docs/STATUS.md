@@ -310,6 +310,15 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   frames on three backends against SciPy, 1e-14. To do: the figures (in progress),
   then the final texts (the new test names need text templates), image baselines
 - [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
+- [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
+  histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
+  labels equal ggstatsplot's character for character (the 17 robust subtitles under
+  §10's bootstrap rule); the 10 differences are pinned (ToothGrowth-tv100, D81; 9
+  exactly collinear texts, D85, D86). All 140 fixtures' expressions are rebuilt from
+  their own numbers; 330 expressions render on matplotlib 3.8.0 and current. APA
+  sentence and alt text for both designs (D91, D92); `figure_alt_text` takes the new
+  figures' keywords. A bootstrap p of 0 is explained in `warnings` (lead's review)
+- [ ] figures of both functions (renderer; in progress), image baselines
 - [ ] histostats, all types
 - [ ] scatterstats, all types (line, band, marginals)
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)

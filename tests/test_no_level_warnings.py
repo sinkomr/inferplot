@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -220,3 +221,28 @@ def test_the_warnings_name_the_value_as_given() -> None:
     seed = np.int64(5)
     result = _HISTO(ONE, "v", seed=seed)
     assert result.warnings[-1].startswith(f"seed={seed!r} has no effect")
+
+
+def test_a_bootstrap_p_of_zero_is_named_for_what_it_is() -> None:
+    # Lead's review of the texts: no resample as extreme as the observed t gives a
+    # bootstrap p of exactly 0, which the subtitle prints as ggstatsplot prints a
+    # p of 0 (2.23e-308). The result says what a 0 from 2,000 resamples shows.
+    rng = np.random.default_rng(3)
+    data = pd.DataFrame({"x": rng.normal(10.0, 0.5, 30)})
+    result = ip.analyze.histostats(data, "x", type="robust")
+    assert result.test is not None
+    assert result.test.p_value == 0.0
+    assert result.text.subtitle is not None
+    assert "p = 2.23e-308" in result.text.subtitle
+    (note,) = [w for w in result.warnings if "bootstrap p-value is 0" in w]
+    assert note == (
+        "None of the 2,000 bootstrap resamples gave a t as extreme as the observed "
+        "one, so the bootstrap p-value is 0 as computed: all it shows is that p is "
+        "below about 1 in 2,000 (0.0005). The subtitle prints p = 2.23e-308, as "
+        "ggstatsplot prints a p-value of 0; report p < 0.0005."
+    )
+    # A p above 0 gets no such entry.
+    near = ip.analyze.histostats(data, "x", type="robust", test_value=9.8)
+    assert near.test is not None
+    assert near.test.p_value > 0.0
+    assert not [w for w in near.warnings if "bootstrap p-value is 0" in w]

@@ -33,11 +33,11 @@ from inferplot.render import StatsFigure
 from inferplot.render.histostats import MAX_BARS, TEST_VALUE_REACH
 from inferplot.result import StatsResult
 from inferplot.stats import histogram_bins
-from inferplot.text import figure_texts, r_number_text
+from inferplot.text import figure_alt_text, figure_texts, r_number_text
 from tests.no_level_cases import analyzed
 from tests.oracle_args import split
 from tests.oracle_fixtures import OracleCase, cases_for, number, require_cases
-from tests.render._helpers import by_gid, gids, numbered_count, text_of
+from tests.render._helpers import by_gid, gids, numbered_count, numbered_texts, text_of
 from tests.render._no_levels import hist_result
 
 CASES = require_cases(cases_for("gghistostats"), "gghistostats fixtures")
@@ -182,8 +182,17 @@ def test_fixture_figure(name: str) -> None:
     assert ax.get_xlabel() == result.x
     assert ax.get_ylabel() == "count"
     assert figure_codes(fig) == [], fig.check()
-    # The result drawn is the result given, told nothing new.
-    assert result == result_of(name)
+    # The result drawn is the result given, with the alt text of this figure.
+    given = result_of(name)
+    assert result == dataclasses.replace(
+        given, text=dataclasses.replace(given.text, alt_text=result.text.alt_text)
+    )
+    assert result.text.alt_text == figure_alt_text(
+        given,
+        centrality=line is not None,
+        test_value_line=by_gid(fig, "test-value-line") is not None,
+        bins=len(drawn),
+    )
 
 
 def test_fixtures_include_both_test_value_marks() -> None:
@@ -238,6 +247,25 @@ def test_a_missing_map_draws_no_centrality_line() -> None:
     assert by_gid(fig, "centrality-label") is None
     assert by_gid(fig, "test-value-line") is not None
     assert figure_codes(fig) == []
+
+
+def test_alt_text_describes_the_figure() -> None:
+    result = tooth()
+    fig = ip.render.histostats(result)
+    alt = fig.result.text.alt_text
+    assert alt != result.text.alt_text  # the analysis' figure draws no test value line
+    assert "test value, 18" in alt
+    assert "9 bins" in alt
+    off = ip.render.histostats(result, centrality_plotting=False, binwidth=5)
+    assert "mean, 18.81" not in off.result.text.alt_text
+    assert "test value, 18" in off.result.text.alt_text
+    assert off.result.text.alt_text == figure_alt_text(
+        result, centrality=False, test_value_line=True, bins=len(bars(off))
+    )
+    far = figure("gghistostats-ToothGrowth-tv100-parametric")
+    assert far.result.text.alt_text == figure_alt_text(
+        far.result, test_value_line=False, bins=len(bars(far))
+    )
 
 
 def test_centrality_plotting_false_leaves_line_and_label_out() -> None:
@@ -302,7 +330,7 @@ def test_user_texts() -> None:
     assert text_of(fig, "title") == "Tooth length"
     assert ax.get_xlabel() == r"Length ($\mu$m)"
     assert ax.get_ylabel() == "guinea pigs"
-    assert text_of(fig, "caption-0") == "Source: Crampton (1947)."
+    assert numbered_texts(fig, "caption")[-1] == "Source: Crampton (1947)."
     assert figure_codes(fig) == []
     assert "matplotlib cannot read it" in message(
         ValueError, lambda: ip.render.histostats(tooth(), title=r"$\frac{1$")
@@ -430,7 +458,7 @@ def test_far_test_value_is_named_at_the_edge() -> None:
 
 
 def _grid(
-    width: float = 12.0, height: float = 5.0, **kwargs: Any
+    width: float = 17.0, height: float = 5.5, **kwargs: Any
 ) -> tuple[Figure, Any]:
     fig = Figure(figsize=(width, height), dpi=100)
     FigureCanvasAgg(fig)
@@ -438,16 +466,35 @@ def _grid(
 
 
 def test_drawn_into_a_grid_without_resizing() -> None:
-    figure_, (a, b) = _grid()
+    figure_, (a, b) = _grid(width=20.0)
     left = ip.render.histostats(tooth(), ax=a, title="left")
     right = ip.render.histostats(result_of("gghistostats-mtcars-robust"), ax=b)
-    assert figure_.get_size_inches().tolist() == [12.0, 5.0]
+    assert figure_.get_size_inches().tolist() == [20.0, 5.5]
     assert left.figure is figure_
     assert right.axes["main"] is b
     assert figure_codes(left) == []
     assert figure_codes(right) == []
     # The title is the Axes' own title; the labels are inside it.
     assert a.get_title(loc="left") == "left"
+    # The lines stop below the subtitle and above the caption, which ax= puts
+    # inside the Axes.
+    fig = left
+    fig.draw()
+    renderer = figure_.canvas.get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
+
+    def in_left(gid: str) -> Any:
+        (found,) = [x for x in a.findobj() if x.get_gid() == gid]
+        return found
+
+    subtitle, caption = in_left("subtitle"), in_left("caption-0")
+    assert isinstance(subtitle, Text)
+    assert isinstance(caption, Text)
+    for gid in ("centrality-line", "test-value-line"):
+        line = in_left(gid)
+        assert isinstance(line, Line2D)
+        box = line.get_window_extent(renderer)
+        assert box.y1 <= subtitle.get_window_extent(renderer).y0 + 1
+        assert box.y0 >= caption.get_window_extent(renderer).y1 - 1
 
 
 def test_shared_axes_fit_both_panels() -> None:

@@ -4,7 +4,8 @@ For data the analyses refuse (a constant column, values too large to draw) and
 for the random layout tests, which need many shapes of data quickly, the results
 are assembled with the analysis' own ``_prepare`` (every argument checked, the
 data read) and ``_assemble``, from stand-in parts: the test, effect size and Bayes
-factor carry placeholder numbers, and the centrality value is the type's
+factor carry placeholder numbers (named as the parametric type's, whatever the
+type, so that the texts have a template), and the centrality value is the type's
 centrality of the values (mean, median, 20% trimmed mean; the median standing in
 for the MAP). The renderer draws every number from the result, so the figures
 have the shape the real analyses give.
@@ -40,9 +41,9 @@ def _center(values: Any, type_name: str, tr: float) -> float:
     return float(np.median(x))
 
 
-def _test(type_name: str, statistic: str, label: str, side: str) -> TestResult:
+def _test(name: str, statistic: str, label: str, side: str) -> TestResult:
     return TestResult(
-        name=f"stand_in_{type_name}",
+        name=name,
         label=label,
         method=label,
         statistic_name=statistic,
@@ -62,7 +63,7 @@ def _effect(name: str, label: str, level: float, side: str) -> EffectSize:
         conf_level=level,
         conf_low=-float("inf") if side == "less" else -0.1,
         conf_high=float("inf") if side == "greater" else 0.6,
-        ci_method="stand-in",
+        ci_method="normal approximation (Fisher z)",
         sidedness=side,
     )
 
@@ -73,7 +74,7 @@ def hist_result(frame: Any, x: str, **kwargs: Any) -> StatsResult:
     side = args.alternative
     test = effect = bayes = None
     if args.type != "bayes":
-        test = _test(args.type, "t", "One-sample t-test", side)
+        test = _test("one_sample_t", "t", "One-sample t-test", side)
         effect = _effect("hedges_g", "Hedges' g", args.conf_level, side)
     if args.results_subtitle and args.type in ("parametric", "bayes"):
         bayes = BayesFactor(
@@ -101,7 +102,7 @@ def scatter_result(frame: Any, x: str, y: str, **kwargs: Any) -> StatsResult:
     data, args, digits = scatter._prepare(frame, x, y, **kwargs)
     test = effect = bayes = None
     if args.type != "bayes":
-        test = _test(args.type, "t", "Pearson correlation", "two-sided")
+        test = _test("pearson_correlation", "t", "Pearson correlation", "two-sided")
         effect = _effect("pearson_r", "Pearson's r", args.conf_level, "two-sided")
     if args.results_subtitle and args.type in ("parametric", "bayes"):
         bayes = BayesFactor(

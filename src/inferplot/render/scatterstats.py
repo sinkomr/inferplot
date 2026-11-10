@@ -59,7 +59,7 @@ from inferplot.stats.plot_geometry import (
     marginal_bins,
     ols_band,
 )
-from inferplot.text import DrawnLayers, drawable, figure_alt_text, figure_texts
+from inferplot.text import drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -627,6 +627,9 @@ class _ScatterDrawing(base.BaseDrawing):
 
     # -- layout ----------------------------------------------------------------
 
+    def generated_texts(self) -> tuple[str | None, str | None, Sequence[str]]:
+        return self.texts.subtitle, self.result.text.subtitle, self.texts.caption_lines
+
     def place_axes(
         self, x0: float, y0: float, width: float, height: float, fig_w: float,
         fig_h: float,
@@ -821,15 +824,16 @@ class _ScatterDrawing(base.BaseDrawing):
         return tuple(data)
 
     def finish_result(self, result: StatsResult) -> StatsResult:
-        """The result told what the figure draws (its alt text is the result's
-        own until the texts of scatterstats are final)."""
-        drawn = DrawnLayers(
-            points=self.drawn_points,
+        """The result with the alt text of what this figure draws: the line and
+        band, the marginal histograms, the labelled points and, when the points
+        are a subsample, how many are drawn."""
+        alt = figure_alt_text(
+            result,
             smooth=self.line is not None,
             marginal=self.xside is not None,
-            labels=len(self.label_texts),
+            labelled_points=len(self.label_texts),
+            points_shown=self.drawn_points if self.subsample is not None else None,
         )
-        alt = figure_alt_text(result, drawn=drawn)
         if alt == result.text.alt_text:
             return result
         return dataclasses.replace(

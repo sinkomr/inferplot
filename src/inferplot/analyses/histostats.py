@@ -509,7 +509,9 @@ def _resample_warnings(
     nonparametric: bool,
 ) -> list[str]:
     """How many bootstrap t values were 0 / 0 (left out, D65's rule) or infinite
-    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``."""
+    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``.
+    A bootstrap p-value of exactly 0 is named for what it is: below the
+    resolution of the resamples."""
     total = boot.resamples
     out: list[str] = []
     if boot.undefined_resamples:
@@ -539,6 +541,16 @@ def _resample_warnings(
                 if nonparametric
                 else ". Collect more values."
             )
+        )
+    if boot.p_value == 0.0:
+        defined = total - boot.undefined_resamples
+        out.append(
+            f"None of the {defined:,} bootstrap resamples gave a t as extreme as "
+            "the observed one, so the bootstrap p-value is 0 as computed: all it "
+            f"shows is that p is below about 1 in {defined:,} "
+            f"({format_value(1.0 / defined, 4)}). The subtitle prints "
+            "p = 2.23e-308, as ggstatsplot prints a p-value of 0; report "
+            f"p < {format_value(1.0 / defined, 4)}."
         )
     return out
 
@@ -654,6 +666,7 @@ def _assemble(data: OneData, args: _Args, parts: _Parts, *, digits: int) -> Stat
         n_obs=data.n_obs,
         settings=settings,
         design="one-sample",
+        values=(observed,),
     )
     return StatsResult(
         analysis="histostats",

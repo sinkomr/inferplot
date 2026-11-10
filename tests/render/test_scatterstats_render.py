@@ -34,6 +34,7 @@ from inferplot.render.comparison import MAX_POINTS, SUBSAMPLE_SIZE
 from inferplot.render.scatterstats import MAX_LABELS
 from inferplot.result import StatsResult
 from inferplot.stats import marginal_bins, ols_band
+from inferplot.text import figure_alt_text
 from tests.no_level_cases import REFUSALS, analyzed
 from tests.oracle_args import split
 from tests.oracle_fixtures import OracleCase, cases_for, number, require_cases
@@ -269,6 +270,36 @@ def test_labelled_fixtures() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_alt_text_describes_the_figure() -> None:
+    result = mtcars()
+    # The default figure is the one the analysis describes.
+    assert ip.render.scatterstats(result).result.text.alt_text == (result.text.alt_text)
+    changes: list[dict[str, Any]] = [
+        {"smooth": False},
+        {"marginal": False},
+        {"smooth": False, "marginal": False},
+    ]
+    for kwargs in changes:
+        fig = ip.render.scatterstats(result, **kwargs)
+        alt = fig.result.text.alt_text
+        assert alt == figure_alt_text(result, **kwargs)
+        assert alt != result.text.alt_text
+    labelled = result_of("ggscatterstats-mtcars-labelexpr-parametric")
+    fig = ip.render.scatterstats(labelled)
+    assert fig.result.text.alt_text == figure_alt_text(labelled, labelled_points=9)
+    many = _many()
+    fig = ip.render.scatterstats(many)
+    assert fig.result.text.alt_text == figure_alt_text(
+        many, labelled_points=3, points_shown=SUBSAMPLE_SIZE
+    )
+    assert fig.result.text.alt_text != many.text.alt_text
+    no_line = scatter_result(
+        pd.DataFrame({"x": [5.0] * 6, "y": [1.0, 3, 2, 5, 4, 6]}), "x", "y"
+    )
+    fig = ip.render.scatterstats(no_line)
+    assert fig.result.text.alt_text == figure_alt_text(no_line, smooth=False)
+
+
 def test_smooth_false_draws_no_line() -> None:
     fig = ip.render.scatterstats(mtcars(), smooth=False)
     assert by_gid(fig, "smooth-line") is None
@@ -482,14 +513,14 @@ def test_crowded_labels_are_reported() -> None:
 
 
 def test_drawn_into_a_grid_without_resizing() -> None:
-    figure_ = Figure(figsize=(12, 5), dpi=100)
+    figure_ = Figure(figsize=(17, 5.5), dpi=100)
     FigureCanvasAgg(figure_)
     a, b = figure_.subplots(1, 2, gridspec_kw={"wspace": 0.3})
     left = ip.render.scatterstats(mtcars(), ax=a, marginal=False)
     right = ip.render.scatterstats(
         result_of("ggscatterstats-iris-parametric"), ax=b, marginal=False
     )
-    assert figure_.get_size_inches().tolist() == [12.0, 5.0]
+    assert figure_.get_size_inches().tolist() == [17.0, 5.5]
     assert figure_codes(left) == []
     assert figure_codes(right) == []
     # A given Axes keeps its own grid.

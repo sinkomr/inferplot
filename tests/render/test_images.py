@@ -253,12 +253,12 @@ def test_histostats_and_scatterstats_in_a_grid() -> Figure:
     selected = cars.assign(
         model=cars["model"].where((cars["mpg"] > 25) | (cars["wt"] > 5))
     )
-    figure = Figure(figsize=(12.0, 5.0), dpi=100)
+    figure = Figure(figsize=(17.0, 5.5), dpi=100)
     FigureCanvasAgg(figure)
     left, right = figure.subplots(1, 2, gridspec_kw={"wspace": 0.45})
     ip.histostats(cars, "mpg", type="robust", ax=left)
     fig = ip.scatterstats(
         selected, "wt", "mpg", label_var="model", ax=right, marginal=False
     )
-    assert figure.get_size_inches().tolist() == [12.0, 5.0]
+    assert figure.get_size_inches().tolist() == [17.0, 5.5]
     return _clean(fig)
