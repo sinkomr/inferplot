@@ -734,9 +734,18 @@ def tick_label(level: str, n: int) -> str:
 
 
 def subtitle_expression(
-    test: TestResult, effect_size: EffectSize, *, n_obs: int, digits: int
+    test: TestResult,
+    effect_size: EffectSize,
+    *,
+    n_obs: int,
+    digits: int,
+    paired: bool = False,
 ) -> Call:
-    """The frequentist subtitle of a result's main test, as ggstatsplot builds it."""
+    """The frequentist subtitle of a result's main test, as ggstatsplot builds it.
+
+    ``paired`` (a within-subjects result) prints n as ``italic("n")["pairs"]``, the
+    number of complete subjects, as ggwithinstats does; otherwise ``["obs"]``.
+    """
     try:
         statistic, frac_df, frac_df_error = _TEST_TEMPLATES[test.name]
     except KeyError:
@@ -758,6 +767,7 @@ def subtitle_expression(
         digits=digits,
         digits_df=digits if frac_df else 0,
         digits_df_error=digits if frac_df_error else 0,
+        paired=paired,
     )
 
 
@@ -1444,6 +1454,7 @@ def _expressions(
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
+    paired: bool,
 ) -> _Expressions:
     digits = settings.digits
     subtitle = None
@@ -1461,7 +1472,9 @@ def _expressions(
     elif settings.results_subtitle:
         assert test is not None
         assert effect_size is not None
-        subtitle = subtitle_expression(test, effect_size, n_obs=n_obs, digits=digits)
+        subtitle = subtitle_expression(
+            test, effect_size, n_obs=n_obs, digits=digits, paired=paired
+        )
         # bf_message=False never draws the caption, even when a Bayes factor exists.
         if bayes is not None and settings.bf_message is not False:
             bayes_caption = bayes_factor_expression(
@@ -1482,6 +1495,14 @@ def _expressions(
         alpha=settings.pairwise_alpha,
     )
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
+
+
+def _paired(design: str) -> bool:
+    """Whether a result's design pairs its measurements: "within" (withinstats)
+    does, "between" (betweenstats) does not."""
+    if design not in ("between", "within"):
+        raise ValueError(f"unknown design {design!r}; known: 'between', 'within'")
+    return design == "within"
 
 
 def _pair_label(pair: PairwiseComparison, digits: int) -> Call:
@@ -1524,9 +1545,12 @@ def build_texts(
     pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
+    design: str = "between",
 ) -> Texts:
     """Every plain text of a result, from the parts the analysis computed.
 
+    ``design`` is the result's: "within" (withinstats) prints n as the number of
+    complete subjects, ``n["pairs"]`` in the subtitle, as ggwithinstats does.
     The subtitle is None when ``settings.results_subtitle`` is false. The caption
     holds the Bayes line (when ``bayes`` is given, the subtitle is drawn and
     ``settings.bf_message`` is not False, as ggstatsplot's ``bf.message``) and the
@@ -1542,6 +1566,7 @@ def build_texts(
         pairwise=pairwise,
         n_obs=n_obs,
         settings=settings,
+        paired=_paired(design),
     )
     lines = caption_lines(ex.bayes_caption, ex.pairwise_line, mathtext=False)
     return Texts(
@@ -1600,6 +1625,7 @@ def figure_texts(result: StatsResult) -> FigureTexts:
         pairwise=result.pairwise,
         n_obs=result.n_obs,
         settings=result.settings,
+        paired=_paired(result.design),
     )
     return FigureTexts(
         subtitle=None if ex.subtitle is None else to_mathtext(ex.subtitle),

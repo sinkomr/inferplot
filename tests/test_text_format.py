@@ -46,18 +46,32 @@ _DF2_RE = re.compile(r"\]\((\S+?), (\S+?)\) ==")
 _DF1_RE = re.compile(r'\* "\(" \* (\S+?) \* "\)" ==')
 
 
-# ggwithinstats fixtures (Phase 3) join these checks with the withinstats text
-# layer: their subtitles differ (paired n, corrected df) and their labels describe
-# complete subjects only.
+TEXT_FUNCTIONS = ("ggbetweenstats", "ggwithinstats")
+
+
 def text_cases() -> list[OracleCase]:
-    """The fixtures whose texts the text layer covers: ggbetweenstats, every type."""
-    return [case for case in load_cases() if case.function == "ggbetweenstats"]
+    """The fixtures whose texts the text layer covers: ggbetweenstats and
+    ggwithinstats, every type. ggwithinstats prints n as ``n["pairs"]`` (complete
+    subjects), its repeated-measures df with ``digits`` decimals, and labels that
+    describe the complete subjects only."""
+    return [case for case in load_cases() if case.function in TEXT_FUNCTIONS]
 
 
 def all_case_params() -> list[Any]:
-    """Every ggbetweenstats fixture, of every type, as a pytest param."""
-    cases = require_cases(text_cases(), "ggbetweenstats")
+    """Every ggbetweenstats and ggwithinstats fixture, of every type."""
+    cases = [
+        case
+        for function in TEXT_FUNCTIONS
+        for case in require_cases(
+            [c for c in text_cases() if c.function == function], function
+        )
+    ]
     return [pytest.param(case, id=case.name) for case in cases]
+
+
+def paired(case: OracleCase) -> bool:
+    """Whether the case's texts describe paired measurements (ggwithinstats)."""
+    return case.function == "ggwithinstats"
 
 
 # --------------------------------------------------------------------------- #
@@ -99,14 +113,18 @@ def case_digits(case: OracleCase) -> int:
 
 
 def centrality_from_data(case: OracleCase, level: str) -> float:
-    """The level's centrality value recomputed from the dataset as R computes it."""
-    x, y = str(case.args["x"]), str(case.args["y"])
-    frame = read_dataset(case, "pandas")[[x, y]].dropna()
-    values = [
-        float(v)
-        for v, k in zip(frame[y], frame[x], strict=True)
-        if r_level_label(k) == level
-    ]
+    """The level's centrality value recomputed from the dataset as R computes it
+    (ggwithinstats: from the complete subjects' values, ``within_data``)."""
+    if paired(case):
+        values = case.within_columns()[level]
+    else:
+        x, y = str(case.args["x"]), str(case.args["y"])
+        frame = read_dataset(case, "pandas")[[x, y]].dropna()
+        values = [
+            float(v)
+            for v, k in zip(frame[y], frame[x], strict=True)
+            if r_level_label(k) == level
+        ]
     if case.type == "parametric":
         return exact_mean(values)
     if case.type == "nonparametric":
@@ -168,8 +186,12 @@ def centrality_rows(case: OracleCase) -> list[tuple[str, Row]]:
 
 
 def df_digits(method: str, digits: int) -> tuple[int, int]:
-    """(digits.df, digits.df.error) for a between-subjects test, as statsExpressions."""
+    """(digits.df, digits.df.error) as statsExpressions rounds them: ``digits`` for
+    fractional df, 0 otherwise. The repeated-measures ANOVAs (afex with the
+    Greenhouse-Geisser correction, WRS2's rmanova) have both df fractional."""
     m = method.lower()
+    if "afex" in m or "repeated measures anova for trimmed means" in m:
+        return digits, digits
     fractional = (
         "welch" in m
         or "not assuming equal variances" in m

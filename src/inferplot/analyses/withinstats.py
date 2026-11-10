@@ -1179,6 +1179,7 @@ def _assemble(
         pairwise=parts.pairwise,
         n_obs=n_subjects,
         settings=settings,
+        design="within",
     )
     observations = tuple(tuple(float(v) for v in col.tolist()) for col in columns)
     return StatsResult(
