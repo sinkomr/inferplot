@@ -20,6 +20,9 @@ Severity = Literal["warning", "info"]
 
 # A group with fewer observations than this gets a small_n warning.
 SMALL_N: Final = 5
+# rows_dropped is a warning when more than this share of the subjects (within) or
+# of the rows (between) was left out.
+_MOST_LEFT_OUT: Final = 0.5
 # A rank-based test on data with more than this share of tied values gets a
 # heavy_ties warning (SPEC section 8).
 HEAVY_TIES: Final = 0.25
@@ -92,9 +95,23 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
             f"{'it lacks' if one else 'they lack'} a value at some level of "
             f"{result.x!r}"
         )
+    # More than half of the subjects (within) or of the rows (between) left out:
+    # the analysis describes a minority of the data, which a reader must know.
+    if result.subject_id is not None:
+        out, unit = result.dropped_subjects, "subjects"
+        total = result.n_obs + out
+    else:
+        out, unit = result.n_dropped, "rows"
+        total = result.n_obs + out
+    share = out / total if total else 0.0
+    if share > _MOST_LEFT_OUT:
+        parts.append(
+            f"that is {share:.0%} of the {total:,} {unit}, so the analysis describes "
+            f"only the {result.n_obs:,} that are left"
+        )
     return Issue(
         code="rows_dropped",
-        severity="info",
+        severity="warning" if share > _MOST_LEFT_OUT else "info",
         message="; ".join(parts) + ".",
         fix="Check that the missing values are expected; impute or remove them "
         "yourself to silence this.",
