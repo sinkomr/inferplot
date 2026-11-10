@@ -1427,8 +1427,10 @@ class Drawing:
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.xlab is not None,
         )
+        # Between and within designs always name y (checked_result).
+        measured = result.y if result.y is not None else ""
         ax.set_ylabel(
-            drawable(result.y) if options.ylab is None else options.ylab,
+            drawable(measured) if options.ylab is None else options.ylab,
             fontproperties=theme.font(theme.SIZE_AXIS_LABEL),
             parse_math=options.ylab is not None,
         )

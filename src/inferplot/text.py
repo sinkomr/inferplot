@@ -1695,7 +1695,10 @@ def figure_alt_text(
     """The alt text of a figure that draws ``subject_paths`` subjects' paths (0
     for none) and the centrality path or not (within subjects; None for
     independent groups), with or without the ``centrality`` points and labels
-    (:func:`alt_text`); the renderer gives it to the result it returns."""
+    (:func:`alt_text`); the renderer gives it to the result it returns. Designs
+    between and within only (they always name ``y``)."""
+    if result.y is None:
+        raise ValueError(f"design {result.design!r} has no figure alt text yet")
     return alt_text(
         x=result.x,
         y=result.y,
@@ -1816,10 +1819,172 @@ def caption_lines(
     return tuple(lines)
 
 
+# --------------------------------------------------------------------------- #
+# Provisional texts of the designs without groups (one-sample, correlation)
+# --------------------------------------------------------------------------- #
+#
+# PROVISIONAL. histostats and scatterstats get their final subtitle, caption,
+# centrality label, APA sentence and alt text in a later step, which compares every
+# text with ggstatsplot's. Until then the result carries a plain APA-style sentence
+# and an alt text built from its own numbers (no group words, nothing about a
+# figure), and None for the subtitle and the caption.
+
+_PROVISIONAL_DESIGNS: Final = frozenset({"one-sample", "correlation"})
+
+
+def _provisional_effect_size(effect_size: EffectSize, *, bounded: bool) -> str:
+    estimate = _apa_number(effect_size.estimate, bounded=bounded)
+    low = _apa_number(effect_size.conf_low, bounded=bounded)
+    high = _apa_number(effect_size.conf_high, bounded=bounded)
+    level = format_conf_level(effect_size.conf_level)
+    return f"{effect_size.label} = {estimate}, {level} CI [{low}, {high}]"
+
+
+def _provisional_sentence(
+    *,
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    n_obs: int,
+    settings: Settings,
+    design: str,
+) -> str:
+    """The provisional APA-style sentence of a one-sample or correlation result.
+
+    "One-sample t-test against 18: t(59) = 0.82, p = .413, Hedges' g = 0.10, 95% CI
+    [-0.15, 0.36], n = 60."; a one-sided test: "... (one-sided: greater than 18):
+    ..."; "Pearson correlation: t(30) = -9.56, p < .001, Pearson's r = -.87, 95% CI
+    [-.93, -.74], n = 32 pairs." (a correlation drops the leading zero, being
+    bounded by 1). ASCII except the test's own label.
+    """
+    one_sample = design == "one-sample"
+    n = f"n = {format_n(n_obs)}" if one_sample else f"n = {format_n(n_obs)} pairs"
+    against = ""
+    if one_sample:
+        if settings.test_value is None:
+            raise ValueError("a one-sample result needs settings.test_value")
+        against = r_number_text(settings.test_value)
+    if test is not None and effect_size is not None:
+        if one_sample and test.alternative != "two-sided":
+            heading = f"{test.label} (one-sided: {test.alternative} than {against})"
+        elif one_sample:
+            heading = f"{test.label} against {against}"
+        else:
+            heading = test.label
+        effect = _provisional_effect_size(
+            effect_size,
+            bounded=not one_sample or effect_size.name in _BOUNDED_EFFECT_SIZES,
+        )
+        return f"{heading}: {_apa_test(test)}, {effect}, {n}."
+    if bayes is not None:
+        scale = r_number_text(bayes.prior_scale)
+        name = (
+            f"Bayesian one-sample t-test against {against} (JZS prior, r = {scale})"
+            if one_sample
+            else f"Bayesian Pearson correlation (stretched beta prior, scale {scale})"
+        )
+        return (
+            f"{name}: BF10 = {_apa_bf(bayes)}, log(BF01) = "
+            f"{_apa_number(bayes.log_bf01)}, {n}."
+        )
+    return f"No test was computed (results_subtitle=False), {n}."
+
+
+def _provisional_alt_text(
+    *,
+    x: str,
+    y: str | None,
+    descriptives: Sequence[Descriptive],
+    sentence: str,
+    n_obs: int,
+    settings: Settings,
+    design: str,
+) -> str:
+    """A description of the analysis, then the result sentence, at most
+    ``ALT_TEXT_MAX_CHARS`` where the sentence allows: "Values of len (n = 60, mean
+    18.81) tested against 18. <sentence>"; "Correlation of mpg with wt over 32
+    complete pairs. <sentence>". Column names are shortened (40, 20, 12
+    characters) until it fits, else the description is left out; the sentence is
+    never cut."""
+    text = sentence
+    for limit in (40, 20, 12):
+        if design == "one-sample":
+            assert settings.test_value is not None
+            center = ""
+            if descriptives:
+                d = descriptives[0]
+                word = _centrality_word(d.centrality, settings.tr)
+                center = (
+                    f", no {word}"
+                    if d.value is None or math.isnan(d.value)
+                    else f", {word} {format_value(d.value, settings.digits)}"
+                )
+            head = (
+                f"Values of {_short(x, limit)} (n = {format_n(n_obs)}{center}) "
+                f"tested against {r_number_text(settings.test_value)}."
+            )
+        else:
+            assert y is not None
+            head = (
+                f"Correlation of {_short(y, limit)} with {_short(x, limit)} over "
+                f"{format_n(n_obs)} complete pairs."
+            )
+        text = f"{head} {sentence}"
+        if len(text) <= ALT_TEXT_MAX_CHARS:
+            return text
+    # Still too long: the description goes, the result sentence stays whole.
+    return sentence
+
+
+def _provisional_texts(
+    *,
+    x: str,
+    y: str | None,
+    descriptives: Sequence[Descriptive],
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bayes: BayesFactor | None,
+    pairwise: Sequence[PairwiseComparison],
+    n_obs: int,
+    settings: Settings,
+    design: str,
+) -> Texts:
+    """``build_texts`` for designs "one-sample" and "correlation" (PROVISIONAL, see
+    above): subtitle and caption None, no labels, the APA sentence and alt text
+    from the result's numbers."""
+    if pairwise:
+        raise ValueError(f"design {design!r} has no pairwise comparisons")
+    sentence = _provisional_sentence(
+        test=test,
+        effect_size=effect_size,
+        bayes=bayes,
+        n_obs=n_obs,
+        settings=settings,
+        design=design,
+    )
+    return Texts(
+        subtitle=None,
+        caption=None,
+        apa=sentence,
+        alt_text=_provisional_alt_text(
+            x=x,
+            y=y,
+            descriptives=descriptives,
+            sentence=sentence,
+            n_obs=n_obs,
+            settings=settings,
+            design=design,
+        ),
+        centrality_labels=(),
+        tick_labels=(),
+        pairwise_labels=(),
+    )
+
+
 def build_texts(
     *,
     x: str,
-    y: str,
+    y: str | None,
     descriptives: Sequence[Descriptive],
     test: TestResult | None,
     effect_size: EffectSize | None,
@@ -1839,7 +2004,28 @@ def build_texts(
     pairwise line (three or more groups, unless ``pairwise_display`` is "none"),
     joined by a newline, or None when there is neither. The user's own caption is
     not part of it.
+
+    Designs "one-sample" (histostats) and "correlation" (scatterstats) take a
+    PROVISIONAL path until their texts are compared with ggstatsplot's: subtitle
+    and caption None, no labels, and a plain APA sentence and alt text from the
+    result's numbers (``_provisional_texts``). ``y`` is None only for
+    "one-sample".
     """
+    if design in _PROVISIONAL_DESIGNS:
+        return _provisional_texts(
+            x=x,
+            y=y,
+            descriptives=descriptives,
+            test=test,
+            effect_size=effect_size,
+            bayes=bayes,
+            pairwise=pairwise,
+            n_obs=n_obs,
+            settings=settings,
+            design=design,
+        )
+    if y is None:
+        raise ValueError(f"design {design!r} needs y, the measured column")
     ex = _expressions(
         descriptives=descriptives,
         test=test,

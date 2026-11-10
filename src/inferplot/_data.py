@@ -58,10 +58,14 @@ from narwhals.exceptions import DuplicateError
 __all__ = [
     "BetweenData",
     "ColumnNotFoundError",
+    "OneData",
+    "PairData",
     "WithinData",
     "data_notes",
     "level_label",
     "read_between",
+    "read_one",
+    "read_pair",
     "read_within",
     "to_frame",
 ]
@@ -293,7 +297,12 @@ def _column(frame: nw.DataFrame[Any], name: object, role: str) -> nw.Series[Any]
     )
 
 
-_EXAMPLE_COLUMN: Final = {"x": "group", "y": "score", "subject_id": "subject"}
+_EXAMPLE_COLUMN: Final = {
+    "x": "group",
+    "y": "score",
+    "subject_id": "subject",
+    "label_var": "label",
+}
 
 
 def _not_a_name(frame: nw.DataFrame[Any], name: object, role: str) -> TypeError:
@@ -990,20 +999,26 @@ def _check_y(series: nw.Series[Any], name: str, x: nw.Series[Any], x_name: str) 
     raise TypeError(f"y={name!r} must be numeric; its type is {dtype}. {hint}")
 
 
-def _check_finite(name: str, values: FloatArray, rows: IntArray) -> None:
-    """An infinite ``y`` in a row that is otherwise complete raises."""
+def _check_finite(
+    name: str, values: FloatArray, rows: IntArray, arg: str = "y"
+) -> None:
+    """An infinite value of a measurement (``arg``, default ``y``) in a row that is
+    otherwise complete raises."""
     infinite = ~np.isfinite(values)
     if infinite.any():
         shown = ", ".join(str(r) for r in rows[infinite][:_MAX_ROWS_SHOWN])
         raise ValueError(
-            f"y={name!r} has {int(infinite.sum())} infinite value(s) (row positions "
-            f"{shown}{', ...' if infinite.sum() > _MAX_ROWS_SHOWN else ''}); "
+            f"{arg}={name!r} has {int(infinite.sum())} infinite value(s) (row "
+            f"positions {shown}{', ...' if infinite.sum() > _MAX_ROWS_SHOWN else ''}); "
             "remove them or replace them with missing values."
         )
 
 
-def _check_exact_integers(series: nw.Series[Any], name: str, rows: IntArray) -> None:
-    """An integer ``y`` that float64 cannot hold exactly raises.
+def _check_exact_integers(
+    series: nw.Series[Any], name: str, rows: IntArray, arg: str = "y"
+) -> None:
+    """An integer measurement (``arg``, default ``y``) that float64 cannot hold
+    exactly raises.
 
     The statistics run in float64. An integer above 2**53 (a nanosecond timestamp,
     a large identifier or count) is rounded to a multiple of a power of two there,
@@ -1021,12 +1036,13 @@ def _check_exact_integers(series: nw.Series[Any], name: str, rows: IntArray) -> 
         return
     example = rounded[0]
     raise ValueError(
-        f"y={name!r} holds integers too large to analyze exactly: {len(rounded)} of "
-        f"its {len(kept)} values change when stored as double-precision numbers "
+        f"{arg}={name!r} holds integers too large to analyze exactly: "
+        f"{len(rounded)} of its {len(kept)} values change when stored as "
+        "double-precision numbers "
         f"(for example {example} becomes {int(float(example))}), so different values "
         "would become ties. Subtract a common offset or change the unit first, for "
-        f"example y - y.min() (smallest value: {min(kept)}); that leaves every test "
-        "and standardized effect size as it is."
+        f"example {arg} - {arg}.min() (smallest value: {min(kept)}); that leaves "
+        "every test and standardized effect size as it is."
     )
 
 
@@ -1372,6 +1388,308 @@ def read_within(
     )
 
 
+# --- histostats and scatterstats: measurements without groups ----------------------
+
+
+@dataclass(frozen=True, slots=True)
+class OneData:
+    """The analyzed values of one numeric column (``histostats``).
+
+    ``values`` holds the non-missing values of ``x`` in the frame's row order, as a
+    read-only float64 array.
+    """
+
+    x: str
+    values: FloatArray
+    n_dropped: int
+    """Rows dropped because ``x`` was missing."""
+
+    @property
+    def n_obs(self) -> int:
+        """The analyzed values."""
+        return int(self.values.size)
+
+
+@dataclass(frozen=True, slots=True)
+class PairData:
+    """The complete pairs of two numeric columns (``scatterstats``).
+
+    A row is analyzed when both ``x`` and ``y`` are present; ``x_values[i]`` and
+    ``y_values[i]`` are the i-th such row's values, in the frame's row order
+    (read-only float64 arrays). ``labels[i]`` is that row's ``label_var`` value as
+    text, "" where it is missing or empty; ``labels`` is empty without
+    ``label_var``.
+    """
+
+    x: str
+    y: str
+    x_values: FloatArray
+    y_values: FloatArray
+    n_dropped: int
+    """Rows dropped because ``x`` or ``y`` was missing (a row counts once)."""
+    n_missing_x: int
+    n_missing_y: int
+    """Rows missing ``x`` and rows missing ``y``; a row missing both counts in each."""
+    label_var: str | None = None
+    labels: tuple[str, ...] = ()
+
+    @property
+    def n_obs(self) -> int:
+        """The complete pairs."""
+        return int(self.x_values.size)
+
+
+# The function each measurement reader serves, for its messages.
+_OneOrPair = Literal["histostats", "scatterstats"]
+
+
+def _numbers_as_text(value: object) -> bool:
+    """Whether ``value`` is text that reads as a number ("1.5", " 2 ")."""
+    if not isinstance(value, str):
+        return False
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _grouping_hint(
+    name: str, fn: _OneOrPair, other: tuple[str, nw.Series[Any]] | None
+) -> str:
+    """Where a column of groups belongs: betweenstats (a measurement across its
+    groups) or barstats (counting its categories)."""
+    if fn == "histostats":
+        return (
+            "histostats() compares one numeric column with test_value. To compare "
+            f"a numeric column across the groups of {name!r}, use "
+            f"betweenstats(data, x={name!r}, y='<numeric column>'); to count its "
+            f"categories, use barstats(data, x={name!r})."
+        )
+    start = "scatterstats() relates two numeric columns."
+    if other is not None:
+        other_name, other_col = other
+        dtype = other_col.dtype
+        if dtype.is_numeric() and not isinstance(dtype, nw.Boolean):
+            return (
+                f"{start} To compare {other_name!r} across the groups of {name!r}, "
+                f"use betweenstats(data, x={name!r}, y={other_name!r}); to relate "
+                "two columns of categories, use barstats(data, x=..., y=...)."
+            )
+    return (
+        f"{start} To compare a numeric column across the groups of {name!r}, use "
+        f"betweenstats(data, x={name!r}, y='<numeric column>'); to relate two "
+        "columns of categories, use barstats(data, x=..., y=...)."
+    )
+
+
+def _check_measurement(
+    series: nw.Series[Any],
+    name: str,
+    arg: str,
+    fn: _OneOrPair,
+    other: tuple[str, nw.Series[Any]] | None = None,
+) -> None:
+    """A column that ``fn`` analyzes as numbers (``arg``: "x" or "y") must be
+    numeric. Text and categories are told where groups belong, booleans that they
+    are not measurements, dates that they need converting, and numbers held as
+    text or Python objects how to convert them. ``other`` is the other column of
+    scatterstats, so the advice can name a call that works."""
+    dtype = series.dtype
+    if dtype.is_numeric() and not isinstance(dtype, nw.Boolean):
+        return
+    start = f"{arg}={name!r} must be numeric; its type is {dtype}."
+    if isinstance(dtype, nw.Boolean):
+        raise TypeError(
+            f"{arg}={name!r} holds True/False values, which are not measurements. To "
+            "count them, convert them to text labels first, for example "
+            f"data[{name!r}].map({{True: 'yes', False: 'no'}}), and use "
+            f"barstats(data, x={name!r}); to analyze them as 0 and 1, convert them "
+            "deliberately first."
+        )
+    if isinstance(dtype, nw.Datetime | nw.Date | nw.Time | nw.Duration):
+        raise TypeError(
+            f"{start} It holds dates or times, which {fn}() cannot analyze as "
+            "numbers. Convert them to numbers in the unit you mean first, for "
+            f"example the days since the first date: (data[{name!r}] - "
+            f"data[{name!r}].min()).dt.days in pandas."
+        )
+    first = _first_value(series)
+    if _numbers_as_text(first):
+        raise TypeError(
+            f"{start} It holds numbers stored as text (for example {first!r}). "
+            f"Convert it first, for example pandas.to_numeric(data[{name!r}]) in "
+            f"pandas or pl.col({name!r}).cast(pl.Float64) in polars."
+        )
+    if isinstance(dtype, nw.String | nw.Categorical | nw.Enum) or isinstance(
+        first, str
+    ):
+        raise TypeError(
+            f"{arg}={name!r} holds text or categories, not numbers. "
+            f"{_grouping_hint(name, fn, other)}"
+        )
+    if _what_values(first) == "dates or times":
+        raise TypeError(
+            f"{start} It holds dates or times, which {fn}() cannot analyze as "
+            "numbers. Convert them to numbers in the unit you mean first."
+        )
+    if isinstance(first, numbers.Real) and not isinstance(first, bool | np.bool_):
+        raise TypeError(
+            f"{start} It holds numbers in a column of Python objects; convert it "
+            f"first, for example pandas.to_numeric(data[{name!r}])."
+        )
+    raise TypeError(
+        f"{start} Convert it with pandas.to_numeric() or .cast(float) first."
+    )
+
+
+def _measurement(
+    series: nw.Series[Any], name: str, arg: str, rows: IntArray
+) -> FloatArray:
+    """The values of ``rows`` as a read-only float64 array, after the checks every
+    measurement gets: integers a double cannot hold exactly and infinite values
+    raise."""
+    _check_exact_integers(series, name, rows, arg)
+    values = np.ascontiguousarray(_float_values(series)[rows], dtype=np.float64)
+    _check_finite(name, values, rows, arg)
+    values.setflags(write=False)
+    return values
+
+
+def read_one(data: object, x: str, *, min_values: int = 2) -> OneData:
+    """Read one numeric column for ``histostats``: its non-missing values in row
+    order.
+
+    Rules (SPEC.md section 3): ``x`` must be numeric (integers, floats, decimals;
+    booleans, text, categories and dates are refused, with a message that says
+    which function fits); rows with a missing ``x`` (null, NaN) are dropped and
+    counted, as ggstatsplot's ``tidyr::drop_na()`` on ``x`` does; an infinite
+    value, or an integer a double cannot hold exactly, raises. Fewer than
+    ``min_values`` values raise: no type can test fewer than two.
+
+    Raises ``TypeError`` for unsupported data or column types,
+    ``ColumnNotFoundError`` (a ``KeyError``) for a missing column, and
+    ``ValueError`` for the data errors above.
+    """
+    frame = to_frame(data)
+    column = _column(frame, x, "x")
+    _check_measurement(column, x, "x", "histostats")
+    missing = _missing(column)
+    rows = np.nonzero(~missing)[0]
+    values = _measurement(column, x, "x", rows)
+    n_dropped = int(missing.sum())
+    if values.size < min_values:
+        found = f"found {values.size}" if values.size else "found none"
+        dropped = (
+            f" after dropping {n_dropped} {'row' if n_dropped == 1 else 'rows'} "
+            "with a missing value"
+            if n_dropped
+            else ""
+        )
+        raise ValueError(
+            f"histostats needs at least {min_values} values of x={x!r} to test "
+            f"against test_value; {found}{dropped} (data has {len(missing)} "
+            f"{'row' if len(missing) == 1 else 'rows'})."
+        )
+    return OneData(x=x, values=values, n_dropped=n_dropped)
+
+
+def _label_text(value: object) -> str:
+    """A label value as text: "" for a missing one; text as given; whole numbers
+    without ".0" and other numbers with 15 significant digits (R's labels);
+    anything else (booleans, dates) as Python prints it."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return str(value)
+    try:
+        if bool(value != value):  # NaN, NaT, pandas NA
+            return ""
+    except (TypeError, ValueError):  # pandas NA's comparison is NA
+        return ""
+    if isinstance(value, bool | np.bool_):
+        return "True" if value else "False"
+    if isinstance(value, numbers.Integral):
+        return str(int(value))
+    if isinstance(value, float | np.floating):
+        return level_label(float(cast("float | np.floating[Any]", value)))
+    return str(value)
+
+
+def _point_labels(series: nw.Series[Any], rows: IntArray) -> tuple[str, ...]:
+    """The label of each of ``rows``; "" where the label is missing."""
+    raw: list[object] = series.to_list()
+    return tuple(_label_text(raw[i]) for i in rows.tolist())
+
+
+def read_pair(
+    data: object,
+    x: str,
+    y: str,
+    *,
+    label_var: str | None = None,
+    min_pairs: int = 3,
+) -> PairData:
+    """Read two numeric columns for ``scatterstats``: the complete pairs in row
+    order.
+
+    Rules (SPEC.md section 3): ``x`` and ``y`` are different numeric columns,
+    each checked as ``read_one`` checks its column; a row is analyzed when both
+    are present (``n_dropped`` counts the others, each once); ``label_var`` is any
+    column, never read as numbers, whose values label the analyzed points as text
+    ("" where missing or empty: no label); a missing label does not drop the row.
+    Fewer than ``min_pairs`` complete pairs raise: a correlation's test needs at
+    least three.
+
+    Raises ``TypeError`` for unsupported data or column types,
+    ``ColumnNotFoundError`` (a ``KeyError``) for a missing column, and
+    ``ValueError`` for the data errors above or ``x`` and ``y`` naming one column.
+    """
+    frame = to_frame(data)
+    x_col = _column(frame, x, "x")
+    y_col = _column(frame, y, "y")
+    label_col = None if label_var is None else _column(frame, label_var, "label_var")
+    if x == y:
+        raise ValueError(
+            f"x and y must be different columns; both are {x!r}. A column's "
+            "correlation with itself is 1 by construction."
+        )
+    _check_measurement(x_col, x, "x", "scatterstats", (y, y_col))
+    _check_measurement(y_col, y, "y", "scatterstats", (x, x_col))
+    missing_x = _missing(x_col)
+    missing_y = _missing(y_col)
+    keep = ~(missing_x | missing_y)
+    rows = np.nonzero(keep)[0]
+    x_values = _measurement(x_col, x, "x", rows)
+    y_values = _measurement(y_col, y, "y", rows)
+    n_dropped = int(len(keep) - rows.size)
+    if rows.size < min_pairs:
+        found = f"found {rows.size}" if rows.size else "found none"
+        dropped = (
+            f" after dropping {n_dropped} {'row' if n_dropped == 1 else 'rows'} "
+            "with a missing value"
+            if n_dropped
+            else ""
+        )
+        raise ValueError(
+            f"scatterstats needs at least {min_pairs} complete pairs (rows with both "
+            f"x={x!r} and y={y!r} present) to test a correlation; {found}{dropped} "
+            f"(data has {len(keep)} {'row' if len(keep) == 1 else 'rows'})."
+        )
+    labels = () if label_col is None else _point_labels(label_col, rows)
+    return PairData(
+        x=x,
+        y=y,
+        x_values=x_values,
+        y_values=y_values,
+        n_dropped=n_dropped,
+        n_missing_x=int(missing_x.sum()),
+        n_missing_y=int(missing_y.sum()),
+        label_var=label_var,
+        labels=labels,
+    )
+
+
 # --- notes for the result's warnings ----------------------------------------------
 
 # How many levels a note names before it shortens the list.
@@ -1394,11 +1712,16 @@ def _listed(levels: Sequence[str]) -> str:
     return f"{shown}, ... ({len(levels)} levels)"
 
 
-def data_notes(data: BetweenData | WithinData) -> list[str]:
-    """Plain-English notes on how the levels of ``x`` were read, for the result's
+def data_notes(data: BetweenData | WithinData | OneData | PairData) -> list[str]:
+    """Plain-English notes on how the data were read, for the result's
     ``warnings``: an unordered dictionary whose order was not used, levels left out
     because every row of them misses a value, and levels that differ only in
-    surrounding whitespace. They name levels of ``x``, never subjects (D36)."""
+    surrounding whitespace. They name levels of ``x``, never subjects (D36).
+    Column names with control characters get a note in every design; the
+    designs without levels (``OneData``, ``PairData``) get only that note and one
+    on the rows left out for a missing value, which never names a row's values."""
+    if isinstance(data, OneData | PairData):
+        return _measurement_notes(data)
     notes: list[str] = []
     x = data.x
     if data.dictionary_order:
@@ -1447,6 +1770,37 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             "look alike. If they are the same group, remove the spaces first, for "
             "example with .str.strip() in pandas or .str.strip_chars() in polars."
         )
+    return notes
+
+
+def _measurement_notes(data: OneData | PairData) -> list[str]:
+    """``data_notes`` for one column (histostats) or a pair of columns
+    (scatterstats): the rows left out and control characters in column names."""
+    notes: list[str] = []
+    dropped = data.n_dropped
+    if dropped:
+        rows = f"{dropped:,} {'row was' if dropped == 1 else 'rows were'}"
+        if isinstance(data, OneData):
+            notes.append(
+                f"{rows} left out because {data.x!r} is missing; "
+                f"{data.n_obs:,} values remain."
+            )
+        else:
+            notes.append(
+                f"{rows} left out because {data.x!r} or {data.y!r} is missing "
+                f"({data.n_missing_x:,} without {data.x!r}, {data.n_missing_y:,} "
+                f"without {data.y!r}); {data.n_obs:,} complete pairs remain."
+            )
+    names = [("x", data.x)]
+    if isinstance(data, PairData):
+        names.append(("y", data.y))
+    for arg, name in names:
+        drawn = _control_characters(name)
+        if drawn is not None:
+            notes.append(
+                f"The column name {arg}={name!r} holds control characters {drawn} "
+                "in the axis label; the result keeps the name as given."
+            )
     return notes
 
 

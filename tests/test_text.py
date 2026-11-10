@@ -746,6 +746,7 @@ def test_alt_text_on_every_parametric_fixture() -> None:
         alt = result.text.alt_text
         assert len(alt) <= 400, case.name
         assert 2 <= _sentences(alt) <= 4, (case.name, alt)
+        assert result.y is not None
         assert result.y in alt
         assert result.x in alt
         # Only what the figure shows (U12): the test when the subtitle is drawn,

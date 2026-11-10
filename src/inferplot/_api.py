@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from inferplot.render import StatsFigure
 
-__all__ = ["betweenstats", "withinstats"]
+__all__ = ["betweenstats", "histostats", "scatterstats", "withinstats"]
 
 
 @checked
@@ -223,5 +223,179 @@ def withinstats(
         point_args=point_args,
         boxplot_args=boxplot_args,
         violin_args=violin_args,
+        ax=ax,
+    )
+
+
+@checked
+def histostats(
+    data: object,
+    x: str,
+    *,
+    type: str = "parametric",
+    test_value: float = 0.0,
+    conf_level: float = 0.95,
+    digits: int = 2,
+    tr: float = 0.2,
+    bf_prior: float = 0.707,
+    bf_message: bool | None = None,
+    results_subtitle: bool = True,
+    alternative: str = "two-sided",
+    seed: int = 0,
+    binwidth: float | None = None,
+    centrality_plotting: bool = True,
+    xlab: str | None = None,
+    ylab: str | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    caption: str | None = None,
+    palette: str | Sequence[object] | None = None,
+    bar_args: Mapping[str, object] | None = None,
+    ax: Axes | None = None,
+) -> StatsFigure:
+    """Test whether one numeric column differs from ``test_value``, and draw its
+    histogram with the result.
+
+    The Python counterpart of ggstatsplot's ``gghistostats()``. The analysis
+    arguments are those of :func:`inferplot.analyze.histostats`; the drawing
+    arguments those of :func:`inferplot.render.histostats`. The drawing arguments
+    are checked first, then the analysis runs, then the figure is drawn.
+
+    Returns:
+        A ``StatsFigure``, as :func:`betweenstats` returns.
+
+    Raises:
+        NotImplementedError: the statistics and the drawing of histostats are not
+            in this version yet.
+    """
+    from inferplot import render  # imports matplotlib
+    from inferplot.render.histostats import check_drawing
+
+    check_drawing(
+        binwidth=binwidth,
+        centrality_plotting=centrality_plotting,
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        bar_args=bar_args,
+    )
+    result = analyze.histostats(
+        data,
+        x,
+        type=type,
+        test_value=test_value,
+        conf_level=conf_level,
+        digits=digits,
+        tr=tr,
+        bf_prior=bf_prior,
+        bf_message=bf_message,
+        results_subtitle=results_subtitle,
+        alternative=alternative,
+        seed=seed,
+    )
+    return render.histostats(
+        result,
+        binwidth=binwidth,
+        centrality_plotting=centrality_plotting,
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        palette=palette,
+        bar_args=bar_args,
+        ax=ax,
+    )
+
+
+@checked
+def scatterstats(
+    data: object,
+    x: str,
+    y: str,
+    *,
+    type: str = "parametric",
+    conf_level: float = 0.95,
+    digits: int = 2,
+    tr: float = 0.2,
+    bf_prior: float = 0.707,
+    bf_message: bool | None = None,
+    results_subtitle: bool = True,
+    label_var: str | None = None,
+    seed: int = 0,
+    marginal: bool = True,
+    smooth: bool = True,
+    xlab: str | None = None,
+    ylab: str | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    caption: str | None = None,
+    palette: str | Sequence[object] | None = None,
+    point_args: Mapping[str, object] | None = None,
+    smooth_args: Mapping[str, object] | None = None,
+    marginal_args: Mapping[str, object] | None = None,
+    ax: Axes | None = None,
+) -> StatsFigure:
+    """Test the correlation of two numeric columns, and draw them as a scatter
+    plot with the result.
+
+    The Python counterpart of ggstatsplot's ``ggscatterstats()``. The analysis
+    arguments are those of :func:`inferplot.analyze.scatterstats`; the drawing
+    arguments those of :func:`inferplot.render.scatterstats`. The drawing
+    arguments are checked first, then the analysis runs, then the figure is
+    drawn. Correlations are always tested two-sided.
+
+    Returns:
+        A ``StatsFigure``, as :func:`betweenstats` returns.
+
+    Raises:
+        NotImplementedError: the statistics and the drawing of scatterstats are
+            not in this version yet.
+    """
+    from inferplot import render  # imports matplotlib
+    from inferplot.render.scatterstats import check_drawing
+
+    check_drawing(
+        marginal=marginal,
+        smooth=smooth,
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        point_args=point_args,
+        smooth_args=smooth_args,
+        marginal_args=marginal_args,
+        ax=ax,
+    )
+    result = analyze.scatterstats(
+        data,
+        x,
+        y,
+        type=type,
+        conf_level=conf_level,
+        digits=digits,
+        tr=tr,
+        bf_prior=bf_prior,
+        bf_message=bf_message,
+        results_subtitle=results_subtitle,
+        label_var=label_var,
+        seed=seed,
+    )
+    return render.scatterstats(
+        result,
+        marginal=marginal,
+        smooth=smooth,
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        palette=palette,
+        point_args=point_args,
+        smooth_args=smooth_args,
+        marginal_args=marginal_args,
         ax=ax,
     )

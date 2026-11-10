@@ -2,7 +2,14 @@
 
 import pytest
 
-from tests.oracle_args import FUNCTIONS, KEYWORDS, POSITIONAL, translate
+from tests.oracle_args import (
+    FUNCTIONS,
+    KEYWORDS,
+    POSITIONAL,
+    apply_label_filter,
+    split,
+    translate,
+)
 
 
 def test_translate_betweenstats() -> None:
@@ -69,3 +76,51 @@ def test_keywords_are_r_names_with_dots_as_underscores() -> None:
 
 def test_every_function_has_positional_columns() -> None:
     assert set(POSITIONAL) == set(FUNCTIONS)
+
+
+def test_split_separates_analysis_and_drawing() -> None:
+    call = split(
+        "gghistostats",
+        {"x": "len", "type": "parametric", "test.value": 18, "binwidth": 2},
+    )
+    assert (call.function, call.args) == ("histostats", ("len",))
+    assert call.analysis == {"type": "parametric", "test_value": 18}
+    assert call.drawing == {"binwidth": 2}
+    call = split(
+        "ggscatterstats",
+        {"x": "wt", "y": "mpg", "type": "p", "marginal": False, "conf.level": 0.9},
+    )
+    assert call.analysis == {"type": "p", "conf_level": 0.9}
+    assert call.drawing == {"marginal": False}
+    call = split("ggwithinstats", {"x": "a", "y": "b", "point.path": False})
+    assert call.drawing == {"point_path": False}
+
+
+def test_split_handles_the_arguments_without_a_keyword() -> None:
+    import pandas as pd
+
+    call = split(
+        "ggscatterstats",
+        {
+            "x": "wt",
+            "y": "mpg",
+            "label.var": "model",
+            "label.expression": "mpg > 25 | wt > 5",
+            "smooth.line.args": {"method": "loess", "formula": "y ~ x"},
+        },
+    )
+    assert call.analysis == {"label_var": "model"}
+    assert call.label_filter == "mpg > 25 | wt > 5"
+    assert call.unsupported == {
+        "smooth.line.args": {"method": "loess", "formula": "y ~ x"}
+    }
+    frame = pd.DataFrame(
+        {"model": ["a", "b", "c"], "mpg": [30.0, 20.0, 10.0], "wt": [2.0, 3.0, 6.0]}
+    )
+    labelled = apply_label_filter(frame, "model", call.label_filter)
+    assert labelled["model"].tolist()[0] == "a"
+    assert pd.isna(labelled["model"][1])
+    assert labelled["model"].tolist()[2] == "c"
+    # translate() itself still refuses them, so a call cannot drop them silently.
+    with pytest.raises(KeyError, match=r"label\.expression"):
+        translate("ggscatterstats", {"x": "a", "y": "b", "label.expression": "a"})
