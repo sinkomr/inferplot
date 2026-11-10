@@ -84,7 +84,9 @@ def test_nonparametric_one_sided(teeth: pd.DataFrame) -> None:
     assert result.test.alternative == "greater"
     assert result.effect_size.sidedness == "greater"
     assert result.effect_size.conf_high == 1.0
-    assert result.text.apa.startswith("Mann-Whitney U test (one-sided, greater): ")
+    assert result.text.apa.startswith(
+        "Mann-Whitney U test (one-sided: OJ greater than VC): "
+    )
 
 
 def test_nonparametric_three_groups(plants: pd.DataFrame) -> None:
@@ -173,6 +175,30 @@ def test_heavy_ties_check() -> None:
     assert "heavy_ties" not in _codes(betweenstats(tied, "g", "y"))
     distinct = frame({"a": [1.0, 2, 3, 4, 5], "b": [6.0, 7, 8, 9, 9]})
     assert "heavy_ties" not in _codes(betweenstats(distinct, "g", "y", type="np"))
+
+
+def test_undefined_resamples_are_in_the_result() -> None:
+    # Three groups of three on two values: some resamples tie every value, where
+    # rank epsilon squared is undefined; they are left out of the interval (D54).
+    data = frame({"a": [1.0, 1, 2], "b": [1.0, 2, 2], "c": [1.0, 1, 2]})
+    result = betweenstats(data, "g", "y", type="np")
+    es = result.effect_size
+    assert es.bootstrap_resamples == stats.BOOTSTRAP_RESAMPLES
+    assert es.undefined_resamples is not None
+    assert 0 < es.undefined_resamples < es.bootstrap_resamples
+    used = es.bootstrap_resamples - es.undefined_resamples
+    (note,) = [w for w in result.warnings if "resamples" in w]
+    assert f"{es.undefined_resamples:,} of {es.bootstrap_resamples:,}" in note
+    assert f"{used:,}" in note
+    assert StatsResult.from_json(result.to_json()).effect_size == es
+    # Every bootstrap interval records the count; analytic ones do not.
+    a = [1.3, 2.1, 3.7, 4.2, 5.9, 6.4, 2.8]
+    plain = frame({"a": a, "b": [2.2, 4.8, 6.1, 8.5, 10.3, 11.1, 7.7]})
+    counts = {
+        kind: betweenstats(plain, "g", "y", type=kind).effect_size.undefined_resamples
+        for kind in ("r", "np", "p")
+    }
+    assert counts == {"r": 0, "np": None, "p": None}
 
 
 def test_nonparametric_row_order_and_relabelling(plants: pd.DataFrame) -> None:
@@ -734,7 +760,8 @@ def test_bayes_alt_text_without_brackets(plants: pd.DataFrame) -> None:
     assert hidden.text.alt_text.endswith(
         "; no brackets are drawn (pairwise_display='none')."
     )
-    assert "pairs_hidden" in _codes(hidden)
+    # pairwise_display="none" was asked for: nothing to report (U11).
+    assert "pairs_hidden" not in _codes(hidden)
 
 
 def test_bayes_alt_text_shortens_long_levels() -> None:
@@ -869,3 +896,56 @@ def test_robust_infinite_xi_estimate() -> None:
     )
     (issue,) = [i for i in result.check() if i.code == "infinite_effect_size"]
     assert issue.message.startswith("The explanatory effect size xi is infinite.")
+
+
+# --------------------------------------------------------------------------- #
+# an estimate outside its own bootstrap interval (U6)
+# --------------------------------------------------------------------------- #
+
+
+def _noise_groups() -> pd.DataFrame:
+    names = [f"grp{i:02d}" for i in range(12)]
+    y = np.random.default_rng(2).normal(size=72)
+    return pd.DataFrame({"g": np.repeat(names, 6), "y": y})
+
+
+@pytest.mark.parametrize(
+    ("kind", "words"),
+    [
+        (
+            "np",
+            "The rank epsilon squared, 0.074, lies outside its own 95% CI "
+            "[0.107, 1.000].",
+        ),
+        (
+            "r",
+            # Bounds of the stream since xi resamples its groups in content order
+            # (S5); they were [0.345, 0.786] when the groups drew in level order.
+            "The explanatory effect size xi, 0.325, lies outside its own 95% CI "
+            "[0.337, 0.779].",
+        ),
+    ],
+)
+def test_estimate_outside_its_interval(kind: str, words: str) -> None:
+    # Twelve groups of six values of pure noise: the effect is small next to the
+    # bootstrap's own bias, and the percentile interval misses the estimate.
+    result = betweenstats(_noise_groups(), "g", "y", type=kind)
+    es = result.effect_size
+    assert not es.conf_low <= es.estimate <= es.conf_high
+    (issue,) = [i for i in result.check() if i.code == "estimate_outside_interval"]
+    assert issue.severity == "warning"
+    assert issue.message.startswith(words)
+    assert "percentile bootstrap" in issue.message
+    assert "small next to the bootstrap's own bias" in issue.message
+    assert "rough range" in issue.fix
+    assert "p-value" in issue.fix
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.check() == result.check()
+
+
+def test_estimate_inside_its_interval(plants: pd.DataFrame) -> None:
+    for kind in ("p", "np", "r"):
+        result = betweenstats(plants, "group", "weight", type=kind)
+        es = result.effect_size
+        assert es.conf_low <= es.estimate <= es.conf_high
+        assert "estimate_outside_interval" not in _codes(result)

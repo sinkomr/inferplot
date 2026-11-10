@@ -4,25 +4,31 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.metadata
+import inspect
 import json
 import math
 import re
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import pytest
 
+import inferplot as ip
 from inferplot import text as tx
 from inferplot.check import SMALL_N, Issue, result_issues
 from inferplot.result import (
     PARITY_TARGET,
+    SCHEMA_VERSION,
     Descriptive,
+    EffectSize,
     PairwiseComparison,
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
-from tests.oracle_fixtures import OracleCase, load_cases
+from tests.oracle_fixtures import DATASET_DIR, OracleCase, load_cases
 from tests.test_text_expressions import result_from_fixture
 
 
@@ -259,6 +265,75 @@ def test_from_dict_rejects_bad_input(anova: StatsResult) -> None:
         StatsResult.from_dict(data)
 
 
+def test_schema_version_is_the_first_key(anova: StatsResult) -> None:
+    assert SCHEMA_VERSION == 2
+    for text in (anova.to_json(), anova.to_json(indent=None, include_values=False)):
+        data = _strict_loads(text)
+        assert next(iter(data)) == "schema_version"
+        assert data["schema_version"] == 2
+    assert next(iter(anova.to_dict())) == "schema_version"
+    assert anova.to_dict()["schema_version"] == 2
+    # Not a field of the result: it describes the JSON, not the analysis.
+    assert "schema_version" not in {f.name for f in dataclasses.fields(anova)}
+
+
+def test_from_json_refuses_another_schema_version(anova: StatsResult) -> None:
+    rerun = "compute the result again with this version of inferplot"
+    # A result written before the version existed (schema version 1).
+    data = anova.to_dict()
+    del data["schema_version"]
+    with pytest.raises(ValueError, match="no schema_version") as info:
+        StatsResult.from_dict(data)
+    assert type(info.value) is ValueError
+    message = str(info.value)
+    assert "schema version 1" in message
+    assert "schema version 2 only" in message
+    assert rerun in message
+    # JSON from a newer (or older, versioned) inferplot.
+    for other in (1, 3, "2", 2.0, None):
+        data = json.loads(anova.to_json())
+        data["schema_version"] = other
+        with pytest.raises(ValueError, match="has schema_version") as info:
+            StatsResult.from_json(json.dumps(data))
+        assert type(info.value) is ValueError
+        assert f"schema_version {other!r}" in str(info.value)
+        assert "schema version 2 only" in str(info.value)
+        assert rerun in str(info.value)
+
+
+def test_effect_size_resample_counts_go_together() -> None:
+    base = {
+        "name": "rank_epsilon_squared",
+        "label": "rank epsilon squared",
+        "estimate": 0.2,
+        "conf_level": 0.95,
+        "conf_low": 0.1,
+        "conf_high": 1.0,
+        "ci_method": "percentile bootstrap",
+        "sidedness": "greater",
+    }
+    full = EffectSize(
+        **base,
+        bootstrap_resamples=2000,
+        bootstrap_seed=0,
+        undefined_resamples=13,
+        infinite_resamples=0,
+    )
+    assert full.undefined_resamples == 13
+    assert EffectSize(**base).undefined_resamples is None
+    with pytest.raises(ValueError, match="must record undefined_resamples"):
+        EffectSize(**base, bootstrap_resamples=2000, bootstrap_seed=0)
+    with pytest.raises(ValueError, match="give bootstrap_resamples too"):
+        EffectSize(**base, undefined_resamples=0)
+    # JSON key order follows SPEC section 6.
+    keys = _field_names(full)
+    assert keys.index("undefined_resamples") == keys.index("infinite_resamples") - 1
+
+
+def _field_names(value: object) -> list[str]:
+    return [f.name for f in dataclasses.fields(value)]  # type: ignore[arg-type]
+
+
 def test_json_holds_every_text(anova: StatsResult) -> None:
     data = _strict_loads(anova.to_json())
     assert data["text"]["apa"] == anova.text.apa
@@ -314,6 +389,32 @@ def test_to_frame_backends_agree(one_sided: StatsResult) -> None:
     assert pd_frame["bf10"].iloc[0] == pl_frame["bf10"][0] == one_sided.bayes.bf10  # type: ignore[union-attr]
 
 
+def test_to_frame_says_which_intervals_are_one_sided(
+    anova: StatsResult, one_sided: StatsResult
+) -> None:
+    # Welch's ANOVA is a two-sided test whose omega squared interval is [low, 1].
+    frame = anova.to_frame()
+    assert list(frame.columns).index("ci_sidedness") == (
+        list(frame.columns).index("conf_high") + 1
+    )
+    assert frame["alternative"].iloc[0] == "two-sided"
+    assert frame["ci_sidedness"].iloc[0] == "greater"
+    assert frame["conf_high"].iloc[0] == 1.0
+    # Games-Howell pairs have no interval.
+    assert frame["ci_sidedness"].iloc[1:].isna().all()
+    assert one_sided.to_frame("polars")["ci_sidedness"].to_list() == ["greater"]
+    two_sided = result_from_fixture(_case("ToothGrowth-parametric"))
+    assert two_sided.to_frame()["ci_sidedness"].to_list() == ["two-sided"]
+
+
+def test_tied_count() -> None:
+    assert tied_count(()) == 0
+    assert tied_count(((1.0, 2.0), (3.0,))) == 0
+    # Values beyond the first of each distinct value, every level pooled.
+    assert tied_count(((1.0, 1.0, 2.0), (2.0, 2.0, 3.0))) == 3
+    assert tied_count(((0.0,), (-0.0,))) == 1
+
+
 def test_to_frame_rejects_unknown_backend(anova: StatsResult) -> None:
     with pytest.raises(ValueError, match="backend"):
         anova.to_frame("pyarrow")  # type: ignore[arg-type]
@@ -364,6 +465,129 @@ def test_check_pairs_hidden(anova: StatsResult) -> None:
     assert "pairwise_display='all'" in issues[0].fix
     shown = tuple(dataclasses.replace(p, displayed=True) for p in anova.pairwise)
     assert dataclasses.replace(anova, pairwise=shown).check() == ()
+
+
+def test_check_pairs_hidden_not_for_an_explicit_none(anova: StatsResult) -> None:
+    # pairwise_display="none" is never a default (the default is "significant"),
+    # so the setting itself says the caller asked for no brackets (U11).
+    settings = dataclasses.replace(anova.settings, pairwise_display="none")
+    asked = dataclasses.replace(anova, settings=settings)
+    assert all(not p.displayed for p in asked.pairwise)
+    assert asked.check() == ()
+    assert StatsResult.from_json(asked.to_json(include_values=False)).check() == ()
+
+
+def _check_cases() -> list[Any]:
+    rng = np.random.default_rng(11)
+    likert = pd.DataFrame(
+        {"g": np.repeat(["a", "b", "c"], 30), "y": rng.integers(1, 6, 90) * 1.0}
+    )
+    sparse = pd.DataFrame(
+        {"g": np.repeat(["a", "b"], 4), "y": [1.0, 2, 2, np.nan, 3, 3, 3, 4]}
+    )
+    plants = pd.read_csv(DATASET_DIR / "PlantGrowth.csv")
+    bugs = pd.read_csv(DATASET_DIR / "bugs_long.csv")
+    between = ip.analyze.betweenstats
+    within = ip.analyze.withinstats
+    return [
+        pytest.param(lambda: between(likert, "g", "y", type="np"), id="likert-np"),
+        pytest.param(
+            lambda: between(likert[likert.g != "c"], "g", "y", type="np"),
+            id="likert2-np",
+        ),
+        pytest.param(lambda: between(likert, "g", "y", type="r"), id="likert-robust"),
+        pytest.param(lambda: between(sparse, "g", "y", type="np"), id="small-ties-np"),
+        pytest.param(lambda: between(plants, "group", "weight"), id="plants"),
+        pytest.param(
+            lambda: between(plants, "group", "weight", pairwise_display="none"),
+            id="plants-none",
+        ),
+        pytest.param(
+            lambda: within(bugs, "condition", "desire", subject_id="subject"),
+            id="bugs-within",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("make", _check_cases())
+def test_check_is_the_same_without_values(make: Any) -> None:
+    """The copy save() embeds (no observations) reports the same issues (U11)."""
+    result: StatsResult = make()
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.values == ()
+    assert embedded.check() == result.check()
+
+
+def test_heavy_ties_reads_the_stored_count() -> None:
+    likert = pd.DataFrame(
+        {"g": np.repeat(["a", "b"], 30), "y": np.tile([1.0, 2, 3, 4, 5], 12)}
+    )
+    result = ip.analyze.betweenstats(likert, "g", "y", type="np")
+    assert result.n_tied == 60 - 5 == tied_count(result.values)
+    (issue,) = [i for i in result.check() if i.code == "heavy_ties"]
+    assert "only 5 distinct values among 60, so 55 of them (92%) are ties" in (
+        issue.message
+    )
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.n_tied == 55
+    assert "heavy_ties" in _codes(embedded.check())
+    # The count, not the values, decides.
+    untied = dataclasses.replace(result, n_tied=0)
+    assert "heavy_ties" not in _codes(untied.check())
+
+
+def test_no_check_reads_the_observations() -> None:
+    import inferplot.check
+
+    source = inspect.getsource(inferplot.check)
+    assert "result.values" not in source
+    assert "result.subjects" not in source
+
+
+def test_sign_and_df_conventions_as_documented() -> None:
+    """U8: the conventions TestResult and PairwiseComparison document. Levels a <
+    b < c by construction, so a sign shows which difference is taken."""
+    rng = np.random.default_rng(1)
+    shift = np.repeat([0.0, 1.0, 2.0], 12)
+    three = pd.DataFrame(
+        {"g": np.repeat(["a", "b", "c"], 12), "y": rng.normal(size=36) + shift}
+    )
+    two = three[three.g != "b"]
+    between: Any = ip.analyze.betweenstats
+
+    welch = between(two, "g", "y")
+    assert welch.test.statistic < 0
+    assert welch.effect_size.estimate < 0
+    assert (welch.test.df, welch.test.df_error is not None) == (None, True)
+    mann = between(two, "g", "y", type="np")
+    assert mann.test.statistic >= 0
+    assert mann.effect_size.estimate < 0
+    assert (mann.test.df, mann.test.df_error) == (None, None)
+    yuen = between(two, "g", "y", type="r")
+    assert yuen.test.statistic > 0
+    assert yuen.effect_size.estimate < 0
+    assert yuen.test.df is None
+
+    anova = between(three, "g", "y")
+    assert (anova.test.df, anova.test.df_error is not None) == (2.0, True)
+    assert all(p.statistic > 0 for p in anova.pairwise)  # q: group2 - group1
+    kruskal = between(three, "g", "y", type="np")
+    assert (kruskal.test.df, kruskal.test.df_error) == (None, 2.0)
+    assert all(p.statistic >= 0 and p.df is None for p in kruskal.pairwise)
+    lincon = between(three, "g", "y", type="r")
+    assert all(p.statistic < 0 and (p.estimate or 0) < 0 for p in lincon.pairwise)
+    bayes = between(three, "g", "y", type="bayes", results_subtitle=False)
+    assert all(p.statistic < 0 and p.df == 22 for p in bayes.pairwise)
+
+    within: Any = ip.analyze.withinstats
+    paired = three.assign(s=np.tile(np.arange(12), 3))
+    t = within(paired[paired.g != "b"], "g", "y", subject_id="s")
+    assert t.test.statistic < 0
+    assert (t.test.df, t.test.df_error) == (None, 11.0)
+    rm = within(paired, "g", "y", subject_id="s")
+    assert rm.test.df is not None
+    assert rm.test.df_error is not None
+    assert all(p.statistic < 0 and p.df == 11 for p in rm.pairwise)
 
 
 def test_issue_is_frozen_and_prints() -> None:

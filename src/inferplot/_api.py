@@ -62,6 +62,13 @@ def betweenstats(
     :func:`inferplot.analyze.betweenstats`; the drawing arguments those of
     :func:`inferplot.render.betweenstats`.
 
+    ``alternative="greater"`` tests whether the first level of ``x`` is greater
+    than the second, and ``"less"`` whether it is less (two groups only). The first
+    level is the first in ``order`` when given, else the first declared category,
+    else the first in sorted order: pass ``order`` to fix the direction. The APA
+    sentence and the alt text name it ("Welch's t-test (one-sided: control greater
+    than treatment)"); the subtitle keeps ggstatsplot's text.
+
     ``title``, ``subtitle``, ``caption``, ``xlab`` and ``ylab`` are matplotlib
     text, which follows matplotlib's convention: text between two dollar signs is
     a mathtext expression (``r"Weight ($\\mu$g)"``). Write ``\\$`` for a literal
@@ -156,6 +163,13 @@ def withinstats(
     row order. The analysis arguments are those of
     :func:`inferplot.analyze.withinstats`; the drawing arguments those of
     :func:`inferplot.render.withinstats`.
+
+    ``alternative="greater"`` tests whether the first level of ``x`` is greater
+    than the second (the differences first minus second are positive), and
+    ``"less"`` whether it is less (two conditions only). The first level is the
+    first in ``order`` when given, else the first declared category, else the
+    first in sorted order: pass ``order`` to fix the direction. The APA sentence
+    and the alt text name it; the subtitle keeps ggstatsplot's text.
 
     Returns:
         A ``StatsFigure``, as :func:`betweenstats` returns.

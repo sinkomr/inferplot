@@ -55,6 +55,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from inferplot.text import build_texts, format_value, r_number_text
 
@@ -548,6 +549,7 @@ def _friedman_parts(data: WithinData, args: _Args) -> _NonparametricParts:
         sidedness=w.sidedness,
         bootstrap_resamples=w.resamples,
         bootstrap_seed=w.seed,
+        undefined_resamples=w.undefined_resamples,
         infinite_resamples=w.infinite_resamples,
     )
     pairwise = _durbin_conover_pairs(x, levels, columns, args)
@@ -755,6 +757,7 @@ def _robust(data: WithinData, args: _Args) -> _Parts:
         sidedness=akp.sidedness,
         bootstrap_resamples=akp.resamples,
         bootstrap_seed=akp.seed,
+        undefined_resamples=akp.undefined_resamples,
         infinite_resamples=akp.infinite_resamples,
     )
     warnings = _robust_resample_warnings(akp, effect_size, k=len(levels))
@@ -1177,6 +1180,7 @@ def _assemble(
         n_obs=n_subjects,
         settings=settings,
     )
+    observations = tuple(tuple(float(v) for v in col.tolist()) for col in columns)
     return StatsResult(
         analysis="withinstats",
         design="within",
@@ -1185,7 +1189,7 @@ def _assemble(
         y=data.y,
         subject_id=data.subject_id,
         levels=data.levels,
-        values=tuple(tuple(float(v) for v in col.tolist()) for col in columns),
+        values=observations,
         subjects=data.subjects,
         descriptives=descriptives,
         test=parts.test,
@@ -1195,6 +1199,8 @@ def _assemble(
         n_obs=n_subjects,
         n_dropped=data.n_dropped,
         dropped_subjects=len(data.dropped_subjects),
+        dropped_subject_rows=data.n_rows_of_dropped_subjects,
+        n_tied=tied_count(observations),
         warnings=(*_data_warnings(data), *parts.warnings),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
@@ -1327,7 +1333,15 @@ def withinstats(
         results_subtitle: whether the statistical results are reported as a
             subtitle.
         alternative: "two-sided", "less" or "greater"; one-sided only with two
-            conditions and type "parametric" or "nonparametric".
+            conditions and type "parametric" or "nonparametric" (the paired
+            t-test, the Wilcoxon signed-rank test). "greater" tests whether the
+            first level of x is greater than the second (the differences first
+            minus second are positive), and "less" whether it is less. The first
+            level is the first in ``order`` when given, else the first declared
+            category, else the first in sorted order: pass ``order`` to fix the
+            direction. The APA sentence and the alt text name it ("Paired t-test
+            (one-sided: pre less than post)"); a program reads it from
+            ``result.test.alternative`` and ``result.levels``.
         seed: random seed of the bootstrap intervals, recorded in the result.
         order: the level order, a permutation of the levels present.
 

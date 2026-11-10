@@ -8,7 +8,6 @@ problems were found.
 from __future__ import annotations
 
 import math
-from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
@@ -85,10 +84,13 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
         parts.append(f"{result.n_dropped} {rows} left out because {columns} is missing")
     if result.dropped_subjects > 0:
         one = result.dropped_subjects == 1
+        rows = result.dropped_subject_rows
+        their_rows = f" ({rows} {'row' if rows == 1 else 'rows'})" if rows else ""
         parts.append(
-            f"{result.dropped_subjects} {'subject was' if one else 'subjects were'} "
-            f"left out because {'it lacks' if one else 'they lack'} a value at some "
-            f"level of {result.x!r}"
+            f"{result.dropped_subjects} {'subject' if one else 'subjects'}"
+            f"{their_rows} {'was' if one else 'were'} left out because "
+            f"{'it lacks' if one else 'they lack'} a value at some level of "
+            f"{result.x!r}"
         )
     return Issue(
         code="rows_dropped",
@@ -100,11 +102,16 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
 
 
 def _pairs_hidden(result: StatsResult) -> Issue | None:
+    """Pairs computed but not drawn. Not for ``pairwise_display="none"``: that is
+    never a default (the default is "significant"), so the setting itself says the
+    caller asked for no brackets."""
+    display = result.settings.pairwise_display
+    if display == "none":
+        return None
     hidden = [pair for pair in result.pairwise if not pair.displayed]
     if not hidden:
         return None
     total = len(result.pairwise)
-    display = result.settings.pairwise_display
     verb = "is" if len(hidden) == 1 else "are"
     return Issue(
         code="pairs_hidden",
@@ -122,21 +129,25 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
     ``HEAVY_TIES`` of the values are ties: values beyond the first of each
     distinct value, n minus the number of distinct values (DECISIONS.md D47).
 
-    Read from ``result.values``; a result read back without its observations
-    (``to_json(include_values=False)``) cannot be checked for ties.
+    Read from ``result.n_tied``, stored at analysis time, so the copy without
+    observations (``to_json(include_values=False)``) gives the same answer. The
+    total is the sum of the levels' n (within designs: complete subjects times
+    levels). Every level's values are pooled, also in within designs, where the
+    signed-rank and Friedman tests rank differences or within-subject values
+    instead.
     """
-    if result.type != "nonparametric" or not result.values:
+    if result.type != "nonparametric":
         return None
-    counts = Counter(v for level in result.values for v in level)
-    total = sum(counts.values())
-    tied = total - len(counts)
+    total = sum(d.n for d in result.descriptives)
+    tied = result.n_tied
+    distinct = total - tied
     if total == 0 or tied / total <= HEAVY_TIES:
         return None
     return Issue(
         code="heavy_ties",
         severity="warning",
         message=(
-            f"{result.y!r} has only {len(counts)} distinct values among {total}, so "
+            f"{result.y!r} has only {distinct} distinct values among {total}, so "
             f"{tied} of them ({tied / total:.0%}) are ties. "
             "The rank tests correct for ties, but with this many their normal "
             "approximations are coarse and the ranks carry less information."
@@ -208,6 +219,58 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
     )
 
 
+def _estimate_outside_interval(result: StatsResult) -> Issue | None:
+    """An effect size outside its own CI. Percentile bootstrap intervals (rank
+    epsilon squared, the explanatory effect size xi) are read off the resampled
+    values, which a small effect's bootstrap bias can shift past the estimate
+    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]). Read
+    from stored fields only, so the copy without values reports it too."""
+    es = result.effect_size
+    if es is None:
+        return None
+    numbers = (es.estimate, es.conf_low, es.conf_high)
+    if any(math.isnan(x) for x in numbers):
+        return None
+    if es.conf_low <= es.estimate <= es.conf_high:
+        return None
+    level = _percent(es.conf_level)
+    head = (
+        f"The {es.label}, {_three(es.estimate)}, lies outside its own {level} CI "
+        f"[{_three(es.conf_low)}, {_three(es.conf_high)}]."
+    )
+    if es.bootstrap_resamples is not None:
+        shift = (
+            "resampling adds chance differences between the groups, so the "
+            "resampled effect sizes run larger than the estimate"
+            if es.estimate < es.conf_low
+            else "the resampled effect sizes run smaller than the estimate"
+        )
+        why = (
+            " The CI is a percentile bootstrap interval, read off the effect sizes "
+            "of resampled data. When the effect is small next to the bootstrap's "
+            f"own bias ({shift}), the whole interval can lie on one side of the "
+            "estimate."
+        )
+    else:
+        why = f" The CI ({es.ci_method}) should contain its estimate."
+    return Issue(
+        code="estimate_outside_interval",
+        severity="warning",
+        message=head + why,
+        fix=(
+            "Report the estimate, and the interval only as a rough range of "
+            "plausible values (say that it does not contain the estimate); the "
+            "test's p-value does not come from the bootstrap and is unaffected."
+        ),
+    )
+
+
+def _three(x: float) -> str:
+    if math.isinf(x):
+        return "Inf" if x > 0 else "-Inf"
+    return f"{x:.3f}"
+
+
 def _percent(level: float) -> str:
     return f"{100 * level:g}%"
 
@@ -220,11 +283,13 @@ def _bound(x: float) -> str:
 
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, heavy_ties,
-    infinite_effect_size, rows_dropped, pairs_hidden, pairwise_conf_level."""
+    infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
+    pairwise_conf_level."""
     found = (
         _small_n(result),
         _heavy_ties(result),
         _infinite_effect_size(result),
+        _estimate_outside_interval(result),
         _rows_dropped(result),
         _pairs_hidden(result),
         _pairwise_conf_level(result),

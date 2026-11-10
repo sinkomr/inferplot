@@ -562,9 +562,33 @@ def test_result_frames_and_check(four: pd.DataFrame) -> None:
     assert set(issues) == {"rows_dropped"}
     assert issues["rows_dropped"].message == (
         "5 rows were left out because 'condition', 'desire' or 'subject' is missing; "
-        "5 subjects were left out because they lack a value at some level of "
-        "'condition'."
+        "5 subjects (15 rows) were left out because they lack a value at some level "
+        "of 'condition'."
     )
+
+
+def test_every_input_row_is_accounted_for(four: pd.DataFrame) -> None:
+    # bugs_long: 5 rows miss a value and 5 subjects lack a level; the complete rows
+    # of those subjects are counted too, so the counts add up to the rows read.
+    result = analyze(four, "condition", "desire", subject_id="subject")
+    data = read_within(four, "condition", "desire", "subject")
+    assert result.dropped_subject_rows == data.n_rows_of_dropped_subjects > 0
+    analyzed = result.n_obs * len(result.levels)
+    assert analyzed == sum(len(level) for level in result.values)
+    assert len(four) == analyzed + result.n_dropped + result.dropped_subject_rows
+    embedded = StatsResult.from_json(result.to_json(include_values=False))
+    assert embedded.dropped_subject_rows == result.dropped_subject_rows
+    (issue,) = [i for i in result.check() if i.code == "rows_dropped"]
+    rows = result.dropped_subject_rows
+    assert f"5 subjects ({rows} rows) were left out" in issue.message
+    # A complete design drops nothing.
+    sleep = analyze(read_csv("sleep.csv"), "group", "extra", subject_id="ID")
+    assert (sleep.n_dropped, sleep.dropped_subjects, sleep.dropped_subject_rows) == (
+        0,
+        0,
+        0,
+    )
+    assert sleep.n_obs * 2 == len(read_csv("sleep.csv"))
 
 
 def test_small_n_names_subjects_once() -> None:

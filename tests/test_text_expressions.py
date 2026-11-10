@@ -37,6 +37,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from inferplot.stats import (
     games_howell,
@@ -600,7 +601,7 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
     case's dataset (``tests.stats.fixture_data.groups``), and no Bayes factor is
     computed. With ``pairwise.display`` "none" ggstatsplot computes no pairs, so they
     come from ``inferplot.stats.games_howell`` with the case's adjustment, every one
-    hidden (``displayed`` False; ``result.check()`` reports ``pairs_hidden``).
+    hidden (``displayed`` False; ``result.check()`` reports nothing for them, U11).
     ``displayed`` follows the case's ``pairwise.display`` and ``pairwise.alpha``;
     the tests compare it with the brackets ggstatsplot drew. ``n_dropped`` is the
     dataset's rows minus the analyzed ones.
@@ -672,6 +673,8 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
         n_obs=n_obs,
         n_dropped=int(case.raw["dataset"]["rows"]) - n_obs,
         dropped_subjects=0,
+        dropped_subject_rows=0,
+        n_tied=tied_count(data),
         warnings=(),
         provenance=current_provenance(seed=0, citations=("Welch 1947",)),
         settings=settings,
@@ -691,6 +694,9 @@ def expected_pairwise_line(case: OracleCase, n_pairs: int) -> str | None:
     if n_pairs == 0 or display == "none":
         return None
     adjusted = ADJUSTED[str(case.args.get("p.adjust.method", "holm"))]
+    # Every fixture uses ggstatsplot's pairwise.alpha 0.05, where the caption has
+    # no threshold note (U5; test_text covers the others).
+    assert float(case.args.get("pairwise.alpha", 0.05)) == 0.05, case.name
     if display == "all":
         return f"Pairwise: {adjusted}; showing all {n_pairs} pairs."
     drawn = len(comparisons(case))
@@ -771,6 +777,9 @@ def test_result_texts_equal_fixture(case: OracleCase) -> None:
 
     # result checks follow from the case
     codes = {issue.code for issue in result.check()}
-    assert ("pairs_hidden" in codes) == any(not p.displayed for p in result.pairwise)
+    # An explicit pairwise_display="none" hides every pair without a report.
+    hidden = any(not p.displayed for p in result.pairwise)
+    asked = result.settings.pairwise_display == "none"
+    assert ("pairs_hidden" in codes) == (hidden and not asked)
     assert ("small_n" in codes) == any(n < 5 for n in case.n_per_level.values())
     assert ("rows_dropped" in codes) == (result.n_dropped > 0)

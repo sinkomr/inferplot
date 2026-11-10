@@ -60,6 +60,8 @@ from inferplot.result import (
 
 __all__ = [
     "ALT_TEXT_MAX_CHARS",
+    "APA_NAME_LIMIT",
+    "DEFAULT_PAIRWISE_ALPHA",
     "DOUBLE_XMIN",
     "EFFECT_SIZE_SYMBOLS",
     "N_BIG_MARK",
@@ -988,21 +990,32 @@ _CENTRALITY_WORDS: Final[dict[str, str]] = {
 
 ALT_TEXT_MAX_CHARS: Final = 400
 
+# ggstatsplot's pairwise.alpha; the caption states any other threshold.
+DEFAULT_PAIRWISE_ALPHA: Final = 0.05
+
 
 def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
 def pairwise_caption_line(
-    pairwise: Sequence[PairwiseComparison], *, display: str, adjust_method: str
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    display: str,
+    adjust_method: str,
+    alpha: float,
 ) -> str | None:
     """The caption line naming the pairwise test, adjustment and drawn pairs.
 
     "Pairwise: Games-Howell, Holm adjusted; showing 1 of 3 pairs (significant
     only)." None when there are no pairs or ``display`` is "none". It also states how
-    many pairs were tested when only some are drawn (SPEC section 5 item 3). Bayes
-    factor pairs (type "bayes", every pair drawn): "Pairwise: Bayes factors
-    (Student's t, JZS prior 0.707), unadjusted; showing all 3 pairs." (D41).
+    many pairs were tested when only some are drawn (SPEC section 5 item 3). When
+    ``alpha`` (``pairwise_alpha``) is not 0.05 and the pairs drawn depend on it, the
+    note states the threshold: "(significant only, adjusted p < 0.1)", "(non-
+    significant only, adjusted p >= 0.1)", "p" alone when the p-values are not
+    adjusted. Bayes factor pairs (type "bayes", every pair drawn): "Pairwise: Bayes
+    factors (Student's t, JZS prior 0.707), unadjusted; showing all 3 pairs."
+    (D41).
     """
     if not pairwise or display == "none":
         return None
@@ -1028,6 +1041,10 @@ def pairwise_caption_line(
         note = _DISPLAY_NOTES[display]
     except KeyError:
         raise ValueError(f"unknown pairwise_display {display!r}") from None
+    if alpha != DEFAULT_PAIRWISE_ALPHA:
+        p = "p" if adjust_method == "none" else "adjusted p"
+        relation = "<" if display == "significant" else ">="
+        note = f"{note}, {p} {relation} {r_number_text(alpha)}"
     drawn = sum(1 for pair in pairwise if pair.displayed)
     return f"Pairwise: {method}; showing {drawn} of {_plural(total, 'pair')} ({note})."
 
@@ -1088,23 +1105,60 @@ def _apa_effect_size(effect_size: EffectSize) -> str:
     return f"{effect_size.label} = {estimate}, {level} CI [{low}, {high}]"
 
 
-def _test_heading(test: TestResult) -> str:
+# The longest level name the APA sentence prints whole; alt_text() shortens further.
+APA_NAME_LIMIT: Final = 40
+
+
+def _direction(alternative: str, levels: Sequence[str], limit: int) -> str:
+    """A one-sided hypothesis in words: "OJ greater than VC". ``alternative``
+    "greater" tests whether the first level is greater than the second, "less"
+    whether it is less (the definition of the argument messages, D59)."""
+    if len(levels) != 2:
+        raise ValueError(
+            f"a one-sided test ({alternative!r}) compares two levels; got "
+            f"{len(levels)} level names, so its direction cannot be named"
+        )
+    first, second = (_short(level, limit) for level in levels)
+    if alternative == "greater":
+        return f"{first} greater than {second}"
+    if alternative == "less":
+        return f"{first} less than {second}"
+    raise ValueError(f"unknown alternative {alternative!r}")
+
+
+def _test_heading(test: TestResult, levels: Sequence[str], limit: int) -> str:
+    """The test's name, followed for a one-sided test by its direction with the
+    level names: "Welch's t-test (one-sided: OJ greater than VC)"."""
     if test.alternative == "two-sided":
         return test.label
-    return f"{test.label} (one-sided, {test.alternative})"
+    return f"{test.label} (one-sided: {_direction(test.alternative, levels, limit)})"
 
 
-def apa_sentence(test: TestResult, effect_size: EffectSize, *, n_obs: int) -> str:
-    """The APA 7 results sentence (SPEC section 7), ASCII only.
+def apa_sentence(
+    test: TestResult,
+    effect_size: EffectSize,
+    *,
+    n_obs: int,
+    levels: Sequence[str] = (),
+    name_limit: int = APA_NAME_LIMIT,
+) -> str:
+    """The APA 7 results sentence (SPEC section 7).
 
     "Welch's t-test: t(55.31) = 1.92, p = .061, Hedges' g = 0.49, 95% CI [-0.02,
     0.99], n = 60." Statistics and estimates to two decimals; p to three decimals
     without a leading zero ("p < .001" below .001); no leading zero for quantities
-    bounded by 1; non-integer df to two decimals, integer df bare; one-sided tests say
-    so after the test name.
+    bounded by 1; non-integer df to two decimals, integer df bare. A one-sided test
+    names its direction after the test name with the two ``levels`` (the analyzed
+    order: "greater" tests whether the first is greater than the second), each
+    shortened to ``name_limit`` characters with an ellipsis: "Welch's t-test
+    (one-sided: OJ greater than VC): ..."; ``levels`` is required then. The
+    sentence is ASCII except for the level names of a one-sided test, which are
+    the user's data and printed as they are, and the ellipsis (U+2026) that
+    shortens a long one.
     """
+    heading = _test_heading(test, levels, name_limit)
     return (
-        f"{_test_heading(test)}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, "
+        f"{heading}: {_apa_test(test)}, {_apa_effect_size(effect_size)}, "
         f"n = {format_n(n_obs)}."
     )
 
@@ -1120,7 +1174,8 @@ def _prior_text(bayes: BayesFactor) -> str:
 
 
 def bayes_sentence(bayes: BayesFactor, *, n_obs: int) -> str:
-    """The results sentence of a two-group Bayes factor (type "bayes"), ASCII.
+    """The results sentence of a two-group Bayes factor (type "bayes"), ASCII
+    (it names no level).
 
     "Bayesian t-test (JZS prior, r = 0.707): BF10 = 1.20, log(BF01) = -0.18,
     n = 60." BF10 to two decimals (scientific from 1e5 and below 0.01, as
@@ -1136,7 +1191,8 @@ def pairwise_bayes_sentence(
     pairwise: Sequence[PairwiseComparison], *, n_obs: int
 ) -> str:
     """The results sentence of type "bayes" with three or more groups, which has no
-    omnibus test in v0.1 (D41): each pair's Bayes factor, ASCII.
+    omnibus test in v0.1 (D41): each pair's Bayes factor. The level names are
+    printed as they are, so the sentence is ASCII only when they are.
 
     "Bayesian t-tests of each pair (JZS prior, r = 0.707): ctrl vs trt1, BF10 =
     0.65; ctrl vs trt2, BF10 = 1.77; trt1 vs trt2, BF10 = 6.36; n = 30."
@@ -1161,12 +1217,17 @@ def results_sentence(
     pairwise: Sequence[PairwiseComparison],
     *,
     n_obs: int,
+    levels: Sequence[str] = (),
+    name_limit: int = APA_NAME_LIMIT,
 ) -> str:
     """The result's APA-style sentence: :func:`apa_sentence` for a frequentist
-    test, :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type
-    "bayes", or a note that nothing was tested."""
+    test (``levels`` and ``name_limit`` name a one-sided test's direction),
+    :func:`bayes_sentence` or :func:`pairwise_bayes_sentence` for type "bayes", or
+    a note that nothing was tested."""
     if test is not None and effect_size is not None:
-        return apa_sentence(test, effect_size, n_obs=n_obs)
+        return apa_sentence(
+            test, effect_size, n_obs=n_obs, levels=levels, name_limit=name_limit
+        )
     if bayes is not None:
         return bayes_sentence(bayes, n_obs=n_obs)
     if pairwise and pairwise[0].bayes is not None:
@@ -1283,6 +1344,15 @@ def alt_text(
     count of significant pairs. Type "bayes" with three or more groups gives the
     range of the pairs' Bayes factors instead.
 
+    It describes only what the figure shows. With ``results_subtitle=False`` the
+    figure shows no test, so the result sentence reads "No test result is shown
+    (results_subtitle=False), n = <n>." (type "bayes" with two groups computes
+    none: "No test was computed ..."), while the APA sentence still reports a
+    computed test. The pair sentence follows the brackets: it is there whenever
+    brackets are drawn (also with ``results_subtitle=False``) and left out with
+    ``pairwise_display="none"``. A one-sided test's direction names the levels
+    as the APA sentence does, shortened with them.
+
     Level names, x and y are shortened (40, 20, then 12 characters) until the text
     fits. If it still does not, the group description is left out; the result
     sentence is never cut, so a result sentence too long by itself (a statistic
@@ -1297,9 +1367,25 @@ def alt_text(
             return _alt_bayes_pairs(
                 pairwise, limit=limit, display=settings.pairwise_display
             )
-        return results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs)
+        if not settings.results_subtitle and (test is not None or bayes is not None):
+            # Computed, but the figure does not show it (U12).
+            return (
+                "No test result is shown (results_subtitle=False), "
+                f"n = {format_n(n_obs)}."
+            )
+        return results_sentence(
+            test,
+            effect_size,
+            bayes,
+            pairwise,
+            n_obs=n_obs,
+            levels=[d.level for d in descriptives],
+            name_limit=limit,
+        )
 
-    if pairwise and not bayes_pairs:
+    if pairwise and not bayes_pairs and settings.pairwise_display != "none":
+        # Brackets and the caption's pairwise line are drawn (also with
+        # results_subtitle=False); with pairwise_display="none" neither is.
         significant = sum(1 for pair in pairwise if pair.significant)
         verb = "is" if significant == 1 else "are"
         method = settings.p_adjust_method
@@ -1393,6 +1479,7 @@ def _expressions(
         pairwise,
         display=settings.pairwise_display,
         adjust_method=settings.p_adjust_method,
+        alpha=settings.pairwise_alpha,
     )
     return _Expressions(subtitle, bayes_caption, centrality, labels, line)
 
@@ -1460,7 +1547,14 @@ def build_texts(
     return Texts(
         subtitle=None if ex.subtitle is None else to_plain(ex.subtitle),
         caption="\n".join(lines) if lines else None,
-        apa=results_sentence(test, effect_size, bayes, pairwise, n_obs=n_obs),
+        apa=results_sentence(
+            test,
+            effect_size,
+            bayes,
+            pairwise,
+            n_obs=n_obs,
+            levels=[d.level for d in descriptives],
+        ),
         alt_text=alt_text(
             x=x,
             y=y,

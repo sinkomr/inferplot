@@ -5,18 +5,23 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
 
+import inferplot as ip
 from inferplot import text as tx
 from inferplot.result import (
     Descriptive,
     EffectSize,
     PairwiseComparison,
     Settings,
+    StatsResult,
     TestResult,
 )
-from tests.oracle_fixtures import OracleCase, load_cases
+from tests.oracle_fixtures import OracleCase, load_cases, read_csv
 from tests.plotmath import parse
 from tests.test_text_expressions import ADJUSTED, result_from_fixture
 
@@ -315,12 +320,12 @@ def test_tick_label_is_plain_text() -> None:
         ),
         (
             "ToothGrowth-greater-parametric",
-            "Welch's t-test (one-sided, greater): t(55.31) = 1.92, p = .030, "
-            "Hedges' g = 0.49, 95% CI [0.06, Inf], n = 60.",
+            "Welch's t-test (one-sided: OJ greater than VC): t(55.31) = 1.92, "
+            "p = .030, Hedges' g = 0.49, 95% CI [0.06, Inf], n = 60.",
         ),
         (
             "ToothGrowth-less-parametric",
-            "Welch's t-test (one-sided, less): t(55.31) = 1.92, p = .970, "
+            "Welch's t-test (one-sided: OJ less than VC): t(55.31) = 1.92, p = .970, "
             "Hedges' g = 0.49, 95% CI [-Inf, 0.91], n = 60.",
         ),
         (
@@ -418,6 +423,76 @@ def _g(**changes: object) -> EffectSize:
 def test_apa_p_values(p: float, text: str) -> None:
     sentence = tx.apa_sentence(_welch(p_value=p), _g(), n_obs=12)
     assert f", {text}, " in sentence
+
+
+def _control_treatment() -> pd.DataFrame:
+    rng = np.random.default_rng(2)
+    y = np.r_[rng.normal(1.0, 1, 15), rng.normal(0, 1, 15)]
+    return pd.DataFrame({"g": np.repeat(["treatment", "control"], 15), "y": y})
+
+
+@pytest.mark.parametrize("kind", ["parametric", "nonparametric"])
+def test_one_sided_direction_names_the_levels(kind: str) -> None:
+    """U2: "greater" tests whether the first level (here "control", first in sorted
+    order) is greater than the second; the sentence says so with the names."""
+    data = _control_treatment()
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(data, "g", "y", type=kind, alternative="greater")
+    assert result.levels == ("control", "treatment")
+    label = "Welch's t-test" if kind == "parametric" else "Mann-Whitney U test"
+    heading = f"{label} (one-sided: control greater than treatment): "
+    assert result.text.apa.startswith(heading)
+    assert heading in result.text.alt_text
+    # The subtitle keeps ggstatsplot's text, which names no direction.
+    assert "control" not in (result.text.subtitle or "")
+    # A program reads the direction from test.alternative and levels.
+    assert result.test is not None
+    assert (result.test.alternative, *result.levels) == (
+        "greater",
+        "control",
+        "treatment",
+    )
+    flipped = analyze(
+        data, "g", "y", type=kind, alternative="greater", order=["treatment", "control"]
+    )
+    assert flipped.text.apa.startswith(
+        f"{label} (one-sided: treatment greater than control): "
+    )
+    less = analyze(data, "g", "y", type=kind, alternative="less")
+    assert less.text.apa.startswith(
+        f"{label} (one-sided: control less than treatment): "
+    )
+
+
+def test_one_sided_direction_shortens_long_names() -> None:
+    data = _control_treatment()
+    data["g"] = data["g"].replace({"control": "c" * 60, "treatment": "t" * 60})
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(data, "g", "y", alternative="less")
+    first, second = "c" * 39 + "…", "t" * 39 + "…"
+    assert result.text.apa.startswith(
+        f"Welch's t-test (one-sided: {first} less than {second}): "
+    )
+    assert len(result.text.alt_text) <= tx.ALT_TEXT_MAX_CHARS
+    assert "(one-sided: " in result.text.alt_text
+    assert " less than " in result.text.alt_text
+
+
+def test_one_sided_direction_within_subjects() -> None:
+    # The paired t-test (sleep: group 1 against group 2), one direction each.
+    sleep = read_csv("sleep.csv")
+    analyze: Any = ip.analyze.withinstats
+    result = analyze(sleep, "group", "extra", subject_id="ID", alternative="less")
+    assert result.text.apa.startswith("Paired t-test (one-sided: 1 less than 2): ")
+    assert "(one-sided: 1 less than 2)" in result.text.alt_text
+
+
+def test_one_sided_needs_the_level_names() -> None:
+    with pytest.raises(ValueError, match="cannot be named"):
+        tx.apa_sentence(_welch(alternative="greater"), _g(), n_obs=12)
+    assert tx.apa_sentence(
+        _welch(alternative="greater"), _g(), n_obs=12, levels=("a", "b")
+    ).startswith("Welch's t-test (one-sided: a greater than b): ")
 
 
 def test_apa_numbers() -> None:
@@ -534,6 +609,60 @@ def test_caption_lines(display: str, method: str) -> None:
     assert texts.pairwise_labels[0] == f"{want} = 0.01"
 
 
+@pytest.mark.parametrize(
+    ("display", "method", "alpha", "tail"),
+    [
+        ("significant", "holm", 0.05, "showing 1 of 3 pairs (significant only)."),
+        (
+            "significant",
+            "holm",
+            0.5,
+            "showing 1 of 3 pairs (significant only, adjusted p < 0.5).",
+        ),
+        (
+            "non-significant",
+            "BH",
+            0.1,
+            "showing 2 of 3 pairs (non-significant only, adjusted p >= 0.1).",
+        ),
+        (
+            "significant",
+            "none",
+            0.01,
+            "showing 1 of 3 pairs (significant only, p < 0.01).",
+        ),
+        ("all", "holm", 0.5, "showing all 3 pairs."),
+    ],
+)
+def test_caption_states_a_non_default_threshold(
+    display: str, method: str, alpha: float, tail: str
+) -> None:
+    """U5: which pairs "significant only" draws depends on pairwise_alpha, so the
+    caption names any threshold but ggstatsplot's 0.05."""
+    line = tx.pairwise_caption_line(
+        _pairs(display, method), display=display, adjust_method=method, alpha=alpha
+    )
+    assert line is not None
+    assert line.endswith("; " + tail)
+
+
+def test_caption_threshold_end_to_end() -> None:
+    plants = read_csv("PlantGrowth.csv")
+    analyze: Any = ip.analyze.betweenstats
+    default = analyze(plants, "group", "weight")
+    assert default.text.caption == (
+        "Pairwise: Games-Howell, Holm adjusted; showing 0 of 3 pairs (significant "
+        "only)."
+    )
+    loose = analyze(plants, "group", "weight", pairwise_alpha=0.5)
+    drawn = sum(p.displayed for p in loose.pairwise)
+    assert loose.text.caption == (
+        f"Pairwise: Games-Howell, Holm adjusted; showing {drawn} of 3 pairs "
+        "(significant only, adjusted p < 0.5)."
+    )
+    assert tx.figure_texts(loose).caption_lines == (loose.text.caption,)
+
+
 def test_no_subtitle_and_no_bayes_line_without_results_subtitle() -> None:
     base = result_from_fixture(_case("ToothGrowth-parametric"))
     settings = dataclasses.replace(base.settings, results_subtitle=False)
@@ -619,12 +748,97 @@ def test_alt_text_on_every_parametric_fixture() -> None:
         assert 2 <= _sentences(alt) <= 4, (case.name, alt)
         assert result.y in alt
         assert result.x in alt
-        assert result.text.apa in alt
+        # Only what the figure shows (U12): the test when the subtitle is drawn,
+        # the pair count when brackets are.
+        if result.settings.results_subtitle:
+            assert result.text.apa in alt
+        else:
+            n = tx.format_n(result.n_obs)
+            assert f"No test result is shown (results_subtitle=False), n = {n}." in alt
+            assert result.text.apa not in alt
         for d in result.descriptives:
             assert f"{d.level} (n = {tx.format_n(d.n)}, mean " in alt
-        if result.pairwise:
+        if result.pairwise and result.settings.pairwise_display != "none":
             significant = sum(1 for p in result.pairwise if p.significant)
             assert f"{significant} of {len(result.pairwise)} pairwise" in alt
+        else:
+            assert "pairwise comparison" not in alt
+
+
+@pytest.mark.parametrize("kind", ["parametric", "nonparametric", "robust"])
+def test_alt_text_describes_only_what_is_drawn(kind: str) -> None:
+    """U12: without the results subtitle the figure shows no test, and with
+    pairwise_display="none" no brackets; the alt text says neither. Brackets are
+    drawn with results_subtitle=False, so their count stays."""
+    plants = read_csv("PlantGrowth.csv")
+    analyze: Any = ip.analyze.betweenstats
+    full = analyze(plants, "group", "weight", type=kind)
+    hidden = "No test result is shown (results_subtitle=False), n = 30."
+    pairs = " pairwise comparisons "
+    assert full.text.apa in full.text.alt_text
+    assert pairs in full.text.alt_text
+
+    quiet = analyze(plants, "group", "weight", type=kind, results_subtitle=False)
+    assert quiet.text.apa == full.text.apa  # the result still reports the test
+    assert quiet.text.alt_text == full.text.alt_text.replace(full.text.apa, hidden)
+    assert pairs in quiet.text.alt_text
+
+    for subtitle in (True, False):
+        bare = analyze(
+            plants,
+            "group",
+            "weight",
+            type=kind,
+            results_subtitle=subtitle,
+            pairwise_display="none",
+        )
+        assert "pairwise" not in bare.text.alt_text
+        assert (full.text.apa in bare.text.alt_text) == subtitle
+        assert (hidden in bare.text.alt_text) == (not subtitle)
+        assert 2 <= _sentences(bare.text.alt_text) <= 4
+
+
+def test_alt_text_without_subtitle_two_groups_and_within() -> None:
+    analyze: Any = ip.analyze.betweenstats
+    teeth = read_csv("ToothGrowth.csv")
+    for kind, words in (
+        ("parametric", "No test result is shown (results_subtitle=False), n = 60."),
+        ("bayes", "No test was computed (results_subtitle=False), n = 60."),
+    ):
+        result = analyze(teeth, "supp", "len", type=kind, results_subtitle=False)
+        assert result.text.alt_text.endswith(words)
+    sleep = read_csv("sleep.csv")
+    within: Any = ip.analyze.withinstats
+    result = within(sleep, "group", "extra", subject_id="ID", results_subtitle=False)
+    assert result.text.alt_text.endswith(
+        "No test result is shown (results_subtitle=False), n = 10."
+    )
+    assert result.text.apa.startswith("Paired t-test: ")
+
+
+def test_non_ascii_level_names_stay_as_they_are() -> None:
+    """U12: level names are the user's data; the APA sentence prints them
+    unchanged, and JSON, str() and the embedded copy carry them."""
+    plants = read_csv("PlantGrowth.csv")
+    plants["group"] = plants["group"].replace(
+        {"ctrl": "Kontrolle", "trt1": "Behandlung ä", "trt2": "处理"}
+    )
+    analyze: Any = ip.analyze.betweenstats
+    result = analyze(plants, "group", "weight", type="bayes", results_subtitle=False)
+    assert "Behandlung ä vs 处理, BF10 = " in result.text.apa
+    assert not result.text.apa.isascii()
+    text = result.to_json(include_values=False)
+    assert text.isascii()  # escaped, as strict JSON allows
+    assert StatsResult.from_json(text).text.apa == result.text.apa
+    assert StatsResult.from_json(result.to_json()) == result
+    assert str(result).startswith(result.text.apa)
+    long = "Behandlungsgruppe mit einer sehr langen Bezeichnung ä"
+    two = plants[plants["group"] != "处理"].replace({"Behandlung ä": long})
+    one_sided = analyze(two, "group", "weight", alternative="greater")
+    assert one_sided.levels == (long, "Kontrolle")
+    assert one_sided.text.apa.startswith(
+        f"Welch's t-test (one-sided: {long[:39]}… greater than Kontrolle): "
+    )
 
 
 def test_alt_text_plant_growth() -> None:
