@@ -2098,3 +2098,433 @@ def test_winsorized_correlation(case: OracleCase) -> None:
     tr = _tr(case)
     r = _pearson(_winsorize(x, tr), _winsorize(y, tr))
     _check_correlation(row, r, n, se_z=1 / math.sqrt(n - 3), what=case.name)
+
+
+# --------------------------------------------------------------------------- #
+# Contingency tables (ggbarstats, ggpiestats)
+# --------------------------------------------------------------------------- #
+#
+# Read from each fixture's `contingency_data` (the table ggstatsplot analyzed; rows x,
+# columns y). statsExpressions 2.2.1's contingency_table() calls, for every type but
+# bayes (one method for all three; the Bayes factors are v0.2):
+#     two-way    chisq.test(correct = FALSE) on the table without empty rows and
+#                columns; effectsize::cramers_v (adjust = TRUE) with a noncentral
+#                chi-square CI that follows `alternative`
+#     paired     mcnemar.test(correct = FALSE) on the table with every declared level
+#                (McNemar-Bowker beyond 2 x 2); effectsize::cohens_g
+#     one-way    chisq.test(p = ratio), equal proportions by default, every level
+#                kept (a declared empty level is a zero count); effectsize::pearsons_c
+#     per bar    the one-way test of x within each level of y against `ratio`, at
+#                95%, two-sided and unadjusted (one_sample_data)
+#     pairwise   fisher.test between every two levels of x that hold data, on their
+#                own table, then p.adjust; cramers_v of each pair
+
+
+def _bar_params(design: str, *, needs: str = "subtitle") -> list[Any]:
+    """Completed ggbarstats and ggpiestats cases of one design ("independence",
+    "paired", "one-way"), type not bayes, that have the table a check reads: the
+    subtitle, the per-bar tests ("one_sample") or the pairwise table."""
+    cases = []
+    for function in ("ggbarstats", "ggpiestats"):
+        for case in cases_for(function):
+            one_way = case.contingency_data["y"] is None
+            paired = case.args.get("paired", False) is True
+            kind = "one-way" if one_way else "paired" if paired else "independence"
+            if kind != design or case.type == "bayes":
+                continue
+            if needs == "subtitle" and not case.subtitle_rows:
+                continue
+            if needs == "one_sample" and not case.one_sample:
+                continue
+            if needs == "pairwise" and not case.pairwise:
+                continue
+            cases.append(case)
+    require_cases(cases, f"barstats {design} with {needs}")
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+def _counts(case: OracleCase) -> NDArray[np.int64]:
+    return np.array(case.counts_table(), dtype=np.int64)
+
+
+def _chisq_p(statistic: float, df: float) -> float:
+    """Upper tail of the central chi-square (the regularized upper gamma)."""
+    return float(special.gammaincc(df / 2, statistic / 2))
+
+
+def _ncx2_cdf(x: float, df: float, ncp: float) -> float:
+    """P(X <= x) for the noncentral chi-square(df, ncp), a Poisson mixture of central
+    chi-squares: sum_j Pois(j; ncp / 2) P(chi2_{df + 2j} <= x) (Johnson, Kotz &
+    Balakrishnan 1995, ch. 29), summed within 12 Poisson SDs of the mode (the rest is
+    below 1e-30), the central terms by the regularized lower gamma."""
+    if ncp == 0.0:
+        return float(special.gammainc(df / 2, x / 2))
+    half = ncp / 2
+    width = int(12 * math.sqrt(half) + 40)
+    mode = int(half)
+    j = np.arange(max(0, mode - width), mode + width + 1, dtype=np.float64)
+    log_weights = -half + j * math.log(half) - special.gammaln(j + 1)
+    return float(np.sum(np.exp(log_weights) * special.gammainc(df / 2 + j, x / 2)))
+
+
+def _chisq_ncp(statistic: float, df: float, prob: float) -> float:
+    """The noncentrality lambda >= 0 with P(X <= statistic) = ``prob``; 0 when the
+    central chi-square already gives at most ``prob``."""
+
+    def gap(ncp: float) -> float:
+        return _ncx2_cdf(statistic, df, ncp) - prob
+
+    if gap(0.0) <= 0.0:
+        return 0.0
+    high = max(1.0, statistic)
+    while gap(high) > 0.0:
+        high *= 2.0
+    return float(optimize.brentq(gap, 0.0, high, xtol=1e-14, rtol=1e-15))
+
+
+def _ncp_interval(
+    statistic: float, df: float, level: float, alternative: str
+) -> tuple[float, float]:
+    """effectsize's noncentrality interval ("ncp"): two-sided at ``level``, or
+    one-sided with the far bound infinite ("greater": [low, Inf])."""
+    alpha = 1 - level
+    tail = alpha / 2 if alternative == "two.sided" else alpha
+    low = 0.0 if alternative == "less" else _chisq_ncp(statistic, df, 1 - tail)
+    high = math.inf if alternative == "greater" else _chisq_ncp(statistic, df, tail)
+    return low, high
+
+
+def _independence(table: NDArray[np.int64]) -> tuple[float, int, NDArray[np.float64]]:
+    """Pearson's chi-square of independence without continuity correction on the
+    table without empty rows and columns (statsExpressions drops unused levels)."""
+    t = table[table.sum(axis=1) > 0][:, table.sum(axis=0) > 0].astype(np.float64)
+    expected = np.outer(t.sum(axis=1), t.sum(axis=0)) / t.sum()
+    statistic = float(((t - expected) ** 2 / expected).sum())
+    return statistic, (t.shape[0] - 1) * (t.shape[1] - 1), t
+
+
+def _cramers_v(chisq: float, n: float, nrow: int, ncol: int) -> float:
+    """Cramer's V with Bergsma's (2013) bias correction, effectsize's default
+    (adjust = TRUE): phi^2 - (r - 1)(c - 1) / (n - 1), floored at 0, over min(r~, c~)
+    - 1 with r~ = r - (r - 1)^2 / (n - 1), capped at 1. The interval's bounds are
+    noncentrality parameters put through the same function in place of chi-square."""
+    phi2 = max(0.0, chisq / n - (nrow - 1) * (ncol - 1) / (n - 1))
+    rows = nrow - (nrow - 1) ** 2 / (n - 1)
+    cols = ncol - (ncol - 1) ** 2 / (n - 1)
+    return min(1.0, math.sqrt(phi2 / (min(rows, cols) - 1)))
+
+
+def _check_cramers_v(
+    row: Row,
+    chisq: float,
+    df: int,
+    t: NDArray[np.float64],
+    alternative: str,
+    what: str,
+) -> None:
+    n = float(t.sum())
+    nrow, ncol = t.shape
+    assert row["effectsize"] == "Cramer's V (adj.)"
+    v = _cramers_v(chisq, n, nrow, ncol)
+    assert_close("closed_form", v, _value(row, "estimate"), what=f"{what} V")
+    low, high = _ncp_interval(chisq, df, _value(row, "conf.level"), alternative)
+    v_low = _cramers_v(low, n, nrow, ncol)
+    v_high = 1.0 if math.isinf(high) else _cramers_v(high, n, nrow, ncol)
+    assert_close("noncentral_ci", v_low, _value(row, "conf.low"), what=f"{what} low")
+    assert_close("noncentral_ci", v_high, _value(row, "conf.high"), what=f"{what} high")
+    # Negative control: the unadjusted V, sqrt(phi^2 / (min(r, c) - 1)), differs
+    # wherever the correction does anything (not at 0 or at perfect association).
+    unadjusted = math.sqrt(chisq / n / (min(nrow, ncol) - 1))
+    if 0 < v < 1:
+        assert not is_close("closed_form", unadjusted, _value(row, "estimate"))
+
+
+@pytest.mark.parametrize("case", _bar_params("independence"))
+def test_chisq_independence_and_cramers_v(case: OracleCase) -> None:
+    chisq, df, t = _independence(_counts(case))
+    row = case.subtitle_data
+    assert row["method"] == "Pearson's Chi-squared test"
+    assert_close("closed_form", chisq, _value(row, "statistic"), what="chi-square")
+    assert _value(row, "df") == df
+    p = _chisq_p(chisq, df)
+    assert_close("closed_form", p, _value(row, "p.value"), what="chi-square p")
+    assert int(_value(row, "n.obs")) == int(t.sum()) == case.contingency_data["n"]
+    _check_cramers_v(row, chisq, df, t, _alternative(case), case.name)
+    if t.shape == (2, 2) and chisq > 0:
+        # Negative control: Yates' continuity correction, chisq.test's own default
+        # for 2 x 2 tables, changes the statistic (statsExpressions turns it off).
+        (a, b), (c, d) = t
+        n = t.sum()
+        yates = n * max(0.0, abs(a * d - b * c) - n / 2) ** 2 / (
+            (a + b) * (c + d) * (a + c) * (b + d)
+        )
+        assert not is_close("closed_form", float(yates), _value(row, "statistic"))
+
+
+def _wilson(
+    successes: float, trials: float, level: float, alternative: str
+) -> tuple[float, float]:
+    """The Wilson score interval without continuity correction (as prop.test(correct
+    = FALSE) gives it): two-sided at ``level``, or one-sided ("less": [0, high])."""
+    p = successes / trials
+    tail = (1 - level) / (2 if alternative == "two.sided" else 1)
+    z = float(-special.ndtri(tail))
+    centre = p + z * z / (2 * trials)
+    spread = z * math.sqrt(p * (1 - p) / trials + z * z / (4 * trials * trials))
+    scale = 1 + z * z / trials
+    low = 0.0 if alternative == "less" else max(0.0, (centre - spread) / scale)
+    high = 1.0 if alternative == "greater" else min(1.0, (centre + spread) / scale)
+    return low, high
+
+
+def _cohens_g(table: NDArray[np.float64]) -> tuple[float, float]:
+    """Cohen's g's share P: the discordant pairs on the more frequent side of each
+    pair of off-diagonal cells, summed (beyond 2 x 2) over the pairs, and the
+    number of discordant pairs."""
+    r = table.shape[0]
+    upper = table[np.triu_indices(r, 1)]
+    lower = table.T[np.triu_indices(r, 1)]
+    return float(np.maximum(upper, lower).sum()), float((upper + lower).sum())
+
+
+@pytest.mark.parametrize("case", _bar_params("paired"))
+def test_mcnemar_and_cohens_g(case: OracleCase) -> None:
+    # McNemar's test without continuity correction on the square table with every
+    # declared level; beyond 2 x 2 it is Bowker's test of symmetry, sum over i < j of
+    # (n_ij - n_ji)^2 / (n_ij + n_ji) on r (r - 1) / 2 df. Cohen's g = P - 0.5; its
+    # interval is the Wilson interval of P without continuity correction minus 0.5
+    # (so its lower bound can be below 0).
+    t = _counts(case).astype(np.float64)
+    r = t.shape[0]
+    assert t.shape == (r, r)
+    upper = t[np.triu_indices(r, 1)]
+    lower = t.T[np.triu_indices(r, 1)]
+    statistic = float(((upper - lower) ** 2 / (upper + lower)).sum())
+    df = r * (r - 1) // 2
+    row = case.subtitle_data
+    assert row["method"] == "McNemar's Chi-squared test"
+    assert_close("closed_form", statistic, _value(row, "statistic"), what="McNemar")
+    assert _value(row, "df") == df
+    p = _chisq_p(statistic, df)
+    assert_close("closed_form", p, _value(row, "p.value"), what="McNemar p")
+    assert int(_value(row, "n.obs")) == int(t.sum())  # pairs
+    more, discordant = _cohens_g(t)
+    assert row["effectsize"] == "Cohen's g"
+    g = more / discordant - 0.5
+    assert_close("closed_form", g, _value(row, "estimate"), what="Cohen's g")
+    level = _value(row, "conf.level")
+    low, high = _wilson(more, discordant, level, _alternative(case))
+    assert_close("closed_form", low - 0.5, _value(row, "conf.low"), what="g low")
+    assert_close("closed_form", high - 0.5, _value(row, "conf.high"), what="g high")
+    if r == 2:
+        # Negative control: the continuity correction, mcnemar.test's default.
+        b, c = float(upper[0]), float(lower[0])
+        corrected = (abs(b - c) - 1) ** 2 / (b + c)
+        assert not is_close("closed_form", corrected, _value(row, "statistic"))
+
+
+def _ratio(case: OracleCase, k: int) -> NDArray[np.float64]:
+    """The expected proportions: `ratio` as given, in the order of x's levels, else
+    equal."""
+    given = case.args.get("ratio")
+    return np.full(k, 1 / k) if given is None else np.array(given, dtype=np.float64)
+
+
+def _goodness_of_fit(
+    counts: NDArray[np.float64], p: NDArray[np.float64]
+) -> tuple[float, int]:
+    expected = counts.sum() * p
+    return float(((counts - expected) ** 2 / expected).sum()), counts.size - 1
+
+
+def _check_pearsons_c(
+    row: Row, chisq: float, df: int, n: float, alternative: str, what: str
+) -> None:
+    """Pearson's C = sqrt(chi2 / (chi2 + n)); its interval's bounds are noncentrality
+    parameters put through the same function."""
+    assert row["effectsize"] == "Pearson's C"
+    c = math.sqrt(chisq / (chisq + n))
+    assert_close("closed_form", c, _value(row, "estimate"), what=f"{what} C")
+    low, high = _ncp_interval(chisq, df, _value(row, "conf.level"), alternative)
+    c_low = math.sqrt(low / (low + n))
+    c_high = 1.0 if math.isinf(high) else math.sqrt(high / (high + n))
+    assert_close("noncentral_ci", c_low, _value(row, "conf.low"), what=f"{what} low")
+    assert_close("noncentral_ci", c_high, _value(row, "conf.high"), what=f"{what} high")
+
+
+@pytest.mark.parametrize("case", _bar_params("one-way"))
+def test_goodness_of_fit_and_pearsons_c(case: OracleCase) -> None:
+    counts = _counts(case)[:, 0].astype(np.float64)
+    chisq, df = _goodness_of_fit(counts, _ratio(case, counts.size))
+    row = case.subtitle_data
+    assert row["method"] == "Chi-squared test for given probabilities"
+    assert_close("closed_form", chisq, _value(row, "statistic"), what="chi-square")
+    assert _value(row, "df") == df
+    p = _chisq_p(chisq, df)
+    assert_close("closed_form", p, _value(row, "p.value"), what="chi-square p")
+    n = float(counts.sum())
+    assert int(_value(row, "n.obs")) == int(n)
+    _check_pearsons_c(row, chisq, df, n, _alternative(case), case.name)
+
+
+def _pretty_num(n: int) -> str:
+    """R's prettyNum(n, big.mark = ",")."""
+    return f"{n:,}"
+
+
+def _format_value(x: float, digits: int) -> str:
+    """insight::format_value as probe-format pins it (SPEC.md section 7)."""
+    if x != 0 and (math.log10(abs(x)) < -digits or abs(x) >= 1e5):
+        return f"{x:.{digits}e}"
+    return f"{x:.{digits}f}"
+
+
+@pytest.mark.parametrize("case", _bar_params("independence", needs="one_sample"))
+def test_proportion_tests(case: OracleCase) -> None:
+    # The test drawn above each bar: x's distribution within that level of y against
+    # `ratio` (equal proportions by default), every level of x kept (zero counts
+    # included), always two-sided at 95% (onesample_data() passes neither alternative
+    # nor conf.level) and never adjusted, whatever p.adjust.method says. Rows come in
+    # the reverse order of y's levels (.cat_counter() sorts by y descending).
+    table = _counts(case).astype(np.float64)
+    data = case.contingency_data
+    y_levels = [str(v) for v in data["y_levels"]]
+    digits = int(case.args.get("digits", 2))
+    rows = case.one_sample
+    held = [level for level in y_levels if table[:, y_levels.index(level)].sum() > 0]
+    assert [str(r[data["y"]]) for r in rows] == held[::-1]
+    for row in rows:
+        level = str(row[data["y"]])
+        column = table[:, y_levels.index(level)]
+        n = int(column.sum())
+        assert int(row["counts"]) == n
+        assert row["N"] == f"(n = {_pretty_num(n)})"
+        if math.isnan(_value(row, "statistic")):
+            # One level of x: chisq.test needs two categories; an NA row.
+            assert column.size < 2
+            assert "proportion_test" in case.expected_hidden_errors
+            continue
+        chisq, df = _goodness_of_fit(column, _ratio(case, column.size))
+        what = f"{case.name} bar {level}"
+        assert_close("closed_form", chisq, _value(row, "statistic"), what=what)
+        assert _value(row, "df") == df
+        p = _chisq_p(chisq, df)
+        assert_close("closed_form", p, _value(row, "p.value"), what=f"{what} p")
+        assert _value(row, "conf.level") == 0.95
+        _check_pearsons_c(row, chisq, df, n, "two.sided", what)
+        p_text = _format_value(_value(row, "p.value"), digits)
+        statistic_text = _format_value(_value(row, "statistic"), digits)
+        assert row[".p.label"] == f"list(~italic(p)=='{p_text}')"
+        assert row[".label"] == (
+            f"list(~chi['gof']^2~({df})=={statistic_text}, ~italic(p)=='{p_text}', "
+            f"~italic(n)=='{_pretty_num(n)}')"
+        )
+
+
+def _log_choose(m: int, k: NDArray[np.int64]) -> NDArray[np.float64]:
+    return math.lgamma(m + 1) - special.gammaln(k + 1) - special.gammaln(m - k + 1)
+
+
+def _fisher_two_by_c(table: NDArray[np.int64]) -> float:
+    """Two-sided Fisher exact p of a 2 x c table: the probability, given both
+    margins, of every table at most as probable as the observed one times 1 + 1e-7
+    (R's allowance for ties). P(a) = prod_j C(col_j, a_j) / C(n, row_1) over first
+    rows a with sum row_1. The columns are split in two halves whose first-row
+    vectors are enumerated apart and joined by their sums (meet in the middle), so a
+    2 x 4 table with n near 1,600 takes a fraction of a second."""
+    first = [int(v) for v in table[0]]
+    cols = [int(v) for v in table.sum(axis=0)]
+    r1, n = sum(first), sum(cols)
+
+    def half(columns: list[int]) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+        sums = np.zeros(1, dtype=np.int64)
+        logs = np.zeros(1, dtype=np.float64)
+        for m in columns:
+            k = np.arange(m + 1, dtype=np.int64)
+            sums = (sums[:, None] + k[None, :]).ravel()
+            logs = (logs[:, None] + _log_choose(m, k)[None, :]).ravel()
+        return sums, logs
+
+    total = float(_log_choose(n, np.array([r1]))[0])
+    observed = sum(
+        float(_log_choose(m, np.array([a]))[0]) for m, a in zip(cols, first, strict=True)
+    )
+    threshold = observed + math.log1p(1e-7)
+    split = len(cols) // 2
+    sums_a, logs_a = half(cols[:split])
+    sums_b, logs_b = half(cols[split:])
+    order = np.lexsort((logs_b, sums_b))
+    sums_b, logs_b = sums_b[order], logs_b[order]
+    terms: list[float] = []
+    for s in np.unique(sums_a):
+        start, stop = np.searchsorted(sums_b, [r1 - s, r1 - s + 1])
+        if start == stop:
+            continue
+        b = logs_b[start:stop]
+        cumulative = np.concatenate(([0.0], np.cumsum(np.exp(b - total))))
+        for la in logs_a[sums_a == s]:
+            index = int(np.searchsorted(b, threshold - la, side="right"))
+            terms.append(math.exp(la) * float(cumulative[index]))
+    return min(1.0, math.fsum(terms))
+
+
+def _fisher_one_sided(table: NDArray[np.int64], alternative: str) -> float:
+    """Fisher's exact test of a 2 x 2 table, one-sided: the hypergeometric tail of the
+    first cell ("greater": that count or more)."""
+    (a, b), (c, d) = ([int(v) for v in row] for row in table)
+    r1, c1, n = a + b, a + c, a + b + c + d
+    lo, hi = max(0, r1 - (n - c1)), min(r1, c1)
+    values = np.arange(a, hi + 1) if alternative == "greater" else np.arange(lo, a + 1)
+    log_p = (
+        _log_choose(c1, values)
+        + _log_choose(n - c1, r1 - values)
+        - float(_log_choose(n, np.array([r1]))[0])
+    )
+    return math.fsum(np.exp(log_p).tolist())
+
+
+@pytest.mark.parametrize("case", _bar_params("independence", needs="pairwise"))
+def test_pairwise_fisher(case: OracleCase) -> None:
+    # Every two levels of x that hold data (pairs in level order, rows sorted as
+    # text), each on the table of the levels of y the pair holds; Fisher's exact
+    # test (one-sided only for a 2 x 2 table, as fisher.test), then p.adjust over all
+    # pairs; Cramer's V of each pair as for the whole table, at the case's level and
+    # alternative.
+    table = _counts(case)
+    x_levels = [str(v) for v in case.contingency_data["x_levels"]]
+    present = [i for i, level in enumerate(x_levels) if table[i].sum() > 0]
+    alternative = _alternative(case)
+    method = _adjust_method(case)
+    pairs = sorted(
+        ((x_levels[i], x_levels[j]), i, j)
+        for k, i in enumerate(present)
+        for j in present[k + 1 :]
+    )
+    rows = case.pairwise
+    assert [(str(r["group1"]), str(r["group2"])) for r in rows] == [
+        pair for pair, _, _ in pairs
+    ]
+    raw = []
+    for ((g1, g2), i, j), row in zip(pairs, rows, strict=True):
+        sub = table[[i, j]]
+        sub = sub[:, sub.sum(axis=0) > 0]
+        what = f"{case.name} {g1}-{g2}"
+        if sub.shape == (2, 2) and alternative != "two.sided":
+            p = _fisher_one_sided(sub, alternative)
+        else:
+            p = _fisher_two_by_c(sub)
+        assert_close("closed_form", p, _value(row, "p.value"), what=f"{what} p")
+        raw.append(_value(row, "p.value"))
+        assert row["test"] == "Fisher's exact test"
+        chisq, df, t = _independence(sub)
+        _check_cramers_v(row, chisq, df, t, alternative, what)
+    adjusted = _p_adjust(raw, method)
+    name = P_ADJUST_LABELS[method]
+    digits = int(case.args.get("digits", 2))
+    for row, expected in zip(rows, adjusted, strict=True):
+        value = _value(row, "p.value.adj")
+        assert_close("closed_form", expected, value, what="adjusted p")
+        assert row["p.adjust.method"] == name
+        label = "unadj." if method == "none" else f'"{name}" - adj.'
+        text = _format_value(value, digits)
+        assert row["expression"] == f'list(italic(p)[{label}] == "{text}")'

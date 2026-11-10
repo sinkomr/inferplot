@@ -5206,6 +5206,31 @@ contingency_probe <- function() {
     )
   }
   as_table <- function(v, nrow) matrix(as.numeric(v), nrow = nrow, byrow = TRUE)
+  # R's own noncentral chi-square probability P(X <= chisq) at the noncentrality
+  # parameter behind each reported bound in (0, 1) (`to_ncp` inverts the effect
+  # size's conversion), to read how far effectsize's root search stopped from the
+  # interval's tail probability.
+  tails_at_bounds <- function(es, chisq, df, to_ncp) {
+    lapply(list(low = es$CI_low, high = es$CI_high), function(bound) {
+      if (is.null(bound) || !is.finite(bound) || bound <= 0 || bound >= 1 || !is.finite(chisq)) {
+        return(NULL)
+      }
+      ncp <- to_ncp(bound)
+      list(ncp_hex = hex(ncp), cdf_hex = hex(stats::pchisq(chisq, df, ncp = ncp)))
+    })
+  }
+  # attempt_row() for an effect size, with tails_at_bounds() of its interval.
+  es_row <- function(expr, chisq, df, to_ncp) {
+    out <- probe_attempt(expr)
+    es <- out$value
+    c(
+      if (is.null(es)) NULL else es_fields(es),
+      list(
+        error = out$error, warnings = out$warnings,
+        tails_at_bounds = if (!is.null(es)) tails_at_bounds(es, chisq, df, to_ncp)
+      )
+    )
+  }
   two_by_two <- list(
     c(1, 9, 8, 4), c(10, 2, 3, 15), c(0, 5, 5, 0), c(5, 5, 5, 5), c(12, 0, 0, 7),
     c(3, 1, 1, 3), c(30, 20, 25, 25), c(100, 80, 90, 110), c(1, 0, 0, 1), c(6, 1, 2, 7),
@@ -5245,12 +5270,18 @@ contingency_probe <- function() {
   )
   gof <- lapply(gof_designs, function(d) {
     p <- d$p %||% rep(1 / length(d$x), length(d$x))
+    test <- probe_attempt(stats::chisq.test(d$x, p = p, correct = FALSE))$value
+    n <- sum(d$x)
+    # C back to chi-square: n C^2 / (1 - C^2).
+    to_ncp <- function(c) n * c^2 / (1 - c^2)
     alternatives <- lapply(c("two.sided", "greater", "less"), function(alternative) {
       lapply(c(0.95, 0.9), function(ci) {
         c(
           list(alternative = alternative, ci = ci),
-          attempt_row(
-            effectsize::pearsons_c(d$x, p = p, ci = ci, alternative = alternative), es_fields
+          es_row(
+            effectsize::pearsons_c(d$x, p = p, ci = ci, alternative = alternative),
+            if (is.null(test)) NA_real_ else unname(test$statistic),
+            if (is.null(test)) NA_real_ else unname(test$parameter), to_ncp
           )
         )
       })
@@ -5263,14 +5294,30 @@ contingency_probe <- function() {
   })
   cramers <- lapply(tables, function(m) {
     rows <- list()
+    kept <- m[rowSums(m) > 0, colSums(m) > 0, drop = FALSE]
+    n <- sum(kept)
+    test <- probe_attempt(stats::chisq.test(kept, correct = FALSE))$value
+    statistic <- if (is.null(test)) NA_real_ else unname(test$statistic)
+    df <- if (is.null(test)) NA_real_ else unname(test$parameter)
     for (adjust in c(TRUE, FALSE)) {
+      # V back to chi-square: n phi^2, with phi^2 = V^2 (min(r, c) - 1) or, adjusted,
+      # V^2 (min(r~, c~) - 1) + (r - 1)(c - 1) / (n - 1) (Bergsma 2013).
+      to_ncp <- function(v) {
+        r <- nrow(kept)
+        k <- ncol(kept)
+        if (!adjust) {
+          return(n * v^2 * (min(r, k) - 1))
+        }
+        shrunk <- min(r - (r - 1)^2 / (n - 1), k - (k - 1)^2 / (n - 1)) - 1
+        n * (v^2 * shrunk + (r - 1) * (k - 1) / (n - 1))
+      }
       for (alternative in c("two.sided", "greater", "less")) {
         for (ci in c(0.95, 0.9)) {
           rows[[length(rows) + 1L]] <- c(
             list(adjust = adjust, alternative = alternative, ci = ci),
-            attempt_row(
+            es_row(
               effectsize::cramers_v(m, adjust = adjust, ci = ci, alternative = alternative),
-              es_fields
+              statistic, df, to_ncp
             )
           )
         }
