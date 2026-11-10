@@ -20,15 +20,19 @@ What each type reproduces (SPEC.md section 4, "histostats"):
 
 Each type's analysis is a function ``(data, args) -> _Parts`` in ``_ANALYSES``,
 run after every argument has been validated and the data read (``_prepare``);
-``_assemble`` builds the result from its parts. The statistics are not in this
-version yet: every type raises ``NotImplementedError`` naming itself.
+``_assemble`` builds the result from its parts. Data a type cannot use (no spread,
+too few values after trimming, every value equal to ``test_value``) raise a plain
+``ValueError`` naming the column before the method runs, advising only what works.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, TypeVar
+
+import numpy as np
+import numpy.typing as npt
 
 from inferplot import stats
 from inferplot._data import OneData, data_notes, read_one
@@ -61,9 +65,11 @@ from inferplot.result import (
     current_provenance,
     one_sample_tied_count,
 )
-from inferplot.text import build_texts, r_number_text
+from inferplot.text import build_texts, format_value, r_number_text
 
 __all__ = ["histostats"]
+
+FloatArray = npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,50 +111,457 @@ class _Parts:
 
 
 # --------------------------------------------------------------------------- #
+# plain errors for data a type cannot use (raised before its method runs)
+# --------------------------------------------------------------------------- #
+
+# The method each type's checks name.
+_METHODS: Final[dict[str, str]] = {
+    "parametric": "the one-sample t-test",
+    "nonparametric": "the signed-rank test",
+    "robust": "the bootstrap-t test of the trimmed mean",
+    "bayes": "the one-sample t-test behind the Bayes factor",
+}
+# The trimming proportions offered, largest first, when the one given leaves too
+# few values or a winsorized standard deviation of 0 (tr=0 trims nothing).
+_SMALLER_TR: Final = (0.2, 0.1, 0.0)
+
+
+def _same_within_rounding(values: FloatArray) -> bool:
+    """Every value the same number, exactly or to within the rounding of the
+    values in double precision (D74: 0.1 + 0.2 and 0.3 are one number as
+    written)."""
+    return stats.differences_same_within_rounding(values, np.zeros_like(values))
+
+
+def _all_test_value(data: OneData, args: _Args) -> bool:
+    """Every value equals test_value exactly: the signed-rank test drops every
+    value, so no type has a difference to test."""
+    return bool((data.values == args.test_value).all())
+
+
+def _no_spread_text(data: OneData) -> str:
+    """What is wrong with a column whose values are one number."""
+    values = data.values
+    low, high = float(values.min()), float(values.max())
+    if low == high:
+        return f"every value of x={data.x!r} is {r_number_text(low)}"
+    return (
+        f"the values of x={data.x!r} differ only by the rounding of double "
+        f"precision (from {low!r} to {high!r}), so as written they are one number"
+    )
+
+
+def _nonparametric_advice(data: OneData, args: _Args) -> str:
+    """Advice that leads to a call that works: the signed-rank test needs only a
+    value that differs from test_value."""
+    if _all_test_value(data, args):
+        return (
+            f"Every value equals test_value={r_number_text(args.test_value)}, so "
+            "there is no difference to test; check the data for entry errors."
+        )
+    return (
+        "Use type='nonparametric': the signed-rank test needs only values that "
+        "differ from test_value."
+    )
+
+
+def _capital(text: str) -> str:
+    return text[0].upper() + text[1:]
+
+
+def _check_spread(data: OneData, args: _Args) -> None:
+    """Types parametric and bayes: the one-sample t needs a standard deviation
+    (R's t.test stops on constant data: "data are essentially constant")."""
+    if _same_within_rounding(data.values):
+        raise ValueError(
+            f"{_capital(_no_spread_text(data))}, so {_METHODS[args.type]} has no "
+            f"standard deviation. {_nonparametric_advice(data, args)}"
+        )
+
+
+def _winsorized(values: FloatArray, tr: float) -> FloatArray:
+    """The values winsorized at floor(tr n) at each end, in sorted order."""
+    ordered = values.copy()
+    ordered.sort()
+    g = stats.trim_count(ordered.size, tr)
+    if g:
+        ordered[:g] = ordered[g]
+        ordered[ordered.size - g :] = ordered[ordered.size - g - 1]
+    return ordered
+
+
+def _robust_problem(values: FloatArray, tr: float) -> str | None:
+    """Why the bootstrap-t test cannot run on ``values`` at ``tr``, or None."""
+    n = values.size
+    g = stats.trim_count(n, tr)
+    if n - 2 * g < 2:
+        return (
+            f"trimming {_percent(tr)}% at each end (tr={tr!r}) leaves {n - 2 * g} of "
+            f"the {n} values; the trimmed mean's bootstrap-t test needs at least 2"
+        )
+    if _same_within_rounding(_winsorized(values, tr)):
+        return (
+            f"after winsorizing {_percent(tr)}% at each end (tr={tr!r}) every value "
+            "is the same number, so the winsorized standard deviation is 0 and the "
+            "bootstrap-t test of the trimmed mean is undefined"
+        )
+    return None
+
+
+def _percent(tr: float) -> str:
+    """``tr`` as a percentage the way R prints it: 0.2 -> "20", 0.125 -> "12.5"."""
+    return r_number_text(tr * 100)
+
+
+def _check_robust(data: OneData, args: _Args) -> None:
+    """Type robust: enough values after trimming, a winsorized standard deviation
+    above 0, and a conf_level the bootstrap-t rule can resolve; each message
+    advises only what works (a smaller tr that passes these checks, or the
+    signed-rank test)."""
+    values = data.values
+    if _same_within_rounding(values):
+        raise ValueError(
+            f"{_capital(_no_spread_text(data))}, so {_METHODS['robust']} has no "
+            f"standard deviation. {_nonparametric_advice(data, args)}"
+        )
+    problem = _robust_problem(values, args.tr)
+    if problem is not None:
+        smaller = next(
+            (
+                t
+                for t in _SMALLER_TR
+                if t < args.tr and _robust_problem(values, t) is None
+            ),
+            None,
+        )
+        options = [] if smaller is None else [f"pass a smaller tr (tr={smaller!r})"]
+        if not _all_test_value(data, args):
+            options.append("use type='nonparametric'")
+        advice = (
+            _capital(", or ".join(options)) + "."
+            if options
+            else "Check the data for entry errors."
+        )
+        raise ValueError(f"For x={data.x!r}, {problem}. {advice}")
+    try:
+        # trimcibt's rule on placeholder values: it refuses a level it cannot
+        # resolve with BOOTSTRAP_RESAMPLES resamples, before any resampling.
+        stats.bootstrap_t_critical_value(
+            np.zeros(stats.BOOTSTRAP_RESAMPLES), args.conf_level
+        )
+    except ValueError:
+        end = "1" if args.conf_level > 0.5 else "0"
+        raise ValueError(
+            f"conf_level={args.passed.get('conf_level', args.conf_level)!r} is too "
+            f"close to {end} for the bootstrap-t interval from "
+            f"{stats.BOOTSTRAP_RESAMPLES:,} resamples: its bounds would come from "
+            "the most extreme resample whatever the level. Pass a conf_level "
+            "between 0.001 and 0.999, or use type='parametric', whose interval is "
+            "not resampled."
+        ) from None
+
+
+# --------------------------------------------------------------------------- #
 # the types (each takes the analyzed values and the validated arguments)
 # --------------------------------------------------------------------------- #
 
-# The method of each type, for the messages of the types not implemented yet.
-_METHODS: Final[dict[str, str]] = {
-    "parametric": "the one-sample t-test with Hedges' g",
-    "nonparametric": "the one-sample Wilcoxon signed-rank test",
-    "robust": "the bootstrap-t test of the trimmed mean",
-    "bayes": "the one-sample Bayes factor",
-}
+# Short references (SPEC.md section 4).
+_STUDENT_1908: Final = "Student (1908). Biometrika 6: 1-25 (the one-sample t-test)."
+_HEDGES_1981: Final = (
+    "Hedges, L. V. (1981). Journal of Educational Statistics 6: 107-128 (Hedges' g)."
+)
+_STEIGER_2004: Final = (
+    "Steiger, J. H. (2004). Psychological Methods 9: 164-182 (noncentral confidence "
+    "intervals for effect sizes)."
+)
+_ROUDER_2009: Final = (
+    "Rouder, J. N., Speckman, P. L., Sun, D., Morey, R. D. & Iverson, G. (2009). "
+    "Psychonomic Bulletin & Review 16: 225-237 (JZS Bayes factor)."
+)
+_WILCOXON_1945: Final = (
+    "Wilcoxon, F. (1945). Biometrics Bulletin 1: 80-83 (the signed-rank test)."
+)
+_KERBY_2014: Final = (
+    "Kerby, D. S. (2014). Comprehensive Psychology 3: 11.IT.3.1 (the rank-biserial "
+    "correlation)."
+)
+_WILCOX_2017: Final = (
+    "Wilcox, R. R. (2017). Introduction to Robust Estimation and Hypothesis "
+    "Testing, 4th ed. Academic Press, section 4.4.3 (the bootstrap-t test of a "
+    "trimmed mean: trimcibt)."
+)
+_SHEATHER_JONES_1991: Final = (
+    "Sheather, S. J. & Jones, M. C. (1991). Journal of the Royal Statistical "
+    "Society B 53: 683-690 (kernel density bandwidth of the MAP estimate)."
+)
+
+_HEDGES_J_ZERO_WARNING: Final = (
+    "Hedges' g is 0 by construction with 2 values: its small-sample correction "
+    "J(n - 1) is 0 at 1 degree of freedom, so g and its confidence interval carry no "
+    "information about the size of the difference. Collect more values."
+)
+_POSTERIOR_WARNING: Final = (
+    "The posterior difference and its credible interval, which ggstatsplot adds to "
+    "the Bayes factor subtitle, arrive in inferplot 0.2."
+)
 
 
-def _not_implemented(data: OneData, args: _Args) -> NotImplementedError:
-    """The error of a type whose statistics are not in this version yet
-    (CLAUDE.md rule 3: no fallback to another method)."""
-    return NotImplementedError(
-        f"histostats(type={args.type!r}) ({_METHODS[args.type]}) is not implemented "
-        "yet in this version of inferplot; it arrives with the Phase 4 histostats "
-        f"statistics. The data were read: {data.n_obs} values of x={data.x!r}, to "
-        f"be tested against {r_number_text(args.test_value)}."
+_T = TypeVar("_T")
+
+
+def _checked(data: OneData, compute: Callable[[], _T]) -> _T:
+    """A statistic of x, or its ValueError (a spread below what double precision
+    resolves, a statistic beyond the largest double) naming the column."""
+    try:
+        return compute()
+    except ValueError as error:
+        text = str(error).rstrip(".")
+        raise ValueError(
+            f"{_capital(text)} (x={data.x!r}). Check the data and test_value for "
+            "entry or unit errors."
+        ) from None
+
+
+def _one_sample_bayes(data: OneData, args: _Args) -> BayesFactor:
+    bf10, log_bf01 = _checked(
+        data,
+        lambda: stats.jzs_bf10_one_sample(
+            data.values, mu=args.test_value, prior_scale=args.prior_scale
+        ),
+    )
+    return BayesFactor(
+        bf10=bf10,
+        log_bf01=log_bf01,
+        prior="cauchy",
+        prior_scale=args.prior_scale,
+        test="jzs_one_sample",
     )
 
 
 def _parametric(data: OneData, args: _Args) -> _Parts:
     """One-sample t-test against ``test_value`` with Hedges' g and the one-sample
     JZS Bayes factor caption; the mean as centrality."""
-    raise _not_implemented(data, args)
+    _check_spread(data, args)
+    x, mu, side = data.values, args.test_value, args.alternative
+    t = _checked(data, lambda: stats.one_sample_t(x, mu=mu, alternative=side))
+    g = _checked(
+        data,
+        lambda: stats.one_sample_hedges_g(
+            x, mu=mu, conf_level=args.conf_level, alternative=side
+        ),
+    )
+    test = TestResult(
+        name="one_sample_t",
+        label="One-sample t-test",
+        method="One Sample t-test",
+        statistic_name="t",
+        statistic=t.t,
+        df=None,
+        df_error=t.df,
+        p_value=t.p_value,
+        alternative=side,
+    )
+    effect_size = EffectSize(
+        name="hedges_g",
+        label="Hedges' g",
+        estimate=g.estimate,
+        conf_level=g.conf_level,
+        conf_low=g.conf_low,
+        conf_high=g.conf_high,
+        ci_method="noncentral t",
+        sidedness=g.sidedness,
+    )
+    warnings: list[str] = []
+    citations = [_STUDENT_1908, _HEDGES_1981, _STEIGER_2004]
+    if t.n == 2:
+        warnings.append(_HEDGES_J_ZERO_WARNING)
+    bayes: BayesFactor | None = None
+    if args.results_subtitle and args.bf_message is not False:
+        bayes = _one_sample_bayes(data, args)
+        citations.append(_ROUDER_2009)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=bayes,
+        centrality="mean",
+        center=stats.mean(x),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
 
 
 def _nonparametric(data: OneData, args: _Args) -> _Parts:
     """One-sample Wilcoxon signed-rank test of x - test_value with the
     rank-biserial r; the median as centrality."""
-    raise _not_implemented(data, args)
+    if _all_test_value(data, args):
+        raise ValueError(
+            f"Every value of x={data.x!r} equals test_value="
+            f"{r_number_text(args.test_value)}, so the signed-rank test has nothing "
+            "to rank (its statistic and the rank-biserial r are 0/0). There is no "
+            "difference to test; check the data for entry errors."
+        )
+    x, mu, side = data.values, args.test_value, args.alternative
+    wilcoxon = stats.one_sample_signed_rank(x, mu=mu, alternative=side)
+    r = stats.one_sample_rank_biserial(
+        x, mu=mu, conf_level=args.conf_level, alternative=side
+    )
+    test = TestResult(
+        name="wilcoxon_signed_rank",
+        label="Wilcoxon signed-rank test",
+        method="Wilcoxon signed rank test",
+        statistic_name="V",
+        statistic=wilcoxon.statistic,
+        df=None,
+        df_error=None,
+        p_value=wilcoxon.p_value,
+        alternative=side,
+    )
+    effect_size = EffectSize(
+        name="rank_biserial",
+        label="rank-biserial r",
+        estimate=r.estimate,
+        conf_level=r.conf_level,
+        conf_low=r.conf_low,
+        conf_high=r.conf_high,
+        ci_method="normal approximation (Fisher z)",
+        sidedness=r.sidedness,
+    )
+    warnings: list[str] = []
+    if abs(r.estimate) == 1.0 and r.conf_low == r.conf_high:
+        side_word, bound = ("above", "1") if r.estimate > 0 else ("below", "-1")
+        warnings.append(
+            f"Every value of x={data.x!r} that differs from test_value="
+            f"{r_number_text(mu)} lies {side_word} it, so the rank-biserial r is at "
+            f"its bound ({bound}) and its confidence interval has no width: "
+            f"[{bound}, {bound}]. The interval is built on the Fisher z scale, where "
+            "r = 1 or -1 lies infinitely far out; it does not mean the effect is "
+            "known exactly. ggstatsplot prints the same interval."
+        )
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        centrality="median",
+        center=stats.median(x),
+        warnings=tuple(warnings),
+        citations=(_WILCOXON_1945, _KERBY_2014),
+    )
 
 
 def _robust(data: OneData, args: _Args) -> _Parts:
     """Bootstrap-t test of the trimmed mean (WRS2's trimcibt) with the trimmed
     mean and its bootstrap-t CI; the trimmed mean as centrality."""
-    raise _not_implemented(data, args)
+    _check_robust(data, args)
+    x, tr = data.values, args.tr
+    try:
+        boot = stats.trimmed_mean_bootstrap_t(
+            x, mu=args.test_value, tr=tr, conf_level=args.conf_level, seed=args.seed
+        )
+    except ValueError as error:
+        text = str(error).rstrip(".")
+        advice = "" if _all_test_value(data, args) else " Use type='nonparametric'."
+        raise ValueError(f"{_capital(text)} (x={data.x!r}).{advice}") from None
+    test = TestResult(
+        name="trimmed_mean_bootstrap_t",
+        label=f"Bootstrap-t test of the {_percent(tr)}% trimmed mean",
+        method="Bootstrap-t method for one-sample test",
+        statistic_name="t",
+        statistic=boot.statistic,
+        df=None,
+        df_error=None,
+        p_value=boot.p_value,
+        alternative="two-sided",
+    )
+    effect_size = EffectSize(
+        name="trimmed_mean",
+        label="trimmed mean",
+        estimate=boot.estimate,
+        conf_level=boot.conf_level,
+        conf_low=boot.conf_low,
+        conf_high=boot.conf_high,
+        ci_method="bootstrap-t",
+        sidedness="two-sided",
+        bootstrap_resamples=boot.resamples,
+        bootstrap_seed=boot.seed,
+        undefined_resamples=boot.undefined_resamples,
+        infinite_resamples=boot.infinite_resamples,
+    )
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        centrality="trimmed_mean",
+        center=boot.estimate,
+        warnings=tuple(
+            _resample_warnings(
+                boot, effect_size, nonparametric=not _all_test_value(data, args)
+            )
+        ),
+        citations=(_WILCOX_2017,),
+    )
+
+
+def _resample_warnings(
+    boot: stats.BootstrapTrimmedMeanTest,
+    effect_size: EffectSize,
+    *,
+    nonparametric: bool,
+) -> list[str]:
+    """How many bootstrap t values were 0 / 0 (left out, D65's rule) or infinite
+    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``."""
+    total = boot.resamples
+    out: list[str] = []
+    if boot.undefined_resamples:
+        undefined = boot.undefined_resamples
+        out.append(
+            f"{undefined:,} of {total:,} bootstrap resamples give an undefined (0/0) "
+            "bootstrap t, because every winsorized value of the resample equals the "
+            "trimmed mean of the data. They are left out: the critical value, the "
+            f"interval and the p-value come from the other {total - undefined:,}."
+        )
+    if boot.infinite_resamples:
+        infinite = boot.infinite_resamples
+        out.append(
+            f"{infinite:,} of {total:,} bootstrap resamples give an infinite bootstrap "
+            "t, because every winsorized value of the resample is the same number "
+            "(a standard error of 0). They are kept, as in WRS2, so the trimmed "
+            f"mean's interval [{format_value(effect_size.conf_low)}, "
+            f"{format_value(effect_size.conf_high)}] can be unbounded"
+            + (
+                ". Collect more values, or use type='nonparametric'."
+                if nonparametric
+                else ". Collect more values."
+            )
+        )
+    return out
 
 
 def _bayes(data: OneData, args: _Args) -> _Parts:
     """One-sample JZS Bayes factor; the MAP estimate as centrality."""
-    raise _not_implemented(data, args)
+    _check_spread(data, args)
+    warnings: list[str] = []
+    bayes: BayesFactor | None = None
+    if args.results_subtitle:
+        bayes = _one_sample_bayes(data, args)
+        warnings.append(_POSTERIOR_WARNING)
+    try:
+        center: float | None = stats.map_estimate(data.values).estimate
+    except ValueError as error:
+        center = None
+        warnings.append(
+            f"x={data.x!r} (n = {data.n_obs}) has no MAP estimate, so no centrality "
+            f"line or label is drawn: {error}. ggstatsplot draws an empty label "
+            "there. Use type='nonparametric' to show the median."
+        )
+    return _Parts(
+        test=None,
+        effect_size=None,
+        bayes=bayes,
+        centrality="map",
+        center=center,
+        warnings=tuple(warnings),
+        citations=(_ROUDER_2009, _SHEATHER_JONES_1991),
+    )
 
 
 _ANALYSES: Final[dict[str, Callable[[OneData, _Args], _Parts]]] = {
@@ -175,6 +588,13 @@ def _warnings(args: _Args, parts: _Parts) -> list[str]:
         conf_level=args.conf_level,
         passed=args.passed,
     )
+    if args.seed != _DEFAULT_SEED and args.type != "robust":
+        out.append(
+            f"seed={args.passed.get('seed', args.seed)!r} has no effect: "
+            f"type={args.type!r} draws no random numbers (only type='robust' "
+            "resamples, for its bootstrap-t test), and the histogram is drawn "
+            "from every value."
+        )
     if parts.bayes is not None and args.alternative != "two-sided":
         out.append(
             "The Bayes factor in the caption is two-sided: it weighs any difference "
@@ -182,6 +602,9 @@ def _warnings(args: _Args, parts: _Parts) -> list[str]:
             "the test and its effect size interval only (as in ggstatsplot)."
         )
     return out
+
+
+_DEFAULT_SEED: Final = 0
 
 
 def _assemble(data: OneData, args: _Args, parts: _Parts, *, digits: int) -> StatsResult:
@@ -322,7 +745,7 @@ def _prepare(
         results_subtitle=subtitle_on,
         tr=trim,
         seed=rng_seed,
-        passed={"bf_prior": bf_prior, "conf_level": conf_level},
+        passed={"bf_prior": bf_prior, "conf_level": conf_level, "seed": seed},
     )
     return one, args, n_digits
 
@@ -355,12 +778,17 @@ def histostats(
       JZS Bayes factor caption. Centrality: the mean.
     * "nonparametric" ("np"): the one-sample Wilcoxon signed-rank test of
       x - test_value with the rank-biserial r. Centrality: the median.
-    * "robust" ("r"): the bootstrap-t test of the ``tr``-trimmed mean, reporting
-      the trimmed mean with its bootstrap-t interval. Centrality: the trimmed
-      mean.
+    * "robust" ("r"): the bootstrap-t test of the ``tr``-trimmed mean (2,000
+      resamples drawn with ``seed``), reporting the signed bootstrap t, its
+      bootstrap p and the trimmed mean with its bootstrap-t interval as the
+      effect size. Centrality: the trimmed mean.
     * "bayes" ("bf"): the one-sample JZS Bayes factor, reported as log_e(BF01)
-      with the prior scale ``bf_prior``. Centrality: the MAP estimate. Posterior
-      estimates arrive in 0.2.
+      with the prior scale ``bf_prior``; ``test`` and ``effect_size`` are None.
+      Centrality: the MAP estimate. Posterior estimates arrive in 0.2.
+
+    At very large |t| R's noncentral-t interval of Hedges' g and BayesFactor's
+    one-sample Bayes factor are measurably off; inferplot reports the accurate
+    values (SPEC.md section 5).
 
     Args:
         data: a pandas, polars or pyarrow data frame.
@@ -382,18 +810,18 @@ def histostats(
             "parametric" and "nonparametric". "greater" tests whether x tends to
             be greater than ``test_value``, "less" whether it tends to be less.
         seed: random seed of the bootstrap (type "robust"), recorded in the
-            result.
+            result; another value with another type adds a ``warnings`` entry.
 
     Returns:
         A :class:`~inferplot.result.StatsResult` holding every number and text.
 
     Raises:
         TypeError, ValueError: a bad argument or unusable data (a column that is
-            not numeric, fewer than two values); the message says how to fix the
-            call.
+            not numeric, fewer than two values, values that are all one number
+            for the types that need a standard deviation, every value equal to
+            ``test_value`` for the signed-rank test, too few values left after
+            trimming); the message says how to fix the call.
         KeyError: a column that the data frame does not have.
-        NotImplementedError: the statistics of each type are not in this version
-            yet.
     """
     one, args, n_digits = _prepare(
         data,
