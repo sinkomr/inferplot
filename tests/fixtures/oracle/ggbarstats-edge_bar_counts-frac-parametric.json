@@ -1,0 +1,95 @@
+{
+  "schema_version": 2,
+  "name": "ggbarstats-edge_bar_counts-frac-parametric",
+  "function": "ggbarstats",
+  "call": "ggstatsplot::ggbarstats(data = data, x = x, y = y, type = \"parametric\", counts = w_frac)",
+  "dataset": {
+    "file": "edge_bar_counts.csv",
+    "sha256": "b6be4d752618c26634bac3e73c953b66b9967abc6baf8435aec6fb5aff614cdc",
+    "rows": 8,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "x",
+    "y": "y",
+    "type": "parametric",
+    "counts": "w_frac"
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "contingency_data": {
+    "x": "x",
+    "y": "y",
+    "counts": "w_frac",
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "rows_dropped": 0,
+    "rule": "rows with x, y and counts present (tidyr::drop_na), each repeated counts times (tidyr::uncount), every column as.factor()",
+    "error": "Can't convert from `weights` <double> to <integer> due to loss of precision.\n• Locations: 4",
+    "x_levels": [],
+    "y_levels": [],
+    "table": [],
+    "n": null
+  },
+  "error": "Can't convert from `weights` <double> to <integer> due to loss of precision.\n• Locations: 4",
+  "expected_error": {
+    "component": "data",
+    "message": "Can't convert from `weights` <double> to <integer> due to loss of precision",
+    "reason": "a weight that is not a whole number: tidyr::uncount() cannot repeat a row 2.5 times"
+  },
+  "partial": [],
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [],
+  "expected_hidden_errors": [],
+  "expected_na_values": [],
+  "expected_null_outputs": [],
+  "subtitle": null,
+  "caption": null,
+  "stats": null,
+  "plot_layers": null,
+  "plot_texts": null,
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

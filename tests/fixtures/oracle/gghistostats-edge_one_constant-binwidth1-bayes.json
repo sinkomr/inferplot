@@ -1,0 +1,223 @@
+{
+  "schema_version": 2,
+  "name": "gghistostats-edge_one_constant-binwidth1-bayes",
+  "function": "gghistostats",
+  "call": "ggstatsplot::gghistostats(data = data, x = value, type = \"bayes\", test.value = 3, binwidth = 1)",
+  "dataset": {
+    "file": "edge_one_constant.csv",
+    "sha256": "452af77018f7d2be5f2e02f433dbc46d73a0d4458fd596554b6b335c136a43c2",
+    "rows": 10,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "value",
+    "type": "bayes",
+    "test.value": 3,
+    "binwidth": 1
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "analyzed_data": {
+    "x": "value",
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "x_values": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "n": 10,
+    "rows_dropped": 0,
+    "rule": "rows with x present, in file order (tidyr::drop_na on x alone)"
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": "data are essentially constant",
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [
+    "subtitle"
+  ],
+  "expected_empty_layers": [],
+  "expected_na_values": [],
+  "subtitle": null,
+  "caption": null,
+  "stats": {
+    "subtitle_data": null,
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_bar",
+      "geom": "GeomBar",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false,
+          "orientation": null,
+          "binwidth": 1,
+          "bins": null,
+          "center": null,
+          "boundary": null,
+          "closed": ["right", "left"],
+          "pad": false,
+          "breaks": null,
+          "drop": "none"
+        },
+        "geom": {
+          "na.rm": false,
+          "orientation": null
+        },
+        "aes": {
+          "colour": "black",
+          "fill": "grey50",
+          "alpha": 0.7
+        }
+      },
+      "built": [
+        {
+          "count": 10,
+          "x": 5,
+          "xmin": 4.5,
+          "xmax": 5.5,
+          "density": 1,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 10,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 10,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_vline",
+      "geom": "GeomVline",
+      "data": [
+        {
+          "xintercept": 5
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed"
+        }
+      },
+      "built": [
+        {
+          "xintercept": 5,
+          "PANEL": "1",
+          "group": -1,
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed",
+          "alpha": null
+        }
+      ]
+    }
+  ],
+  "centrality": [
+    {
+      ".x": ".x",
+      "var": 5,
+      "iqr": 0,
+      "conf.low": 5,
+      "conf.high": 5,
+      "min": 5,
+      "max": 5,
+      "skewness": "NaN",
+      "kurtosis": "NaN",
+      "n.obs": 10,
+      "missing.obs": 0,
+      "expression": "list(widehat(mu)[MAP] == \"5.00\")",
+      "n.expression": ".x\n(n = 10)"
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
