@@ -299,8 +299,16 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   from-the-definition integrals, 1e-13 or better. Refused where R answers: a
   constant variable (R prints NA), a correlation interval at n = 3, the default bin
   width of a constant column (D89)
-- [ ] analyses: each type of both functions through `ip.analyze`, API-level parity;
-  in progress
+- [x] analyses: `ip.analyze.histostats` matches all 76 fixtures and
+  `ip.analyze.scatterstats` the 60 answerable ones through the public API on pandas,
+  polars and pyarrow (identical JSON on the three). Refused by design: one-sided
+  robust and bayes histostats (2; the two-sided replay equals R), a constant column
+  (4; R prints NA). Reported exactly where R prints rounding noise: 8 exactly
+  collinear cases, with a warning (D85). Worst disagreement: statistics 5.1e-13
+  relative, Hedges' g bounds 1.1e-7 absolute, Bayes factors 3.3e-9 and 3.07e-12,
+  bootstrap-t bounds and p 2.3 and 2.6 of 4 Monte Carlo SDs. Lead's check: 60 random
+  frames on three backends against SciPy, 1e-14. To do: the figures (in progress),
+  then the final texts (the new test names need text templates), image baselines
 - [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
 - [ ] histostats, all types
 - [ ] scatterstats, all types (line, band, marginals)
