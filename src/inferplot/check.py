@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
+from inferplot.text import DATA_UNIT_EFFECT_SIZES, data_number
+
 if TYPE_CHECKING:
     from inferplot.result import StatsResult
 
@@ -373,10 +375,12 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
             # The bootstrap-t test of the trimmed mean: a resample whose
             # winsorized values are all equal has a standard error of 0. The
             # interval is unbounded when its critical value falls among them.
+            # Its bounds are in the data's units: the subtitle's number rule.
             unbounded = math.isinf(es.conf_low) or math.isinf(es.conf_high)
+            digits = result.settings.digits
             shown = (
-                f"{_percent(es.conf_level)} CI [{_bound(es.conf_low)}, "
-                f"{_bound(es.conf_high)}]"
+                f"{_percent(es.conf_level)} CI [{data_number(es.conf_low, digits)}, "
+                f"{data_number(es.conf_high, digits)}]"
             )
             parts.append(
                 f"{infinite:,} of {total:,} bootstrap resamples have a standard "
@@ -442,12 +446,19 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
     # Outside by less than the three decimals the message prints (a bound that is
     # the estimate up to its last digits): nothing a reader could see or act on.
     crossed = es.conf_low if es.estimate < es.conf_low else es.conf_high
-    if _three(es.estimate) == _three(crossed):
+    # Three decimals; an effect size in the data's units (the trimmed mean) by
+    # the subtitle's number rule at three digits, so tiny or huge units show.
+    units = es.name in DATA_UNIT_EFFECT_SIZES
+
+    def three(x: float) -> str:
+        return data_number(x, 3) if units else _three(x)
+
+    if three(es.estimate) == three(crossed):
         return None
     level = _percent(es.conf_level)
     head = (
-        f"{_named(es.label)}, {_three(es.estimate)}, lies outside its own {level} "
-        f"CI [{_three(es.conf_low)}, {_three(es.conf_high)}]."
+        f"{_named(es.label)}, {three(es.estimate)}, lies outside its own {level} "
+        f"CI [{three(es.conf_low)}, {three(es.conf_high)}]."
     )
     if es.ci_method == "percentile bootstrap":
         between = {"within": "conditions", "between": "groups"}.get(result.design)
