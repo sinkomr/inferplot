@@ -9,6 +9,15 @@ nonzero delta. Each rate must lie in the central 99% band of the binomial
 distribution of 2,000 replications at the nominal rate, so a correct method fails
 one of these tests about once in 100 seeds; the seeds are fixed, so the result is
 reproducible.
+
+``test_betweenstats_rates`` covers the other methods of betweenstats (the
+nonparametric, robust and Bayes types, the pairwise families, partial omega
+squared): each setting, its quantities, their kind (1: the nominal rate's band;
+2: the band of the rate established by tools/reference/simulation_rates.py or
+computed exactly) and the reason for the kind are in
+``tests/simulation_settings.py`` (``BETWEEN``). The Mann-Whitney test and the
+rank-biserial interval go through ``ip.analyze.betweenstats``; the others through
+``inferplot.stats``, which the parity tests tie to the analysis function.
 """
 
 from __future__ import annotations
@@ -22,6 +31,7 @@ import pytest
 from scipy import stats as sps
 
 import inferplot as ip
+from tests import simulation_settings as ss
 
 pytestmark = pytest.mark.slow
 
@@ -130,3 +140,8 @@ def test_hedges_g_interval_coverage_of_a_nonzero_difference(
     assert low <= rate <= high, (
         f"Hedges' g CI coverage of delta {delta} is {rate}, outside [{low}, {high}]"
     )
+
+
+@pytest.mark.parametrize("setting", ss.BETWEEN, ids=lambda s: s.name)
+def test_betweenstats_rates(setting: ss.Setting) -> None:
+    ss.assert_rates(setting)
