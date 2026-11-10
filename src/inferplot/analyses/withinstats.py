@@ -8,15 +8,18 @@ argument with :mod:`inferplot._validate`, and returns a
 :class:`~inferplot.result.StatsResult` with ``design="within"``. It never imports
 matplotlib.
 
-The statistics of each type (SPEC.md section 4, "withinstats") are not implemented
-yet: every type raises ``NotImplementedError`` naming the type and the number of
-conditions, after every argument has been validated and the data read. Each type's
-analysis is a function ``(data, args) -> _Parts`` in ``_ANALYSES``; ``_assemble``
-builds the result from its parts.
+Each type's analysis (SPEC.md section 4, "withinstats") is a function
+``(data, args) -> _Parts`` in ``_ANALYSES``, run after every argument has been
+validated and the data read; ``_assemble`` builds the result from its parts. Only
+the Bayesian repeated-measures ANOVA (type bayes with three or more conditions and
+the subtitle on) raises ``NotImplementedError``: it arrives in inferplot 0.2.
 """
 
 from __future__ import annotations
 
+import itertools
+import math
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -53,7 +56,7 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
-from inferplot.text import build_texts, r_number_text
+from inferplot.text import build_texts, format_value, r_number_text
 
 __all__ = ["withinstats"]
 
@@ -61,36 +64,6 @@ FloatArray = npt.NDArray[np.float64]
 
 # ggstatsplot's default trimming; another value is allowed only where it is used.
 _DEFAULT_TR: Final = 0.2
-
-# The method of each type, for the messages of the types not implemented yet
-# (SPEC.md section 4, "withinstats").
-_METHODS: Final[dict[tuple[str, bool], str]] = {
-    ("parametric", False): "the paired t-test",
-    ("parametric", True): "the repeated-measures ANOVA",
-    ("nonparametric", False): "the Wilcoxon signed-rank test",
-    ("nonparametric", True): "the Friedman test",
-    ("robust", False): "Yuen's test for dependent trimmed means",
-    ("robust", True): "the repeated-measures trimmed-means ANOVA",
-    ("bayes", False): "the paired Bayes factor",
-    ("bayes", True): "the Bayesian repeated-measures ANOVA",
-}
-
-
-def _not_implemented(type_name: str, data: WithinData) -> NotImplementedError:
-    """The error of a type whose analysis is not implemented yet (CLAUDE.md rule 3:
-    no fallback to another method)."""
-    k = len(data.levels)
-    method = _METHODS[type_name, k >= 3]
-    later = (
-        "arrives in inferplot 0.2"
-        if (type_name, k >= 3) == ("bayes", True)
-        else "is not implemented yet in this version of inferplot"
-    )
-    return NotImplementedError(
-        f"withinstats(type={type_name!r}) with {k} conditions ({method}) {later}. "
-        f"The data were read: {data.n_subjects} subjects with a value at each of "
-        f"the {k} levels of x={data.x!r}."
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -710,9 +683,262 @@ def _rank_biserial_bound_warning(
 
 
 def _robust(data: WithinData, args: _Args) -> _Parts:
-    """Yuen's test for dependent trimmed means with WRS2's dep.effect (two
-    conditions); WRS2's rmanova with rmmcp comparisons (three or more)."""
-    raise _not_implemented(args.type, data)
+    """Yuen's test for dependent trimmed means with WRS2's dep.effect AKP (two
+    conditions); WRS2's rmanova with the average AKP (wmcpAKP) and rmmcp's
+    comparisons (three or more). Every interval of this type is a 95% interval
+    whatever conf_level says, as in ggstatsplot (SPEC.md section 4)."""
+    x, levels, columns, tr = args.x, data.levels, data.by_level(), args.tr
+    _check_within_robust(data, args)
+    trimmed = f"{_trim_percent(tr)}% trimmed means"
+    pairwise: tuple[PairwiseComparison, ...] = ()
+    try:
+        if len(levels) == 2:
+            a, b = columns
+            yuen = stats.yuen_dependent_t(a, b, tr=tr)
+            akp = stats.dependent_akp(
+                a, b, tr=tr, conf_level=_ROBUST_CONF_LEVEL, seed=args.seed
+            )
+            test = TestResult(
+                name="yuen_dependent_t",
+                label=f"Yuen's t-test for dependent samples ({trimmed})",
+                method="Yuen's test on trimmed means for dependent samples",
+                statistic_name="t",
+                statistic=yuen.t,
+                df=None,
+                df_error=yuen.df,
+                p_value=yuen.p_value,
+                alternative="two-sided",
+            )
+            name, label = "akp_delta", "AKP robust standardized difference"
+            citations = [_WILCOX_2017, _AKP_2005, _EFRON_TIBSHIRANI_1993]
+        else:
+            anova = stats.trimmed_rm_anova(columns, tr=tr)
+            akp = stats.average_dependent_akp(
+                columns, tr=tr, conf_level=_ROBUST_CONF_LEVEL, seed=args.seed
+            )
+            pairwise = _rmmcp_pairs(levels, columns, args)
+            test = TestResult(
+                name="trimmed_rm_anova",
+                label=f"Repeated-measures trimmed-means ANOVA ({trimmed})",
+                method=(
+                    "A heteroscedastic one-way repeated measures ANOVA for trimmed "
+                    "means"
+                ),
+                statistic_name="F",
+                statistic=anova.f,
+                df=anova.df1,
+                df_error=anova.df2,
+                p_value=anova.p_value,
+                alternative="two-sided",
+            )
+            name, label = "akp_delta_avg", "average AKP robust standardized difference"
+            citations = [
+                _WILCOX_2017,
+                _HUYNH_FELDT_1976,
+                _AKP_2005,
+                _EFRON_TIBSHIRANI_1993,
+                *_within_adjustment_citation(args.p_adjust_method),
+            ]
+    except ValueError as error:
+        raise ValueError(
+            _robust_message(str(error), levels, x)
+            + " Pass a smaller tr, or use type='nonparametric'."
+        ) from None
+    effect_size = EffectSize(
+        name=name,
+        label=label,
+        estimate=akp.estimate,
+        conf_level=akp.conf_level,
+        conf_low=akp.conf_low,
+        conf_high=akp.conf_high,
+        ci_method="percentile bootstrap",
+        sidedness=akp.sidedness,
+        bootstrap_resamples=akp.resamples,
+        bootstrap_seed=akp.seed,
+        infinite_resamples=akp.infinite_resamples,
+    )
+    warnings = _robust_resample_warnings(akp, effect_size, k=len(levels))
+    if args.conf_level != _ROBUST_CONF_LEVEL:
+        warnings.append(_robust_level_warning(args.conf_level, k=len(levels)))
+    warnings += _within_no_effect_warnings(data, args, bayes_computed=False)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        pairwise=pairwise,
+        centrality="trimmed_mean",
+        centers=tuple(stats.trimmed_mean(column, tr=tr) for column in columns),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
+
+
+# ggstatsplot calls dep.effect, wmcpAKP and rmmcp at their default alpha 0.05:
+# conf.level reaches none of them (sleep-cl90-robust, bugs_long-cl90-robust).
+_ROBUST_CONF_LEVEL: Final = 0.95
+_WILCOX_2017: Final = (
+    "Wilcox, R. R. (2017). Introduction to Robust Estimation and Hypothesis "
+    "Testing, 4th ed. Academic Press (trimmed means of dependent groups: yuend, "
+    "rmanova, rmmcp)."
+)
+_HUYNH_FELDT_1976: Final = (
+    "Huynh, H. & Feldt, L. S. (1976). Journal of Educational Statistics 1: 69-82 "
+    "(Huynh-Feldt correction of the degrees of freedom)."
+)
+_AKP_2005: Final = (
+    "Algina, J., Keselman, H. J. & Penfield, R. D. (2005). Psychological Methods "
+    "10: 317-328 (AKP robust standardized difference)."
+)
+_CONDITION_NUMBERS: Final = re.compile(r"\bconditions (\d+) and (\d+)")
+
+
+def _trim_percent(tr: float) -> str:
+    """``tr`` as a percentage the way R prints it: 0.2 -> "20", 0.125 -> "12.5"."""
+    return r_number_text(tr * 100)
+
+
+def _robust_message(message: str, levels: Sequence[str], x: str) -> str:
+    """A statistics-layer message with its condition numbers replaced by the level
+    names (two conditions: the levels added), first letter capitalized and ended
+    with one period."""
+
+    def name(match: re.Match[str]) -> str:
+        first, second = levels[int(match.group(1)) - 1], levels[int(match.group(2)) - 1]
+        return f"the levels {first!r} and {second!r} of x={x!r}"
+
+    out = _CONDITION_NUMBERS.sub(name, message).rstrip().rstrip(".")
+    if f"x={x!r}" not in out:
+        out = f"{out} (the levels {_level_list(levels)} of x={x!r})"
+    return out[0].upper() + out[1:] + "."
+
+
+def _level_list(levels: Sequence[str]) -> str:
+    names = [repr(level) for level in levels]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _check_within_robust(data: WithinData, args: _Args) -> None:
+    """Plain errors, naming x and the levels, for data the trimmed-means methods
+    cannot use, before any of them runs (SPEC.md section 4)."""
+    n, tr = data.n_subjects, args.tr
+    g = math.floor(tr * n)
+    if n - 2 * g < 2:
+        raise ValueError(
+            f"Trimming {_trim_percent(tr)}% of the {n} complete subjects from each "
+            f"end (tr={tr!r}) leaves {n - 2 * g} at the levels of x={args.x!r}; the "
+            "trimmed-means methods need at least 2. Pass a smaller tr (for example "
+            "tr=0.1), or collect more subjects."
+        )
+    columns = data.by_level()
+    levels = data.levels
+    for i, j in itertools.combinations(range(len(levels)), 2):
+        d = columns[i] - columns[j]
+        if _winsorized_constant(d, tr):
+            raise ValueError(
+                f"After winsorizing {_trim_percent(tr)}% at each end, every "
+                f"subject's difference between the levels {levels[i]!r} and "
+                f"{levels[j]!r} of x={args.x!r} is the same, so the AKP effect size "
+                "of the paired differences (their trimmed mean over their winsorized "
+                "standard deviation) is undefined. Pass a smaller tr, or use "
+                "type='nonparametric'."
+            )
+
+
+def _winsorized_constant(values: FloatArray, tr: float) -> bool:
+    """Whether winsorizing g = floor(tr n) values at each end leaves one distinct
+    value (on the rounded differences; the statistics layer decides on the exact
+    ones and raises in the rare case they disagree)."""
+    ordered = values.copy()
+    ordered.sort()
+    g = math.floor(tr * ordered.size)
+    return bool(ordered[g] == ordered[ordered.size - g - 1])
+
+
+def _rmmcp_pairs(
+    levels: Sequence[str], columns: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """rmmcp's comparison of every pair i < j in level order: the trimmed mean of
+    the differences group1 - group2 with its 95% Bonferroni interval, its t and
+    df, the raw p adjusted with ``p_adjust_method`` over all pairs; rows in
+    ggstatsplot's order (``_sorted_pairs``)."""
+    pairs = stats.rmmcp(
+        columns,
+        tr=args.tr,
+        conf_level=_ROBUST_CONF_LEVEL,
+        p_adjust_method=args.p_adjust_method,
+    )
+    rows: list[PairwiseComparison] = []
+    for pair in pairs:
+        significant = pair.p_adjusted < args.pairwise_alpha
+        rows.append(
+            PairwiseComparison(
+                group1=levels[pair.i],
+                group2=levels[pair.j],
+                statistic_name="t",
+                statistic=pair.t,
+                df=pair.df,
+                p_value=pair.p_value,
+                p_adjusted=pair.p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test="rmmcp",
+                test_label="Yuen's trimmed means",
+                significant=significant,
+                displayed=_displayed(args.pairwise_display, significant),
+                estimate=pair.estimate,
+                conf_level=_ROBUST_CONF_LEVEL,
+                conf_low=pair.conf_low,
+                conf_high=pair.conf_high,
+            )
+        )
+    return _sorted_pairs(rows)
+
+
+def _robust_level_warning(conf_level: float, *, k: int) -> str:
+    """D53's rule for the within methods: conf_level reaches no interval."""
+    what = (
+        "the AKP effect size's bootstrap interval is always a 95% interval"
+        if k == 2
+        else "the average AKP effect size's bootstrap interval and the pairwise "
+        "intervals are always 95% intervals"
+    )
+    return (
+        f"conf_level={conf_level!r} has no effect: {what}, as in "
+        "ggstatsplot, which does not pass conf.level to WRS2 here; the effect size "
+        "records conf_level 0.95."
+    )
+
+
+def _robust_resample_warnings(
+    akp: stats.BootstrapEffectSizeCI, effect_size: EffectSize, *, k: int
+) -> list[str]:
+    """How many bootstrap values were 0 / 0 (left out, D54's rule) or infinite
+    (kept); ``check()`` reports the infinite ones as ``infinite_effect_size``. The
+    undefined count lives on the statistics object until the result contract
+    carries it."""
+    total = akp.resamples if k == 2 else akp.resamples * k * (k - 1) // 2
+    where = (
+        f"{total:,} bootstrap resamples"
+        if k == 2
+        else f"{total:,} bootstrap values ({akp.resamples:,} resamples of the "
+        f"subjects for each of the {k * (k - 1) // 2} pairs)"
+    )
+    out: list[str] = []
+    if akp.undefined_resamples:
+        out.append(
+            f"{akp.undefined_resamples:,} of the {where} give an undefined (0/0) "
+            "AKP, because in them every winsorized difference is 0. They are left "
+            "out: each pair's confidence interval comes from the others."
+        )
+    if akp.infinite_resamples:
+        out.append(
+            f"{akp.infinite_resamples:,} of the {where} give an infinite AKP, because "
+            "in them every winsorized difference is the same nonzero value. They "
+            "are kept, so the confidence interval "
+            f"[{format_value(effect_size.conf_low)}, "
+            f"{format_value(effect_size.conf_high)}] can be unbounded. Pass a "
+            "smaller tr, or use type='nonparametric'."
+        )
+    return out
 
 
 def _bayes(data: WithinData, args: _Args) -> _Parts:
@@ -1114,8 +1340,9 @@ def withinstats(
             message says how to fix the call. A call without ``subject_id`` raises
             ``TypeError``.
         KeyError: a column that the data frame does not have.
-        NotImplementedError: this version computes no within-subjects statistics
-            yet; the message names the type and the number of conditions.
+        NotImplementedError: what arrives in inferplot 0.2 (the Bayesian
+            repeated-measures ANOVA: type "bayes" with three or more conditions
+            unless ``results_subtitle=False``, and ``bf_message=True`` there).
     """
     if subject_id is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise subject_id_required("withinstats", given=describe_value(subject_id))

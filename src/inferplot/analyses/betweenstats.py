@@ -940,12 +940,16 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
     x, tr, level = args.x, args.tr, args.conf_level
     _check_robust(x, levels, values, args)
     trimmed = f"{_percent(tr)}% trimmed means"
+    # t1way's estimate with unequal sizes is the bootstrap median.
+    median_estimate = len(levels) > 2 and len({v.size for v in values}) > 1
     pairwise: tuple[PairwiseComparison, ...] = ()
+    bootstrap: stats.BootstrapEffectSizeCI
     try:
         if len(levels) == 2:
             a, b = values
             yuen = stats.yuen_t(a, b, tr=tr)
             akp = stats.akp_effect(a, b, tr=tr, conf_level=level, seed=args.seed)
+            bootstrap = akp
             test = TestResult(
                 name="yuen_t",
                 label=f"Yuen's t-test ({trimmed})",
@@ -976,6 +980,7 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
             xi = stats.explanatory_effect(
                 values, tr=tr, conf_level=level, seed=args.seed
             )
+            bootstrap = xi
             test = TestResult(
                 name="trimmed_means_anova",
                 label=f"Trimmed-means ANOVA ({trimmed})",
@@ -1025,11 +1030,16 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
         centrality="trimmed_mean",
         centers=tuple(stats.trimmed_mean(v, tr=tr) for v in values),
         warnings=(
+            *_undefined_effect_warnings(
+                bootstrap,
+                effect_size.label,
+                two_groups=len(levels) == 2,
+                median_estimate=median_estimate,
+            ),
             *_infinite_effect_warnings(
                 effect_size,
                 two_groups=len(levels) == 2,
-                # t1way's estimate with unequal sizes is the bootstrap median.
-                median_estimate=len(levels) > 2 and len({v.size for v in values}) > 1,
+                median_estimate=median_estimate,
             ),
             *(
                 (_lincon_level_warning(level),)
@@ -1039,6 +1049,41 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
         ),
         citations=tuple(citations),
     )
+
+
+def _undefined_effect_warnings(
+    bootstrap: stats.BootstrapEffectSizeCI,
+    label: str,
+    *,
+    two_groups: bool,
+    median_estimate: bool,
+) -> list[str]:
+    """The bootstrap resamples where the robust effect size is 0 / 0, left out of
+    its percentile interval (DECISIONS.md D54, as rank epsilon squared's tied
+    resamples). The count lives on the statistics object until the result
+    contract carries it."""
+    undefined, total = bootstrap.undefined_resamples, bootstrap.resamples
+    if not undefined:
+        return []
+    why = (
+        "the first group's winsorized variance is 0 and the trimmed means are equal"
+        if two_groups
+        else "the pooled winsorized variance is 0 and the trimmed means are equal"
+    )
+    what = (
+        "the confidence interval and the estimate (their median, as the group "
+        "sizes differ) come"
+        if median_estimate
+        else "the confidence interval comes"
+    )
+    give, them, they = (
+        ("gives", "it", "It is") if undefined == 1 else ("give", "them", "They are")
+    )
+    return [
+        f"{undefined:,} of {total:,} bootstrap resamples {give} an undefined (0/0) "
+        f"{label}, because in {them} {why}. {they} left out: {what} from the "
+        f"other {total - undefined:,}."
+    ]
 
 
 def _infinite_effect_warnings(

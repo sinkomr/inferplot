@@ -468,6 +468,8 @@ _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "rm_anova": ("fisher_f", True, True),
     "wilcoxon_signed_rank": ("wilcoxon_v", False, False),
     "friedman": ("friedman_chi2", False, False),
+    "yuen_dependent_t": ("yuen_t", False, False),
+    "trimmed_rm_anova": ("trimmed_means_f", True, True),
 }
 
 

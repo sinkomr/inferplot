@@ -35,8 +35,10 @@ from inferplot.stats import (
 from inferplot.stats._smm_table import SMM_ROWS, SMM_TABLE_05
 from inferplot.stats.robust import (
     SMM_MAX_TABLED,
-    _floor_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
+    floor_percentile_bounds,
+    replicate_bounds,
+    split_replicates,
 )
 from tests.oracle_fixtures import probe, r_double
 from tests.stats.fixture_data import between_cases, groups
@@ -141,7 +143,7 @@ def test_percentile_order_statistics(
     count: int, akp: tuple[int, int], t1way: tuple[int, int]
 ) -> None:
     ordered = np.arange(count, dtype=np.float64)
-    assert _floor_percentile_bounds(ordered, 0.95) == akp
+    assert floor_percentile_bounds(ordered, 0.95) == akp
     assert _rounded_percentile_bounds(ordered, 0.95) == t1way
 
 
@@ -216,14 +218,17 @@ def test_infinite_resamples_are_kept_and_counted() -> None:
         ],
         seed=0,
     )
-    assert xi.infinite_resamples == 162
+    # Re-pinned (was 162): S5 changed the stream, the groups now draw in an order
+    # fixed by their contents.
+    assert xi.infinite_resamples == 144
+    assert xi.undefined_resamples == 1
     assert xi.conf_high == math.inf
     # Equal sizes with a pooled winsorized variance of 0: the estimate is inf.
     low = np.array([-1.0] * 20 + [0.0] * 30)
     high = np.array([0.0] * 30 + [1.0] * 20)
     flat = explanatory_effect([low, high, low, high], seed=0)
     assert flat.estimate == math.inf
-    assert flat.infinite_resamples == 593
+    assert flat.infinite_resamples == 608  # re-pinned (was 593): S5's stream
     clean = explanatory_effect(_draw([10, 10, 10], 4), seed=0)
     assert clean.infinite_resamples == 0
     assert rank_epsilon_squared(_draw([10, 10, 10], 4)).infinite_resamples == 0
@@ -662,13 +667,73 @@ def test_constant_and_zero_winsorized_variance() -> None:
         explanatory_effect([constant, constant, constant])
 
 
-def test_undefined_resamples_raise() -> None:
-    # Most resamples of `a` with eight or more zeros winsorize to all zeros with a
-    # trimmed mean of 0, as `b` has: 0 / 0, so no percentile interval exists.
+def test_undefined_resamples_are_left_out_and_counted() -> None:
+    # Resamples of `a` with eight or more zeros winsorize to all zeros with a
+    # trimmed mean of 0, as `b` has: 0 / 0. They are left out of the percentile
+    # interval and counted (D54's rule, S3), the others give the interval.
     a = np.array([0.0] * 6 + [1.0] * 4)
     b = np.zeros(10)
-    with pytest.raises(ValueError, match="undefined"):
-        akp_effect(a, b)
+    akp = akp_effect(a, b)
+    assert akp.undefined_resamples == 333
+    assert akp.infinite_resamples == 21
+    assert math.isfinite(akp.conf_low)
+    assert math.isfinite(akp.conf_high)
+    assert akp.conf_low <= akp.estimate <= akp.conf_high
+    # At conf_level 0.999 the floor rule needs all 2,000 resamples for its one
+    # resample beyond each bound; 1,667 are left, so the interval does not exist.
+    with pytest.raises(
+        ValueError, match=r"undefined \(0 / 0\) in 333 of 2,000 .* leaves 1,667"
+    ):
+        akp_effect(a, b, conf_level=0.999)
+    # xi: three groups whose resamples are 0 / 0 now and then.
+    xi = explanatory_effect(
+        [
+            np.array([1.0, 0, 1, 1, 1, 1, 1, 1, 0]),
+            np.array([0.0, 0, -1, -1, -1]),
+            np.array([0.0, -1, -1, 0, 0, 0, 0]),
+        ],
+        seed=0,
+    )
+    assert xi.undefined_resamples == 1
+
+
+def test_undefined_resamples_order_statistics() -> None:
+    # The order statistics are counted over the defined resamples only (rule (a)
+    # of S3): 40 defined values at 0.95 give the 2nd smallest and the 39th.
+    values = np.concatenate([np.arange(40.0), np.full(1960, np.nan)])
+    replicates = split_replicates(values)
+    assert replicates.undefined == 1960
+    assert replicates.infinite == 0
+    assert replicate_bounds(replicates, 0.95, floor_percentile_bounds, "x") == (
+        1.0,
+        38.0,
+    )
+    assert replicate_bounds(replicates, 0.95, _rounded_percentile_bounds, "x") == (
+        1.0,
+        38.0,
+    )
+    with pytest.raises(ValueError, match=r"in 1,960 of 2,000 .* leaves 40"):
+        replicate_bounds(replicates, 0.96, floor_percentile_bounds, "x")
+    nothing = split_replicates(np.full(2000, np.nan))
+    with pytest.raises(ValueError, match=r"in 2,000 of 2,000 .* leaves 0"):
+        replicate_bounds(nothing, 0.95, floor_percentile_bounds, "x")
+    infinite = split_replicates(np.array([-np.inf, np.nan, *range(40), np.inf]))
+    assert (infinite.undefined, infinite.infinite) == (1, 2)
+    # Without 0 / 0 resamples a level too close to 1 keeps its own message.
+    with pytest.raises(ValueError, match="too close to 1"):
+        replicate_bounds(
+            split_replicates(np.arange(2000.0)), 0.9999, floor_percentile_bounds, "x"
+        )
+
+
+def test_explanatory_effect_ignores_the_group_order() -> None:
+    # S5: unequal sizes, so the estimate is the bootstrap median; the groups draw
+    # from the stream in an order fixed by their contents, so every order of the
+    # groups gives the same result, bit for bit.
+    groups_ = _draw([7, 12, 9], 11)
+    first = explanatory_effect(groups_, seed=4)
+    for order in ([2, 1, 0], [1, 0, 2], [0, 2, 1]):
+        assert explanatory_effect([groups_[i] for i in order], seed=4) == first
 
 
 def test_constant_groups_in_the_explanatory_effect() -> None:

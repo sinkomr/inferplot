@@ -383,54 +383,31 @@ def test_arguments_a_type_cannot_use(two: pd.DataFrame, four: pd.DataFrame) -> N
 
 
 # --------------------------------------------------------------------------- #
-# the analysis: data are read, then NotImplementedError per type
+# the analysis: every type computes
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize(
-    ("kind", "k", "method", "later"),
-    [
-        (
-            "robust",
-            2,
-            "Yuen's test for dependent trimmed means",
-            "is not implemented yet",
-        ),
-        (
-            "robust",
-            4,
-            "the repeated-measures trimmed-means ANOVA",
-            "is not implemented yet",
-        ),
-    ],
-)
-def test_each_type_raises_not_implemented(
-    two: pd.DataFrame, four: pd.DataFrame, kind: str, k: int, method: str, later: str
-) -> None:
-    frame, x, y, subject_id, n = (
-        (two, "group", "extra", "ID", 10)
-        if k == 2
-        else (four, "condition", "desire", "subject", 88)
+@pytest.mark.parametrize("kind", ["parametric", "nonparametric", "robust", "bayes"])
+def test_every_type_computes(two: pd.DataFrame, four: pd.DataFrame, kind: str) -> None:
+    # What is still missing is the Bayesian ANOVA of type bayes with three or more
+    # conditions (v0.2; test_bayes_... above), which results_subtitle=False avoids.
+    assert analyze(two, "group", "extra", subject_id="ID", type=kind).type == kind
+    result = analyze(
+        four,
+        "condition",
+        "desire",
+        subject_id="subject",
+        type=kind,
+        results_subtitle=kind != "bayes",
     )
-    for fn in (analyze, top):  # the top-level function analyzes before drawing
-        text = message(
-            NotImplementedError,
-            lambda fn=fn: fn(frame, x, y, subject_id=subject_id, type=kind),
-        )
-        assert text == (
-            f"withinstats(type={kind!r}) with {k} conditions ({method}) {later}"
-            f"{' in this version of inferplot' if later.startswith('is') else ''}. "
-            f"The data were read: {n} subjects with a value at each of the {k} levels "
-            f"of x={x!r}."
-        )
+    assert result.type == kind
+    assert len(result.pairwise) == 6
 
 
 def test_type_aliases_reach_the_same_type(two: pd.DataFrame) -> None:
-    for alias, kind in (("p", "parametric"), ("bf", "bayes"), ("np", "nonparametric")):
+    aliases = (("p", "parametric"), ("np", "nonparametric"), ("r", "robust"))
+    for alias, kind in (*aliases, ("bf", "bayes")):
         assert call(two, type=alias).type == kind
-    for alias, kind in (("r", "robust"),):
-        text = message(NotImplementedError, lambda alias=alias: call(two, type=alias))
-        assert text.startswith(f"withinstats(type={kind!r})")
 
 
 def test_data_errors_come_before_not_implemented(two: pd.DataFrame) -> None:
