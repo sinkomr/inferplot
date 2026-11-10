@@ -654,20 +654,54 @@ def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:
     return [o - middle for o in ordered]
 
 
-def _check_replicates(values: NDArray[np.float64], what: str) -> int:
-    """Raise when a resample is 0 / 0; return how many are +/-inf (a winsorized
-    variance of 0 under a numerator that is not). The infinite values are kept, as
-    WRS2 keeps them: its arithmetic gives the same infinities, so a percentile
-    bound can be infinite."""
-    undefined = int(np.isnan(values).sum())
-    if undefined:
-        raise ValueError(
-            f"{what} is undefined (0 / 0) in {undefined} of {values.size} bootstrap "
-            "resamples, because a resample's winsorized variance is 0 together "
-            "with its numerator; the data have too few distinct values for this "
-            "bootstrap CI"
-        )
-    return int(np.isinf(values).sum())
+@dataclass(frozen=True, slots=True)
+class _Replicates:
+    """The bootstrap values split as the percentile interval uses them.
+
+    ``defined`` holds the sorted values that are not 0 / 0 (NaN); ``undefined``
+    counts the 0 / 0 resamples, which are left out (DECISIONS.md D54, extended to
+    the robust effect sizes); ``infinite`` counts the +/-inf resamples (a
+    winsorized variance of 0 under a numerator that is not), which are kept, as
+    WRS2's arithmetic gives the same infinities, so a bound can be infinite.
+    """
+
+    defined: NDArray[np.float64]
+    undefined: int
+    infinite: int
+
+
+def _split_replicates(values: NDArray[np.float64]) -> _Replicates:
+    defined = _sorted(values[~np.isnan(values)])
+    return _Replicates(
+        defined=defined,
+        undefined=values.size - defined.size,
+        infinite=int(np.isinf(defined).sum()),
+    )
+
+
+def _replicate_bounds(
+    replicates: _Replicates,
+    conf_level: float,
+    rule: Callable[[NDArray[np.float64], float], tuple[float, float]],
+    what: str,
+) -> tuple[float, float]:
+    """The percentile ``rule`` over the defined resamples, its order statistics
+    counted over them; a plain error when the 0 / 0 resamples leave too few."""
+    if replicates.defined.size:
+        try:
+            return rule(replicates.defined, conf_level)
+        except ValueError:
+            if not replicates.undefined:
+                raise
+    total = replicates.undefined + replicates.defined.size
+    raise ValueError(
+        f"{what} is undefined (0 / 0) in {replicates.undefined:,} of {total:,} "
+        "bootstrap resamples, because a resample's winsorized variance is 0 "
+        "together with its numerator; that leaves "
+        f"{replicates.defined.size:,}, too few for a percentile interval at "
+        f"conf_level={conf_level!r} (the data have too few distinct values for "
+        "this bootstrap CI)"
+    )
 
 
 def _floor_percentile_bounds(
@@ -735,9 +769,12 @@ def akp_effect(
     floor((1 - alpha / 2) B)-th smallest of the resampled deltas, alpha =
     1 - conf_level (WRS2's order statistics, read off the oracle's replay). A
     resample whose first sample has a winsorized variance of 0 while the trimmed
-    means differ gives delta = +/-inf; it is kept (WRS2's formula gives the same;
-    no oracle fixture has one), so a bound can be infinite, and counted in
-    ``infinite_resamples``.
+    means differ gives delta = +/-inf; it is kept (WRS2's formula gives the same,
+    and edge_heavy_ties2's reference bound is -Inf), so a bound can be infinite,
+    and counted in ``infinite_resamples``. A resample where the trimmed means are
+    also equal gives 0 / 0: it is left out, B is the number of the others, and it
+    is counted in ``undefined_resamples`` (DECISIONS.md D54's rule; the fixtures
+    have too few such resamples to tell it from WRS2's alternatives, S3).
 
     WRS2 evaluates s_N numerically, off the exact value used here by an amount
     that varies with tr: 1.2e-9 relative above it at tr = 0.2, 4.6e-9 at 0.1, up
@@ -747,8 +784,8 @@ def akp_effect(
         ValueError: a sample has fewer than two values or a non-finite value,
             trimming leaves fewer than two values, the first sample's winsorized
             variance is 0 (or too small to resolve next to the largest |value|),
-            a resample's delta is 0 / 0, or an invalid ``tr``, ``conf_level`` or
-            ``seed``.
+            so many resamples are 0 / 0 that the others are too few for the
+            percentile interval, or an invalid ``tr``, ``conf_level`` or ``seed``.
     """
     t_trim = _check_trim(tr)
     level = check_conf_level(conf_level)
@@ -772,9 +809,10 @@ def akp_effect(
             return constant * (tm_a - tm_b) / np.sqrt(wv_a)
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
-    values = _replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
-    infinite = _check_replicates(values, method)
-    low, high = _floor_percentile_bounds(_sorted(values), level)
+    replicates = _split_replicates(
+        _replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
+    )
+    low, high = _replicate_bounds(replicates, level, _floor_percentile_bounds, method)
     return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
@@ -783,7 +821,8 @@ def akp_effect(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
-        infinite_resamples=infinite,
+        undefined_resamples=replicates.undefined,
+        infinite_resamples=replicates.infinite,
     )
 
 
@@ -811,12 +850,17 @@ def explanatory_effect(
     1 - conf_level in floating point (WRS2's rule; at B = 100 alpha / 2 B is
     2.5000000000000022, so l = 3, which ggstatsplot's own values need). A resample
     whose pooled winsorized variance is 0 while its trimmed means differ gives
-    xi = inf; it is kept and counted in ``infinite_resamples``.
+    xi = inf; it is kept and counted in ``infinite_resamples``. One whose trimmed
+    means are also equal gives 0 / 0: it is left out, B is the number of the
+    others, and it is counted in ``undefined_resamples`` (as ``akp_effect``).
+    The groups draw from the stream in an order fixed by their contents (size,
+    then sorted values), so the result does not depend on the order of the
+    groups.
 
     Estimate: with equal group sizes, xi of the data (inf when the pooled
     winsorized variance is 0 and the trimmed means differ). With unequal sizes the
-    median of the bootstrap values, as WRS2 reports it (oracle replay; the
-    100-resample values reproduce exactly), so it depends on ``seed``.
+    median of the (defined) bootstrap values, as WRS2 reports it (oracle replay;
+    the 100-resample values reproduce exactly), so it depends on ``seed``.
 
     WRS2 divides by 0.4120867 instead of the exact winsorized normal variance
     0.41208672670619, so its xi is 3.2e-8 relative below the value here (tolerance
@@ -825,8 +869,9 @@ def explanatory_effect(
     Raises:
         ValueError: fewer than two groups, a group with fewer than two values or a
             non-finite value, a pooled winsorized variance of 0 together with equal
-            trimmed means in the data or in a resample (0 / 0), or an invalid
-            ``tr``, ``conf_level`` or ``seed``.
+            trimmed means in the data (0 / 0), so many 0 / 0 resamples that the
+            others are too few for the percentile interval, or an invalid ``tr``,
+            ``conf_level`` or ``seed``.
     """
     t_trim = _check_trim(tr)
     level = check_conf_level(conf_level)
@@ -850,10 +895,7 @@ def explanatory_effect(
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.sqrt(top / (pooled / normal))
 
-    rng = np.random.Generator(np.random.PCG64(rng_seed))
-    values = _replicates(rng, _centred(ordered), [size] * k, xis)
-    infinite = _check_replicates(values, method)
-    values = _sorted(values)
+    estimate: float | None = None
     if all(o.size == size for o in ordered):
         # The variance of the exact trimmed means, rounded once.
         top = exact_variance([_exact_trimmed_mean(o, t_trim) for o in ordered])
@@ -870,9 +912,15 @@ def explanatory_effect(
             estimate = math.inf
         else:
             estimate = math.sqrt(top / (wvar / normal))
-    else:
-        estimate = float(np.median(values))
-    low, high = _rounded_percentile_bounds(values, level)
+    rng = np.random.Generator(np.random.PCG64(rng_seed))
+    # The groups draw from the stream in an order fixed by their contents (size,
+    # then sorted values), so the result does not depend on the order of the
+    # groups (``rank_epsilon_squared`` does the same).
+    canonical = sorted(_centred(ordered), key=lambda o: (o.size, o.tolist()))
+    replicates = _split_replicates(_replicates(rng, canonical, [size] * k, xis))
+    low, high = _replicate_bounds(replicates, level, _rounded_percentile_bounds, method)
+    if estimate is None:
+        estimate = float(np.median(replicates.defined))
     return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
@@ -881,5 +929,6 @@ def explanatory_effect(
         sidedness="two-sided",
         seed=rng_seed,
         resamples=BOOTSTRAP_RESAMPLES,
-        infinite_resamples=infinite,
+        undefined_resamples=replicates.undefined,
+        infinite_resamples=replicates.infinite,
     )

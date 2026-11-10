@@ -330,14 +330,48 @@ def test_robust_plain_errors() -> None:
         betweenstats(tiny, "g", "y", type="robust", tr=0.0)
 
 
-def test_robust_bootstrap_error_names_x() -> None:
+def test_robust_undefined_resamples_are_left_out() -> None:
     # Most values of 'a' are 5, as are all of 'b': 759 of 2,000 AKP resamples
-    # have a winsorized variance of 0 and a difference of 0.
+    # have a winsorized variance of 0 and a difference of 0. They are left out of
+    # the interval and counted in a warning (S3, D54's rule).
+    data = frame({"a": [5.0] * 7 + [6.0, 7.0, 8.0], "b": [5.0] * 10})
+    result = betweenstats(data, "g", "y", type="robust")
+    es = result.effect_size
+    assert math.isfinite(es.conf_low)
+    assert math.isfinite(es.conf_high)
+    assert result.warnings == (
+        "759 of 2,000 bootstrap resamples give an undefined (0/0) AKP robust "
+        "standardized difference, because in them the first group's winsorized "
+        "variance is 0 and the trimmed means are equal. They are left out: the "
+        "confidence interval comes from the other 1,241.",
+    )
+    assert StatsResult.from_json(result.to_json()) == result
+
+
+def test_robust_bootstrap_error_names_x() -> None:
+    # At conf_level 0.999 the interval needs all 2,000 resamples; 759 are 0 / 0.
     data = frame({"a": [5.0] * 7 + [6.0, 7.0, 8.0], "b": [5.0] * 10})
     with pytest.raises(
         ValueError, match=r"0 / 0.*\(the groups of x='g'\)\. Pass a smaller tr"
     ):
-        betweenstats(data, "g", "y", type="robust")
+        betweenstats(data, "g", "y", type="robust", conf_level=0.999)
+
+
+def test_robust_xi_ignores_the_group_order() -> None:
+    # S5: unequal sizes; the explanatory effect size and its interval are the same
+    # whatever the order of the groups.
+    data = frame(
+        {
+            "a": [1.0, 4, 2, 8, 5, 7, 3],
+            "b": [2.0, 9, 6, 7, 5, 8, 9, 10, 4],
+            "c": [3.0, 1, 2, 6, 4],
+        }
+    )
+    first = betweenstats(data, "g", "y", type="robust").effect_size
+    second = betweenstats(
+        data, "g", "y", type="robust", order=["c", "b", "a"]
+    ).effect_size
+    assert first == second
 
 
 def test_robust_conf_level_too_close_to_one_raises(
@@ -798,16 +832,21 @@ def test_robust_infinite_xi_resamples() -> None:
     )
     result = betweenstats(data, "g", "y", type="robust")
     es = result.effect_size
-    assert es.infinite_resamples == 162
+    # Re-pinned (was 162 and [0.65, Inf]): S5 changed the stream.
+    assert es.infinite_resamples == 144
     assert es.conf_high == math.inf
     assert math.isfinite(es.estimate)  # the median of the resamples (unequal n)
-    assert [w for w in result.warnings if "infinite" in w] == [
-        "162 of 2,000 bootstrap resamples give an infinite explanatory effect size "
+    assert result.warnings == (
+        "1 of 2,000 bootstrap resamples gives an undefined (0/0) explanatory effect "
+        "size xi, because in it the pooled winsorized variance is 0 and the trimmed "
+        "means are equal. It is left out: the confidence interval and the estimate "
+        "(their median, as the group sizes differ) come from the other 1,999.",
+        "144 of 2,000 bootstrap resamples give an infinite explanatory effect size "
         "xi, because in them the pooled winsorized variance is 0 while the trimmed "
         "means differ. They are kept, so the confidence "
-        "interval [0.65, Inf] can be unbounded. Pass a smaller tr, or use "
-        "type='nonparametric'."
-    ]
+        "interval [0.62, Inf] can be unbounded. Pass a smaller tr, or use "
+        "type='nonparametric'.",
+    )
     assert "infinite_effect_size" in _codes(result)
 
 
@@ -822,7 +861,7 @@ def test_robust_infinite_xi_estimate() -> None:
     )
     es = result.effect_size
     assert es.estimate == math.inf
-    assert es.infinite_resamples == 593
+    assert es.infinite_resamples == 608  # re-pinned (was 593): S5 changed the stream
     assert "xi = Inf, 95% CI [0.43, Inf]" in result.text.apa
     assert result.warnings[0] == (
         "The explanatory effect size xi is infinite: the pooled winsorized variance "
