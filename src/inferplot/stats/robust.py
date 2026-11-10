@@ -823,9 +823,33 @@ def akp_effect(
             so many resamples are 0 / 0 that the others are too few for the
             percentile interval, or an invalid ``tr``, ``conf_level`` or ``seed``.
     """
-    t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
+    estimate, values = _akp_replicates(a, b, tr=tr, seed=rng_seed)
+    replicates = split_replicates(values)
+    low, high = replicate_bounds(
+        replicates, level, floor_percentile_bounds, "the AKP effect size"
+    )
+    return BootstrapEffectSizeCI(
+        estimate=estimate,
+        conf_low=low,
+        conf_high=high,
+        conf_level=level,
+        sidedness="two-sided",
+        seed=rng_seed,
+        resamples=BOOTSTRAP_RESAMPLES,
+        undefined_resamples=replicates.undefined,
+        infinite_resamples=replicates.infinite,
+    )
+
+
+def _akp_replicates(
+    a: SampleLike, b: SampleLike, *, tr: float, seed: int
+) -> tuple[float, NDArray[np.float64]]:
+    """``akp_effect``'s estimate and its BOOTSTRAP_RESAMPLES resampled values in
+    the order drawn, NaN for a 0 / 0 resample (tests read them to apply other
+    percentile rules)."""
+    t_trim = check_trim(tr)
     raw_a = as_sample(a, name="a", min_size=2)
     raw_b = as_sample(b, name="b", min_size=2)
     scale = common_scale(raw_a, raw_b)
@@ -856,22 +880,9 @@ def akp_effect(
             out[row] = math.nan if sign == 0.0 else sign * math.inf
         return out
 
-    rng = np.random.Generator(np.random.PCG64(rng_seed))
-    replicates = split_replicates(
-        bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
-    )
-    low, high = replicate_bounds(replicates, level, floor_percentile_bounds, method)
-    return BootstrapEffectSizeCI(
-        estimate=estimate,
-        conf_low=low,
-        conf_high=high,
-        conf_level=level,
-        sidedness="two-sided",
-        seed=rng_seed,
-        resamples=BOOTSTRAP_RESAMPLES,
-        undefined_resamples=replicates.undefined,
-        infinite_resamples=replicates.infinite,
-    )
+    rng = np.random.Generator(np.random.PCG64(seed))
+    values = bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
+    return estimate, values
 
 
 def explanatory_effect(
