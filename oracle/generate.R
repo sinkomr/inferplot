@@ -233,6 +233,55 @@ edge_one <- function(dataset, test_value, ...) {
 }
 edge_corr <- function(dataset, ...) scatter_cases(dataset, x = "x", y = "y", ...)
 
+# Phase 4 (barstats): ggbarstats cases, one per type in `types`. `x` is the variable
+# drawn as the fill (the rows of the table), `y` the bars (its columns); without `y`
+# the design is one-way (goodness of fit), which ggbarstats 1.1.4 accepts as well as
+# ggpiestats (`fun`; both compute it through statsExpressions::contingency_table()).
+# `columns` names the arguments that are column names (counts too). Declarations as
+# above, by type: `expect_error` (ggstatsplot fails; component "data" when it fails
+# while preparing the data, before any hidden call), `expect_hidden_errors` (the
+# components whose error ggstatsplot swallows: subtitle, caption,
+# pairwise_comparisons, and proportion_test for the per-bar tests, which become NA
+# rows), `expect_na_values` (the tables, among subtitle, caption, pairwise and
+# one_sample, where R reports a number as NA) and `expect_null_outputs` (components
+# that return nothing without an error).
+bar_cases <- function(dataset, x, y = NULL, label = dataset, types = "parametric",
+                      extra_args = list(), factor_levels = NULL, fun = "ggbarstats",
+                      expect_error = list(), expect_hidden_errors = list(),
+                      expect_na_values = list(), expect_null_outputs = list()) {
+  declared <- c(
+    names(expect_error), names(expect_hidden_errors), names(expect_na_values),
+    names(expect_null_outputs)
+  )
+  unknown <- setdiff(declared, types)
+  if (length(unknown) > 0L) stop(label, ": expectations for types without a case: ", unknown)
+  lapply(types, function(type) {
+    args <- c(list(x = x), if (!is.null(y)) list(y = y), list(type = type), extra_args)
+    list(
+      name = paste(fun, label, type, sep = "-"),
+      fun = fun,
+      dataset = dataset,
+      factor_levels = factor_levels,
+      args = args,
+      columns = intersect(c("x", "y", "counts"), names(args)),
+      expect_error = expect_error[[type]],
+      expect_hidden_errors = expect_hidden_errors[[type]] %||% character(),
+      expect_empty_layers = character(),
+      expect_na_values = expect_na_values[[type]] %||% character(),
+      expect_null_outputs = expect_null_outputs[[type]] %||% character()
+    )
+  })
+}
+pie_cases <- function(...) bar_cases(..., fun = "ggpiestats")
+# The hand-written two-way edge datasets share their columns.
+edge_bar <- function(dataset, ...) bar_cases(dataset, x = "x", y = "y", ...)
+# The paired ones: one row per subject, the answer before (x) and after (y).
+edge_paired <- function(dataset, extra_args = list(), ...) {
+  bar_cases(
+    dataset, x = "before", y = "after", extra_args = c(list(paired = TRUE), extra_args), ...
+  )
+}
+
 P_ADJUST_OTHERS <- c("bonferroni", "hochberg", "hommel", "BH", "BY", "fdr", "none")
 
 CASES <- c(
@@ -884,6 +933,279 @@ CASES <- c(
   scatter_cases(
     "mtcars", x = "wt", y = "mpg", label = "mtcars-labelexpr", types = "parametric",
     extra_args = list(label.var = "model", label.expression = "mpg > 25 | wt > 5")
+  ),
+  # Small samples the foundation package asked for: two and three values (values of
+  # edge_one_small's first rows), three and four pairs (edge_corr_small's first rows),
+  # and a point label that is missing (the third of six points has no name).
+  edge_one("edge_one_n2", 3),
+  edge_one("edge_one_n3", 3),
+  # Ten values of 5 against 3: the default bin width when max = min, and which types
+  # answer on constant data; then a given bin width. t.test stops ("data are
+  # essentially constant") in the parametric subtitle and caption and in the bayes
+  # subtitle, and ggstatsplot swallows it; trimcibt's interval is NA (robust).
+  edge_one(
+    "edge_one_constant", 3,
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"), bayes = "subtitle"),
+    expect_na_values = list(robust = "subtitle")
+  ),
+  histo_cases(
+    "edge_one_constant", x = "value", label = "edge_one_constant-binwidth1",
+    extra_args = list(test.value = 3, binwidth = 1),
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"), bayes = "subtitle"),
+    expect_na_values = list(robust = "subtitle")
+  ),
+  # Three pairs: the Fisher-z interval of r has 1 / sqrt(n - 3) = Inf, and R prints
+  # it as NA (parametric, robust).
+  edge_corr(
+    "edge_corr_n3", expect_na_values = list(parametric = "subtitle", robust = "subtitle")
+  ),
+  edge_corr("edge_corr_n4"),
+  scatter_cases(
+    "edge_corr_label_missing", x = "x", y = "y", types = "parametric",
+    extra_args = list(label.var = "name")
+  ),
+
+  # Phase 4 (barstats): ggbarstats, and ggpiestats for the one-way design. The fixture
+  # records the table it analyzed (`contingency_data`), every extract_stats() table
+  # (descriptive_data: the labels inside the bars; one_sample_data: the per-bar
+  # proportion tests), the layers as ggplot2 built them and the plot's labels. The
+  # edge datasets are hand-written; each one's table is in its comment.
+  # Two-way, all four types: 3 x 2 (pairwise Fisher tests between the three levels of
+  # cyl, each a 2 x 2 table), 2 x 3, 2 x 2, and Titanic's 4 x 2 with n = 2,201.
+  bar_cases("mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am", types = TYPES),
+  bar_cases("mtcars", x = "am", y = "cyl", label = "mtcars-am-cyl", types = TYPES),
+  bar_cases("mtcars", x = "am", y = "vs", label = "mtcars-am-vs", types = TYPES),
+  bar_cases("Titanic_full", x = "Class", y = "Survived", label = "Titanic_full-class", types = TYPES),
+  # 2 x 4: four bars, no pairwise tests (x has two levels).
+  bar_cases("Titanic_full", x = "Survived", y = "Class", label = "Titanic_full-survived"),
+  # The same table as counts: as.data.frame(Titanic), 32 rows of Class, Sex, Age,
+  # Survived and Freq (8 of them 0), aggregated from Titanic_full.csv.
+  bar_cases(
+    "Titanic_counts", x = "Class", y = "Survived", label = "Titanic_counts-class",
+    extra_args = list(counts = "Freq")
+  ),
+  # One-way (goodness of fit against equal proportions), all four types, from both
+  # functions.
+  bar_cases("mtcars", x = "cyl", label = "mtcars-cyl", types = TYPES),
+  pie_cases("mtcars", x = "cyl", label = "mtcars-cyl", types = TYPES),
+  # Paired (McNemar), all four types. edge_bar_paired: 40 subjects, before x after
+  # (yes, yes) 10, (yes, no) 12, (no, yes) 4, (no, no) 14.
+  edge_paired("edge_bar_paired", types = TYPES),
+  # Arguments, on mtcars cyl by am.
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-cl90",
+    extra_args = list(conf.level = 0.90)
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-digits3",
+    extra_args = list(digits = 3L)
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  # proportion.test defaults to results.subtitle; given explicitly it is drawn without
+  # the subtitle.
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-nosubtitle-proptest",
+    extra_args = list(results.subtitle = FALSE, proportion.test = TRUE)
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-noproptest",
+    extra_args = list(proportion.test = FALSE)
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-nobf",
+    extra_args = list(bf.message = FALSE)
+  ),
+  # One-sided: the Cramer's V interval, and Fisher's test on each 2 x 2 pair.
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-greater",
+    extra_args = list(alternative = "greater")
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-less",
+    extra_args = list(alternative = "less")
+  ),
+  # The labels inside the bars.
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-counts",
+    extra_args = list(label = "counts")
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-both",
+    extra_args = list(label = "both")
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-digitsperc1",
+    extra_args = list(digits.perc = 1L)
+  ),
+  # ratio with two variables: the per-bar proportion tests (order of cyl's levels 4,
+  # 6, 8).
+  bar_cases(
+    "mtcars", x = "cyl", y = "am", label = "mtcars-cyl-am-ratio",
+    extra_args = list(ratio = c(0.25, 0.25, 0.5))
+  ),
+  # Every other p.adjust method on the six pairwise Fisher tests of Titanic's classes.
+  unlist(lapply(P_ADJUST_OTHERS, function(method) {
+    bar_cases(
+      "Titanic_full", x = "Class", y = "Survived",
+      label = paste0("Titanic_full-class-padj-", method),
+      extra_args = list(p.adjust.method = method)
+    )
+  }), recursive = FALSE),
+  # One-way arguments, on mtcars cyl (levels 4, 6, 8).
+  bar_cases("mtcars", x = "cyl", label = "mtcars-cyl-cl90", extra_args = list(conf.level = 0.90)),
+  bar_cases("mtcars", x = "cyl", label = "mtcars-cyl-digits3", extra_args = list(digits = 3L)),
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-nosubtitle",
+    extra_args = list(results.subtitle = FALSE)
+  ),
+  bar_cases("mtcars", x = "cyl", label = "mtcars-cyl-nobf", extra_args = list(bf.message = FALSE)),
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-greater", extra_args = list(alternative = "greater")
+  ),
+  bar_cases("mtcars", x = "cyl", label = "mtcars-cyl-both", extra_args = list(label = "both")),
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-digitsperc1", extra_args = list(digits.perc = 1L)
+  ),
+  # ratio: in the order of the levels; one that does not sum to 1 and one of the wrong
+  # length.
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio", extra_args = list(ratio = c(0.5, 0.25, 0.25))
+  ),
+  pie_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio", extra_args = list(ratio = c(0.5, 0.25, 0.25))
+  ),
+  # chisq.test refuses both ("probabilities must sum to 1.", "'x' and 'p' must have
+  # the same number of elements") and ggstatsplot swallows it: no subtitle. The
+  # one-way Bayes factor normalizes c(2, 1, 1) (a caption is drawn) and stops on the
+  # short one.
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-sum4", extra_args = list(ratio = c(2, 1, 1)),
+    expect_hidden_errors = list(parametric = "subtitle")
+  ),
+  bar_cases(
+    "mtcars", x = "cyl", label = "mtcars-cyl-ratio-short", extra_args = list(ratio = c(0.5, 0.5)),
+    expect_hidden_errors = list(parametric = c("subtitle", "caption"))
+  ),
+  # Paired arguments.
+  edge_paired(
+    "edge_bar_paired", label = "edge_bar_paired-cl90", extra_args = list(conf.level = 0.90)
+  ),
+  edge_paired(
+    "edge_bar_paired", label = "edge_bar_paired-less", extra_args = list(alternative = "less")
+  ),
+  # Edge data. edge_bar_zero_cell: x a, b by y p, q, r: a (6, 0, 4), b (3, 7, 5); a
+  # zero cell and expected counts below 5.
+  edge_bar("edge_bar_zero_cell"),
+  # Declared levels with an empty level in x (b, empty, a) and in y (r, none, q, p).
+  edge_bar(
+    "edge_bar_zero_cell", label = "edge_bar_zero_cell-declared",
+    factor_levels = list(x = c("b", "empty", "a"), y = c("r", "none", "q", "p"))
+  ),
+  # One-way with an empty declared level: a category with a count of 0.
+  bar_cases(
+    "edge_bar_zero_cell", x = "x", label = "edge_bar_zero_cell-oneway-declared",
+    factor_levels = list(x = c("b", "empty", "a"))
+  ),
+  # 3 x 3, n = 12: a (3, 1, 0), b (0, 2, 1), c (1, 0, 4); expected counts below 1.
+  edge_bar("edge_bar_small_expected"),
+  # 2 x 2 with a count of 1: a (1, 9), b (8, 4).
+  edge_bar("edge_bar_2x2_one"),
+  # 5 x 4, n = 4,070: the count of (x_i, y_j) is 60 + 15 i + 25 j + 40 ((i j) mod 3),
+  # i = 1..5 (a..e), j = 1..4 (w..z), rows in x-major order.
+  edge_bar("edge_bar_large"),
+  # Missing x (row 3), y (row 7), both (row 11) and weight w (row 15).
+  edge_bar("edge_bar_missing"),
+  edge_bar(
+    "edge_bar_missing", label = "edge_bar_missing-counts", extra_args = list(counts = "w")
+  ),
+  bar_cases("edge_bar_missing", x = "x", label = "edge_bar_missing-oneway"),
+  # Perfect association (3 x 3 diagonal: 8, 6, 7) and exact independence (a (4, 8,
+  # 12), b (6, 12, 18): chi-squared exactly 0).
+  edge_bar("edge_bar_perfect"),
+  edge_bar("edge_bar_independent"),
+  # Degenerate designs on twelve rows: `one` and `single` hold one level each; x3 by
+  # y2 is a (3, 0), b (4, 0), c (0, 5), so bar q holds only c.
+  # One category: chisq.test stops ("'x' must at least have 2 elements"), and the
+  # one-way Bayes factor returns nothing for a one-cell table.
+  bar_cases(
+    "edge_bar_degenerate", x = "one", label = "edge_bar_degenerate-oneway-one",
+    expect_hidden_errors = list(parametric = "subtitle"),
+    expect_null_outputs = list(parametric = "caption")
+  ),
+  # One row (x has one level): chisq.test turns a 1 x 2 table into a goodness-of-fit
+  # test of y, and cramers_v refuses it ("not supported for goodness-of-fit tests");
+  # contingencyTableBF refuses it too; each bar's test has one category (NA rows).
+  bar_cases(
+    "edge_bar_degenerate", x = "one", y = "y2", label = "edge_bar_degenerate-one-row",
+    expect_hidden_errors = list(parametric = c("subtitle", "caption", "proportion_test")),
+    expect_na_values = list(parametric = "one_sample")
+  ),
+  # One column (y has one level): the same goodness-of-fit turn and refusal; no
+  # caption (bf.condition: y not of exactly one level); the bar's own test runs.
+  bar_cases(
+    "edge_bar_degenerate", x = "x3", y = "single", label = "edge_bar_degenerate-one-column",
+    expect_hidden_errors = list(parametric = "subtitle")
+  ),
+  # One cell.
+  bar_cases(
+    "edge_bar_degenerate", x = "one", y = "single", label = "edge_bar_degenerate-one-cell",
+    expect_hidden_errors = list(parametric = c("subtitle", "proportion_test")),
+    expect_na_values = list(parametric = "one_sample")
+  ),
+  # Pairs a-b: after droplevels the pair's table is 2 x 1 and fisher.test stops; the
+  # whole pairwise table is lost.
+  bar_cases(
+    "edge_bar_degenerate", x = "x3", y = "y2", label = "edge_bar_degenerate-single-x",
+    expect_hidden_errors = list(parametric = "pairwise_comparisons")
+  ),
+  # Percent labels: bars of 8 (a 1, b 3, c 4: 12.5%, 37.5%, 50%), 16 (1, 5, 10: 6.25%,
+  # 31.25%, 62.5%), 3 (1 each: 33.3%) and 7 (1, 2, 4).
+  edge_bar("edge_bar_rounding"),
+  edge_bar(
+    "edge_bar_rounding", label = "edge_bar_rounding-digitsperc1",
+    extra_args = list(digits.perc = 1L)
+  ),
+  edge_bar(
+    "edge_bar_rounding", label = "edge_bar_rounding-digitsperc2",
+    extra_args = list(digits.perc = 2L)
+  ),
+  edge_bar("edge_bar_rounding", label = "edge_bar_rounding-both", extra_args = list(label = "both")),
+  edge_bar(
+    "edge_bar_rounding", label = "edge_bar_rounding-counts", extra_args = list(label = "counts")
+  ),
+  # Weights: w holds zeros (every row of c), w_frac a weight of 2.5.
+  edge_bar("edge_bar_counts", label = "edge_bar_counts", extra_args = list(counts = "w")),
+  # tidyr::uncount() refuses a weight of 2.5 while ggstatsplot prepares the data.
+  edge_bar(
+    "edge_bar_counts", label = "edge_bar_counts-frac", extra_args = list(counts = "w_frac"),
+    expect_error = list(parametric = list(
+      component = "data",
+      message = "Can't convert from `weights` <double> to <integer> due to loss of precision",
+      reason = "a weight that is not a whole number: tidyr::uncount() cannot repeat a row 2.5 times"
+    ))
+  ),
+  # Paired edge data. 3 x 3 (low, mid, high; McNemar-Bowker): before low (6, 5, 2),
+  # mid (1, 7, 6), high (1, 3, 8) after low, mid, high.
+  edge_paired("edge_bar_paired3"),
+  # Every subject answers the same twice (no discordant pair): McNemar's statistic is
+  # 0/0 and cohens_g stops ("not enough data"), which ggstatsplot swallows.
+  edge_paired(
+    "edge_bar_paired_agree", expect_hidden_errors = list(parametric = "subtitle")
+  ),
+  # One discordant pair (yes, no) among ten subjects.
+  edge_paired("edge_bar_paired_small"),
+  # After has a level (maybe) that before lacks: a 2 x 3 table, which mcnemar.test
+  # refuses ("'x' must be square").
+  edge_paired(
+    "edge_bar_paired_unequal", expect_hidden_errors = list(parametric = "subtitle")
+  ),
+  # The same with both variables declared on maybe, no, yes: a square table.
+  edge_paired(
+    "edge_bar_paired_unequal", label = "edge_bar_paired_unequal-declared",
+    factor_levels = list(before = c("maybe", "no", "yes"), after = c("maybe", "no", "yes"))
   )
 )
 
@@ -933,6 +1255,19 @@ KNOWN_ARGS_BY_FUNCTION <- list(
   ggscatterstats = c(
     "x", "y", "type", "conf.level", "digits", "results.subtitle", "bf.message", "bf.prior",
     "tr", "marginal", "smooth.line.args", "label.var", "label.expression"
+  ),
+  # ggbarstats and ggpiestats 1.1.4 take no bf.prior (contingency tables use the
+  # Gunel-Dickey prior with concentration 1, fixed by ggstatsplot) and no tr.
+  # label, digits.perc and proportion.test change only the labels and layers.
+  ggbarstats = c(
+    "x", "y", "counts", "type", "paired", "results.subtitle", "label", "digits",
+    "proportion.test", "digits.perc", "bf.message", "ratio", "alternative", "conf.level",
+    "p.adjust.method"
+  ),
+  ggpiestats = c(
+    "x", "y", "counts", "type", "paired", "results.subtitle", "label", "digits",
+    "proportion.test", "digits.perc", "bf.message", "ratio", "alternative", "conf.level",
+    "p.adjust.method"
   )
 )
 for (case in c(CASES, HELD_OUT_CASES)) {
@@ -950,9 +1285,16 @@ for (case in c(CASES, HELD_OUT_CASES)) {
   if (!is.null(case$args$label.expression) && is.null(case$args$label.var)) {
     stop(case$name, ": label.expression has no effect without label.var")
   }
+  # [[ ]], not $: `$` would match label.var and label.expression partially.
+  label <- case$args[["label"]]
+  if (!is.null(label) && !(label %in% c("percentage", "counts", "both"))) {
+    # ggstatsplot matches label by regular expression ("perc|prop", "count|n|N");
+    # the cases use its three documented values.
+    stop(case$name, ": label must be percentage, counts or both")
+  }
   flags <- c(
     "results.subtitle", "bf.message", "point.path", "centrality.path", "marginal",
-    "centrality.plotting"
+    "centrality.plotting", "paired", "proportion.test"
   )
   for (flag in flags) {
     value <- case$args[[flag]]
@@ -1165,14 +1507,80 @@ local({
   }
 })
 
+# ggbarstats and ggpiestats run the per-bar proportion tests (one goodness-of-fit test
+# of x within each level of y, ggstatsplot's onesample_data()) through
+# `.chisq_test_safe`: purrr::possibly() around suppressWarnings(contingency_table(data,
+# x, ratio = ratio)), which turns an error into a row of NA. The replacement makes the
+# same call the same way (the arguments pass through `...` exactly as in the
+# original, so the non-standard evaluation of x is unchanged), returns the same value
+# or the same NA row, lets messages through as the original does, and logs the error
+# and the muted warnings as a hidden call "proportion_test" (one per bar, in the order
+# of y's levels; run_case() names each entry's level).
+recording_chisq_test_safe <- function(data, x, ratio) {
+  warnings <- character()
+  error <- NULL
+  value <- tryCatch(
+    withCallingHandlers(
+      (function(...) statsExpressions::contingency_table(...))(data, x, ratio = ratio),
+      warning = function(w) {
+        warnings <<- c(warnings, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    ),
+    error = function(e) {
+      error <<- conditionMessage(e)
+      NULL
+    }
+  )
+  if (!is.null(error)) {
+    value <- tibble::tibble(
+      statistic = NA_real_,
+      p.value = NA_real_,
+      df = NA_real_,
+      method = "Chi-squared test for given probabilities"
+    )
+  }
+  log_hidden("proportion_test", error, warnings, character(), value)
+  value
+}
+utils::assignInNamespace(".chisq_test_safe", recording_chisq_test_safe, ns = "ggstatsplot")
+
 # The functions whose hidden calls the rules below describe. ggbetweenstats and
 # ggwithinstats 1.1.4 share them: both compute the subtitle and caption through
 # .bw_subtitle_caption() and .subtitle_caption(), and the labels and pairs through
 # .bw_decorate() (ggstatsplot's R/ggbetweenstats-helpers.R and R/0-utils.R).
-HIDDEN_CALL_FUNCTIONS <- c("ggbetweenstats", "ggwithinstats", "gghistostats", "ggscatterstats")
+HIDDEN_CALL_FUNCTIONS <- c(
+  "ggbetweenstats", "ggwithinstats", "gghistostats", "ggscatterstats", "ggbarstats",
+  "ggpiestats"
+)
 # Functions whose design has no groups: their fixtures have no levels and record the
 # analyzed values instead (`analyzed_data`).
 NO_LEVEL_FUNCTIONS <- c("gghistostats", "ggscatterstats")
+# Functions that count categories: their fixtures record the table they analyzed
+# (`contingency_data`).
+BAR_FUNCTIONS <- c("ggbarstats", "ggpiestats")
+
+# What the hidden-call rules of ggbarstats and ggpiestats depend on, as their shared
+# .pie_bar_data_prep() leaves the data: the number of levels of x and of y (factor
+# levels, declared empty ones included; y_levels is 0 without y) and the number of
+# levels of y that hold data (the per-bar tests run once for each).
+bar_design <- function(x_levels, y_levels, y_present) {
+  list(x_levels = x_levels, y_levels = y_levels, y_present = y_present)
+}
+
+# Whether ggbarstats or ggpiestats draws its per-bar proportion tests: proportion.test
+# defaults to results.subtitle, and ggbarstats turns it off for type bayes and for
+# fewer than two levels of x or of y (so always without y); ggpiestats for type bayes
+# and for one level of x with more than one level of y.
+bar_proportion_test <- function(case, design) {
+  wanted <- case$args$proportion.test %||% !isFALSE(case$args$results.subtitle)
+  if (case$fun == "ggbarstats") {
+    off <- case$args$type == "bayes" || design$x_levels < 2L || design$y_levels < 2L
+  } else {
+    off <- (design$x_levels == 1L && design$y_levels > 1L) || case$args$type == "bayes"
+  }
+  isTRUE(wanted) && !off
+}
 
 # The `.eval_f` calls each function makes, in order. All four compute the subtitle and
 # caption through .subtitle_caption(): with results.subtitle (default TRUE) the
@@ -1181,9 +1589,26 @@ NO_LEVEL_FUNCTIONS <- c("gghistostats", "ggscatterstats")
 # ggscatterstats then builds its two marginal histogram layers through `.eval_f`
 # (ggside::geom_xsidehistogram, then geom_ysidehistogram) unless marginal = FALSE, so
 # an error there would drop the marginals silently.
-expected_eval_f <- function(case) {
+#
+# ggbarstats and ggpiestats (.pie_bar_subtitle_caption()): with results.subtitle the
+# subtitle, then the Bayes caption when bf.message holds and ggstatsplot's
+# bf.condition does (type not bayes, paired FALSE, and y not of exactly one level, so
+# also without y), then the pairwise Fisher tests through `.eval_f` when x has more
+# than two levels, y more than one and paired is FALSE. `design` is bar_design().
+expected_eval_f <- function(case, design = NULL) {
   if (!(case$fun %in% HIDDEN_CALL_FUNCTIONS)) {
     stop("generate.R has no hidden-call rules for ", case$fun, "; add them first")
+  }
+  if (case$fun %in% BAR_FUNCTIONS) {
+    if (is.null(design)) stop(case$name, ": the hidden calls depend on the table's levels")
+    if (isFALSE(case$args$results.subtitle)) {
+      return(character())
+    }
+    paired <- isTRUE(case$args$paired)
+    caption <- case$args$type != "bayes" && !paired && design$y_levels != 1L &&
+      !isFALSE(case$args$bf.message)
+    pairwise <- design$x_levels > 2L && design$y_levels > 1L && !paired
+    return(c("subtitle", if (caption) "caption", if (pairwise) "pairwise_comparisons"))
   }
   calls <- if (isFALSE(case$args$results.subtitle)) {
     character()
@@ -1202,8 +1627,15 @@ expected_eval_f <- function(case) {
 # (ggwithinstats: three or more conditions after complete_subjects()) unless
 # pairwise.display = "none". gghistostats: the `.eval_f` calls, then
 # centrality_description() (through .histo_labeller()) unless centrality.plotting =
-# FALSE. ggscatterstats: the `.eval_f` calls only.
+# FALSE. ggscatterstats: the `.eval_f` calls only. ggbarstats and ggpiestats: the
+# `.eval_f` calls, then with y one per-bar proportion test (`.chisq_test_safe`) for
+# each level of y that holds data, whatever results.subtitle and proportion.test say
+# (onesample_data() also gives the n under each bar). `levels` is bar_design() for
+# them.
 expected_hidden_calls <- function(case, levels) {
+  if (case$fun %in% BAR_FUNCTIONS) {
+    return(c(expected_eval_f(case, levels), rep("proportion_test", levels$y_present)))
+  }
   if (case$fun == "gghistostats") {
     return(c(
       expected_eval_f(case),
@@ -1222,9 +1654,15 @@ expected_hidden_calls <- function(case, levels) {
 # arguments imply stops the run; a call that failed may have stopped early, so its
 # entries are named only as far as they go (outcome_problems() then reports the
 # error unless the case expects it).
-name_hidden <- function(case, log, failed = FALSE) {
+name_hidden <- function(case, log, failed = FALSE, design = NULL) {
   eval_f <- which(vapply(log, function(entry) entry$component == ".eval_f", logical(1L)))
-  expected <- expected_eval_f(case)
+  if (case$fun %in% BAR_FUNCTIONS && is.null(design)) {
+    # The data could not be prepared (ggstatsplot fails there too): no hidden call
+    # can have run.
+    if (length(log) > 0L) stop(case$name, ": hidden calls without prepared data")
+    return(log)
+  }
+  expected <- expected_eval_f(case, design)
   if (length(eval_f) > length(expected) || (!failed && length(eval_f) != length(expected))) {
     stop(
       case$name, ": ", length(eval_f), " `.eval_f` calls; expected ",
@@ -1271,6 +1709,22 @@ plot_layers <- function(plot, build_all = FALSE) {
       built = if (detailed) frame_rows(ggplot2::layer_data(plot, index)) else NULL
     )
   }, layers, layer_names, seq_along(layers)))
+}
+
+# The plot's texts outside the layers (ggbarstats and ggpiestats): the labels
+# (ggplot2::get_labs(), where the x axis names y and the fill names x) and the fill
+# legend's title, which ggstatsplot sets through guides(). Each is recorded as text
+# "<error: ...>" when ggplot2 cannot give it, so a change in ggplot2's internals
+# cannot stop the run.
+plot_texts <- function(plot) {
+  attempt <- function(expr) {
+    tryCatch(to_json_value(expr), error = function(e) paste0("<error: ", conditionMessage(e), ">"))
+  }
+  guides <- tryCatch(plot@guides, error = function(e) plot$guides)
+  list(
+    labels = attempt(ggplot2::get_labs(plot)),
+    legend_title = attempt(guides$guides$fill$params$title)
+  )
 }
 
 VERSIONS <- list(
@@ -1664,6 +2118,11 @@ DEFAULT_BOOT_FIELDS <- c("estimate", "conf_low", "conf_high")
 DEFAULT_BOOT_COLUMNS <- c("estimate", "conf.low", "conf.high")
 
 bootstrap_reference <- function(case, analysis, stats) {
+  # statsExpressions computes every contingency-table interval analytically (the
+  # one-way Bayes factor's Monte Carlo draws are a v0.2 output, in the caption).
+  if (case$fun %in% BAR_FUNCTIONS) {
+    return(NULL)
+  }
   subtitle_row <- stats$subtitle_data
   within <- case$fun == "ggwithinstats"
   histo <- case$fun == "gghistostats"
@@ -1864,8 +2323,79 @@ ANALYSES <- list(
       y = as.numeric(data[[case$args$y]][keep]),
       row = which(keep)
     )
-  }
+  },
+  ggbarstats = function(data, case) bar_analysis(data, case),
+  ggpiestats = function(data, case) bar_analysis(data, case)
 )
+
+# ggbarstats and ggpiestats: the data as ggstatsplot's own .pie_bar_data_prep() leaves
+# it (select x, y and counts, tidyr::drop_na(), tidyr::uncount() by counts, every
+# column as.factor(), so declared levels, empty ones included, are kept), called the
+# way both functions call it. An error there (ggstatsplot fails on such data too) is
+# kept as text.
+bar_analysis <- function(data, case) {
+  prep_fn <- utils::getFromNamespace(".pie_bar_data_prep", "ggstatsplot")
+  sym_or_null <- function(name) if (is.null(name)) NULL else rlang::sym(name)
+  out <- capture(rlang::inject(prep_fn(
+    data = data,
+    x = !!rlang::sym(case$args$x),
+    y = !!sym_or_null(case$args$y),
+    counts = !!sym_or_null(case$args$counts)
+  )))
+  if (inherits(out$value, "error")) {
+    return(list(error = conditionMessage(out$value), x = NULL, y = NULL))
+  }
+  prep <- out$value
+  list(
+    error = NULL,
+    x = prep$data[[case$args$x]],
+    y = if (is.null(case$args$y)) NULL else prep$data[[case$args$y]],
+    n = nrow(prep$data),
+    test = prep$test,
+    design = bar_design(
+      prep$x_levels, prep$y_levels,
+      if (is.null(case$args$y)) 0L else nlevels(droplevels(prep$data[[case$args$y]]))
+    )
+  )
+}
+
+# The table a ggbarstats or ggpiestats case analyzed, as `within_data` records a
+# within-subjects case: the columns (x, y and counts, null where not given), the
+# 1-based CSV rows kept (no value missing in those columns; counts then repeat a row),
+# the levels of x and y as ggstatsplot holds them (declared order, empty declared
+# levels included; else sorted: numbers numerically, text in the C locale), the counts
+# (one row per level of x, one column per level of y; one column without y), n (the
+# rows after uncount()), and the error when the data could not be prepared.
+contingency_data <- function(data, case, analysis) {
+  columns <- c(case$args$x, case$args$y, case$args$counts)
+  keep <- stats::complete.cases(data[columns])
+  one_way <- is.null(case$args$y)
+  base <- list(
+    x = case$args$x,
+    y = case$args$y,
+    counts = case$args$counts,
+    rows = as.list(which(keep)),
+    rows_dropped = sum(!keep),
+    rule = paste(
+      "rows with x, y and counts present (tidyr::drop_na), each repeated counts times",
+      "(tidyr::uncount), every column as.factor()"
+    ),
+    error = analysis$error
+  )
+  if (!is.null(analysis$error)) {
+    return(c(base, list(x_levels = list(), y_levels = list(), table = list(), n = NULL)))
+  }
+  tab <- if (one_way) table(analysis$x) else table(analysis$x, analysis$y)
+  rows <- lapply(seq_len(nlevels(analysis$x)), function(i) {
+    as.list(as.integer(if (one_way) tab[[i]] else tab[i, ]))
+  })
+  c(base, list(
+    x_levels = as.list(levels(analysis$x)),
+    y_levels = if (one_way) list() else as.list(levels(analysis$y)),
+    table = rows,
+    n = analysis$n
+  ))
+}
 
 # The values a one-sample or correlation case analyzed (gghistostats,
 # ggscatterstats), as `within_data` records the subjects of a ggwithinstats case:
@@ -2022,6 +2552,7 @@ run_case <- function(case) {
   cl <- as.call(c(list(fn, data = quote(data)), call_args))
   env <- environment()
   no_levels <- case$fun %in% NO_LEVEL_FUNCTIONS
+  bar <- case$fun %in% BAR_FUNCTIONS
 
   HIDDEN$log <- list()
   HIDDEN$values <- list()
@@ -2032,13 +2563,23 @@ run_case <- function(case) {
       stats = ggstatsplot::extract_stats(plot),
       subtitle = ggstatsplot::extract_subtitle(plot),
       caption = ggstatsplot::extract_caption(plot),
-      layers = plot_layers(plot, build_all = no_levels)
+      layers = plot_layers(plot, build_all = no_levels || bar),
+      texts = if (bar) plot_texts(plot)
     )
   })
   failed <- inherits(outcome$value, "error")
-  hidden <- name_hidden(case, HIDDEN$log, failed)
-
+  # Computed after ggstatsplot's call, so it cannot touch the random-number stream
+  # the call saw (it draws no random numbers anyway).
   analysis <- ANALYSES[[case$fun]](data, case)
+  hidden <- name_hidden(case, HIDDEN$log, failed, design = analysis$design)
+  if (bar && !is.null(analysis$y)) {
+    # The per-bar tests run in the order of y's levels that hold data.
+    present <- levels(droplevels(analysis$y))
+    tests <- which(vapply(hidden, function(entry) entry$component == "proportion_test", logical(1L)))
+    if (length(tests) == length(present)) {
+      for (i in seq_along(tests)) hidden[[tests[[i]]]]$level <- present[[i]]
+    }
+  }
   fixture <- list(
     schema_version = SCHEMA_VERSION,
     name = case$name,
@@ -2054,8 +2595,14 @@ run_case <- function(case) {
     seed = CASE_SEED,
     # A one-sample or correlation design has no levels: an empty list and an empty
     # object, and `analyzed_data` holds what it analyzed.
+    # ggbarstats and ggpiestats: the levels of x as ggstatsplot holds them, declared
+    # empty levels included (count 0); none when the data could not be prepared.
     analysis_levels = if (no_levels) list() else as.list(levels(analysis$x)),
-    n_per_level = if (no_levels) stats::setNames(list(), character()) else as.list(table(analysis$x)),
+    n_per_level = if (no_levels || is.null(analysis$x)) {
+      stats::setNames(list(), character())
+    } else {
+      as.list(table(analysis$x))
+    },
     error = if (failed) conditionMessage(outcome$value) else NULL,
     expected_error = case$expect_error,
     # What the hidden calls returned before ggstatsplot failed, one entry per call.
@@ -2093,6 +2640,25 @@ run_case <- function(case) {
     # After n_per_level (each level's count is the number of complete subjects).
     at <- match("n_per_level", names(fixture))
     fixture <- append(fixture, list(within_data = within_data(data, case, analysis)), after = at)
+  }
+  if (bar) {
+    at <- match("n_per_level", names(fixture))
+    fixture <- append(
+      fixture, list(contingency_data = contingency_data(data, case, analysis)), after = at
+    )
+    at <- match("expected_hidden_errors", names(fixture))
+    fixture <- append(
+      fixture,
+      list(
+        expected_na_values = as.list(case$expect_na_values),
+        expected_null_outputs = as.list(case$expect_null_outputs)
+      ),
+      after = at
+    )
+    at <- match("plot_layers", names(fixture))
+    fixture <- append(
+      fixture, list(plot_texts = if (failed) NULL else outcome$value$texts), after = at
+    )
   }
   if (no_levels) {
     at <- match("n_per_level", names(fixture))
@@ -2206,6 +2772,123 @@ no_level_problems <- function(case, fixture) {
   out
 }
 
+# The checks of a ggbarstats or ggpiestats case that replace the per-level counts:
+# the table generate.R recorded must be the one ggstatsplot counted (its
+# descriptive_data, every cell; its one_sample_data, every bar's n; the subtitle's
+# n.obs), the per-bar tests must be NA only where the case declares a swallowed
+# error, no reported number may be NA unless declared, and the layers must be the
+# ones the arguments imply, each built with rows.
+bar_problems <- function(case, fixture) {
+  out <- character()
+  data <- fixture$contingency_data
+  design <- hidden_call_levels(case, fixture)
+  x_levels <- unlist(data$x_levels)
+  y_levels <- unlist(data$y_levels)
+  one_way <- is.null(case$args$y)
+  cell <- function(x, y) {
+    i <- match(x, x_levels)
+    j <- if (one_way) 1L else match(y, y_levels)
+    if (is.na(i) || is.na(j)) NA_integer_ else as.integer(data$table[[i]][[j]])
+  }
+  # Every cell ggstatsplot labels (descriptive_data: one row per bar and level of x,
+  # zeros included) holds the recorded count, and together they hold all n.
+  described <- fixture$stats$descriptive_data
+  total <- 0
+  for (row in described) {
+    count <- as.integer(row$counts)
+    expected <- cell(as.character(row[[case$args$x]]), if (!one_way) as.character(row[[case$args$y]]))
+    if (!identical(count, expected)) {
+      out <- c(out, sprintf(
+        "descriptive_data counts %s for %s; the table has %s", count,
+        paste(row[[case$args$x]], if (!one_way) row[[case$args$y]]), expected
+      ))
+    }
+    total <- total + count
+  }
+  if (!identical(as.integer(total), as.integer(data$n))) {
+    out <- c(out, sprintf("descriptive_data counts %s rows; the table %s", total, data$n))
+  }
+  for (row in fixture$stats$subtitle_data) {
+    if (!identical(as.integer(row[["n.obs"]]), as.integer(data$n))) {
+      out <- c(out, sprintf("the subtitle's n.obs is %s; the table has %s", row[["n.obs"]], data$n))
+    }
+  }
+  # The per-bar tests: one row per bar that holds data, with that bar's n.
+  bars <- fixture$stats$one_sample_data
+  if (one_way != (length(bars) == 0L)) {
+    out <- c(out, if (one_way) "one_sample_data without y" else "no one_sample_data")
+  }
+  for (row in bars) {
+    level <- as.character(row[[case$args$y]])
+    j <- match(level, y_levels)
+    n_bar <- if (is.na(j)) NA else sum(vapply(data$table, function(r) as.numeric(r[[j]]), numeric(1L)))
+    if (!isTRUE(as.numeric(row$counts) == n_bar)) {
+      out <- c(out, sprintf("bar %s: one_sample_data n %s, the table %s", level, row$counts, n_bar))
+    }
+  }
+  missing_value <- function(v) {
+    is.null(v) || identical(v, "NaN") || (length(v) == 1L && is.atomic(v) && is.na(v))
+  }
+  numbers <- c("statistic", "p.value", "estimate", "conf.low", "conf.high", "bf10")
+  tables <- c(
+    subtitle = "subtitle_data", caption = "caption_data",
+    pairwise = "pairwise_comparisons_data", one_sample = "one_sample_data"
+  )
+  for (table in names(tables)) {
+    rows <- fixture$stats[[tables[[table]]]]
+    has_na <- any(vapply(rows, function(row) {
+      any(vapply(intersect(c(numbers, "p.value.adj"), names(row)), function(column) {
+        missing_value(row[[column]])
+      }, logical(1L)))
+    }, logical(1L)))
+    if (has_na != (table %in% case$expect_na_values)) {
+      out <- c(out, sprintf(
+        "%s table %s", table, if (has_na) "holds NA" else "holds no NA as declared"
+      ))
+    }
+  }
+  # The layers: the bars (GeomCol) and their labels (GeomLabel), then for ggbarstats
+  # with y the proportion tests' p-values above the bars when drawn and the n under
+  # each bar, without y the n below the single bar (annotate()); for ggpiestats the
+  # proportion tests beside each pie when drawn (only with more than one pie).
+  geoms <- vapply(fixture$plot_layers, function(layer) layer$geom, character(1L))
+  tests <- bar_proportion_test(case, design)
+  expected <- if (case$fun == "ggbarstats") {
+    c("GeomCol", "GeomLabel", if (!one_way && tests) "GeomText", "GeomText")
+  } else {
+    c("GeomCol", "GeomLabel", if (design$y_levels > 1L && tests) "GeomText")
+  }
+  if (!identical(unname(geoms), expected)) {
+    out <- c(out, sprintf(
+      "layers %s; expected %s", paste(geoms, collapse = ", "), paste(expected, collapse = ", ")
+    ))
+  }
+  for (layer in fixture$plot_layers) {
+    if (length(layer$built) == 0L) out <- c(out, sprintf("layer %s has no built data", layer$geom))
+  }
+  out
+}
+
+# What expected_hidden_calls() needs from a written fixture: the levels R analyzed,
+# or for ggbarstats and ggpiestats the bar_design() of the table it recorded.
+hidden_call_levels <- function(case, fixture) {
+  if (!(case$fun %in% BAR_FUNCTIONS)) {
+    return(unlist(fixture$analysis_levels))
+  }
+  data <- fixture$contingency_data
+  if (!is.null(data$error)) {
+    return(bar_design(0L, 0L, 0L))
+  }
+  column_totals <- if (length(data$y_levels) == 0L) {
+    numeric()
+  } else {
+    vapply(seq_along(data$y_levels), function(j) {
+      sum(vapply(data$table, function(row) as.numeric(row[[j]]), numeric(1L)))
+    }, numeric(1L))
+  }
+  bar_design(length(data$x_levels), length(data$y_levels), sum(column_totals > 0))
+}
+
 # Everything about a finished case that differs from what the case declares.
 outcome_problems <- function(case, fixture) {
   errored <- !is.null(fixture$error)
@@ -2223,7 +2906,18 @@ outcome_problems <- function(case, fixture) {
     calls <- vapply(fixture$suppressed, function(entry) entry$component, character(1L))
     errors <- lapply(fixture$suppressed, function(entry) entry$error)
     last <- length(calls)
-    planned <- expected_hidden_calls(case, unlist(fixture$analysis_levels))
+    if (identical(expected$component, "data")) {
+      # ggbarstats or ggpiestats failed while preparing the data (before any hidden
+      # call); generate.R's own preparation, the same function, failed the same way.
+      if (last != 0L || !identical(fixture$contingency_data$error, fixture$error)) {
+        out <- c(out, sprintf(
+          "expected the data preparation to fail before any hidden call; hidden calls were %s",
+          paste(calls, collapse = ", ")
+        ))
+      }
+      return(out)
+    }
+    planned <- expected_hidden_calls(case, hidden_call_levels(case, fixture))
     # A call before the failing one may have failed only where the case declares
     # that ggstatsplot swallows its error (edge_rm_all_tied: the subtitle).
     earlier_failed <- !vapply(errors[-last], is.null, logical(1L))
@@ -2252,7 +2946,7 @@ outcome_problems <- function(case, fixture) {
   }
   # Every hidden call, in order, must be the one the arguments imply.
   calls <- vapply(fixture$suppressed, function(entry) entry$component, character(1L))
-  expected_calls <- expected_hidden_calls(case, unlist(fixture$analysis_levels))
+  expected_calls <- expected_hidden_calls(case, hidden_call_levels(case, fixture))
   if (!identical(unname(calls), expected_calls)) {
     out <- c(out, sprintf(
       "hidden calls %s; expected %s",
@@ -2262,7 +2956,11 @@ outcome_problems <- function(case, fixture) {
   # ggbetweenstats and ggwithinstats draw the subtitle unless results.subtitle =
   # FALSE, and the Bayes caption only for type "parametric" with bf.message (ggstatsplot's bf.condition),
   # never without the subtitle; the tables behind them follow the same rule.
-  evaluated <- expected_eval_f(case)
+  bar <- case$fun %in% BAR_FUNCTIONS
+  evaluated <- expected_eval_f(case, if (bar) hidden_call_levels(case, fixture))
+  # A component may also return nothing without an error where the case declares it
+  # (ggbarstats and ggpiestats: `expect_null_outputs`).
+  failed_parts <- c(failed_parts, case$expect_null_outputs)
   wants_subtitle <- "subtitle" %in% evaluated
   wants_caption <- "caption" %in% evaluated
   has_subtitle <- !is.null(fixture$subtitle)
@@ -2284,11 +2982,14 @@ outcome_problems <- function(case, fixture) {
   # Pairwise comparisons exist exactly when ggbetweenstats or ggwithinstats computes them.
   wants_pairwise <- "pairwise_comparisons" %in% expected_calls
   has_pairwise <- length(fixture$stats$pairwise_comparisons_data) > 0L
-  if (wants_pairwise != has_pairwise) {
+  if (wants_pairwise != has_pairwise && !("pairwise_comparisons" %in% failed_parts)) {
     out <- c(out, if (wants_pairwise) "no pairwise comparisons" else "unexpected pairwise comparisons")
   }
   if (case$fun %in% NO_LEVEL_FUNCTIONS) {
     return(c(out, no_level_problems(case, fixture)))
+  }
+  if (bar) {
+    return(c(out, bar_problems(case, fixture)))
   }
   # n_per_level must be what ggstatsplot itself counted.
   labels <- label_counts(fixture$plot_layers, case$args$x)
@@ -4474,6 +5175,258 @@ heldout_probe <- function() {
   )
 }
 
+# probe-contingency: the R functions statsExpressions 2.2.1's contingency_table()
+# and pairwise_contingency_table() call for ggbarstats, as black boxes on fixed
+# grids: stats::chisq.test with and without the continuity correction (2 x 2 and
+# larger tables, goodness of fit with given probabilities, valid and invalid),
+# stats::mcnemar.test likewise (2 x 2, the McNemar-Bowker test on larger square tables,
+# a table that is not square), effectsize::cramers_v (adjust TRUE and FALSE),
+# effectsize::pearsons_c (goodness of fit) and effectsize::cohens_g at every
+# alternative and at 95% and 90%, next to stats::prop.test's interval for the share
+# of one kind of discordant pair (the documented basis of Cohen's g's interval), and
+# stats::fisher.test at every alternative. Last, the percent labels ggbarstats writes
+# inside the bars, paste0(round(perc, digits.perc), "%"), for counts k of n.
+contingency_probe <- function() {
+  attempt_row <- function(expr, fields) {
+    out <- probe_attempt(expr)
+    values <- if (is.null(out$value)) NULL else fields(out$value)
+    c(values, list(error = out$error, warnings = out$warnings))
+  }
+  test_fields <- function(r) {
+    list(
+      statistic_hex = hex(unname(r$statistic)), parameter = encode_doubles(unname(r$parameter)),
+      p_value_hex = hex(r$p.value), method = r$method,
+      expected_hex = if (!is.null(r$expected)) hex_list(r$expected)
+    )
+  }
+  es_fields <- function(r) {
+    list(
+      name = names(r)[[1L]], estimate_hex = hex(r[[1L]]), ci = r$CI,
+      ci_low_hex = hex(r$CI_low), ci_high_hex = hex(r$CI_high)
+    )
+  }
+  as_table <- function(v, nrow) matrix(as.numeric(v), nrow = nrow, byrow = TRUE)
+  # R's own noncentral chi-square probability P(X <= chisq) at the noncentrality
+  # parameter behind each reported bound in (0, 1) (`to_ncp` inverts the effect
+  # size's conversion), to read how far effectsize's root search stopped from the
+  # interval's tail probability.
+  tails_at_bounds <- function(es, chisq, df, to_ncp) {
+    lapply(list(low = es$CI_low, high = es$CI_high), function(bound) {
+      if (is.null(bound) || !is.finite(bound) || bound <= 0 || bound >= 1 || !is.finite(chisq)) {
+        return(NULL)
+      }
+      ncp <- to_ncp(bound)
+      list(ncp_hex = hex(ncp), cdf_hex = hex(stats::pchisq(chisq, df, ncp = ncp)))
+    })
+  }
+  # attempt_row() for an effect size, with tails_at_bounds() of its interval.
+  es_row <- function(expr, chisq, df, to_ncp) {
+    out <- probe_attempt(expr)
+    es <- out$value
+    c(
+      if (is.null(es)) NULL else es_fields(es),
+      list(
+        error = out$error, warnings = out$warnings,
+        tails_at_bounds = if (!is.null(es)) tails_at_bounds(es, chisq, df, to_ncp)
+      )
+    )
+  }
+  two_by_two <- list(
+    c(1, 9, 8, 4), c(10, 2, 3, 15), c(0, 5, 5, 0), c(5, 5, 5, 5), c(12, 0, 0, 7),
+    c(3, 1, 1, 3), c(30, 20, 25, 25), c(100, 80, 90, 110), c(1, 0, 0, 1), c(6, 1, 2, 7),
+    c(50, 1, 1, 50), c(4, 4, 4, 5), c(0, 0, 3, 4), c(2, 7, 9, 3)
+  )
+  larger <- list(
+    list(nrow = 2L, v = c(6, 0, 4, 3, 7, 5)),
+    list(nrow = 3L, v = c(3, 1, 0, 0, 2, 1, 1, 0, 4)),
+    list(nrow = 3L, v = c(8, 0, 0, 0, 6, 0, 0, 0, 7)),
+    list(nrow = 2L, v = c(4, 8, 12, 6, 12, 18)),
+    list(nrow = 3L, v = c(3, 8, 0, 4, 3, 12, 2, 2, 0)),
+    list(nrow = 4L, v = c(122, 203, 167, 118, 528, 178, 673, 212)),
+    list(nrow = 5L, v = unlist(lapply(1:5, function(i) {
+      60 + 15 * i + 25 * (1:4) + 40 * ((i * (1:4)) %% 3)
+    }))),
+    list(nrow = 2L, v = c(1, 2, 3, 4, 40, 50, 60, 70))
+  )
+  tables <- c(
+    lapply(two_by_two, function(v) as_table(v, 2L)),
+    lapply(larger, function(t) as_table(t$v, t$nrow))
+  )
+  chisq <- lapply(tables, function(m) {
+    list(
+      table = lapply(seq_len(nrow(m)), function(i) as.list(m[i, ])),
+      correct = attempt_row(stats::chisq.test(m, correct = TRUE), test_fields),
+      uncorrected = attempt_row(stats::chisq.test(m, correct = FALSE), test_fields)
+    )
+  })
+  gof_designs <- list(
+    list(x = c(11, 7, 14), p = NULL), list(x = c(11, 7, 14), p = c(0.5, 0.25, 0.25)),
+    list(x = c(11, 7, 14), p = c(0.25, 0.25, 0.5)), list(x = c(3, 0, 5), p = NULL),
+    list(x = c(10, 10, 10), p = NULL), list(x = c(1, 2), p = NULL),
+    list(x = c(50, 0), p = NULL), list(x = c(19, 13), p = c(0.6, 0.4)),
+    list(x = c(11, 7, 14), p = c(2, 1, 1)), list(x = c(11, 7, 14), p = c(0.5, 0.5)),
+    list(x = c(11, 7, 14), p = c(0.2, 0.3, 0.5)), list(x = 12, p = NULL),
+    list(x = c(85, 104, 95, 106, 110), p = NULL)
+  )
+  gof <- lapply(gof_designs, function(d) {
+    p <- d$p %||% rep(1 / length(d$x), length(d$x))
+    test <- probe_attempt(stats::chisq.test(d$x, p = p, correct = FALSE))$value
+    n <- sum(d$x)
+    # C back to chi-square: n C^2 / (1 - C^2).
+    to_ncp <- function(c) n * c^2 / (1 - c^2)
+    alternatives <- lapply(c("two.sided", "greater", "less"), function(alternative) {
+      lapply(c(0.95, 0.9), function(ci) {
+        c(
+          list(alternative = alternative, ci = ci),
+          es_row(
+            effectsize::pearsons_c(d$x, p = p, ci = ci, alternative = alternative),
+            if (is.null(test)) NA_real_ else unname(test$statistic),
+            if (is.null(test)) NA_real_ else unname(test$parameter), to_ncp
+          )
+        )
+      })
+    })
+    list(
+      x = as.list(d$x), p_hex = hex_list(p), p_given = !is.null(d$p),
+      chisq = attempt_row(stats::chisq.test(d$x, p = p, correct = FALSE), test_fields),
+      pearsons_c = unlist(alternatives, recursive = FALSE)
+    )
+  })
+  cramers <- lapply(tables, function(m) {
+    rows <- list()
+    kept <- m[rowSums(m) > 0, colSums(m) > 0, drop = FALSE]
+    n <- sum(kept)
+    test <- probe_attempt(stats::chisq.test(kept, correct = FALSE))$value
+    statistic <- if (is.null(test)) NA_real_ else unname(test$statistic)
+    df <- if (is.null(test)) NA_real_ else unname(test$parameter)
+    for (adjust in c(TRUE, FALSE)) {
+      # V back to chi-square: n phi^2, with phi^2 = V^2 (min(r, c) - 1) or, adjusted,
+      # V^2 (min(r~, c~) - 1) + (r - 1)(c - 1) / (n - 1) (Bergsma 2013).
+      to_ncp <- function(v) {
+        r <- nrow(kept)
+        k <- ncol(kept)
+        if (!adjust) {
+          return(n * v^2 * (min(r, k) - 1))
+        }
+        shrunk <- min(r - (r - 1)^2 / (n - 1), k - (k - 1)^2 / (n - 1)) - 1
+        n * (v^2 * shrunk + (r - 1) * (k - 1) / (n - 1))
+      }
+      for (alternative in c("two.sided", "greater", "less")) {
+        for (ci in c(0.95, 0.9)) {
+          rows[[length(rows) + 1L]] <- c(
+            list(adjust = adjust, alternative = alternative, ci = ci),
+            es_row(
+              effectsize::cramers_v(m, adjust = adjust, ci = ci, alternative = alternative),
+              statistic, df, to_ncp
+            )
+          )
+        }
+      }
+    }
+    list(table = lapply(seq_len(nrow(m)), function(i) as.list(m[i, ])), n = sum(m), rows = rows)
+  })
+  paired_tables <- c(
+    lapply(
+      list(
+        c(14, 4, 12, 10), c(9, 0, 0, 11), c(5, 0, 1, 4), c(20, 30, 5, 45), c(1, 7, 0, 2),
+        c(10, 6, 6, 10), c(0, 25, 3, 0)
+      ),
+      function(v) as_table(v, 2L)
+    ),
+    list(
+      as_table(c(6, 5, 2, 1, 7, 6, 1, 3, 8), 3L),
+      as_table(c(0, 0, 0, 3, 6, 0, 2, 5, 7), 3L),
+      as_table(c(5, 0, 0, 0, 5, 2, 0, 1, 5), 3L),
+      as_table(c(4, 1, 2, 3, 0, 5, 2, 1, 3, 3, 6, 2, 1, 0, 2, 7), 4L),
+      as_table(c(6, 0, 3, 7, 5, 2), 2L)
+    )
+  )
+  paired <- lapply(paired_tables, function(m) {
+    g_rows <- list()
+    for (alternative in c("two.sided", "greater", "less")) {
+      for (ci in c(0.95, 0.9)) {
+        g_rows[[length(g_rows) + 1L]] <- c(
+          list(alternative = alternative, ci = ci),
+          attempt_row(effectsize::cohens_g(m, ci = ci, alternative = alternative), es_fields)
+        )
+      }
+    }
+    # The documented basis of Cohen's g's interval: prop.test on one kind of
+    # discordant pair (m[1, 2] of m[1, 2] + m[2, 1]), with and without the
+    # continuity correction, and binom.test's exact interval.
+    basis <- if (all(dim(m) == 2L) && m[1L, 2L] + m[2L, 1L] > 0) {
+      b <- m[1L, 2L]
+      total <- m[1L, 2L] + m[2L, 1L]
+      lapply(c(0.95, 0.9), function(ci) {
+        interval <- function(r) list(conf_int_hex = hex_list(r$conf.int))
+        list(
+          ci = ci, successes = b, trials = total,
+          prop_test_correct = attempt_row(
+            stats::prop.test(b, total, conf.level = ci, correct = TRUE), interval
+          ),
+          prop_test_uncorrected = attempt_row(
+            stats::prop.test(b, total, conf.level = ci, correct = FALSE), interval
+          ),
+          binom_test = attempt_row(stats::binom.test(b, total, conf.level = ci), interval)
+        )
+      })
+    }
+    list(
+      table = lapply(seq_len(nrow(m)), function(i) as.list(m[i, ])),
+      correct = attempt_row(stats::mcnemar.test(m, correct = TRUE), test_fields),
+      uncorrected = attempt_row(stats::mcnemar.test(m, correct = FALSE), test_fields),
+      cohens_g = g_rows,
+      interval_basis = basis
+    )
+  })
+  fisher_tables <- c(
+    lapply(two_by_two, function(v) as_table(v, 2L)),
+    list(
+      as_table(c(6, 0, 4, 3, 7, 5), 2L), as_table(c(1, 2, 3, 4, 4, 3, 2, 1), 2L),
+      as_table(c(3, 1, 0, 0, 2, 1, 1, 0, 4), 3L), as_table(c(5, 0, 9, 2, 3, 4), 2L),
+      as_table(c(10, 12, 9, 3, 2, 14), 2L)
+    )
+  )
+  fisher <- lapply(fisher_tables, function(m) {
+    list(
+      table = lapply(seq_len(nrow(m)), function(i) as.list(m[i, ])),
+      tests = lapply(c("two.sided", "greater", "less"), function(alternative) {
+        c(
+          list(alternative = alternative),
+          attempt_row(
+            stats::fisher.test(m, alternative = alternative),
+            function(r) list(p_value_hex = hex(r$p.value), method = r$method)
+          )
+        )
+      })
+    )
+  })
+  label_rows <- list()
+  for (n in c(3L, 7L, 8L, 11L, 16L, 32L, 40L, 200L)) {
+    counts <- seq_len(n - 1L)
+    perc <- (counts / n) * 100
+    for (d in 0:2) {
+      for (i in seq_along(counts)) {
+        label_rows[[length(label_rows) + 1L]] <- list(
+          k = counts[[i]], n = n, digits = d, perc_hex = hex(perc[[i]]),
+          rounded_hex = hex(round(perc[[i]], d)), label = paste0(round(perc[[i]], d), "%")
+        )
+      }
+    }
+  }
+  probe_file(
+    "probe-contingency",
+    paste(
+      "chisq.test, mcnemar.test, cramers_v, pearsons_c, cohens_g with prop.test and",
+      "binom.test, fisher.test on fixed tables; ggbarstats' percent labels"
+    ),
+    list(
+      chisq = chisq, goodness_of_fit = gof, cramers_v = cramers, paired = paired,
+      fisher = fisher, percent_labels = label_rows
+    )
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -4504,7 +5457,8 @@ PROBE_BUILDERS <- list(
   "probe-bootrules" = bootrules_probe,
   "probe-corr" = corr_probe,
   "probe-onesamplebf" = onesamplebf_probe,
-  "probe-heldout" = heldout_probe
+  "probe-heldout" = heldout_probe,
+  "probe-contingency" = contingency_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
@@ -4539,6 +5493,9 @@ case_bootstraps <- function(case) {
   }
   type <- case$args$type
   if (case$fun == "ggscatterstats") {
+    return(FALSE)
+  }
+  if (case$fun %in% BAR_FUNCTIONS) {
     return(FALSE)
   }
   if (type == "robust") {

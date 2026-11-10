@@ -2,11 +2,13 @@
 each check's trigger and wording on the designs without levels.
 
 Over every fixture the statistical checks that fire are ``heavy_ties`` (type
-nonparametric with many ties), ``rows_dropped`` (missing values) and
-``infinite_effect_size`` (two robust histostats cases); ``estimate_outside_interval``
-never fires (a bootstrap-t interval is symmetric about its estimate, and the
-Fisher z intervals contain theirs), and neither does ``small_n`` (the smallest
-fixture has 5 values or pairs).
+nonparametric with many ties, also ten values of 5), ``rows_dropped`` (missing
+values), ``infinite_effect_size`` (four robust histostats cases: edge_one_small,
+edge_one_ties, and n = 2 and 3, whose intervals are [-Inf, Inf] as in R) and
+``small_n`` (the n = 2 and 3 histostats and the 3- and 4-pair scatterstats cases
+of the barstats oracle run); ``estimate_outside_interval`` never fires (a
+bootstrap-t interval is symmetric about its estimate, and the Fisher z intervals
+contain theirs).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from tests import no_level_cases as nl
 
 H: Any = ip.analyze.histostats
 S: Any = ip.analyze.scatterstats
+TYPES = ("parametric", "nonparametric", "robust", "bayes")
 
 
 def _codes(result: StatsResult) -> list[str]:
@@ -36,11 +39,27 @@ def test_checks_over_every_fixture() -> None:
             continue
         for code in _codes(result):
             fired.setdefault(code, set()).add(case.name.split("-", 1)[1])
-    assert set(fired) == {"heavy_ties", "rows_dropped", "infinite_effect_size"}
+    assert set(fired) == {
+        "heavy_ties",
+        "rows_dropped",
+        "infinite_effect_size",
+        "small_n",
+    }
     assert fired["infinite_effect_size"] == {
         "edge_one_small-robust",
         "edge_one_ties-robust",
+        # n = 2 and 3 (barstats oracle run): 967 and 215 of 2,000 resamples.
+        "edge_one_n2-robust",
+        "edge_one_n3-robust",
     }
+    # Fewer than 5 values or pairs: the small cases of the barstats oracle run,
+    # every type answered (3 pairs: type bayes only).
+    assert fired["small_n"] == {
+        *(f"edge_one_n{n}-{t}" for n in (2, 3) for t in TYPES),
+        *(f"edge_corr_n4-{t}" for t in TYPES),
+        "edge_corr_n3-bayes",
+    }
+    assert "edge_one_constant-nonparametric" in fired["heavy_ties"]
     # heavy_ties only for the rank tests.
     assert all(name.endswith("nonparametric") for name in fired["heavy_ties"])
     assert {n.rsplit("-", 1)[0] for n in fired["rows_dropped"]} == {

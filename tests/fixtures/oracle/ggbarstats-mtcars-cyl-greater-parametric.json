@@ -1,0 +1,421 @@
+{
+  "schema_version": 2,
+  "name": "ggbarstats-mtcars-cyl-greater-parametric",
+  "function": "ggbarstats",
+  "call": "ggstatsplot::ggbarstats(data = data, x = cyl, type = \"parametric\", alternative = \"greater\")",
+  "dataset": {
+    "file": "mtcars.csv",
+    "sha256": "f188c5614db7341420cc36d42a8ab4b6ba50e4749757a3396fa93df199b853ce",
+    "rows": 32,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "cyl",
+    "type": "parametric",
+    "alternative": "greater"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "4",
+    "6",
+    "8"
+  ],
+  "n_per_level": {
+    "4": 11,
+    "6": 7,
+    "8": 14
+  },
+  "contingency_data": {
+    "x": "cyl",
+    "y": null,
+    "counts": null,
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "rows_dropped": 0,
+    "rule": "rows with x, y and counts present (tidyr::drop_na), each repeated counts times (tidyr::uncount), every column as.factor()",
+    "error": null,
+    "x_levels": [
+      "4",
+      "6",
+      "8"
+    ],
+    "y_levels": [],
+    "table": [
+      [
+        11
+      ],
+      [
+        7
+      ],
+      [
+        14
+      ]
+    ],
+    "n": 32
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_na_values": [],
+  "expected_null_outputs": [],
+  "subtitle": "list(chi[\"gof\"]^2 * \"(\" * 2 * \")\" == \"2.31\", italic(p) == \"0.31\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.26\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")",
+  "caption": "list(log[e] * (BF[\"01\"]) == \"2.80\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")",
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 2.3125,
+        "df": 2,
+        "p.value": 0.314663961018459,
+        "method": "Chi-squared test for given probabilities",
+        "effectsize": "Pearson's C",
+        "estimate": 0.259605978584037,
+        "conf.level": 0.95,
+        "conf.low": 0,
+        "conf.high": 1,
+        "conf.method": "ncp",
+        "conf.distribution": "chisq",
+        "n.obs": 32,
+        "expression": "list(chi[\"gof\"]^2 * \"(\" * 2 * \")\" == \"2.31\", italic(p) == \"0.31\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.26\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")"
+      }
+    ],
+    "caption_data": [
+      {
+        "bf10": 0.0607514624615177,
+        "prior.scale": 1,
+        "method": "Bayesian one-way contingency table analysis",
+        "expression": "list(log[e] * (BF[\"01\"]) == \"2.80\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")"
+      }
+    ],
+    "pairwise_comparisons_data": null,
+    "descriptive_data": [
+      {
+        "cyl": "4",
+        "counts": 11,
+        "perc": 34.375,
+        ".label": "34%"
+      },
+      {
+        "cyl": "6",
+        "counts": 7,
+        "perc": 21.875,
+        ".label": "22%"
+      },
+      {
+        "cyl": "8",
+        "counts": 14,
+        "perc": 43.75,
+        ".label": "44%"
+      }
+    ],
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_col",
+      "geom": "GeomCol",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "just": 0.5,
+          "lineend": "butt",
+          "linejoin": "mitre"
+        },
+        "aes": {
+          "colour": "black"
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": 1,
+          "fill": "#4285F4FF",
+          "PANEL": "1",
+          "group": 1,
+          "flipped_aes": false,
+          "ymin": 0.65625,
+          "ymax": 1,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.65625,
+          "fill": "#EA4335FF",
+          "PANEL": "1",
+          "group": 2,
+          "flipped_aes": false,
+          "ymin": 0.4375,
+          "ymax": 0.65625,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.4375,
+          "fill": "#FBBC04FF",
+          "PANEL": "1",
+          "group": 3,
+          "flipped_aes": false,
+          "ymin": 0,
+          "ymax": 0.4375,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_label",
+      "geom": "GeomLabel",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true
+        },
+        "geom": {
+          "parse": false,
+          "label.padding": 0.25,
+          "label.r": 0.15,
+          "size.unit": "mm",
+          "border.colour": null,
+          "text.colour": null,
+          "na.rm": true
+        },
+        "aes": {
+          "alpha": 1,
+          "fill": "white"
+        }
+      },
+      "built": [
+        {
+          "label": "34%",
+          "group": 1,
+          "x": 1,
+          "y": 0.828125,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.65625,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "22%",
+          "group": 2,
+          "x": 1,
+          "y": 0.546875,
+          "PANEL": "1",
+          "ymax": 0.65625,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.4375,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "44%",
+          "group": 3,
+          "x": 1,
+          "y": 0.21875,
+          "PANEL": "1",
+          "ymax": 0.4375,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        }
+      ]
+    },
+    {
+      "name": "geom_text",
+      "geom": "GeomText",
+      "data": [
+        {
+          "x": "",
+          "y": -0.05
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "label": "(n = 32)",
+          "size": 4
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": -0.05,
+          "PANEL": "1",
+          "group": 1,
+          "colour": "black",
+          "family": "",
+          "size": 4,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "label": "(n = 32)"
+        }
+      ]
+    }
+  ],
+  "plot_texts": {
+    "labels": {
+      "fill": "cyl",
+      "x.sec": null,
+      "x": null,
+      "y": null,
+      "y.sec": null,
+      "title": null,
+      "subtitle": "list(chi[\"gof\"]^2 * \"(\" * 2 * \")\" == \"2.31\", italic(p) == \"0.31\", widehat(italic(\"C\"))[\"Pearson\"] == \"0.26\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"1.00\" * \"]\", italic(\"n\")[\"obs\"] == \"32\")",
+      "caption": "list(log[e] * (BF[\"01\"]) == \"2.80\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")",
+      "label": ".label",
+      "group": "cyl",
+      "alt": ""
+    },
+    "legend_title": "cyl"
+  },
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
