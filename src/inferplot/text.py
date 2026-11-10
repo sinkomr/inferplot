@@ -1288,7 +1288,10 @@ def _elided(name: str, start: int, head: int, limit: int) -> str:
     ``head`` characters and an ellipsis; the end cut with an ellipsis when it is
     longer than ``limit`` allows."""
     tail = name[start:]
-    lead = name[:head].rstrip()
+    lead = name[:head]
+    if head < len(name) and not name[head].isspace() and " " in lead:
+        lead = lead[: lead.rfind(" ")]  # end the start at a word's end
+    lead = lead.rstrip()
     joined = f"{lead} \u2026 {tail}" if lead else f"\u2026{tail}"
     if len(joined) <= limit:
         return joined

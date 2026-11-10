@@ -689,7 +689,7 @@ def test_bayes_map_of_constant_and_zero_iqr_groups() -> None:
     assert not [w for w in result.warnings if "MAP" in w]
     # A zero interquartile range with spread: R's bw.SJ fails, the MAP is NA and
     # ggstatsplot prints an empty label. inferplot: value None, a warning that says
-    # why, the same empty label in the result's texts, nothing drawn for it.
+    # why, an empty text in the result's texts, nothing drawn for it.
     sparse = frame({"a": [1.0, 2.0, 4.0, 7.0], "b": [1.0] * 7 + [5.0]})
     result = betweenstats(sparse, "g", "y", type="bayes")
     assert result.descriptives[0].value == stats.map_estimate([1.0, 2, 4, 7]).estimate
@@ -699,7 +699,8 @@ def test_bayes_map_of_constant_and_zero_iqr_groups() -> None:
         "The group 'b' of x='g' (n = 8) has no MAP estimate, so no centrality label "
         "is drawn for it: no Sheather-Jones bandwidth"
     )
-    assert result.text.centrality_labels[1] == "μ_MAP = "
+    # No label is drawn, so its text is empty (review of phase 3, finding 7).
+    assert result.text.centrality_labels[1] == ""
     assert "b (n = 8, no MAP estimate)" in result.text.alt_text
     assert "NA" not in result.text.alt_text
     assert StatsResult.from_json(result.to_json()) == result
@@ -818,9 +819,11 @@ def test_bayes_alt_text_shortens_long_levels() -> None:
         alt = result.text.alt_text
         assert alt.startswith("Plot comparing y across the 3 groups of g ("), alt
         assert len(alt) <= 400, alt
-    short = "Treatment with the …"
+    # Names that differ only at the end keep their ends (review of phase 3,
+    # finding 3; they used to read "Treatment with the …" all three).
+    one, two, three = (f"Treatment with … {i}" for i in (1, 2, 3))
     assert bayes.text.alt_text.endswith(
-        f"BF10 from 0.67 ({short} vs {short}) to 659.96 ({short} vs {short}); "
+        f"BF10 from 0.67 ({one} vs {two}) to 659.96 ({one} vs {three}); "
         "brackets show log(BF01) for every pair."
     )
 
