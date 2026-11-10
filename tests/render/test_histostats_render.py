@@ -11,6 +11,7 @@ only what the result itself reports.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import math
 import warnings
@@ -160,8 +161,14 @@ def test_fixture_figure(name: str) -> None:
     assert [b.get_x() for b in drawn] == list(bins.edges[:-1])
     # The percent axis: count / n as a percentage.
     (percent,) = ax.child_axes
-    transform = percent._functions[0]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-    assert float(transform(np.array([len(x)]))[0]) == pytest.approx(100.0)  # pyright: ignore[reportUnknownArgumentType]
+    fig.draw()
+    low, high = ax.get_ylim()
+    assert percent.get_ylim() == pytest.approx(
+        (low * 100 / len(x), high * 100 / len(x))
+    )
+    ticks = [t.get_text() for t in percent.get_yticklabels() if t.get_text()]
+    assert ticks
+    assert all(t.endswith("%") for t in ticks)
     # The centrality line and its label, where drawn.
     line = by_gid(fig, "centrality-line")
     label = text_of(fig, "centrality-label")
@@ -237,6 +244,20 @@ def test_constant_column_needs_a_binwidth() -> None:
     assert "binwidth=" in text
     fig = ip.render.histostats(result, binwidth=0.5)
     assert [b.get_height() for b in bars(fig)] == [6.0]
+
+
+def test_a_missing_map_draws_no_centrality_line() -> None:
+    # A MAP without a density (D55): the result has no centrality value.
+    result = tooth(type="bayes")
+    (d,) = result.descriptives
+    missing = dataclasses.replace(
+        result, descriptives=(dataclasses.replace(d, value=None),)
+    )
+    fig = ip.render.histostats(missing)
+    assert by_gid(fig, "centrality-line") is None
+    assert by_gid(fig, "centrality-label") is None
+    assert by_gid(fig, "test-value-line") is not None
+    assert figure_codes(fig) == []
 
 
 def test_centrality_plotting_false_leaves_line_and_label_out() -> None:
