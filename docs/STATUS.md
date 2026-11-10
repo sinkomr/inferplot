@@ -319,6 +319,55 @@ results matched SciPy field by field, 108 results round-trip through JSON; scrip
   names that differ only in surrounding whitespace become separate groups silently;
   the APA sentence is not ASCII when level names are not.
 
+Drawing, saving and figure checks review (784 brackets over 72 figures: every one
+spans its pair with that pair's p; points, boxes and paths are the result's values;
+saved files embed the right copy and no raw value, byte-identical on re-save; no
+global matplotlib state is touched, also under 80 hostile rcParams; 70 random own
+figures clean; scripts and images in `reviewV/`). The oldest matplotlib (3.8.0) was
+not drawn on by the reviewer; CI's lowest-dependency job is the evidence there. For a
+figure inferplot makes itself an empty `fig.check()` held up except for V2, V3 and
+V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
+
+- [ ] V1: `ax=` on shared axes: with `sharex` a panel shows the other panel's tick
+  labels, n included (left panel n = 12, 30, 25 labelled 50, 8, 44; image checked by
+  the lead); with `sharey` the second call resets the limits and cuts the first
+  panel's data (72 of 80 values outside the view). `fig.check()` is empty.
+- [ ] V2: a centrality label covers the next group's centrality point whenever
+  neighbouring centres are close (66 of 120 random data sets; InsectSprays B under
+  A's label, image checked by the lead). No check compares labels with points.
+- [ ] V3: data that nothing draws: (a) without a points layer, values beyond the
+  whiskers have no mark; (b) a group of more than 2,048 values with one extreme value
+  loses its violin (0/0 in the binned density) while the warning says the violins
+  show all values; (c) the 2,000-point subsample is uniform over all values, so a
+  group of 8 next to 60,000 gets no point.
+- [ ] V4: `ax=` under a dark style: subtitle, brackets, labels and caption are drawn
+  in near-black on black.
+- [ ] V5: overlaps between panels (one panel's x label through the next panel's
+  title) are not checked; only the Axes' own texts are compared.
+- [ ] V6: a sequential colormap as `palette` gives the first group a near-white
+  colour ("Blues", "Greys"), invisible on white.
+- [ ] V7: Chinese, Japanese, Korean and Thai names are drawn as empty boxes, and the
+  theme overrides any font the user sets.
+- [ ] V8: the SVG names DejaVu Sans and STIX fonts without a fallback (on macOS and
+  Windows the hats land beside their letters), and mathtext is one positioned
+  character per `<tspan>`, so it is not editable or searchable as text. PDF embeds
+  its fonts and is faithful.
+- [ ] V9: the artist dicts accept properties that replace or hide the data
+  (`offsets`, `visible`, `alpha=0`, `xy`, `path`, `transform`, a white palette)
+  without a warning; palette entries beyond the number of levels are not validated.
+- [ ] V10: inverting an axis on a returned figure strikes each bracket label through
+  with its own line (y) or puts labels on their own points (x); `fig.check()` is
+  empty.
+- [ ] V11 (docs, Phase 5): `plt.savefig()` after `ip.betweenstats(...)` writes a blank
+  image (the figure is not pyplot's); `fig.figure.savefig()` writes text as paths
+  and no embedded result.
+- [ ] V12: with `ax=` under constrained layout the wide subtitle collapses the Axes;
+  it is reported, but the advice does not name the cause.
+- [ ] V13: smaller: one long level name widens every level (60 characters: a 30 in
+  figure); y x 1e200 raises a raw ZeroDivisionError in the brackets and y x 1e-200
+  "figure size must be positive finite"; a 3D Axes fails after artists were added; a
+  check message quotes mathtext source; `dpi=1e6` raises MemoryError.
+
 - Decided (D31, D37): Games-Howell p is computed from an accurate studentized range
   tail (`inferplot.stats.srange_sf`), not R's ptukey, whose error grows as the df falls
   (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, about 4.7e-10 in the
