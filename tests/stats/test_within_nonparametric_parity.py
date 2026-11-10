@@ -21,6 +21,7 @@ import pytest
 from inferplot.stats import (
     durbin_conover,
     friedman,
+    kendalls_w,
     paired_rank_biserial,
     signed_rank,
 )
@@ -32,7 +33,7 @@ from tests.oracle_fixtures import (
     r_double,
     require_cases,
 )
-from tests.tolerances import assert_close
+from tests.tolerances import assert_close, assert_within_monte_carlo
 
 FloatArray = np.ndarray[Any, np.dtype[np.float64]]
 
@@ -46,6 +47,11 @@ CASES = require_cases(
 )
 TWO = [pytest.param(c, id=c.name) for c in CASES if len(c.analysis_levels) == 2]
 MORE = [pytest.param(c, id=c.name) for c in CASES if len(c.analysis_levels) >= 3]
+BOOTSTRAP = [
+    pytest.param(c, id=c.name)
+    for c in CASES
+    if len(c.analysis_levels) >= 3 and c.bootstrap_reference is not None
+]
 PAIRS = [
     pytest.param(c, id=c.name)
     for c in cases_for("ggwithinstats")
@@ -233,6 +239,51 @@ def test_probe_friedman(design: Any) -> None:
 
 
 @pytest.mark.parametrize("design", DESIGNS, ids=[d["name"] for d in DESIGNS])
+def test_probe_kendalls_w(design: Any) -> None:
+    """effectsize::kendalls_w's estimate. Its interval in the probe comes from
+    effectsize's own resamples, with no replicate runs to measure their Monte Carlo
+    error, so the bounds are compared in ``test_kendalls_w_bootstrap`` instead;
+    on edge_within_small (W = 1) effectsize's bootstrap fails."""
+    columns = _design(design)
+    assert design["kendalls_w_error"] is None
+    expected = r_double(design["kendalls_w_hex"])
+    assert expected is not None
+    w = kendalls_w(columns)
+    assert_close("closed_form", w.estimate, expected, what=f"{design['name']} W")
+    if design["name"] == "edge_within_small":
+        assert design["kendalls_w_ci"] is None
+        assert design["kendalls_w_ci_error"] is not None
+        assert (w.estimate, w.conf_low, w.conf_high) == (1.0, 1.0, 1.0)
+    else:
+        assert design["kendalls_w_ci_error"] is None
+
+
+@pytest.mark.parametrize("case", BOOTSTRAP)
+def test_kendalls_w_bootstrap(case: OracleCase) -> None:
+    """Kendall's W and its bound against the fixture's 20,000-resample reference,
+    within 4 Monte Carlo SDs of a 2,000-resample bound (R's 50 replicate runs)."""
+    reference = case.bootstrap_reference
+    assert reference is not None
+    row = case.subtitle_data
+    level = number(reference["conf_level"])
+    assert (
+        level == number(row["conf.level"]) == float(case.args.get("conf.level", 0.95))
+    )
+    w = kendalls_w(_columns(case), conf_level=level)
+    assert row["effectsize"] == "Kendall's W"
+    assert_close("closed_form", w.estimate, number(row["estimate"]), what="W")
+    replicates = reference["replicates"]
+    assert int(replicates["resamples"]) == w.resamples
+    for bound in ("conf_low", "conf_high"):
+        assert_within_monte_carlo(
+            getattr(w, bound),
+            number(reference[bound]),
+            number(replicates[f"{bound}_sd"]),
+            what=f"{case.name} {bound}",
+        )
+
+
+@pytest.mark.parametrize("design", DESIGNS, ids=[d["name"] for d in DESIGNS])
 def test_probe_durbin_conover(design: Any) -> None:
     """The unadjusted pairs; R's statistics are never negative (|t|)."""
     columns = _design(design)
@@ -253,3 +304,51 @@ def test_probe_durbin_conover(design: Any) -> None:
         assert_close("closed_form", pair.statistic, statistic, what=f"{what} t")
         assert_close("closed_form", pair.p_value, p, what=f"{what} p")
         assert pair.p_adjusted == pair.p_value
+
+
+# --------------------------------------------------------------------------- #
+# the bootstrap scheme of Kendall's W over seeds
+# --------------------------------------------------------------------------- #
+
+_SWEEP = (
+    "ggwithinstats-bugs_long-nonparametric",
+    "ggwithinstats-bugs_long-cl90-nonparametric",
+    "ggwithinstats-edge_within_k5-nonparametric",
+    "ggwithinstats-edge_within_large_n-nonparametric",
+    "ggwithinstats-edge_within_ties-nonparametric",
+    "ggwithinstats-edge_within_nonspherical-nonparametric",
+)
+_SEEDS = 40
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("name", _SWEEP)
+def test_kendalls_w_scheme_over_seeds(name: str) -> None:
+    """The mean 2,000-resample lower bound over 40 seeds agrees with the mean of
+    R's 50 replicate runs of 2,000 within 3.5 standard errors (measured: within
+    1.6 on these six fixtures), which pins the scheme: whole subjects resampled,
+    one-sided at conf_level, ``boot.ci``'s percentile rule. Negative control: the
+    lower bound of a two-sided interval at the same level (alpha / 2) is off by
+    more than 10 standard errors."""
+    (case,) = [c for c in CASES if c.name == name]
+    reference = case.bootstrap_reference
+    assert reference is not None
+    replicates = reference["replicates"]
+    level = number(reference["conf_level"])
+    columns = _columns(case)
+    ours = np.array(
+        [kendalls_w(columns, conf_level=level, seed=s).conf_low for s in range(_SEEDS)]
+    )
+    r_mean, r_sd = (
+        number(replicates["conf_low_mean"]),
+        number(replicates["conf_low_sd"]),
+    )
+    se = float(np.sqrt(ours.var(ddof=1) / _SEEDS + r_sd**2 / int(replicates["count"])))
+    assert abs(float(ours.mean()) - r_mean) <= 3.5 * se, (ours.mean(), r_mean, se)
+    two_sided = np.array(
+        [
+            kendalls_w(columns, conf_level=2 * level - 1, seed=s).conf_low
+            for s in range(_SEEDS)
+        ]
+    )
+    assert abs(float(two_sided.mean()) - r_mean) > 10 * se

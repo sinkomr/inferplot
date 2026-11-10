@@ -15,6 +15,7 @@ and fractions) and each statistic is rounded once.
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -28,6 +29,13 @@ from scipy import special
 from inferplot.stats.descriptive import FloatArray, SampleLike, as_sample
 from inferplot.stats.effect_sizes import EffectSizeCI
 from inferplot.stats.noncentral import check_conf_level
+from inferplot.stats.nonparametric import (
+    BOOTSTRAP_RESAMPLES,
+    BootstrapEffectSizeCI,
+    SeedLike,
+    _percentile_lower,  # pyright: ignore[reportPrivateUsage]
+    check_bootstrap_seed,
+)
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import Alternative, check_alternative
 
@@ -37,6 +45,7 @@ __all__ = [
     "SignedRank",
     "durbin_conover",
     "friedman",
+    "kendalls_w",
     "paired_rank_biserial",
     "signed_rank",
 ]
@@ -448,4 +457,169 @@ def durbin_conover(
     return tuple(
         DurbinConoverPair(i=i, j=j, statistic=t, df=df, p_value=p, p_adjusted=adj)
         for (i, j, t, p), adj in zip(rows, adjusted, strict=True)
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Kendall's W
+# --------------------------------------------------------------------------- #
+
+# Resamples drawn together in one block of the bootstrap: bounds the block's
+# (resamples x subjects) count array to about this many elements.
+_BOOT_BLOCK_ELEMENTS: Final = 4_000_000
+# Arrangements of conditions that tie on their invariants tried for the canonical
+# table (``_canonical_ranks``); beyond this many the input order breaks the tie.
+_MAX_ARRANGEMENTS: Final = 720
+
+
+def _canonical_ranks(ranks2: IntArray) -> IntArray:
+    """The within-subject twice-ranks with the conditions and the subjects in an
+    order that depends only on the table's contents.
+
+    Conditions are ordered by their rank sum, then by their sorted ranks; the
+    subjects (rows) are then sorted lexicographically. Conditions that tie on both
+    keys are tried in every arrangement (up to ``_MAX_ARRANGEMENTS`` in all) and
+    the one whose sorted table is smallest is kept, so the result is the same for
+    any order of the subjects and of the conditions; beyond that many
+    arrangements (seven or more conditions with identical rank sums and rank
+    multisets) the input order of the tied conditions is kept."""
+    n, k = ranks2.shape
+    keys = [
+        (int(ranks2[:, j].sum()), tuple(sorted(ranks2[:, j].tolist())))
+        for j in range(k)
+    ]
+    order = sorted(range(k), key=lambda j: keys[j])
+    classes: list[list[int]] = []
+    for j in order:
+        if classes and keys[classes[-1][0]] == keys[j]:
+            classes[-1].append(j)
+        else:
+            classes.append([j])
+    count = math.prod(math.factorial(len(c)) for c in classes)
+    if count > _MAX_ARRANGEMENTS:
+        arrangements = [order]
+    else:
+        arrangements = [
+            [j for part in parts for j in part]
+            for parts in itertools.product(
+                *(itertools.permutations(c) for c in classes)
+            )
+        ]
+    best: IntArray | None = None
+    best_key = b""
+    for arrangement in arrangements:
+        table = ranks2[:, arrangement]
+        table = table[np.lexsort(table.T[::-1])]
+        key = table.tobytes()
+        if best is None or key < best_key:
+            best, best_key = table, key
+    assert best is not None
+    return np.ascontiguousarray(best).reshape(n, k)
+
+
+def _w_resamples(ranks2: IntArray, seed: int, resamples: int) -> tuple[FloatArray, int]:
+    """Kendall's W of ``resamples`` bootstrap resamples of the subjects (rows of
+    ``ranks2``), NaN where every drawn subject is fully tied, and that count.
+
+    Resample b draws n row indices in one call, ``integers(0, n, size=n)``; its
+    rank sums are counts @ ranks2 and its tie sum counts @ ties, all exact
+    integers in float64, so W is rounded once, as the estimate is."""
+    n, k = ranks2.shape
+    ties = np.zeros(n, dtype=np.int64)
+    for j in range(k):
+        equal = (ranks2 == ranks2[:, j : j + 1]).sum(axis=1)
+        ties += equal * equal - 1
+    r2 = ranks2.astype(np.float64)
+    t = ties.astype(np.float64)
+    centre = float(n * (k + 1))
+    full = float(n * k * (k * k - 1))
+    rng = np.random.Generator(np.random.PCG64(seed))
+    block = max(1, min(resamples, _BOOT_BLOCK_ELEMENTS // n))
+    values = np.empty(resamples, dtype=np.float64)
+    for first in range(0, resamples, block):
+        last = min(resamples, first + block)
+        counts = np.empty((last - first, n), dtype=np.float64)
+        for row in range(last - first):
+            counts[row] = np.bincount(rng.integers(0, n, size=n), minlength=n)
+        deviations = counts @ r2 - centre
+        ss2 = (deviations * deviations).sum(axis=1)
+        spread = full - counts @ t
+        with np.errstate(invalid="ignore", divide="ignore"):
+            values[first:last] = np.where(
+                spread > 0.0, 3.0 * ss2 / (n * spread), np.nan
+            )
+    return values, int(np.isnan(values).sum())
+
+
+def kendalls_w(
+    conditions: Sequence[SampleLike], *, conf_level: float = 0.95, seed: SeedLike = 0
+) -> BootstrapEffectSizeCI:
+    """Kendall's W, the coefficient of concordance of the subjects' rankings of
+    the conditions, with a one-sided percentile bootstrap CI [lower, 1].
+
+    Estimate (Kendall & Babington Smith 1939, Annals of Mathematical Statistics
+    10: 275-287; with ties, Kendall 1948, Rank Correlation Methods, ch. 6): W =
+    12 sum_j (R_j - n (k + 1) / 2)^2 / (n^2 (k^3 - k) - n sum(t^3 - t)), which is
+    the tie-corrected Friedman chi^2 / (n (k - 1)), in [0, 1]; 1 when every
+    subject ranks the conditions alike. Matches R's ``effectsize::kendalls_w``
+    as statsExpressions 2.2.1 calls it for ggwithinstats.
+
+    CI: ``BOOTSTRAP_RESAMPLES`` (2,000) resamples of the subjects, each drawing n
+    whole subjects (rows of the subjects-by-conditions table) with replacement
+    and recomputing W from their within-subject ranks; the lower bound is the
+    bootstrap (1 - conf_level) quantile with ``boot.ci``'s percentile rule
+    (``_percentile_lower``), the upper bound 1: effectsize's interval
+    (``alternative = "greater"``, 100 resamples there), matched within Monte
+    Carlo error against the oracle's references: over 40 seeds the mean
+    2,000-resample lower bound agrees with the mean of R's 50 replicate runs of
+    2,000 within 1.6 standard errors on all 7 fixtures where the bound varies
+    (bugs_long at 0.95 and 0.90, edge_within_k5, _large_n, _missing,
+    _nonspherical, _ties), and equals R's on the 4 where it does not; the lower
+    bound of a two-sided interval misses by 17 to 39 Monte Carlo SDs. A resample whose
+    drawn subjects all have the same value in every condition has no W; such
+    resamples are left out and the quantile is taken over the others, counted in
+    ``undefined_resamples`` (DECISIONS.md D54). With W = 1 every resample has
+    W = 1 and the interval is [1, 1] (R's bootstrap fails there).
+
+    Randomness: ``numpy.random.Generator(numpy.random.PCG64(seed))``; resample b
+    draws its n indices in one call. The draws index the rows of the ranked table
+    in a canonical order (``_canonical_ranks``), so the interval depends only on
+    the data and the seed: not on the order of the subjects, the order of the
+    conditions or any strictly increasing transform of the values.
+
+    Raises:
+        ValueError: as ``friedman``; conf_level not strictly between 0 and 1 or
+            too extreme for the resamples left (below 1/2001 or above 2000/2001
+            with none undefined); too many undefined resamples; or a negative
+            seed.
+    """
+    level = check_conf_level(conf_level)
+    rng_seed = check_bootstrap_seed(seed)
+    blocks = _blocks(conditions, "Kendall's W")
+    estimate = float(Fraction(3 * blocks.ss2, blocks.n * blocks.spread))
+    values, undefined = _w_resamples(
+        _canonical_ranks(blocks.ranks2), rng_seed, BOOTSTRAP_RESAMPLES
+    )
+    defined = values[~np.isnan(values)]
+    try:
+        low = _percentile_lower(defined, 1.0 - level)
+    except ValueError:
+        if not undefined:
+            raise
+        raise ValueError(
+            f"{undefined} of {BOOTSTRAP_RESAMPLES} bootstrap resamples draw only "
+            f"subjects with the same value in every condition, which leaves "
+            f"{defined.size}, too few for a percentile interval at "
+            f"conf_level={level!r} (most subjects have the same value in every "
+            "condition)"
+        ) from None
+    return BootstrapEffectSizeCI(
+        estimate=estimate,
+        conf_low=low,
+        conf_high=1.0,
+        conf_level=level,
+        sidedness="greater",
+        seed=rng_seed,
+        resamples=BOOTSTRAP_RESAMPLES,
+        undefined_resamples=undefined,
     )

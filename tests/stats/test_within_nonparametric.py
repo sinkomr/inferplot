@@ -3,6 +3,7 @@ conventions, invariances, degenerate inputs and an independent SciPy reference."
 
 from __future__ import annotations
 
+import itertools
 import math
 from typing import Any
 
@@ -11,8 +12,10 @@ import pytest
 from scipy import stats as scipy_stats
 
 from inferplot.stats import (
+    BOOTSTRAP_RESAMPLES,
     durbin_conover,
     friedman,
+    kendalls_w,
     p_adjust,
     paired_rank_biserial,
     signed_rank,
@@ -388,3 +391,119 @@ def test_two_subjects() -> None:
     pairs = durbin_conover(columns)
     assert {p.df for p in pairs} == {2.0}
     assert all(math.isfinite(p.statistic) for p in pairs)
+
+
+# --------------------------------------------------------------------------- #
+# Kendall's W
+# --------------------------------------------------------------------------- #
+
+
+def _w_reference(columns: list[FloatArray]) -> float:
+    """Kendall's tie-corrected W from SciPy's within-row ranks."""
+    ranks = _within_ranks(columns)
+    n, k = ranks.shape
+    s = float(((ranks.sum(axis=0) - n * (k + 1) / 2) ** 2).sum())
+    ties = 0.0
+    for row in ranks:
+        counts = np.unique(row, return_counts=True)[1].astype(np.float64)
+        ties += float((counts**3 - counts).sum())
+    return 12 * s / (n * n * (k**3 - k) - n * ties)
+
+
+def test_kendalls_w_definition() -> None:
+    w = kendalls_w(COLUMNS)
+    n, k = TABLE.shape
+    assert w.estimate == pytest.approx(_w_reference(COLUMNS), rel=1e-14)
+    assert w.estimate == pytest.approx(
+        friedman(COLUMNS).statistic / (n * (k - 1)), rel=1e-15
+    )
+    assert (w.conf_high, w.sidedness, w.conf_level) == (1.0, "greater", 0.95)
+    assert (w.seed, w.resamples, w.undefined_resamples) == (0, BOOTSTRAP_RESAMPLES, 0)
+    assert 0.0 <= w.conf_low <= w.estimate
+
+
+def test_kendalls_w_is_reproducible_and_seeded() -> None:
+    assert kendalls_w(COLUMNS, seed=5) == kendalls_w(COLUMNS, seed=5)
+    assert kendalls_w(COLUMNS, seed=5).conf_low != kendalls_w(COLUMNS).conf_low
+    assert kendalls_w(COLUMNS, seed=np.int64(5)).seed == 5
+    with pytest.raises(ValueError, match="seed"):
+        kendalls_w(COLUMNS, seed=-1)
+    with pytest.raises(ValueError, match="seed"):
+        kendalls_w(COLUMNS, seed=True)
+
+
+def test_kendalls_w_does_not_depend_on_order_or_scale() -> None:
+    base = kendalls_w(COLUMNS)
+    for _ in range(5):
+        rows = RNG.permutation(TABLE.shape[0])
+        cols = RNG.permutation(TABLE.shape[1])
+        assert kendalls_w([COLUMNS[j][rows] for j in cols]) == base
+    assert kendalls_w([np.exp(c) for c in COLUMNS]) == base
+    for factor in (1e-300, 1e300):
+        assert kendalls_w([c * factor for c in COLUMNS]) == base
+
+
+def test_kendalls_w_order_free_when_conditions_look_alike() -> None:
+    # A cyclic design: every condition has the same rank sum and the same ranks,
+    # so the canonical order comes from trying the arrangements.
+    cyclic = np.array(
+        [
+            [1.0, 2.0, 3.0, 4.0],
+            [2.0, 3.0, 4.0, 1.0],
+            [3.0, 4.0, 1.0, 2.0],
+            [4.0, 1.0, 2.0, 3.0],
+            [1.0, 3.0, 2.0, 4.0],
+            [3.0, 1.0, 4.0, 2.0],
+            [2.0, 4.0, 1.0, 3.0],
+            [4.0, 2.0, 3.0, 1.0],
+        ]
+    )
+    columns = [cyclic[:, j].copy() for j in range(4)]
+    base = kendalls_w(columns)
+    for order in itertools.permutations(range(4)):
+        assert kendalls_w([columns[j] for j in order]) == base
+
+
+def test_kendalls_w_one() -> None:
+    columns = [
+        np.array([1.0, 2.0, 0.5]),
+        np.array([2.0, 3.5, 1.0]),
+        np.array([3.0, 9.0, 1.5]),
+    ]
+    w = kendalls_w(columns)
+    assert (w.estimate, w.conf_low, w.conf_high) == (1.0, 1.0, 1.0)
+    assert w.undefined_resamples == 0
+
+
+def test_kendalls_w_zero() -> None:
+    # Each condition has every rank once: no concordance.
+    columns = [
+        np.array([1.0, 2.0, 3.0]),
+        np.array([2.0, 3.0, 1.0]),
+        np.array([3.0, 1.0, 2.0]),
+    ]
+    w = kendalls_w(columns)
+    assert w.estimate == 0.0
+    assert w.conf_low == 0.0
+
+
+def test_kendalls_w_leaves_out_undefined_resamples() -> None:
+    columns = [
+        np.array([1.0, 5.0, 2.0, 7.0]),
+        np.array([1.0, 5.0, 3.0, 7.0]),
+        np.array([1.0, 5.0, 1.0, 7.0]),
+    ]
+    w = kendalls_w(columns)
+    # Three of four subjects fully tied: (3/4)^4 = 32% of resamples undefined.
+    assert w.undefined_resamples > 0.25 * BOOTSTRAP_RESAMPLES
+    assert w.undefined_resamples < 0.39 * BOOTSTRAP_RESAMPLES
+    assert w.estimate == 1.0 / 4.0  # one informative subject of four
+
+
+def test_kendalls_w_errors() -> None:
+    with pytest.raises(ValueError, match="conf_level"):
+        kendalls_w(COLUMNS, conf_level=0.0)
+    with pytest.raises(ValueError, match="order statistic"):
+        kendalls_w(COLUMNS, conf_level=0.9999)
+    with pytest.raises(ValueError, match="same value in all 3 conditions"):
+        kendalls_w([np.array([1.0, 2.0])] * 3)

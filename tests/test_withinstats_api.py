@@ -396,7 +396,6 @@ def test_arguments_a_type_cannot_use(two: pd.DataFrame, four: pd.DataFrame) -> N
             "Yuen's test for dependent trimmed means",
             "is not implemented yet",
         ),
-        ("nonparametric", 4, "the Friedman test", "is not implemented yet"),
         (
             "robust",
             4,

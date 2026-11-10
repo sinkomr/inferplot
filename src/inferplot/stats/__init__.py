@@ -73,6 +73,7 @@ from inferplot.stats.within_nonparametric import (
     SignedRank,
     durbin_conover,
     friedman,
+    kendalls_w,
     paired_rank_biserial,
     signed_rank,
 )
@@ -129,6 +130,7 @@ __all__ = [
     "jzs_bf10_paired",
     "jzs_bf10_two_sample",
     "jzs_log_bf10",
+    "kendalls_w",
     "kruskal_wallis",
     "lincon",
     "mann_whitney",
