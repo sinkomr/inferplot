@@ -318,9 +318,17 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   their own numbers; 330 expressions render on matplotlib 3.8.0 and current. APA
   sentence and alt text for both designs (D91, D92); `figure_alt_text` takes the new
   figures' keywords. A bootstrap p of 0 is explained in `warnings` (lead's review)
-- [ ] figures of both functions (renderer; in progress), image baselines
-- [ ] histostats, all types
-- [ ] scatterstats, all types (line, band, marginals)
+- [x] figures: `ip.histostats` and `ip.scatterstats` draw end to end on shared machinery
+  (`render/base.py`; 327 existing between and within figures byte-identical). Histogram:
+  ggstatsplot's bins on all 76 fixtures (counts exact, edges within 1e-13), percent
+  axis, centrality line and label, test value mark (D94). Scatter plot: OLS line and
+  band within 1e-8 of R's on every lm fixture, marginal histograms, point labels
+  placed clear of each other (D97), a seeded subsample above 5,000 pairs. `fig.check()`
+  reports nothing about the figure on any fixture; 120 random data sets clean in the
+  own figure and in `ax=` at three dpi; passes on matplotlib 3.8.0. Six new image
+  baselines. Open, small: a link line can cross another label in a crowded figure
+- [x] histostats, all types: reference data, statistics, analysis, texts, figure
+- [x] scatterstats, all types (line, band, marginals): the same
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)
 
 ## Phase 5 — documentation, evaluation, release 0.1.0

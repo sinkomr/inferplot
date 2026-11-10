@@ -66,8 +66,8 @@ labels and the texts it draws; texts already in that Axes keep their font.
 | --- | --- | --- |
 | `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. Before anything is drawn, each is applied to a scratch artist made as the drawing makes it, which is drawn and written as SVG and PDF (matplotlib checks some values only then); a property name the artist does not have raises `TypeError` with the closest property name, and any value matplotlib rejects, when setting it or only when drawing, raises `ValueError` naming the argument, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
 | `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=None` (join each subject's points with a line; None and True draw them with two conditions and the `"points"` layer, as ggwithinstats draws them only for two conditions; False leaves them out), `centrality_path=None` (join the centrality points; None and True draw it with `centrality_plotting=True`, as in ggwithinstats). An explicit `point_path` (True or False) where no subject paths can be drawn and an explicit `centrality_path` with `centrality_plotting=False` add a `warnings` entry each (D39, D72); the defaults add nothing (D57) |
-| `histostats` | `data, x` | `test_value=0.0` (a finite number); drawing: `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True`, `bar_args` (matplotlib properties of the bars) (D82) |
-| `scatterstats` | `data, x, y` | `label_var=None` (an analysis argument: a column whose values label the points; a missing or empty value means no label, which replaces ggstatsplot's `label.expression`); drawing: `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `point_args`, `smooth_args`, `marginal_args`; `ax` needs `marginal=False` and is refused otherwise before anything is drawn (D82) |
+| `histostats` | `data, x` | `test_value=0.0` (a finite number); drawing: `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True`, `bar_args` (Rectangle properties of every bar; `x`, `y`, `width`, `height`, `bounds` and `xy`, which would set the bins, are refused); at most 10,000 bars (`ValueError` naming a `binwidth` that gives 100) (D82, D95) |
+| `scatterstats` | `data, x, y` | `label_var=None` (an analysis argument: a column whose values label the points; a missing or empty value means no label, which replaces ggstatsplot's `label.expression`); drawing: `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `point_args`, `smooth_args` (styles the line, a `Line2D`; the band takes its colour; needs `smooth=True`), `marginal_args` (every marginal bar; needs `marginal=True`); `ax` needs `marginal=False` and is refused otherwise before anything is drawn; a given Axes may share its axes with other panels, the limits then fit every panel (D82, D96) |
 | `barstats` | `data, x, y=None` | `counts=None`, `paired=False`, `ratio=None`, `label="percentage"` (`"counts"`, `"both"`), `proportion_test=True`, `p_adjust_method="holm"`, `digits_perc=0` |
 
 `p_adjust_method` accepts R's names: `holm`, `hochberg`, `hommel`, `bonferroni`, `BH`,
@@ -440,6 +440,14 @@ value (mean, median, trimmed mean at tr, MAP) with its label
 `centrality_plotting=False` neither the line nor the label is computed. ggstatsplot
 1.1.4 has no `normal.curve` argument (its `...` swallows one silently).
 
+inferplot's histogram (D94, D95): counts on the left axis from 0, the share of n in
+percent on a right axis; the centrality line dashed in the centrality colour with
+ggstatsplot's label; the test value marked with a thin grey line labelled "test value
+<v>", or, when it lies more than a quarter of the bars' width beyond them, with an
+arrow at that edge ("test value 100 →") so that the default test value 0 does not
+squash the bars; both labels in a strip above the tallest bar, never over bars, on
+two rows only when they would touch.
+
 ### scatterstats
 
 Every row comes from `correlation::correlation()` on the complete pairs (rows with x
@@ -476,6 +484,18 @@ ggplot2's); marginal histograms (ggside, 30 bins each of x and y, built through
 ggstatsplot's error-swallowing helper); `label.var` labels every analyzed point,
 `label.expression` (a dplyr filter) the points it selects (mtcars `mpg > 25 | wt > 5`:
 9 of 32).
+
+inferplot's scatter plot (D96, D97): points and marginal bars in the palette's first
+colour, the line near-black with its band at alpha 0.18; the marginal panels
+(`fig.axes["xside"]`, `["yside"]`) share the main panel's axes and have no axis of
+their own; where no line exists nothing is drawn and `warnings` says so. Point labels
+are placed deterministically (`render/point_labels.py`): each takes the nearest of 96
+places around its point (12 on each of 8 rings) that lies inside the plot, clear of
+the other labels and texts, covering the fewest points; a label moved off the first
+ring gets a link line; above 200 labels none is searched for and `fig.check()` says
+so. Above 5,000 pairs the points are a seeded subsample of about 2,000 (always with
+the pairs holding the smallest and largest x and y and every labelled point) over a
+60 x 60 density layer, with a `warnings` entry and the `points_subsampled` check.
 
 ### barstats (`x` = rows / fill, `y` = columns / bars)
 
@@ -929,6 +949,7 @@ no problems.
 | `paths_crowded` | figure | warning | withinstats: the subject paths, rendered alone as drawn, are at least half opaque over more than 15% of the area between the two conditions (about 250 subjects in inferplot's own figure); the fix is `point_path=False` |
 | `centrality_label_overlap` | figure | warning | a centrality point at least half covered by a text's box |
 | `centrality_label_ambiguous` | figure | warning | a centrality label reads as another level's, wherever it is when checked: on its usual side its box's middle lies beyond the neighbouring point, on the other side it reaches past the middle toward the neighbouring point, or it lies over the centrality path between two other conditions (D75) |
+| `point_labels_crowded` | figure | warning | scatterstats: point labels overlap each other, or more than 200 points are labelled (D97); labels over points of a dense cloud are not reported |
 | `low_contrast` | figure | warning | a text under 3:1 (WCAG 2.1, large text and graphics) against its background, or a level's colour under 1.1:1 against the Axes background (WCAG's 3:1 would report the default palette's yellow, 1.32:1 on white) |
 | `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX); matplotlib's own "Glyph ... missing" warning for these characters is held back during inferplot's drawing, `check()` and `save()`, and passes through for characters this check does not report (D79) |
 | `axis_changed` | figure | warning | an inverted x or y axis, or a non-linear scale: brackets and labels were placed for an upright linear axis |
@@ -1190,7 +1211,7 @@ Every other subtitle number is compared as the exact string inferplot produces.
   polars and pyarrow inputs give identical results; standardized effect sizes invariant
   to location and positive scale.
 - **Rendering:** structural SVG assertions (layers present, label text equals result
-  text) on every OS; five pytest-mpl image baselines (`tests/render/test_images.py`:
+  text) on every OS; fourteen pytest-mpl image baselines (five of betweenstats, three of withinstats, six of histostats and scatterstats, one of them a shared `ax=` grid; `tests/render/test_images.py`; the first five:
   ToothGrowth, PlantGrowth and InsectSprays with every pair bracketed, a subsampled
   panel, an `ax=` figure), generated by ci.yml's `mpl-baselines` job and compared only
   in the `--mpl` job (ubuntu-latest, newest Python) at RMS tolerance 0.1 on the 0-255
