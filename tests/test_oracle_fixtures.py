@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 from scipy import stats as sp_stats
 
+from inferplot.stats import histogram_bins, marginal_bins, ols_band
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
     ACCURATE_BAYES_FACTORS,
@@ -1455,6 +1456,10 @@ def test_histogram_bins_and_centrality_line(case: OracleCase) -> None:
         assert abs(k - round(k)) < 1e-6, (b["xmin"], width)
     assert number(bins[0]["xmin"]) <= min(x)
     assert max(x) <= number(bins[-1]["xmax"])
+    # inferplot's own bins (tests/stats/test_plot_geometry.py checks every edge).
+    assert list(histogram_bins(x, binwidth=given).counts) == [
+        int(b["count"]) for b in bins
+    ]
     # The centrality line sits at the value centrality_description() labels: the
     # mean, median, trimmed mean (at the case's tr) or MAP.
     centrality = case.centrality
@@ -1511,6 +1516,9 @@ def test_scatter_smooth_band_and_marginals(case: OracleCase) -> None:
         assert number(built[-1]["x"]) == x.max()
         if method == "lm":
             _check_ols_band(built, x, y, level)
+            band = ols_band(x, y, conf_level=level)
+            for row, fit in zip(built, band.fit, strict=True):
+                assert math.isclose(number(row["y"]), fit, rel_tol=1e-9, abs_tol=1e-9)
     # Marginal histograms: 30 bins of each variable (one of width 0.1 for a constant
     # one, edge_corr_constant_x), every value counted once.
     for geom, values in {"GeomXsidebar": x, "GeomYsidebar": y}.items():
@@ -1521,6 +1529,7 @@ def test_scatter_smooth_band_and_marginals(case: OracleCase) -> None:
         (side,) = layers
         assert len(side) == (1 if values.min() == values.max() else 30)
         assert sum(int(b["count"]) for b in side) == values.size
+        assert list(marginal_bins(values).counts) == [int(b["count"]) for b in side]
     # Point labels: every analyzed point, or those label.expression selects.
     labelled = [
         layer for layer in case.plot_layers if layer["geom"] == "GeomLabelRepel"
