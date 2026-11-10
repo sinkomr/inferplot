@@ -8,6 +8,27 @@ function it must match (SPEC.md section 4).
 from __future__ import annotations
 
 from inferplot.stats.bayes import jzs_bf10_paired, jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.contingency import (
+    BarTest,
+    CountTable,
+    CountVector,
+    FisherExact,
+    GoodnessOfFit,
+    IndependenceTest,
+    PairComparison,
+    Probabilities,
+    SymmetryTest,
+    chisq_independence,
+    cohens_g,
+    column_percentages,
+    cramers_v,
+    fisher_exact,
+    goodness_of_fit,
+    mcnemar,
+    pairwise_fisher,
+    pearsons_c,
+    proportion_tests,
+)
 from inferplot.stats.correlation import (
     Correlation,
     CorrelationMethod,
@@ -35,7 +56,13 @@ from inferplot.stats.effect_sizes import (
     hedges_j,
     partial_omega_squared,
 )
-from inferplot.stats.noncentral import f_ncp_bound, t_ncp_interval
+from inferplot.stats.noncentral import (
+    chi2_ncp_bound,
+    chi2_ncp_interval,
+    f_ncp_bound,
+    noncentral_chi2_logcdf,
+    t_ncp_interval,
+)
 from inferplot.stats.nonparametric import (
     BOOTSTRAP_RESAMPLES,
     BootstrapEffectSizeCI,
@@ -249,4 +276,30 @@ __all__ = [
     "winsorized_variance",
     "yuen_dependent_t",
     "yuen_t",
+]
+
+# barstats: count tables and the noncentral chi-square behind their intervals.
+__all__ += [
+    "BarTest",
+    "CountTable",
+    "CountVector",
+    "FisherExact",
+    "GoodnessOfFit",
+    "IndependenceTest",
+    "PairComparison",
+    "Probabilities",
+    "SymmetryTest",
+    "chi2_ncp_bound",
+    "chi2_ncp_interval",
+    "chisq_independence",
+    "cohens_g",
+    "column_percentages",
+    "cramers_v",
+    "fisher_exact",
+    "goodness_of_fit",
+    "mcnemar",
+    "noncentral_chi2_logcdf",
+    "pairwise_fisher",
+    "pearsons_c",
+    "proportion_tests",
 ]

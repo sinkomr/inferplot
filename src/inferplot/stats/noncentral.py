@@ -85,6 +85,20 @@ over a window of +/- (15 sqrt(mu) + 30) terms around the mode, mu = lambda / 2.
   ncp up to 2e12 for tails from 1e-3 to 1e-20 the relative error is at most
   5.0e-14 (3.1e-13 against exact sums at df2 = 1e6 and 1e8, df1 = 2), and log P
   is within 2.3e-15 relative of the reference down to log P = -2000.
+
+Noncentral chi-square (Johnson, Kotz & Balakrishnan 1995, ch. 29): the
+Poisson(lambda / 2) mixture of central chi-squares,
+
+    P(X' <= x) = sum_j w_j P(df / 2 + j, x / 2),
+
+P (and Q for the upper tail) the regularized incomplete gamma functions, summed over
+the same Poisson window as the noncentral F (every term below a Poisson mean of 1e4,
+every h-th term with Loader's weights above it, the window moved to the dominant
+terms far in a tail). The gamma factors come from SciPy's ``gammainc`` /
+``gammaincc``, recomputed in log space by a series or a continued fraction where
+they fall below 1e-250 (``_log_gamma_tail``), so either tail keeps its relative
+accuracy far out. Against 40-digit mpmath (tests/data/ncx2_reference.json) see
+tests/stats/test_noncentral.py.
 """
 
 from __future__ import annotations
@@ -109,8 +123,11 @@ FloatArray = NDArray[np.float64]
 
 __all__ = [
     "check_conf_level",
+    "chi2_ncp_bound",
+    "chi2_ncp_interval",
     "f_ncp_bound",
     "log_beta_factors",
+    "noncentral_chi2_logcdf",
     "noncentral_f_logcdf",
     "noncentral_t_logcdf",
     "t_ncp_interval",
@@ -985,3 +1002,158 @@ def f_ncp_bound(f: float, df1: float, df2: float, *, prob: float) -> float:
         )
     root = optimize.brentq(g, 0.0, high, xtol=_XTOL, rtol=4.0 * 2.0**-52, maxiter=500)
     return float(root)
+
+
+def _check_chi2_args(x: float, df: float, ncp: float) -> None:
+    for name, value in (("x", x), ("df", df), ("ncp", ncp)):
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite; got {value!r}")
+    if x < 0.0 or ncp < 0.0:
+        raise ValueError(f"x and ncp must be >= 0; got {x!r} and {ncp!r}")
+    if df <= 0.0:
+        raise ValueError(f"df must be > 0; got {df!r}")
+
+
+def noncentral_chi2_logcdf(
+    x: float, df: float, ncp: float, *, upper: bool = False
+) -> float:
+    """log P(X' <= x), or log P(X' > x) with ``upper``, for X' ~ chi'^2(df, ncp).
+
+    The distribution R evaluates as ``pchisq(x, df, ncp)`` (module docstring for the
+    method: the Poisson mixture of regularized incomplete gamma functions); ``ncp =
+    0`` is the central chi-square.
+
+    Raises:
+        ValueError: an argument is not finite, x or ncp is negative, or df is not
+            positive.
+    """
+    x, df, ncp = float(x), float(df), float(ncp)
+    _check_chi2_args(x, df, ncp)
+    if x == 0.0:
+        return 0.0 if upper else -math.inf
+    mu = 0.5 * ncp
+    half_df = 0.5 * df
+    half_x = 0.5 * x
+    what = f"chi'^2(df={df!r}, ncp={ncp!r}) at x={x!r}"
+
+    def log_factors(j: FloatArray) -> FloatArray:
+        return _log_gamma_tail(half_df + j, np.full(j.shape, half_x), upper=upper)[0]
+
+    j, log_w = _log_poisson_window(mu)
+    terms = log_w + log_factors(j)
+    if mu > 0.0 and _misses_terms(j, log_w, terms):
+        # As for the noncentral F: far in a tail the gamma factors shift the
+        # dominant terms out of the window around mu.
+        j, log_w = _tilted_window(mu, log_factors, upper=upper)
+        terms = log_w + log_factors(j)
+        if _misses_terms(j, log_w, terms):  # pragma: no cover - not reached
+            raise ArithmeticError(f"the Poisson sum of {what} could not be bracketed")
+    return _checked_log_probability(_logsumexp(terms), what)
+
+
+def _chi2_ncp_start(x: float, df: float, prob: float) -> float:
+    """The noncentrality with P(X' <= x) = prob under the normal approximation
+    X' ~ N(df + lambda, 2 (df + 2 lambda)) (Johnson, Kotz & Balakrishnan 1995,
+    ch. 29): the root of (x - df - lambda)^2 = z^2 (2 df + 4 lambda) on the side
+    where x - df - lambda has the sign of z = Phi^-1(prob)."""
+    z = float(special.ndtri(prob))
+    d = x - df
+    centre = d + 2.0 * z * z
+    disc = centre * centre - d * d + 2.0 * z * z * df
+    if disc < 0.0:  # pragma: no cover - disc >= 4 z^2 (x + z^2) >= 0
+        return 0.0
+    root = math.sqrt(disc)
+    return centre - root if z > 0.0 else centre + root
+
+
+def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
+    """Noncentrality lambda >= 0 with P(chi'^2(df, lambda) <= x) = ``prob``.
+
+    The probability falls as lambda grows; when even lambda = 0 gives a probability
+    at or below ``prob`` there is no positive root and the bound is 0.0, the edge of
+    the parameter space (Steiger 2004, section 3; Smithson 2003, ch. 5). The
+    inversion behind ``effectsize``'s noncentral chi-square intervals of Cramer's V
+    and Pearson's C (R: ``pchisq(x, df, ncp)`` inverted in ``ncp``). Probabilities
+    above 1/2 are solved through the upper tail, P(X' > x) = 1 - prob, so both keep
+    their relative accuracy.
+
+    Root search: Brent's method to 1e-13 absolute and 4 ulp relative, which is the
+    accurate root; effectsize's own search stops earlier on some bounds (D99).
+    When the normal approximation of the root (``_chi2_ncp_start``) is at least 1e4
+    the bracket is that value +/- 4 sqrt(value), widened four-fold until it holds the
+    root; otherwise it runs from 0 to max(1, 2 x), doubled until it holds the root.
+    Returns ``math.inf`` when the root lies beyond the largest double.
+
+    Raises:
+        ValueError: an argument is not finite, x < 0, df is not positive, or
+            ``prob`` is not strictly between 0 and 1.
+    """
+    x, df, prob = float(x), float(df), float(prob)
+    _check_chi2_args(x, df, 0.0)
+    if not 0.0 < prob < 1.0:
+        raise ValueError(f"prob must lie strictly between 0 and 1; got {prob!r}")
+    upper = prob > 0.5
+    log_target = math.log1p(-prob) if upper else math.log(prob)
+    if upper:
+        at_zero = noncentral_chi2_logcdf(x, df, 0.0, upper=True)
+        if at_zero >= log_target:
+            return 0.0
+
+        def g(ncp: float) -> float:
+            return _clip(noncentral_chi2_logcdf(x, df, ncp, upper=True)) - log_target
+
+    else:
+        at_zero = noncentral_chi2_logcdf(x, df, 0.0)
+        if at_zero <= log_target:
+            return 0.0
+
+        def g(ncp: float) -> float:
+            return log_target - _clip(noncentral_chi2_logcdf(x, df, ncp))
+
+    start = _chi2_ncp_start(x, df, prob)
+    if start >= _TIGHT_BRACKET_FROM:
+        return _f_ncp_from(g, start)
+    high = min(max(1.0, 2.0 * x), _LARGEST)
+    for _ in range(_MAX_EXPANSIONS):
+        if g(high) > 0.0:
+            break
+        high *= 2.0
+    else:  # pragma: no cover - P(X' <= x) tends to 0 as lambda grows
+        raise ArithmeticError(
+            f"could not bracket the noncentrality parameter of chi-square = {x!r}"
+        )
+    root = optimize.brentq(g, 0.0, high, xtol=_XTOL, rtol=4.0 * 2.0**-52, maxiter=500)
+    return float(root)
+
+
+def chi2_ncp_interval(
+    x: float,
+    df: float,
+    *,
+    conf_level: float,
+    alternative: Alternative,
+) -> tuple[float, float]:
+    """Confidence interval for the noncentrality parameter of an observed
+    chi-square ``x`` on ``df`` degrees of freedom.
+
+    Test inversion (Steiger & Fouladi 1997; Smithson 2003, ch. 5): with alpha = 1 -
+    conf_level, the two-sided bounds solve P(chi'^2(df, lambda) <= x) = 1 - alpha / 2
+    (lower) and = alpha / 2 (upper), each 0 where no lambda > 0 solves
+    (``chi2_ncp_bound``); "greater" gives (the bound at 1 - alpha, +inf) and "less"
+    (0, the bound at alpha). The construction ``effectsize`` uses for
+    ``cramers_v`` and ``pearsons_c`` (``ci_method = "ncp"``).
+
+    Raises:
+        ValueError: x is not finite or negative, df is not positive, conf_level is
+            not strictly between 0 and 1, or alternative is not one of
+            "two-sided", "less", "greater".
+    """
+    x, df = float(x), float(df)
+    _check_chi2_args(x, df, 0.0)
+    level = check_conf_level(conf_level)
+    side = check_alternative(alternative)
+    alpha = 1.0 - level
+    tail = alpha / 2.0 if side == "two-sided" else alpha
+    low = 0.0 if side == "less" else chi2_ncp_bound(x, df, prob=1.0 - tail)
+    high = math.inf if side == "greater" else chi2_ncp_bound(x, df, prob=tail)
+    return low, high
