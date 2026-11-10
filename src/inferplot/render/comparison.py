@@ -31,7 +31,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import numpy as np
@@ -76,6 +76,7 @@ __all__ = [
     "MAX_POINTS",
     "MIN_PER_LEVEL",
     "SUBSAMPLE_SIZE",
+    "TICK_LINES",
     "Drawing",
     "LabelPlace",
     "Options",
@@ -84,6 +85,7 @@ __all__ = [
     "checked_result",
     "draw",
     "points_artist",
+    "wrap_tick_label",
 ]
 
 FloatArray = NDArray[np.float64]
@@ -689,6 +691,56 @@ def _split_subsample(
 # --------------------------------------------------------------------------- #
 
 
+# Tick labels: a level name wraps on spaces into at most TICK_LINES lines, each
+# as wide as the narrowest level spacing of inferplot's own figure allows.
+TICK_LINES: Final = 3
+_ELLIPSIS: Final = "\u2026"  # as the alt text shortens names
+
+
+def _shortened(text: str, fits: Callable[[str], bool]) -> str:
+    """``text`` cut at its end, with an ellipsis, to the longest prefix that
+    fits; ``text`` itself when it fits."""
+    if fits(text):
+        return text
+    lo, hi = 0, len(text)  # the longest fitting prefix lies in [lo, hi)
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if fits(text[:mid].rstrip() + _ELLIPSIS):
+            lo = mid
+        else:
+            hi = mid
+    return text[:lo].rstrip() + _ELLIPSIS
+
+
+def wrap_tick_label(label: str, fits: Callable[[str], bool]) -> str:
+    """A tick label ``"<level>\n(n = <n>)"`` as drawn.
+
+    The level name is wrapped on spaces into lines that ``fits`` accepts, at
+    most TICK_LINES of them; a word too long for a line, and whatever does not
+    fit in the last line, is shortened with an ellipsis. The result keeps the
+    full name; a name that fits on one line is drawn as it is.
+    """
+    name, sep, count = label.rpartition("\n")
+    if not sep:
+        name, count = label, ""
+    lines: list[str] = []
+    for paragraph in name.split("\n"):
+        current = ""
+        for word in paragraph.split(" "):
+            joined = f"{current} {word}" if current else word
+            if fits(joined) or not current:
+                current = joined
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    if len(lines) > TICK_LINES:
+        rest = " ".join(lines[TICK_LINES - 1 :])
+        lines = [*lines[: TICK_LINES - 1], _shortened(rest, fits)]
+    wrapped = "\n".join(_shortened(line, fits) for line in lines)
+    return f"{wrapped}\n{count}" if sep else wrapped
+
+
 def px(points: float, dpi: float) -> float:
     return points * dpi / 72.0
 
@@ -745,6 +797,7 @@ class Drawing:
         self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         self.undrawn: list[str] = []  # levels whose violin or outline is not drawn
         self.outlier_marks: list[PathCollection] = []
+        self.tick_texts: list[str] | None = None
         # The y layout's inputs: bracket levels used, room above and below (px).
         self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
         self.levels_of_brackets: list[int] = []
@@ -765,6 +818,28 @@ class Drawing:
             box = Bbox.from_bounds(box.x0 - pad / 2, box.y0 - pad / 2,
                                    box.width + pad, box.height + pad)  # fmt: skip
         return box
+
+    def tick_labels(self) -> list[str]:
+        """The x tick labels as drawn: :func:`wrap_tick_label` with lines as wide
+        as the narrowest level spacing of inferplot's own figure leaves (measured
+        in the tick font), so that one long name does not widen every level."""
+        if self.tick_texts is not None:
+            return self.tick_texts
+        room = MIN_LEVEL_SPACING_IN * self.dpi - 2 * px(GAP_PT, self.dpi)
+        probe = self.figure.text(
+            0.0, 0.0, "", fontproperties=theme.font(theme.SIZE_TICK), parse_math=False
+        )
+        renderer = self.renderer()
+
+        def fits(line: str) -> bool:
+            probe.set_text(line)
+            return float(probe.get_window_extent(renderer).width) <= room
+
+        try:
+            self.tick_texts = [wrap_tick_label(t, fits) for t in self.texts.tick_labels]
+        finally:
+            probe.remove()
+        return self.tick_texts
 
     def role(self, text: Text, name: str, plain: str | None = None) -> Text:
         """Record what ``text`` is (and its plain wording) for check() messages."""
@@ -1050,7 +1125,7 @@ class Drawing:
         k = len(result.levels)
         ax.set_xticks(
             list(range(k)),
-            labels=list(self.texts.tick_labels),
+            labels=self.tick_labels(),
             parse_math=False,
             fontproperties=theme.font(theme.SIZE_TICK),
         )
@@ -1153,7 +1228,7 @@ class Drawing:
                 fontproperties=theme.font(theme.SIZE_TICK),
                 parse_math=False,
             )
-            for s in self.texts.tick_labels
+            for s in self.tick_labels()
         ]
         tick_w = max(self.extent(t).width for t in probe)
         for t in probe:
