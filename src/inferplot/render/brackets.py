@@ -170,6 +170,7 @@ def vertical_layout(
     min_height_px: float | None = None,
     data_height_px: float,
     height_px: float | None = None,
+    ppu: float | None = None,
 ) -> VerticalLayout:
     """The y-axis layout for data in [data_min, data_max].
 
@@ -184,7 +185,9 @@ def vertical_layout(
     top of it. Give ``min_height_px`` to choose the axes height (at least that), or
     ``height_px`` to fit an Axes of fixed height; there the levels keep their full
     spacing while the data keep ``data_height_px`` or :data:`MIN_DATA_SHARE` of
-    the height left after ``top_px`` and ``bottom_px``, whichever is less.
+    the height left after ``top_px`` and ``bottom_px``, whichever is less. Give
+    ``ppu`` (pixels per data unit) to lay everything out at that scale with the
+    levels at full spacing (panels sharing a y axis share one scale).
     """
     r = _data_range(data_min, data_max)
     full_step = level_step_px(
@@ -225,7 +228,9 @@ def vertical_layout(
         return (ceiling(ppu) - floor(ppu)) * ppu
 
     step = full_step
-    if height_px is not None:
+    if ppu is not None:
+        pass
+    elif height_px is not None:
         available = height_px - top_px - bottom_px
         floor_px = max(min(data_height_px, MIN_DATA_SHARE * available), 1.0)
         found = _solve(height, height_px)

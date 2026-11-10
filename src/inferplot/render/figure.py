@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DrawnPaths",
+    "DrawnView",
     "StatsFigure",
     "Subsample",
     "describe_text",
@@ -64,6 +65,15 @@ class DrawnPaths:
     levels: tuple[str, ...]
 
 
+@dataclass(slots=True)
+class DrawnView:
+    """The axis limits inferplot set for a panel (updated when a later drawing
+    into a panel that shares its y axis widens them), for ``check()``'s advice."""
+
+    xlim: tuple[float, float]
+    ylim: tuple[float, float]
+
+
 class StatsFigure:
     """A figure drawn from a :class:`~inferplot.result.StatsResult`.
 
@@ -84,6 +94,7 @@ class StatsFigure:
         "_result",
         "_roles",
         "_subsample",
+        "_view",
     )
 
     def __init__(
@@ -98,6 +109,7 @@ class StatsFigure:
         subsample: Subsample | None,
         brackets: tuple[tuple[Text, Line2D, str], ...] = (),
         paths: DrawnPaths | None = None,
+        view: DrawnView | None = None,
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -108,6 +120,7 @@ class StatsFigure:
         self._subsample = subsample
         self._brackets = brackets
         self._paths = paths
+        self._view = view
 
     @property
     def figure(self) -> Figure:
@@ -214,6 +227,11 @@ class StatsFigure:
     def paths(self) -> DrawnPaths | None:
         """The subject and centrality paths (withinstats), or None."""
         return self._paths
+
+    @property
+    def view(self) -> DrawnView | None:
+        """The axis limits inferplot set, or None."""
+        return self._view
 
     def draw(self) -> None:
         """Draw the figure so text extents are current."""

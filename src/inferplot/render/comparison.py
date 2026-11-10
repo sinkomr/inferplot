@@ -53,6 +53,7 @@ from inferplot.render import theme
 from inferplot.render.brackets import Bracket, VerticalLayout, stack, vertical_layout
 from inferplot.render.figure import (
     DrawnPaths,
+    DrawnView,
     StatsFigure,
     Subsample,
     describe_text,
@@ -188,7 +189,8 @@ def check_options(result: StatsResult, options: Options, ax: Axes | None) -> Non
 
 
 def check_axes(ax: Axes) -> None:
-    """A given Axes is a plain rectangular 2D one; checked before drawing."""
+    """A given Axes is a plain rectangular 2D one whose x axis it does not share;
+    checked before drawing."""
     name = str(getattr(ax, "name", ""))
     if name != "rectilinear":
         raise ValueError(
@@ -196,6 +198,22 @@ def check_axes(ax: Axes) -> None:
             "2D Axes, where the levels lie along x and the values along y. Pass an "
             "Axes made without projection=, for example figure.add_subplot()."
         )
+    if len(_siblings(ax, "x")) > 1:
+        raise ValueError(
+            "ax shares its x axis with another Axes (sharex=True, or twinx()), and "
+            "Axes that share an x axis share its tick labels; inferplot's tick "
+            "labels name each level with that panel's n, so one panel would show "
+            "the other's. Make the panels with sharex=False (the default), for "
+            "example figure.subplots(1, 2, sharey=True)."
+        )
+
+
+def _siblings(ax: Axes, which: Literal["x", "y"]) -> list[Axes]:
+    """The Axes that share ``ax``'s x or y axis, ``ax`` included."""
+    group = cast(
+        "Any", ax.get_shared_x_axes() if which == "x" else ax.get_shared_y_axes()
+    )
+    return list(cast("list[Axes]", group.get_siblings(ax)))
 
 
 def draw(
@@ -602,6 +620,9 @@ def px(points: float, dpi: float) -> float:
 
 
 _EMPTY: Final = np.empty(0, dtype=np.float64)
+# The attribute of a given Axes that holds its drawing, so that a later drawing
+# into an Axes sharing its y axis can lay it out again at the shared scale.
+_PANEL_ATTR: Final = "_inferplot_drawing"
 
 
 class Drawing:
@@ -647,6 +668,10 @@ class Drawing:
         self.bracket_names: list[str] = []
         self.header: list[Text] = []  # title, subtitle (own figure)
         self.captions: list[Text] = []
+        self.view = DrawnView(xlim=(0.0, 1.0), ylim=(0.0, 1.0))
+        # The y layout's inputs: bracket levels used, room above and below (px).
+        self.y_room: tuple[int, float, float] = (0, 0.0, 0.0)
+        self.levels_of_brackets: list[int] = []
 
     # -- helpers ---------------------------------------------------------------
 
@@ -750,6 +775,7 @@ class Drawing:
                 )
             ),
             paths=self.drawn_paths(),
+            view=self.view,
         )
 
     def draw_data(self) -> None:
@@ -1094,6 +1120,7 @@ class Drawing:
         top_px: float = 0.0,
         bottom_px: float = 0.0,
         height_px: float | None = None,
+        ppu: float | None = None,
     ) -> VerticalLayout:
         data = [x for x in self.values if x.size > 0]
         data_min = min(float(x.min()) for x in data)
@@ -1121,6 +1148,7 @@ class Drawing:
             min_height_px=None if fixed else MIN_AXES_HEIGHT_IN * self.dpi,
             data_height_px=MIN_DATA_HEIGHT_IN * self.dpi,
             height_px=height_px,
+            ppu=ppu,
         )
 
     def apply_limits(
@@ -1129,8 +1157,10 @@ class Drawing:
         ax = self.ax
         ax.set_xlim(left, right)
         ax.set_ylim(layout.bottom, layout.top)
-        for m, ((i, j), text, level) in enumerate(
-            zip(self.bracket_pairs, self.bracket_labels, levels, strict=True)
+        self.view.xlim = (left, right)
+        self.view.ylim = (layout.bottom, layout.top)
+        for m, ((i, j), level) in enumerate(
+            zip(self.bracket_pairs, levels, strict=True)
         ):
             y = layout.levels[level]
             line = Line2D(
@@ -1143,6 +1173,20 @@ class Drawing:
             )
             ax.add_line(line)
             self.bracket_lines.append(line)
+        self.levels_of_brackets = levels
+        self.place_bracket_levels(layout)
+
+    def place_bracket_levels(self, layout: VerticalLayout) -> None:
+        """Put each bracket and its label at its level of ``layout``."""
+        for (i, j), line, text, level in zip(
+            self.bracket_pairs,
+            self.bracket_lines,
+            self.bracket_labels,
+            self.levels_of_brackets,
+            strict=True,
+        ):
+            y = layout.levels[level]
+            line.set_data([i, i, j, j], [y - layout.tip, y, y, y - layout.tip])
             text.set_position(((i + j) / 2, y + layout.label_pad))
 
     def layout_own(self) -> None:
@@ -1241,7 +1285,59 @@ class Drawing:
             bottom_px=bottom_px,
             height_px=float(self.ax.bbox.height),
         )
+        self.y_room = (n_levels, top_px, bottom_px)
         self.apply_limits(left, right, layout, levels)
+        setattr(self.ax, _PANEL_ATTR, self)
+        self.share_y()
+
+    def layout_at(self, ppu: float) -> VerticalLayout:
+        """This panel's y layout at ``ppu`` pixels per data unit, full spacing."""
+        n_levels, top_px, bottom_px = self.y_room
+        return self.y_layout(n_levels, top_px=top_px, bottom_px=bottom_px, ppu=ppu)
+
+    def share_y(self) -> None:
+        """With a y axis shared with other Axes: the limits that every panel
+        sharing it needs, at one scale, so a later drawing never cuts an earlier
+        panel's data or brackets.
+
+        The panels inferplot drew are laid out again at the shared scale (their
+        brackets move); another Axes keeps its data in view. The scale is found
+        by iterating span -> span needed at that span, which converges while the
+        texts and brackets take less than each Axes' height.
+        """
+        ax = self.ax
+        siblings = [a for a in _siblings(ax, "y") if a is not ax]
+        if not siblings:
+            return
+        panels: list[Drawing] = [self]
+        fixed: list[float] = []
+        for other in siblings:
+            drawn = getattr(other, _PANEL_ATTR, None)
+            if not other.has_data():
+                continue
+            if isinstance(drawn, Drawing) and drawn.ax is other:
+                panels.append(drawn)
+            else:
+                ys = np.asarray(other.dataLim.intervaly, dtype=np.float64)
+                fixed += [float(y) for y in ys[np.isfinite(ys)]]
+        if len(panels) == 1 and not fixed:
+            return
+        lo, hi = self.view.ylim
+        span = hi - lo
+        if fixed:
+            span = max(span, max(fixed) - min(fixed))
+        layouts: list[VerticalLayout] = []
+        for _ in range(100):
+            layouts = [p.layout_at(float(p.ax.bbox.height) / span) for p in panels]
+            lo = min([lay.bottom for lay in layouts] + fixed)
+            hi = max([lay.top for lay in layouts] + fixed)
+            if abs((hi - lo) - span) <= 1e-9 * span:
+                break
+            span = hi - lo
+        ax.set_ylim(lo, hi)
+        for panel, lay in zip(panels, layouts, strict=True):
+            panel.place_bracket_levels(lay)
+            panel.view.ylim = (lo, hi)
 
     def finish_fonts(self) -> None:
         """DejaVu Sans, also for mathtext, on every text inferplot draws.
