@@ -463,8 +463,250 @@ def _within_no_effect_warnings(
 
 def _nonparametric(data: WithinData, args: _Args) -> _Parts:
     """Wilcoxon signed-rank test with the rank-biserial r (two conditions);
-    Friedman test with Kendall's W and Durbin-Conover comparisons (three or more)."""
-    raise _not_implemented(args.type, data)
+    Friedman test with Kendall's W and Durbin-Conover comparisons (three or more).
+    Medians of the complete subjects' values as centrality."""
+    columns = data.by_level()
+    if len(data.levels) == 2:
+        test, effect_size, pairwise, warnings, citations = _signed_rank_parts(
+            data, args
+        )
+    else:
+        test, effect_size, pairwise, warnings, citations = _friedman_parts(data, args)
+    warnings += _within_no_effect_warnings(data, args, bayes_computed=False)
+    return _Parts(
+        test=test,
+        effect_size=effect_size,
+        bayes=None,
+        pairwise=pairwise,
+        centrality="median",
+        centers=tuple(stats.median(column) for column in columns),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
+
+
+_NonparametricParts = tuple[
+    TestResult, EffectSize, tuple[PairwiseComparison, ...], list[str], list[str]
+]
+
+
+def _signed_rank_parts(data: WithinData, args: _Args) -> _NonparametricParts:
+    """Two conditions: the signed-rank test of the first level minus the second
+    and the matched-pairs rank-biserial r."""
+    x, levels = args.x, data.levels
+    side, level = args.alternative, args.conf_level
+    warnings: list[str] = []
+    a, b = data.by_level()
+    if bool((a == b).all()):
+        raise ValueError(
+            f"Every subject has the same value at {levels[0]!r} as at {levels[1]!r} "
+            f"(x={x!r}), so every paired difference is 0 and the signed-rank test "
+            "has nothing to rank: its statistic and the rank-biserial r are 0/0. "
+            "There is no difference to test; check the data for entry errors."
+        )
+    wilcoxon = stats.signed_rank(a, b, alternative=side)
+    r = stats.paired_rank_biserial(a, b, conf_level=level, alternative=side)
+    test = TestResult(
+        name="wilcoxon_signed_rank",
+        label="Wilcoxon signed-rank test",
+        method="Wilcoxon signed rank test",
+        statistic_name="V",
+        statistic=wilcoxon.statistic,
+        df=None,
+        df_error=None,
+        p_value=wilcoxon.p_value,
+        alternative=side,
+    )
+    effect_size = EffectSize(
+        name="rank_biserial",
+        label="rank-biserial r",
+        estimate=r.estimate,
+        conf_level=r.conf_level,
+        conf_low=r.conf_low,
+        conf_high=r.conf_high,
+        ci_method="normal approximation (Fisher z)",
+        sidedness=r.sidedness,
+    )
+    if abs(r.estimate) == 1.0 and r.conf_low == r.conf_high:
+        warnings.append(_rank_biserial_bound_warning(x, levels[0], levels[1], r))
+    return test, effect_size, (), warnings, [_WILCOXON_1945, _KERBY_2014]
+
+
+def _friedman_parts(data: WithinData, args: _Args) -> _NonparametricParts:
+    """Three or more conditions: Friedman's test, Kendall's W with its seeded
+    bootstrap interval and Durbin-Conover's comparisons of every pair."""
+    x, levels, columns = args.x, data.levels, data.by_level()
+    k = len(levels)
+    if all(bool((column == columns[0]).all()) for column in columns[1:]):
+        raise ValueError(
+            f"Every subject has the same value at all {k} levels of x={x!r}, so "
+            "Friedman's test has nothing to rank within the subjects: its statistic "
+            "and Kendall's W are 0/0. There is no difference to test; check the "
+            "data for entry errors."
+        )
+    friedman = stats.friedman(columns)
+    try:
+        w = stats.kendalls_w(columns, conf_level=args.conf_level, seed=args.seed)
+    except ValueError as error:
+        raise ValueError(
+            f"The bootstrap interval of Kendall's W cannot be computed for these "
+            f"subjects (x={x!r}): {error}. Use type='parametric', or collect more "
+            "subjects whose values differ between the conditions."
+        ) from None
+    test = TestResult(
+        name="friedman",
+        label="Friedman test",
+        method="Friedman rank sum test",
+        statistic_name="chi2",
+        statistic=friedman.statistic,
+        df=None,
+        df_error=friedman.df,
+        p_value=friedman.p_value,
+        alternative="two-sided",
+    )
+    effect_size = EffectSize(
+        name="kendalls_w",
+        label="Kendall's W",
+        estimate=w.estimate,
+        conf_level=w.conf_level,
+        conf_low=w.conf_low,
+        conf_high=w.conf_high,
+        ci_method="percentile bootstrap",
+        sidedness=w.sidedness,
+        bootstrap_resamples=w.resamples,
+        bootstrap_seed=w.seed,
+        infinite_resamples=w.infinite_resamples,
+    )
+    pairwise = _durbin_conover_pairs(x, levels, columns, args)
+    warnings: list[str] = []
+    if w.undefined_resamples:
+        warnings.append(_tied_subject_resamples_warning(w))
+    if w.estimate == 1.0:
+        warnings.append(_identical_rankings_warning(x, data.n_subjects))
+    citations = [
+        _FRIEDMAN_1937,
+        _KENDALL_1939,
+        _EFRON_TIBSHIRANI_1993,
+        _CONOVER_1999,
+        *_within_adjustment_citation(args.p_adjust_method),
+    ]
+    return test, effect_size, pairwise, warnings, citations
+
+
+def _durbin_conover_pairs(
+    x: str, levels: Sequence[str], columns: Sequence[FloatArray], args: _Args
+) -> tuple[PairwiseComparison, ...]:
+    """Durbin-Conover's |t| for every pair i < j in level order (unsigned, as
+    ggstatsplot reports it), on (n - 1)(k - 1) df, raw p adjusted with
+    ``p_adjust_method`` over all pairs, rows in ggstatsplot's order."""
+    try:
+        pairs = stats.durbin_conover(columns, p_adjust_method=args.p_adjust_method)
+    except ValueError as error:
+        if "share their rank in every subject" not in str(error):
+            raise
+        tied = _rank_tied_pair(levels, columns)
+        raise ValueError(
+            f"Every subject ranks the levels of x={x!r} in the same order, and "
+            f"{tied} share their rank in every subject, so the Durbin-Conover "
+            "comparison of that pair has no difference and no error variance (its t "
+            "is 0/0). Check the data for entry errors, or compare the other levels "
+            "without one of these two."
+        ) from None
+    rows: list[PairwiseComparison] = []
+    for pair in pairs:
+        significant = pair.p_adjusted < args.pairwise_alpha
+        rows.append(
+            PairwiseComparison(
+                group1=levels[pair.i],
+                group2=levels[pair.j],
+                statistic_name="t",
+                statistic=pair.statistic,
+                df=pair.df,
+                p_value=pair.p_value,
+                p_adjusted=pair.p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test="durbin_conover",
+                test_label="Durbin-Conover",
+                significant=significant,
+                displayed=_displayed(args.pairwise_display, significant),
+            )
+        )
+    return _sorted_pairs(rows)
+
+
+def _rank_tied_pair(levels: Sequence[str], columns: Sequence[FloatArray]) -> str:
+    """The first two levels whose values tie within every subject."""
+    k = len(levels)
+    for i in range(k):
+        for j in range(i + 1, k):
+            if bool((columns[i] == columns[j]).all()):
+                return f"{levels[i]!r} and {levels[j]!r}"
+    raise AssertionError("no pair of levels ties in every subject")  # pragma: no cover
+
+
+# Short references for the methods of type nonparametric (SPEC.md section 4).
+_WILCOXON_1945: Final = (
+    "Wilcoxon, F. (1945). Biometrics Bulletin 1: 80-83 (the signed-rank test)."
+)
+_KERBY_2014: Final = (
+    "Kerby, D. S. (2014). Comprehensive Psychology 3: 11.IT.3.1 (the matched-pairs "
+    "rank-biserial correlation)."
+)
+_FRIEDMAN_1937: Final = (
+    "Friedman, M. (1937). Journal of the American Statistical Association 32: "
+    "675-701 (Friedman's rank test)."
+)
+_KENDALL_1939: Final = (
+    "Kendall, M. G. & Babington Smith, B. (1939). Annals of Mathematical "
+    "Statistics 10: 275-287 (Kendall's W)."
+)
+_EFRON_TIBSHIRANI_1993: Final = (
+    "Efron, B. & Tibshirani, R. J. (1993). An Introduction to the Bootstrap. "
+    "Chapman & Hall (percentile bootstrap intervals)."
+)
+_CONOVER_1999: Final = (
+    "Conover, W. J. (1999). Practical Nonparametric Statistics, 3rd ed. Wiley, "
+    "section 5.8 (Durbin-Conover pairwise comparisons)."
+)
+
+
+def _tied_subject_resamples_warning(w: stats.BootstrapEffectSizeCI) -> str:
+    """D54: the resamples left out of Kendall's W's interval."""
+    tied, total = w.undefined_resamples, w.resamples
+    return (
+        f"{tied:,} of {total:,} bootstrap resamples draw only subjects with the "
+        "same value in every condition, where Kendall's W is undefined; its "
+        f"confidence interval comes from the other {total - tied:,}."
+    )
+
+
+def _identical_rankings_warning(x: str, n: int) -> str:
+    """W = 1: a degenerate bootstrap and infinite Durbin-Conover t."""
+    return (
+        f"All {n} subjects rank the levels of x={x!r} in the same order, so "
+        "Kendall's W is 1 and so is every bootstrap resample: its confidence "
+        "interval is [1, 1], which shows the identical rankings, not an effect "
+        "known exactly (ggstatsplot's bootstrap fails here and it leaves out the "
+        "results subtitle). The Durbin-Conover comparisons then have no error "
+        "variance: each t is infinite and each p is 0, as ggstatsplot reports "
+        "them; that p is the limit of the t approximation, not an exact "
+        "probability, so report Friedman's test for these data."
+    )
+
+
+def _rank_biserial_bound_warning(
+    x: str, first: str, second: str, r: stats.EffectSizeCI
+) -> str:
+    """|r| = 1 collapses the Fisher-z interval to the point r."""
+    bound = "1" if r.estimate > 0 else "-1"
+    return (
+        f"Every nonzero difference between {first!r} and {second!r} of x={x!r} has "
+        f"the same sign, so the rank-biserial r is at its bound ({bound}) and its "
+        f"confidence interval has no width: [{bound}, {bound}]. The interval is "
+        "built on the Fisher z scale, where r = 1 or -1 lies infinitely far out; "
+        "it does not mean the effect is known exactly. ggstatsplot prints the "
+        "same interval."
+    )
 
 
 def _robust(data: WithinData, args: _Args) -> _Parts:
