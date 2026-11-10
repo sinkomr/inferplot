@@ -135,7 +135,7 @@ class LinconPair:
 # ------------------------------------------------------------------ helpers
 
 
-def _check_trim(tr: float) -> float:
+def check_trim(tr: float) -> float:
     value = float(tr)
     if not 0.0 <= value < 0.5:
         raise ValueError(f"tr must lie in [0, 0.5); got {tr!r}")
@@ -160,7 +160,7 @@ def _joined(parts: Sequence[FloatArray]) -> FloatArray:
     return out
 
 
-def _trim_count(n: int, tr: float) -> int:
+def trim_count(n: int, tr: float) -> int:
     """g = floor(tr n), the values trimmed (or winsorized) at each end, computed
     in floating point as R's ``floor(tr * n)``."""
     return math.floor(tr * n)
@@ -177,7 +177,7 @@ def winsorized_normal_variance(tr: float = 0.2) -> float:
     explanatory effect size and, in akp.effect, a square root 1.2e-9 relative
     above this one. inferplot uses the exact value (DECISIONS.md D42).
     """
-    t = _check_trim(tr)
+    t = check_trim(tr)
     if t == 0.0:
         return 1.0
     c = -float(special.ndtri(t))
@@ -195,19 +195,19 @@ def trimmed_mean(x: SampleLike, *, tr: float = 0.2) -> float:
         ValueError: ``x`` is empty, not one-dimensional or not finite, or ``tr`` is
             outside [0, 0.5).
     """
-    t = _check_trim(tr)
+    t = check_trim(tr)
     arr = _sorted(as_sample(x))
-    g = _trim_count(arr.size, t)
+    g = trim_count(arr.size, t)
     return mean(arr[g : arr.size - g])
 
 
-def _exact_trimmed_mean(sorted_x: FloatArray, tr: float) -> Fraction:
+def exact_trimmed_mean(sorted_x: FloatArray, tr: float) -> Fraction:
     """The tr-trimmed mean of sorted values as an exact rational (``exact_mean``)."""
-    g = _trim_count(sorted_x.size, tr)
+    g = trim_count(sorted_x.size, tr)
     return exact_mean(sorted_x[g : sorted_x.size - g])
 
 
-def _winsorize_sorted(sorted_x: FloatArray, g: int) -> FloatArray:
+def winsorize_sorted(sorted_x: FloatArray, g: int) -> FloatArray:
     out = sorted_x.copy()
     n = out.size
     if g:
@@ -226,9 +226,9 @@ def winsorized_variance(x: SampleLike, *, tr: float = 0.2) -> float:
         ValueError: fewer than two values, not one-dimensional or not finite, or
             ``tr`` outside [0, 0.5).
     """
-    t = _check_trim(tr)
+    t = check_trim(tr)
     arr = _sorted(as_sample(x, min_size=2))
-    return variance(_winsorize_sorted(arr, _trim_count(arr.size, t)))
+    return variance(winsorize_sorted(arr, trim_count(arr.size, t)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,18 +247,18 @@ def _kernel(scaled: FloatArray, tr: float, name: str, method: str) -> _Kernel:
     of one scaled group, h = n - 2 g the values left after trimming."""
     ordered = _sorted(scaled)
     n = ordered.size
-    g = _trim_count(n, tr)
+    g = trim_count(n, tr)
     h = n - 2 * g
     if h < 2:
         raise ValueError(
             f"{name}: trimming {g} of {n} values at each end leaves {h}; {method} "
             "needs at least 2 values after trimming (use more values or a smaller tr)"
         )
-    wvar = scaled_variance(_winsorize_sorted(ordered, g))
+    wvar = scaled_variance(winsorize_sorted(ordered, g))
     return _Kernel(
         n=n,
         h=h,
-        tmean=_exact_trimmed_mean(ordered, tr),
+        tmean=exact_trimmed_mean(ordered, tr),
         wvar=wvar,
         d=(n - 1) * wvar / (h * (h - 1)),
     )
@@ -266,7 +266,7 @@ def _kernel(scaled: FloatArray, tr: float, name: str, method: str) -> _Kernel:
 
 def _zero_spread_message(name: str, raw: FloatArray, tr: float, method: str) -> str:
     ordered = _sorted(raw)
-    g = _trim_count(ordered.size, tr)
+    g = trim_count(ordered.size, tr)
     if float(ordered[ordered.size - g - 1] - ordered[g]) == 0.0:
         return (
             f"{name} has a winsorized variance of 0 (its values from the "
@@ -281,7 +281,7 @@ def _zero_spread_message(name: str, raw: FloatArray, tr: float, method: str) -> 
     )
 
 
-def _two_sided_t_p(t_abs: float, df: float) -> float:
+def two_sided_t_p(t_abs: float, df: float) -> float:
     """2 P(T_df > |t|), the upper tail computed directly (SciPy's ``stdtr`` at
     -|t|). WRS2's yuen and lincon compute 2 (1 - pt(|t|, df)) instead, which
     rounds the one-sided tail to the spacing of doubles just below 1 (2^-53) and
@@ -291,10 +291,10 @@ def _two_sided_t_p(t_abs: float, df: float) -> float:
     return min(1.0, 2.0 * float(special.stdtr(df, -t_abs)))
 
 
-def _f_upper_p(f: float, df1: float, df2: float) -> float:
+def f_upper_p(f: float, df1: float, df2: float) -> float:
     """P(F_{df1, df2} > F), the upper tail computed directly (SciPy's ``fdtrc``).
     WRS2's t1way computes 1 - pf(F, df1, df2) instead; inferplot reports the
-    accurate tail (DECISIONS.md D43; see ``_two_sided_t_p``)."""
+    accurate tail (DECISIONS.md D43; see ``two_sided_t_p``)."""
     return float(special.fdtrc(df1, df2, f))
 
 
@@ -324,7 +324,7 @@ def yuen_t(a: SampleLike, b: SampleLike, *, tr: float = 0.2) -> YuenT:
             (or too small to resolve next to the largest |value|), or ``tr`` is
             outside [0, 0.5).
     """
-    t_trim = _check_trim(tr)
+    t_trim = check_trim(tr)
     raw_a = as_sample(a, name="a", min_size=2)
     raw_b = as_sample(b, name="b", min_size=2)
     scale = common_scale(raw_a, raw_b)
@@ -346,7 +346,7 @@ def yuen_t(a: SampleLike, b: SampleLike, *, tr: float = 0.2) -> YuenT:
     return YuenT(
         t=abs(t),
         df=df,
-        p_value=_two_sided_t_p(abs(t), df),
+        p_value=two_sided_t_p(abs(t), df),
         difference=difference / scale,
         se=se / scale,
     )
@@ -397,7 +397,7 @@ def trimmed_means_anova(
             largest |value|), an F above the largest double, or ``tr`` outside
             [0, 0.5).
     """
-    t_trim = _check_trim(tr)
+    t_trim = check_trim(tr)
     method = "the trimmed-means ANOVA"
     raw, _, kernels = _group_kernels(groups, t_trim, method, min_groups=2)
     for index, kernel in enumerate(kernels):
@@ -432,7 +432,7 @@ def trimmed_means_anova(
         )
     df1 = float(k - 1)
     df2 = (k * k - 1) / (3.0 * lam)
-    return TrimmedMeansAnova(f=f, df1=df1, df2=df2, p_value=_f_upper_p(f, df1, df2))
+    return TrimmedMeansAnova(f=f, df1=df1, df2=df2, p_value=f_upper_p(f, df1, df2))
 
 
 # ------------------------------------------------------------------ lincon
@@ -537,7 +537,7 @@ def lincon(
         NotImplementedError: ``conf_level`` other than 0.95, or a pair with fewer
             than 2 df with up to 8 groups (``smm_critical_value``).
     """
-    t_trim = _check_trim(tr)
+    t_trim = check_trim(tr)
     check_conf_level(conf_level)
     p_adjust([], p_adjust_method)  # an unknown method fails before any work
     raw, scale, kernels = _group_kernels(groups, t_trim, "lincon", min_groups=2)
@@ -566,7 +566,7 @@ def lincon(
             t = estimate / se
             df = satterthwaite_df(ki.d, ki.h, kj.d, kj.h)
             critical = smm_critical_value(n_comparisons, df, conf_level=conf_level)
-            p = _two_sided_t_p(abs(t), df)
+            p = two_sided_t_p(abs(t), df)
             rows.append((i, j, estimate, se, df, t, critical, p))
     adjusted = p_adjust([row[7] for row in rows], p_adjust_method)
     out: list[LinconPair] = []
@@ -595,13 +595,13 @@ def lincon(
 # ------------------------------------------------------------------ bootstrap
 
 
-def _rows_trimmed(
+def rows_trimmed(
     draws: NDArray[np.float64], tr: float
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Trimmed mean and winsorized variance of every row of ``draws`` (which is
     reordered in place)."""
     m = draws.shape[1]
-    g = _trim_count(m, tr)
+    g = trim_count(m, tr)
     draws.partition([g, m - g - 1], axis=1)
     part = draws
     tmeans = part[:, g : m - g].mean(axis=1)
@@ -617,7 +617,7 @@ def _chunks(total_rows: int, values_per_row: int) -> list[int]:
     return [size] * full + ([rest] if rest else [])
 
 
-def _replicates(
+def bootstrap_replicates(
     rng: np.random.Generator,
     sorted_groups: Sequence[FloatArray],
     sizes: Sequence[int],
@@ -655,7 +655,7 @@ def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:
 
 
 @dataclass(frozen=True, slots=True)
-class _Replicates:
+class Replicates:
     """The bootstrap values split as the percentile interval uses them.
 
     ``defined`` holds the sorted values that are not 0 / 0 (NaN); ``undefined``
@@ -670,17 +670,17 @@ class _Replicates:
     infinite: int
 
 
-def _split_replicates(values: NDArray[np.float64]) -> _Replicates:
+def split_replicates(values: NDArray[np.float64]) -> Replicates:
     defined = _sorted(values[~np.isnan(values)])
-    return _Replicates(
+    return Replicates(
         defined=defined,
         undefined=values.size - defined.size,
         infinite=int(np.isinf(defined).sum()),
     )
 
 
-def _replicate_bounds(
-    replicates: _Replicates,
+def replicate_bounds(
+    replicates: Replicates,
     conf_level: float,
     rule: Callable[[NDArray[np.float64], float], tuple[float, float]],
     what: str,
@@ -704,7 +704,7 @@ def _replicate_bounds(
     )
 
 
-def _floor_percentile_bounds(
+def floor_percentile_bounds(
     ordered: NDArray[np.float64], conf_level: float
 ) -> tuple[float, float]:
     """akp.effect's percentile interval: with alpha = 1 - conf_level and B
@@ -787,7 +787,7 @@ def akp_effect(
             so many resamples are 0 / 0 that the others are too few for the
             percentile interval, or an invalid ``tr``, ``conf_level`` or ``seed``.
     """
-    t_trim = _check_trim(tr)
+    t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
     raw_a = as_sample(a, name="a", min_size=2)
@@ -803,16 +803,16 @@ def akp_effect(
     estimate = constant * float(ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
 
     def deltas(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
-        tm_a, wv_a = _rows_trimmed(draws[0], t_trim)
-        tm_b, _ = _rows_trimmed(draws[1], t_trim)
+        tm_a, wv_a = rows_trimmed(draws[0], t_trim)
+        tm_b, _ = rows_trimmed(draws[1], t_trim)
         with np.errstate(divide="ignore", invalid="ignore"):
             return constant * (tm_a - tm_b) / np.sqrt(wv_a)
 
     rng = np.random.Generator(np.random.PCG64(rng_seed))
-    replicates = _split_replicates(
-        _replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
+    replicates = split_replicates(
+        bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
     )
-    low, high = _replicate_bounds(replicates, level, _floor_percentile_bounds, method)
+    low, high = replicate_bounds(replicates, level, floor_percentile_bounds, method)
     return BootstrapEffectSizeCI(
         estimate=estimate,
         conf_low=low,
@@ -873,7 +873,7 @@ def explanatory_effect(
             others are too few for the percentile interval, or an invalid ``tr``,
             ``conf_level`` or ``seed``.
     """
-    t_trim = _check_trim(tr)
+    t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
     method = "the explanatory effect size"
@@ -889,8 +889,8 @@ def explanatory_effect(
     k = len(ordered)
 
     def xis(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
-        _, pooled = _rows_trimmed(_joined(draws), t_trim)
-        tmeans = _joined([_rows_trimmed(d, t_trim)[0][:, None] for d in draws])
+        _, pooled = rows_trimmed(_joined(draws), t_trim)
+        tmeans = _joined([rows_trimmed(d, t_trim)[0][:, None] for d in draws])
         top = tmeans.var(axis=1, ddof=1)
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.sqrt(top / (pooled / normal))
@@ -898,10 +898,10 @@ def explanatory_effect(
     estimate: float | None = None
     if all(o.size == size for o in ordered):
         # The variance of the exact trimmed means, rounded once.
-        top = exact_variance([_exact_trimmed_mean(o, t_trim) for o in ordered])
+        top = exact_variance([exact_trimmed_mean(o, t_trim) for o in ordered])
         pooled = _sorted(_joined(ordered))
         wvar = scaled_variance(
-            _winsorize_sorted(pooled, _trim_count(pooled.size, t_trim))
+            winsorize_sorted(pooled, trim_count(pooled.size, t_trim))
         )
         if wvar == 0.0:
             if top == 0.0:
@@ -917,8 +917,8 @@ def explanatory_effect(
     # then sorted values), so the result does not depend on the order of the
     # groups (``rank_epsilon_squared`` does the same).
     canonical = sorted(_centred(ordered), key=lambda o: (o.size, o.tolist()))
-    replicates = _split_replicates(_replicates(rng, canonical, [size] * k, xis))
-    low, high = _replicate_bounds(replicates, level, _rounded_percentile_bounds, method)
+    replicates = split_replicates(bootstrap_replicates(rng, canonical, [size] * k, xis))
+    low, high = replicate_bounds(replicates, level, _rounded_percentile_bounds, method)
     if estimate is None:
         estimate = float(np.median(replicates.defined))
     return BootstrapEffectSizeCI(

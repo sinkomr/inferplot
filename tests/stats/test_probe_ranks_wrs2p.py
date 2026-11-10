@@ -22,8 +22,8 @@ import pytest
 from inferplot.stats import dunn, kruskal_wallis, mann_whitney, rank_biserial
 from inferplot.stats.parametric import Alternative
 from inferplot.stats.robust import (
-    _f_upper_p,  # pyright: ignore[reportPrivateUsage]
-    _two_sided_t_p,  # pyright: ignore[reportPrivateUsage]
+    f_upper_p,
+    two_sided_t_p,
 )
 from tests.oracle_fixtures import Row, probe, r_double
 from tests.tolerances import assert_close, is_close
@@ -120,7 +120,7 @@ def test_yuen_p_against_wrs2() -> None:
     for row in rows:
         what = f"yuen n={row['n']} shift={row['shift']}"
         t, df = abs(_x(row["test_hex"])), _x(row["df_hex"])
-        got = _two_sided_t_p(t, df)
+        got = two_sided_t_p(t, df)
         # WRS2's 2 (1 - pt): the tail rounded to 2^-53, doubled.
         assert_close("wrs2_p", got, _x(row["p_value_hex"]), what=what, atol_scale=2)
         # R's own accurate tail at the same point.
@@ -134,7 +134,7 @@ def test_t1way_p_against_wrs2() -> None:
     for row in rows:
         what = f"t1way n={row['n']} shift={row['shift']}"
         f, df1, df2 = (_x(row[k]) for k in ("test_hex", "df1_hex", "df2_hex"))
-        got = _f_upper_p(f, df1, df2)
+        got = f_upper_p(f, df1, df2)
         assert_close("wrs2_p", got, _x(row["p_value_hex"]), what=what)
         assert_close("closed_form", got, _x(row["upper_tail_hex"]), what=what)
 
@@ -147,7 +147,7 @@ def test_lincon_p_against_wrs2() -> None:
         for pair in entry["pairs"]:
             what = f"lincon n={entry['n']} shift={entry['shift']} {pair['group1']}"
             t, df = abs(_x(pair["yuen_test_hex"])), _x(pair["yuen_df_hex"])
-            got = _two_sided_t_p(t, df)
+            got = two_sided_t_p(t, df)
             # lincon's unadjusted p (what ggstatsplot adjusts) is the pair's Yuen p.
             assert_close(
                 "wrs2_p", got, _x(pair["p_value_hex"]), what=what, atol_scale=2

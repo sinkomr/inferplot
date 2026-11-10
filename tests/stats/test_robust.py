@@ -35,10 +35,10 @@ from inferplot.stats import (
 from inferplot.stats._smm_table import SMM_ROWS, SMM_TABLE_05
 from inferplot.stats.robust import (
     SMM_MAX_TABLED,
-    _floor_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
-    _replicate_bounds,  # pyright: ignore[reportPrivateUsage]
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
-    _split_replicates,  # pyright: ignore[reportPrivateUsage]
+    floor_percentile_bounds,
+    replicate_bounds,
+    split_replicates,
 )
 from tests.oracle_fixtures import probe, r_double
 from tests.stats.fixture_data import between_cases, groups
@@ -143,7 +143,7 @@ def test_percentile_order_statistics(
     count: int, akp: tuple[int, int], t1way: tuple[int, int]
 ) -> None:
     ordered = np.arange(count, dtype=np.float64)
-    assert _floor_percentile_bounds(ordered, 0.95) == akp
+    assert floor_percentile_bounds(ordered, 0.95) == akp
     assert _rounded_percentile_bounds(ordered, 0.95) == t1way
 
 
@@ -701,28 +701,28 @@ def test_undefined_resamples_order_statistics() -> None:
     # The order statistics are counted over the defined resamples only (rule (a)
     # of S3): 40 defined values at 0.95 give the 2nd smallest and the 39th.
     values = np.concatenate([np.arange(40.0), np.full(1960, np.nan)])
-    replicates = _split_replicates(values)
+    replicates = split_replicates(values)
     assert replicates.undefined == 1960
     assert replicates.infinite == 0
-    assert _replicate_bounds(replicates, 0.95, _floor_percentile_bounds, "x") == (
+    assert replicate_bounds(replicates, 0.95, floor_percentile_bounds, "x") == (
         1.0,
         38.0,
     )
-    assert _replicate_bounds(replicates, 0.95, _rounded_percentile_bounds, "x") == (
+    assert replicate_bounds(replicates, 0.95, _rounded_percentile_bounds, "x") == (
         1.0,
         38.0,
     )
     with pytest.raises(ValueError, match=r"in 1,960 of 2,000 .* leaves 40"):
-        _replicate_bounds(replicates, 0.96, _floor_percentile_bounds, "x")
-    nothing = _split_replicates(np.full(2000, np.nan))
+        replicate_bounds(replicates, 0.96, floor_percentile_bounds, "x")
+    nothing = split_replicates(np.full(2000, np.nan))
     with pytest.raises(ValueError, match=r"in 2,000 of 2,000 .* leaves 0"):
-        _replicate_bounds(nothing, 0.95, _floor_percentile_bounds, "x")
-    infinite = _split_replicates(np.array([-np.inf, np.nan, *range(40), np.inf]))
+        replicate_bounds(nothing, 0.95, floor_percentile_bounds, "x")
+    infinite = split_replicates(np.array([-np.inf, np.nan, *range(40), np.inf]))
     assert (infinite.undefined, infinite.infinite) == (1, 2)
     # Without 0 / 0 resamples a level too close to 1 keeps its own message.
     with pytest.raises(ValueError, match="too close to 1"):
-        _replicate_bounds(
-            _split_replicates(np.arange(2000.0)), 0.9999, _floor_percentile_bounds, "x"
+        replicate_bounds(
+            split_replicates(np.arange(2000.0)), 0.9999, floor_percentile_bounds, "x"
         )
 
 
