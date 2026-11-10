@@ -268,7 +268,13 @@ def test_rmmcp_definition() -> None:
     g = math.floor(0.2 * n)
     pairs = rmmcp(columns, p_adjust_method="none")
     assert [(p.i, p.j) for p in pairs] == [(0, 1), (0, 2), (1, 2)]
-    critical = scipy_stats.t.ppf(1 - 0.05 / (2 * 3), n - 2 * g - 1)
+    # The Bonferroni t quantile, checked through its tail probability: SciPy 1.11's
+    # t.ppf itself is off by 8e-11 relative here (2.779473101554 for the exact
+    # 2.779473101781), SciPy's t.sf is accurate in every supported version.
+    df = n - 2 * g - 1
+    critical = pairs[0].critical_value
+    assert scipy_stats.t.sf(critical, df) == pytest.approx(0.05 / (2 * 3), rel=1e-12)
+    assert critical == pytest.approx(2.7794731017811013, rel=1e-13)  # 40-digit mpmath
     for pair in pairs:
         d = columns[pair.i] - columns[pair.j]
         se = math.sqrt(np.var(_winsorized(d), ddof=1)) / (0.6 * math.sqrt(n))
