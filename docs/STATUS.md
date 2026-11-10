@@ -193,6 +193,43 @@ coefstats, `grouping_var`, replicate-aware SuperPlots.
 
 ## Known gaps and open oracle discrepancies
 
+### Fable review of Phases 0-3 (2026-11-10, owner's request), open findings
+
+Statistics review (no wrong formula, tail, df, correction, adjustment or resampling
+scheme found; scripts in the session scratch folder `reviewS/`). To fix:
+
+- [ ] S1 (wrong numbers, silent): an integer `y` above 2^53 (nanosecond timestamps,
+  large counts) is rounded by the float64 cast in `_data._float_values`; 12 values
+  1.7e18 + 10..300 keep 2 distinct values (Welch t -3.16 for the true -4.32;
+  Mann-Whitney p 0.02 for 0.008). Reproduced by the lead.
+- [ ] S2: Hedges' g with a group of n = 2 collapses with Welch's df near 1 (n 2 against
+  50: d 1.16, g 0.026); the formula is the documented one (J at Welch's df), but the
+  warning fires only at df exactly 1. Warn below 2 df; pin effectsize's value with a
+  two-group n = 2 case in the next oracle run.
+- [ ] S3: `type="robust"`: one 0/0 bootstrap resample of 2,000 raises, so small rating-
+  scale data are refused (5-point scale, n 8 per group: 33 of 40 data sets) and the
+  outcome depends on the seed (fixture edge_ties raises at seed 3 only). Decide with
+  the Phase 3 probe of WRS2's behaviour (D54 leaves undefined resamples out).
+- [ ] S4: AKP and xi intervals stop widening above conf_level about 0.9995 (the order
+  statistics run out) without saying so; rank epsilon squared raises there.
+- [ ] S5: the explanatory effect size and its interval depend on the order of the
+  groups when sizes differ (xi 0.5036 against 0.5125 with `order=` reversed).
+- [ ] S6: `smm_quantile` is off by up to 3e-12 relative between df 20 and 30 (4-term
+  Stirling series from df/2 = 10); D52 and the docstring claim 1.1e-14. No printed
+  digit changes.
+- [ ] S7: the robust pre-check in betweenstats works in raw units: y x 1e-165 raises
+  with a false reason (winsorized variance 0), y x 1e156 an overflow error; the other
+  types handle both.
+- [ ] S8 (wording): WRS2's critical values above 28 pairs match the quantile of the
+  largest of C signed t variates (one-sided; within -0.4% to +0.9% on all 81 probe
+  pairs), not a noisy modulus quantile; D52 and SPEC §5 should say so. The decision
+  stands; tell the owner the description changed.
+- Leads, not verified: the exact-replay emulator behind the robust percentile rules is
+  not committed (the committed tests compare within 4 Monte Carlo SDs, which cannot
+  resolve a one-order-statistic difference, about 0.14 SD); rank-biserial r of ±1 gets
+  the interval [±1, ±1] without a warning; a p below the smallest double is stored as
+  0.0.
+
 - Decided (D31, D37): Games-Howell p is computed from an accurate studentized range
   tail (`inferplot.stats.srange_sf`), not R's ptukey, whose error grows as the df falls
   (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, about 4.7e-10 in the
