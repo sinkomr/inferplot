@@ -50,7 +50,9 @@ from dataclasses import dataclass
 from typing import Final, TypeAlias
 
 from inferplot.result import (
+    Bar,
     BayesFactor,
+    Cell,
     Descriptive,
     EffectSize,
     PairwiseComparison,
@@ -67,6 +69,7 @@ __all__ = [
     "DOUBLE_XMIN",
     "EFFECT_SIZE_SYMBOLS",
     "N_BIG_MARK",
+    "PERCENT_TICKS",
     "PRIOR_SYMBOLS",
     "SCI_LARGE_THRESHOLD",
     "STATISTIC_SYMBOLS",
@@ -82,12 +85,21 @@ __all__ = [
     "Sym",
     "alt_text",
     "apa_sentence",
+    "bar_p_expression",
     "bayes_expression",
     "bayes_factor_expression",
     "bayes_sentence",
     "build_texts",
     "caption_lines",
+    "cell_label",
     "centrality_expression",
+    "contingency_alt_text",
+    "contingency_apa",
+    "contingency_figure_texts",
+    "contingency_sentence",
+    "contingency_subtitle_expression",
+    "contingency_tests_sentence",
+    "contingency_texts",
     "correlation_alt_text",
     "correlation_sentence",
     "figure_alt_text",
@@ -100,6 +112,7 @@ __all__ = [
     "format_p_subtitle",
     "format_value",
     "frequentist_expression",
+    "n_label",
     "one_sample_alt_text",
     "one_sample_sentence",
     "p_adjust_label",
@@ -107,6 +120,7 @@ __all__ = [
     "pairwise_bf_expression",
     "pairwise_caption_line",
     "pairwise_p_expression",
+    "percent_text",
     "r_number_text",
     "results_sentence",
     "subtitle_expression",
@@ -490,6 +504,13 @@ _TEST_TEMPLATES: Final[dict[str, tuple[str, bool, bool]]] = {
     "pearson_correlation": ("student_t", False, False),
     "winsorized_correlation": ("student_t", False, False),
     "spearman_correlation": ("spearman_s", False, False),
+    # Counts (ggbarstats): chisq.test's methods "Pearson's Chi-squared test" and
+    # "Chi-squared test for given probabilities" and mcnemar.test's "McNemar's
+    # Chi-squared test" print chi^2 with its integer df (Bowker's test of
+    # symmetry beyond 2 x 2 is the same method string).
+    "pearson_chi_square": ("pearson_chi2", False, False),
+    "mcnemar": ("mcnemar_chi2", False, False),
+    "chi_square_gof": ("gof_chi2", False, False),
 }
 
 
@@ -849,6 +870,8 @@ _GREEK: Final[dict[str, str]] = {
 }
 
 _STYLES: Final = frozenset({"italic", "plain", "bold"})
+# R parses a leading ``~x`` as the call `~`(x): plotmath draws a space before x.
+_UNARY_TILDE: Final = Sym("~")
 _TEXT_ESCAPES: Final = {"\\": "\\\\", "{": "\\{", "}": "\\}", "$": "\\$"}
 _LETTERS_RE: Final = re.compile(r"^[A-Za-z0-9]+$")
 _NAME_RE: Final = re.compile(r"^[A-Za-z][A-Za-z0-9.]*$")
@@ -920,6 +943,9 @@ def _mathtext(node: Node, style: str) -> str:
     if isinstance(node, Paren):
         return "(" + _mathtext(node.inner, style) + ")"
     fn = node.fn
+    if fn == _UNARY_TILDE and len(node.args) == 1:
+        # ``~x``: plotmath draws a space, then x (ggbarstats' bar labels).
+        return "\\ " + _mathtext(node.args[0], style)
     if isinstance(fn, Sym):
         if fn.name == "list":
             return ",\\ ".join(_mathtext(a, style) for a in node.args)
@@ -971,6 +997,8 @@ def _plain(node: Node) -> str:
         return "(" + _plain(node.inner) + ")"
     fn = node.fn
     args = [_plain(a) for a in node.args]
+    if fn == _UNARY_TILDE and len(args) == 1:
+        return args[0]  # the leading space plotmath draws is left out
     if isinstance(fn, Sym):
         if fn.name == "list":
             return ", ".join(args)
@@ -1714,6 +1742,9 @@ def figure_alt_text(
     marginal: bool | None = None,
     labelled_points: int | None = None,
     points_shown: int | None = None,
+    cell_labels: bool | None = None,
+    bar_tests: bool | None = None,
+    legend: bool | None = None,
 ) -> str:
     """The alt text of the figure the renderer drew for ``result``; it gives the
     text to the result it returns. Every keyword describes what the figure
@@ -1737,9 +1768,15 @@ def figure_alt_text(
     the number of points that carry a label (default: every non-empty entry of
     ``result.point_labels``); ``points_shown``, the number of points drawn when
     the figure draws a random sample of them (default None: every point).
+
+    barstats (:func:`contingency_alt_text`): ``cell_labels``, the labels inside
+    the bars (default True); ``bar_tests``, the p-value above each bar (default
+    ``settings.proportion_test``; refused without y, where the single bar's test
+    is the main test); ``legend``, the legend of the levels of x (default True).
     """
     design = result.design
-    _check_design(design)
+    if design != "contingency":
+        _check_design(design)
     passed = {
         "subject_paths": subject_paths,
         "centrality_path": centrality_path,
@@ -1749,15 +1786,19 @@ def figure_alt_text(
         "marginal": marginal,
         "labelled_points": labelled_points,
         "points_shown": points_shown,
+        "cell_labels": cell_labels,
+        "bar_tests": bar_tests,
+        "legend": legend,
     }
     own = {
         "between": (),
         "within": ("subject_paths", "centrality_path"),
         "one-sample": ("test_value_line", "bins"),
         "correlation": ("smooth", "marginal", "labelled_points", "points_shown"),
+        "contingency": ("cell_labels", "bar_tests", "legend"),
     }[design]
     foreign = [k for k, v in passed.items() if v is not None and k not in own]
-    if design == "correlation" and not centrality:
+    if design in ("correlation", "contingency") and not centrality:
         foreign.insert(0, "centrality")
     if foreign:
         raise ValueError(
@@ -1769,6 +1810,21 @@ def figure_alt_text(
         count = passed[name]
         if count is not None and (isinstance(count, bool) or count < 0):
             raise ValueError(f"{name} must be a count of 0 or more, got {count!r}")
+    if design == "contingency":
+        return contingency_alt_text(
+            x=result.x,
+            y=result.y,
+            levels=result.levels,
+            test=result.test,
+            effect_size=result.effect_size,
+            bars=result.bars,
+            cells=result.cells,
+            n_obs=result.n_obs,
+            settings=result.settings,
+            cell_labels=True if cell_labels is None else cell_labels,
+            bar_tests=bar_tests,
+            legend=True if legend is None else legend,
+        )
     if design == "one-sample":
         return one_sample_alt_text(
             x=result.x,
@@ -2547,6 +2603,16 @@ class FigureTexts:
     ``tick_labels`` is plain text per level (``parse_math=False``; none for
     histostats and scatterstats); ``pairwise_labels`` is mathtext per pair, in
     the order of ``result.pairwise``.
+
+    barstats (design "contingency", :func:`contingency_figure_texts`) also fills
+    ``bar_labels`` (mathtext per bar: its proportion test's p, drawn above the
+    bar when ``settings.proportion_test``; "" for a bar without a test),
+    ``n_labels`` (plain, under each bar), ``cell_labels`` (plain, one per entry
+    of ``result.cells``, "" for a zero cell, which has no label; "both" holds a
+    line break), ``legend_title`` (the name of x), ``x_title`` (the name of y;
+    None without y) and ``y_tick_labels`` ("0%" to "100%" by 10); its
+    ``tick_labels`` are the bars' levels of y ("" for the single bar without y).
+    The other designs leave them empty.
     """
 
     subtitle: str | None
@@ -2554,6 +2620,12 @@ class FigureTexts:
     centrality_labels: tuple[str, ...]
     tick_labels: tuple[str, ...]
     pairwise_labels: tuple[str, ...]
+    bar_labels: tuple[str, ...] = ()
+    n_labels: tuple[str, ...] = ()
+    cell_labels: tuple[str, ...] = ()
+    legend_title: str | None = None
+    x_title: str | None = None
+    y_tick_labels: tuple[str, ...] = ()
 
 
 def figure_texts(result: StatsResult) -> FigureTexts:
@@ -2563,8 +2635,11 @@ def figure_texts(result: StatsResult) -> FigureTexts:
     one centrality label (the line's: ``widehat(mu)[mean] == "18.81"``, drawn
     at the centrality value unless ``centrality_plotting=False``) and no tick or
     pairwise labels. scatterstats ("correlation"): the subtitle, the Bayes
-    caption, and no centrality, tick or pairwise labels.
+    caption, and no centrality, tick or pairwise labels. barstats
+    ("contingency"): :func:`contingency_figure_texts`.
     """
+    if result.design == "contingency":
+        return contingency_figure_texts(result)
     grouped = _grouped(result.design)
     ex = _expressions(
         descriptives=result.descriptives,
@@ -2590,41 +2665,527 @@ def figure_texts(result: StatsResult) -> FigureTexts:
 
 
 # --------------------------------------------------------------------------- #
-# Provisional texts of barstats (design "contingency")
+# barstats (design "contingency")
 # --------------------------------------------------------------------------- #
 #
-# PROVISIONAL. barstats gets its subtitle, caption, cell and bar labels, APA
-# sentence and alt text in a later step, which compares every text with
-# ggstatsplot's. Until then the result carries a plain APA-style sentence and an
-# alt text built from its own numbers (nothing about a figure), None for the
-# subtitle and the caption, and no labels.
+# The subtitle, the p label above each bar and the pairs' labels are
+# ggstatsplot's expressions (statsExpressions' template and ggbarstats'
+# ``onesample_data()``); the labels inside and under the bars are ggbarstats'
+# ``descriptive_data()`` and ``onesample_data()`` texts (ggstatsplot 1.1.4, MIT:
+# ``R/ggpiestats-ggbarstats-helpers.R``, ``R/ggbarstats.R``); the APA sentence and
+# the alt text are inferplot's own, in the style of the other designs (SPEC
+# section 7). ggstatsplot's Bayes caption arrives in inferplot 0.2: there is no
+# caption in 0.1 (the analysis says so in ``warnings``).
+
+# The chi-square symbol and the effect size of each barstats design.
+# statsExpressions picks the symbol from the test's method string, which the
+# design fixes: "Pearson's Chi-squared test", "McNemar's Chi-squared test",
+# "Chi-squared test for given probabilities".
+_CONTINGENCY_STATISTICS: Final[dict[str, str]] = {
+    "two-way": "pearson_chi2",
+    "paired": "mcnemar_chi2",
+    "one-way": "gof_chi2",
+}
+_CONTINGENCY_EFFECT_SIZES: Final[dict[str, str]] = {
+    "two-way": "cramers_v",
+    "paired": "cohens_g",
+    "one-way": "pearsons_c",
+}
+# Cramér's V and Pearson's C lie in [0, 1] and Cohen's g in [-0.5, 0.5]: APA
+# style drops the leading zero of all three.
+_CONTINGENCY_BOUNDED: Final = frozenset({"cramers_v", "pearsons_c", "cohens_g"})
+# What the main sentence says when results_subtitle=False computed no test.
+_CONTINGENCY_NO_TEST: Final[dict[str, str]] = {
+    "two-way": "No test of independence was computed",
+    "paired": "No McNemar's test was computed",
+    "one-way": "No goodness-of-fit test was computed",
+}
+# The y axis of a barstats figure: insight::format_percent(digits = 0) of the
+# breaks 0, 0.1, ..., 1.
+PERCENT_TICKS: Final[tuple[str, ...]] = tuple(f"{10 * i}%" for i in range(11))
+# What the labels inside the bars show, by settings.label.
+_CELL_LABEL_WORDS: Final[dict[str, str]] = {
+    "percentage": "percentages",
+    "counts": "counts",
+    "both": "counts and percentages",
+}
 
 
-def _contingency_sentence(
+def _contingency_design(y: str | None, settings: Settings) -> str:
+    """ "two-way", "paired" or "one-way" (``y`` None)."""
+    if y is None:
+        if settings.paired:
+            raise ValueError("a paired barstats result needs y, the second measurement")
+        return "one-way"
+    return "paired" if settings.paired else "two-way"
+
+
+def contingency_subtitle_expression(
+    test: TestResult,
+    effect_size: EffectSize,
     *,
+    design: str,
+    n_obs: int,
+    digits: int,
+) -> Call:
+    """ggbarstats' subtitle (statsExpressions' ``contingency_table()``).
+
+    ``list(chi["Pearson"]^2 * "(" * 2 * ")" == "8.74", italic(p) == "0.01",
+    widehat(italic("V"))["Cramer"] == "0.46", CI["95%"] ~ "[" * "0.00", "0.82" *
+    "]", italic("n")["obs"] == "32")``. ``design`` "two-way" prints Pearson's
+    chi^2 and Cramér's V, "paired" McNemar's chi^2, Cohen's g and n as
+    ``italic("n")["pairs"]``, "one-way" the goodness-of-fit chi^2
+    (``chi["gof"]``) and Pearson's C. The df is an integer (``digits.df`` 0);
+    an exact p of 0 prints 2.23e-308.
+    """
+    try:
+        statistic = _CONTINGENCY_STATISTICS[design]
+    except KeyError:
+        known = ", ".join(repr(d) for d in _CONTINGENCY_STATISTICS)
+        raise ValueError(
+            f"unknown barstats design {design!r}; known: {known}"
+        ) from None
+    expected = _CONTINGENCY_EFFECT_SIZES[design]
+    if effect_size.name != expected:
+        raise ValueError(
+            f"the {design} design reports {expected!r}, got the effect size "
+            f"{effect_size.name!r}"
+        )
+    return frequentist_expression(
+        statistic=statistic,
+        statistic_value=test.statistic,
+        p_value=test.p_value,
+        effect_size=effect_size.name,
+        estimate=effect_size.estimate,
+        conf_level=effect_size.conf_level,
+        conf_low=effect_size.conf_low,
+        conf_high=effect_size.conf_high,
+        n_obs=n_obs,
+        df=test.df,
+        df_error=test.df_error,
+        digits=digits,
+        digits_df=0,
+        paired=design == "paired",
+    )
+
+
+def bar_p_expression(p_value: float | None, digits: int = 2) -> Call:
+    """The label above a bar: ``list(~italic(p)=='0.09')`` (ggbarstats'
+    ``.p.label``, ``format_value(p.value, digits)``), its proportion test's p
+    with no adjustment and no stars. The p comes from statsExpressions'
+    ``contingency_table()``, which stores an exact 0 as ``.Machine$double.xmin``
+    (2.23e-308); a missing p prints as "" (R's ``format_value(NA)``)."""
+    if p_value is None or math.isnan(p_value):
+        text = format_value(None, digits, missing="")
+    else:
+        text = format_p_subtitle(p_value, digits)
+    return _call("list", Call(_UNARY_TILDE, (_rel(_italic(Sym("p")), Str(text)),)))
+
+
+def n_label(n: int) -> str:
+    """The label under a bar, ``"(n = 1,490)"`` (``.prettyNum``: a comma from
+    1,000 on)."""
+    return f"(n = {format_n(n)})"
+
+
+def percent_text(percent: float, digits_perc: int) -> str:
+    """A cell's percentage as ggbarstats prints it, without the "%":
+    ``round(perc, digits.perc)`` pasted as R prints a double ("62" for 62.5 at 0
+    digits, "6.2" for 6.25 at 1, "33.33" for 100 / 3 at 2, "50" for 50).
+
+    R's ``round()`` agrees with Python's on the same double (the nearest
+    representable result; an exact binary tie goes to even), on all 927 percent
+    labels of the oracle probe ``probe-contingency``.
+    """
+    if digits_perc < 0:
+        raise ValueError(f"digits_perc must be >= 0, got {digits_perc}")
+    return r_number_text(round(percent, digits_perc))
+
+
+def cell_label(count: int, percent: float, *, label: str, digits_perc: int) -> str:
+    """The label inside a cell (ggbarstats' ``descriptive_data()``): "16%"
+    (``label`` "percentage"), "1,490" ("counts"), "3\\n(16%)" ("both"); "" for
+    a zero cell, which ggbarstats leaves without a label. ``percent`` is the
+    cell's share of its bar, (count / bar n) * 100 (:class:`~inferplot.result.Cell`)."""
+    if count == 0:
+        return ""
+    if label == "percentage":
+        return f"{percent_text(percent, digits_perc)}%"
+    if label == "counts":
+        return format_n(count)
+    if label == "both":
+        return f"{format_n(count)}\n({percent_text(percent, digits_perc)}%)"
+    raise ValueError(f"unknown cell label {label!r}; known: percentage, counts, both")
+
+
+def _cell_labels(cells: Sequence[Cell], settings: Settings) -> tuple[str, ...]:
+    if settings.label is None or settings.digits_perc is None:
+        raise ValueError("a barstats result sets settings.label and digits_perc")
+    return tuple(
+        cell_label(
+            c.count, c.percent, label=settings.label, digits_perc=settings.digits_perc
+        )
+        for c in cells
+    )
+
+
+def _bar_expressions(bars: Sequence[Bar], digits: int) -> tuple[Call | None, ...]:
+    return tuple(
+        None if bar.test is None else bar_p_expression(bar.test.p_value, digits)
+        for bar in bars
+    )
+
+
+def _and_join(items: Sequence[str]) -> str:
+    """ "a", "a and b", "a, b and c"."""
+    if len(items) <= 2:
+        return " and ".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _shares_text(settings: Settings) -> str:
+    """What the goodness-of-fit tests compare against: "equal shares" or
+    "expected shares 0.5, 0.25 and 0.25" (``ratio``, in the order of the
+    levels of x)."""
+    if settings.ratio is None:
+        return "equal shares"
+    return "expected shares " + _and_join([r_number_text(r) for r in settings.ratio])
+
+
+def _contingency_effect_text(effect_size: EffectSize) -> str:
+    """ "Cramer's V = .46, 95% CI [.00, .82]"; a one-sided interval says so:
+    "95% one-sided CI [.00, 1.00]"."""
+    bounded = effect_size.name in _CONTINGENCY_BOUNDED
+    estimate = _apa_number(effect_size.estimate, bounded=bounded)
+    low = _apa_number(effect_size.conf_low, bounded=bounded)
+    high = _apa_number(effect_size.conf_high, bounded=bounded)
+    level = format_conf_level(effect_size.conf_level)
+    sided = "" if effect_size.sidedness == "two-sided" else "one-sided "
+    return f"{effect_size.label} = {estimate}, {level} {sided}CI [{low}, {high}]"
+
+
+def contingency_sentence(
     test: TestResult | None,
     effect_size: EffectSize | None,
+    *,
+    x: str,
+    y: str | None,
     n_obs: int,
-    paired: bool,
+    settings: Settings,
+    name_limit: int = APA_NAME_LIMIT,
+    compact: bool = False,
 ) -> str:
-    """The provisional APA-style sentence of a barstats result: "<test label>:
-    chi2(2) = 8.74, p = .013, Cramer's V = .46, 95% CI [.00, .82], n = 32."
-    (n pairs when paired). Cramér's V, Pearson's C and Cohen's g drop the
-    leading zero (none can exceed 1); a one-sided interval says so."""
-    n = f"n = {format_n(n_obs)}{' pairs' if paired else ''}"
-    if test is None:
-        return f"No test was computed (results_subtitle=False), {n}."
-    parts = [_apa_test(test)]
-    if effect_size is not None:
-        estimate = _apa_number(effect_size.estimate, bounded=True)
-        low = _apa_number(effect_size.conf_low, bounded=True)
-        high = _apa_number(effect_size.conf_high, bounded=True)
-        level = format_conf_level(effect_size.conf_level)
-        sided = "" if effect_size.sidedness == "two-sided" else "one-sided "
-        parts.append(
-            f"{effect_size.label} = {estimate}, {level} {sided}CI [{low}, {high}]"
+    """The APA 7 sentence of a barstats result's main test, ASCII except the
+    column names.
+
+    Two-way: "Pearson's chi-square test (shares of cyl across the levels of am):
+    chi2(2, N = 32) = 8.74, p = .013, Cramer's V = .46, 95% CI [.00, .82]."
+    Paired: "McNemar's test (before and after, the same units measured twice):
+    chi2(1, N = 40) = 4.00, p = .046, Cohen's g = .25, 95% CI [.01, .40]." (N
+    counts the pairs). One-way: "Chi-square goodness-of-fit test (shares of cyl
+    against equal shares): chi2(2, N = 32) = 2.31, p = .315, Pearson's C = .26,
+    95% CI [.00, .50]." ("against expected shares 0.5, 0.25 and 0.25" with
+    ``ratio``). The chi-square has no direction, so a one-sided ``alternative``
+    shows only in the interval, named "one-sided CI". Cramér's V, Pearson's C
+    and Cohen's g drop the leading zero. Column names are shortened to
+    ``name_limit`` characters with an ellipsis. Without a test
+    (``results_subtitle=False``): "No test of independence was computed
+    (results_subtitle=False), n = 32." ("No McNemar's test ..., n = 40 pairs.",
+    "No goodness-of-fit test ...").
+
+    ``compact`` (the alt text, whose first sentence already says what the bars
+    compare) leaves out the parenthesis of the two-way and paired designs and
+    keeps "(against equal shares)" of the one-way design.
+    """
+    design = _contingency_design(y, settings)
+    if test is None or effect_size is None:
+        pairs = " pairs" if design == "paired" else ""
+        return (
+            f"{_CONTINGENCY_NO_TEST[design]} (results_subtitle=False), "
+            f"n = {format_n(n_obs)}{pairs}."
         )
-    return f"{test.label}: {', '.join(parts)}, {n}."
+    sx = _short(x, name_limit)
+    if compact:
+        what = f"against {_shares_text(settings)}" if design == "one-way" else ""
+    elif design == "two-way":
+        assert y is not None
+        what = f"shares of {sx} across the levels of {_short(y, name_limit)}"
+    elif design == "paired":
+        assert y is not None
+        what = f"{sx} and {_short(y, name_limit)}, the same units measured twice"
+    else:
+        what = f"shares of {sx} against {_shares_text(settings)}"
+    df = test.df_error if test.df_error is not None else test.df
+    dfs = "" if df is None else f"{_apa_df(df)}, "
+    statistic = (
+        f"{test.statistic_name}({dfs}N = {format_n(n_obs)}) = "
+        f"{_apa_number(test.statistic)}, {_apa_p(test.p_value)}"
+    )
+    return (
+        f"{test.label}{f' ({what})' if what else ''}: {statistic}, "
+        f"{_contingency_effect_text(effect_size)}."
+    )
+
+
+def contingency_tests_sentence(
+    bars: Sequence[Bar],
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    x: str,
+    y: str | None,
+    settings: Settings,
+    name_limit: int = APA_NAME_LIMIT,
+) -> str | None:
+    """One sentence on the bars' proportion tests and the pairwise tests, or
+    None where there are neither (no y): how many are below .05, the method
+    named, as the other designs' alt text counts its pairs.
+
+    "Goodness-of-fit tests within each level of am (shares of cyl against equal
+    shares, unadjusted): p < .05 in 1 of 2 bars; Fisher's exact tests between
+    the levels of cyl (Holm adjusted): adjusted p < .05 in 1 of 3 pairs." The
+    bars' tests are never adjusted (ggstatsplot's ``onesample_data()``); the
+    pairs follow ``p_adjust_method`` ("unadjusted: p < .05 in ..." for "none").
+    """
+    parts: list[str] = []
+    tested = [bar for bar in bars if bar.test is not None]
+    sx = _short(x, name_limit)
+    if tested and y is not None:
+        below = sum(
+            1 for bar in tested if bar.test is not None and bar.test.p_value < 0.05
+        )
+        parts.append(
+            f"Goodness-of-fit tests within each level of {_short(y, name_limit)} "
+            f"(shares of {sx} against {_shares_text(settings)}, unadjusted): "
+            f"p < .05 in {below} of {_plural(len(tested), 'bar')}"
+        )
+    if pairwise:
+        method = settings.p_adjust_method
+        if method == "none":
+            how, p = "unadjusted", "p"
+        else:
+            how, p = f"{_ADJUST_NAMES.get(method, method)} adjusted", "adjusted p"
+        below = sum(1 for pair in pairwise if pair.significant)
+        parts.append(
+            f"Fisher's exact tests between the levels of {sx} ({how}): {p} < .05 in "
+            f"{below} of {_plural(len(pairwise), 'pair')}"
+        )
+    if not parts:
+        return None
+    return "; ".join(parts) + "."
+
+
+def contingency_apa(
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bars: Sequence[Bar],
+    pairwise: Sequence[PairwiseComparison],
+    *,
+    x: str,
+    y: str | None,
+    n_obs: int,
+    settings: Settings,
+) -> str:
+    """``result.text.apa`` of barstats: :func:`contingency_sentence`, then
+    :func:`contingency_tests_sentence` where there are bar or pair tests."""
+    main = contingency_sentence(
+        test, effect_size, x=x, y=y, n_obs=n_obs, settings=settings
+    )
+    tests = contingency_tests_sentence(bars, pairwise, x=x, y=y, settings=settings)
+    return main if tests is None else f"{main} {tests}"
+
+
+def _bar_compositions(
+    bars: Sequence[Bar],
+    cells: Sequence[Cell],
+    *,
+    digits_perc: int,
+    short: dict[str, str],
+    short_bars: dict[str, str],
+    largest: bool,
+) -> list[str]:
+    """Each bar's shares, in level order, zero cells left out: "0 (n = 19): 4
+    16%, 6 21%, 8 63%", or with ``largest`` its largest share only: "0 (n =
+    19): largest 8 63%" ("largest a and b 50% each" for a tie)."""
+    out: list[str] = []
+    for bar in bars:
+        own = [c for c in cells if c.bar == bar.level and c.count > 0]
+        name = "" if bar.level is None else f"{short_bars[bar.level]} "
+        head = f"{name}(n = {format_n(bar.n)})"
+        if largest:
+            top = max(c.count for c in own)
+            tops = [c for c in own if c.count == top]
+            share = f"{percent_text(tops[0].percent, digits_perc)}%"
+            names = _and_join([short[c.level] for c in tops])
+            each = " each" if len(tops) > 1 else ""
+            out.append(f"{head}: largest {names} {share}{each}")
+        else:
+            shares = ", ".join(
+                f"{short[c.level]} {percent_text(c.percent, digits_perc)}%" for c in own
+            )
+            out.append(f"{head}: {shares}")
+    return out
+
+
+def _second_sentence(*parts: str) -> str:
+    """The parts that are there, joined by semicolons, as one sentence."""
+    kept = [part for part in parts if part]
+    if not kept:
+        return ""
+    text = "; ".join(kept)
+    return text[0].upper() + text[1:] + "."
+
+
+def contingency_alt_text(
+    *,
+    x: str,
+    y: str | None,
+    levels: Sequence[str],
+    test: TestResult | None,
+    effect_size: EffectSize | None,
+    bars: Sequence[Bar],
+    cells: Sequence[Cell],
+    n_obs: int,
+    settings: Settings,
+    cell_labels: bool = True,
+    bar_tests: bool | None = None,
+    legend: bool = True,
+) -> str:
+    """Alt text of a barstats figure: 2 or 3 sentences, at most 400 characters.
+
+    "Stacked bar chart of cyl within each level of am, each bar summing to 100%:
+    0 (n = 19): 4 16%, 6 21%, 8 63%; 1 (n = 13): 4 62%, 6 23%, 8 15%. Labels
+    show percentages; the p-value above each bar tests its shares against equal
+    shares (0: p = 0.02, 1: p = 0.09); a legend names the 3 levels of cyl.
+    Pearson's chi-square test: chi2(2, N = 32) = 8.74, p = .013, Cramer's V =
+    .46, 95% CI [.00, .82]."
+
+    The head names x and y (paired: "... within each level of after (40 units
+    measured twice), ..."; one-way: "Stacked bar chart of the shares of cyl in
+    one bar (n = 32): ...") and each bar's shares as its height shows them
+    (rounded to ``digits_perc``, as the labels; zero cells left out). The second
+    sentence names what else is drawn: the labels inside the bars
+    (``cell_labels``: percentages, counts or both, as ``settings.label``), the
+    p-value above each bar (``bar_tests``, default ``settings.proportion_test``;
+    as the label prints it) and the legend (``legend``). The result sentence is
+    :func:`contingency_sentence` with ``compact=True`` (the head says what is
+    compared; the figure draws no pairs, and the bars' tests are named with
+    their labels). Every keyword describes what the figure draws; the defaults
+    are ``ip.barstats``' default figure.
+
+    Shortening, until the text fits, at each length of the names of the columns
+    and levels (40, 20, then 12 characters): the legend clause goes, then the
+    list of the bars' p-values; then each bar keeps only its largest share; then
+    the second sentence goes (all shares back); then only the largest shares;
+    then each bar keeps only its n (with the short second sentence, then
+    without). Last, only the head and the result. The result sentence is never
+    cut.
+    """
+    design = _contingency_design(y, settings)
+    if bar_tests is None:
+        bar_tests = bool(settings.proportion_test) and design != "one-way"
+    elif bar_tests and design == "one-way":
+        raise ValueError(
+            "bar_tests=True: without y the single bar has no test of its own (its "
+            "goodness-of-fit test is the main test)"
+        )
+    if settings.label not in _CELL_LABEL_WORDS or settings.digits_perc is None:
+        raise ValueError("a barstats result sets settings.label and digits_perc")
+    digits_perc = settings.digits_perc
+    bar_names = [bar.level for bar in bars if bar.level is not None]
+    plain_p = [
+        "" if node is None else to_plain(node)
+        for node in _bar_expressions(bars, settings.digits)
+    ]
+    result = ""
+    head = ""
+    for limit in (40, 20, 12):
+        sx = _short(x, limit)
+        short = _shortened(list(levels), limit)
+        short_bars = _shortened(bar_names, limit)
+        result = contingency_sentence(
+            test,
+            effect_size,
+            x=x,
+            y=y,
+            n_obs=n_obs,
+            settings=settings,
+            name_limit=limit,
+            compact=True,
+        )
+        if design == "one-way":
+            head = f"Stacked bar chart of the shares of {sx} in one bar"
+        else:
+            assert y is not None
+            sy = _short(y, limit)
+            same = (
+                f" ({format_n(n_obs)} units measured twice)"
+                if design == "paired"
+                else ""
+            )
+            head = (
+                f"Stacked bar chart of {sx} within each level of {sy}{same}, each bar "
+                "summing to 100%"
+            )
+        joiner = " " if design == "one-way" else ": "
+        heads = [
+            head + joiner + "; ".join(compositions)
+            for compositions in (
+                _bar_compositions(
+                    bars,
+                    cells,
+                    digits_perc=digits_perc,
+                    short=short,
+                    short_bars=short_bars,
+                    largest=largest,
+                )
+                for largest in (False, True)
+            )
+        ]
+        sizes = ", ".join(
+            n_label(bar.n)
+            if bar.level is None
+            else f"{short_bars[bar.level]} {n_label(bar.n)}"
+            for bar in bars
+        )
+        heads.append(head + joiner + sizes)
+        cell_part = (
+            f"labels show {_CELL_LABEL_WORDS[settings.label]}" if cell_labels else ""
+        )
+        p_items = ", ".join(
+            f"{short_bars[bar.level]}: {text}"
+            for bar, text in zip(bars, plain_p, strict=True)
+            if text and bar.level is not None
+        )
+        tests_part = (
+            "the p-value above each bar tests its shares against "
+            f"{_shares_text(settings)}"
+            if bar_tests
+            else ""
+        )
+        legend_part = (
+            f"a legend names the {len(levels)} levels of {sx}" if legend else ""
+        )
+        listed = f"{tests_part} ({p_items})" if tests_part and p_items else tests_part
+        full, largest, sizes_only = heads
+        every = _second_sentence(cell_part, listed, legend_part)
+        no_legend = _second_sentence(cell_part, listed)
+        brief = _second_sentence(cell_part, tests_part)
+        candidates = [
+            (full, every),
+            (full, no_legend),
+            (full, brief),
+            (largest, brief),
+            (full, ""),
+            (largest, ""),
+            (sizes_only, brief),
+            (sizes_only, ""),
+        ]
+        for start, middle in candidates:
+            text = " ".join(part for part in (f"{start}.", middle, result) if part)
+            if _fits(text):
+                return text
+    # Still too long: the bars and the second sentence go, the result stays whole.
+    return f"{head}. {result}"
 
 
 def contingency_texts(
@@ -2635,47 +3196,112 @@ def contingency_texts(
     y_levels: Sequence[str],
     test: TestResult | None,
     effect_size: EffectSize | None,
+    bars: Sequence[Bar],
+    cells: Sequence[Cell],
+    pairwise: Sequence[PairwiseComparison],
     n_obs: int,
     settings: Settings,
 ) -> Texts:
-    """The texts of a barstats result (PROVISIONAL, see above): subtitle and
-    caption None, no labels, the APA sentence and an alt text from the result's
-    numbers: "Counts of the 3 levels of cyl within the 2 levels of am (n = 32).
-    <sentence>"; "Counts of the 3 levels of cyl (n = 32). <sentence>"; paired:
-    "Paired counts of before and after over 2 levels (n = 40 pairs). <sentence>".
-    Column names are shortened (40, 20, 12 characters) until the alt text fits
-    ``ALT_TEXT_MAX_CHARS``, else the description is left out; the sentence is
-    never cut."""
-    paired = bool(settings.paired)
-    sentence = _contingency_sentence(
-        test=test, effect_size=effect_size, n_obs=n_obs, paired=paired
-    )
-    alt = sentence
-    for limit in (40, 20, 12):
-        name = _short(x, limit)
-        if y is None:
-            head = (
-                f"Counts of the {len(levels)} levels of {name} (n = {format_n(n_obs)})."
+    """Every plain text of a barstats result (design "contingency").
+
+    ``subtitle``: ggbarstats' (:func:`contingency_subtitle_expression`), None
+    with ``results_subtitle=False``; ``caption`` None (ggstatsplot's Bayes
+    caption arrives in inferplot 0.2); ``apa``: :func:`contingency_apa`;
+    ``alt_text``: :func:`contingency_alt_text` of the default figure;
+    ``tick_labels``: the bars' levels of y ("" for the single bar without y);
+    ``pairwise_labels``: each Fisher pair's adjusted p as ggstatsplot labels it
+    (``p_Holm-adj. = 0.56``), never drawn; ``bar_labels``: each bar's proportion
+    test, "p = 0.09" ("" for a bar without a test: the single bar without y),
+    drawn above the bar when ``settings.proportion_test``; ``n_labels``: "(n =
+    13)" under each bar; ``cell_labels``: one per entry of ``cells``,
+    :func:`cell_label` ("" for a zero cell). No centrality labels.
+    """
+    del y_levels  # the bars name the levels of y that are drawn
+    design = _contingency_design(y, settings)
+    digits = settings.digits
+    subtitle = None
+    if settings.results_subtitle and test is not None and effect_size is not None:
+        subtitle = to_plain(
+            contingency_subtitle_expression(
+                test, effect_size, design=design, n_obs=n_obs, digits=digits
             )
-        elif paired:
-            head = (
-                f"Paired counts of {name} and {_short(y, limit)} over "
-                f"{len(levels)} levels (n = {format_n(n_obs)} pairs)."
-            )
-        else:
-            head = (
-                f"Counts of the {len(levels)} levels of {name} within the "
-                f"{len(y_levels)} levels of {_short(y, limit)} (n = {format_n(n_obs)})."
-            )
-        if len(f"{head} {sentence}") <= ALT_TEXT_MAX_CHARS:
-            alt = f"{head} {sentence}"
-            break
+        )
     return Texts(
-        subtitle=None,
+        subtitle=subtitle,
         caption=None,
-        apa=sentence,
-        alt_text=alt,
+        apa=contingency_apa(
+            test,
+            effect_size,
+            bars,
+            pairwise,
+            x=x,
+            y=y,
+            n_obs=n_obs,
+            settings=settings,
+        ),
+        alt_text=contingency_alt_text(
+            x=x,
+            y=y,
+            levels=levels,
+            test=test,
+            effect_size=effect_size,
+            bars=bars,
+            cells=cells,
+            n_obs=n_obs,
+            settings=settings,
+        ),
         centrality_labels=(),
-        tick_labels=(),
-        pairwise_labels=(),
+        tick_labels=tuple("" if b.level is None else drawable(b.level) for b in bars),
+        pairwise_labels=tuple(to_plain(_pair_label(p, digits)) for p in pairwise),
+        bar_labels=tuple(
+            "" if node is None else to_plain(node)
+            for node in _bar_expressions(bars, digits)
+        ),
+        n_labels=tuple(n_label(bar.n) for bar in bars),
+        cell_labels=_cell_labels(cells, settings),
+    )
+
+
+def contingency_figure_texts(result: StatsResult) -> FigureTexts:
+    """The renderer's texts for a barstats result (see :class:`FigureTexts`):
+    the subtitle as mathtext, no caption lines, the bars' levels as tick labels,
+    each bar's p label as mathtext (drawn when ``settings.proportion_test``),
+    the n and cell labels as plain text, the legend title (the name of x), the
+    x axis title (the name of y; None without y) and the percent ticks."""
+    settings = result.settings
+    design = _contingency_design(result.y, settings)
+    subtitle = None
+    if (
+        settings.results_subtitle
+        and result.test is not None
+        and result.effect_size is not None
+    ):
+        subtitle = to_mathtext(
+            contingency_subtitle_expression(
+                result.test,
+                result.effect_size,
+                design=design,
+                n_obs=result.n_obs,
+                digits=settings.digits,
+            )
+        )
+    return FigureTexts(
+        subtitle=subtitle,
+        caption_lines=(),
+        centrality_labels=(),
+        tick_labels=tuple(
+            "" if b.level is None else drawable(b.level) for b in result.bars
+        ),
+        pairwise_labels=tuple(
+            to_mathtext(_pair_label(p, settings.digits)) for p in result.pairwise
+        ),
+        bar_labels=tuple(
+            "" if node is None else to_mathtext(node)
+            for node in _bar_expressions(result.bars, settings.digits)
+        ),
+        n_labels=tuple(n_label(bar.n) for bar in result.bars),
+        cell_labels=_cell_labels(result.cells, settings),
+        legend_title=result.x,
+        x_title=result.y,
+        y_tick_labels=PERCENT_TICKS,
     )
