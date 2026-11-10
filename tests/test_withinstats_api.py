@@ -85,8 +85,9 @@ ANALYSIS_DEFAULTS = {
     "order": None,
 }
 DRAWING_DEFAULTS = {
-    "point_path": True,
-    "centrality_path": True,
+    # None: drawn where ggwithinstats draws them; an explicit value is told apart.
+    "point_path": None,
+    "centrality_path": None,
     "centrality_plotting": True,
     "layers": ("violin", "box", "points"),
     "xlab": None,
@@ -469,10 +470,10 @@ def test_render_checks_then_draws(four: pd.DataFrame) -> None:
     fig = draw(result)
     assert fig.result.analysis == "withinstats"
     assert fig.result.warnings == result.warnings
-    assert "point_path must be True or False" in message(
+    assert "point_path must be None, True or False" in message(
         TypeError, lambda: draw(result, point_path=1)
     )
-    assert "centrality_path must be True or False" in message(
+    assert "centrality_path must be None, True or False" in message(
         TypeError, lambda: draw(result, centrality_path="no")
     )
     assert "not a layer" in message(ValueError, lambda: draw(result, layers=("dots",)))

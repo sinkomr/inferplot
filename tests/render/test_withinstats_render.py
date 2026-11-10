@@ -245,7 +245,12 @@ def test_point_path_false_with_three_conditions_has_no_effect_and_says_so() -> N
         "point_path=False has no effect: subject paths are drawn only with two "
         "conditions (as in ggwithinstats), and x='dose' has 3.",
     )
-    assert _new_warnings(withinstats(result, point_path=True), result) == ()
+    # An explicit True is told from the default (None) and says so too.
+    assert _new_warnings(withinstats(result, point_path=True), result) == (
+        "point_path=True has no effect: subject paths are drawn only with two "
+        "conditions (as in ggwithinstats), and x='dose' has 3.",
+    )
+    assert _new_warnings(withinstats(result), result) == ()
 
 
 def test_layers_without_points_draw_no_subject_paths() -> None:
@@ -281,13 +286,18 @@ def test_centrality_path_false() -> None:
 def test_centrality_plotting_false_draws_no_centrality_path() -> None:
     # As in ggwithinstats, the centrality path belongs to the centrality points.
     result = two_conditions()
-    fig = withinstats(result, centrality_plotting=False, centrality_path=True)
+    fig = withinstats(result, centrality_plotting=False)
     present = gids(fig)
     assert not any(g.startswith("centrality") for g in present)
     assert "subject-paths" in present
     assert fig.paths is not None
     assert fig.paths.centrality is None
-    assert _new_warnings(fig, result) == ()  # centrality_path=True is the default
+    assert _new_warnings(fig, result) == ()  # the default centrality_path (None)
+    fig = withinstats(result, centrality_plotting=False, centrality_path=True)
+    assert _new_warnings(fig, result) == (
+        "centrality_path=True has no effect: the centrality path joins the "
+        "centrality points, which centrality_plotting=False leaves out.",
+    )
     fig = withinstats(result, centrality_plotting=False, centrality_path=False)
     assert _new_warnings(fig, result) == (
         "centrality_path=False has no effect: the centrality path joins the "

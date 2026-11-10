@@ -130,8 +130,9 @@ class Options:
     point_args: dict[str, object]
     boxplot_args: dict[str, object]
     violin_args: dict[str, object]
-    point_path: bool = False  # withinstats only
-    centrality_path: bool = False  # withinstats only
+    # withinstats only: None draws the path where ggwithinstats does.
+    point_path: bool | None = None
+    centrality_path: bool | None = None
 
 
 CENTRALITY_SIZE: Final = 40.0  # centrality point marker area, points squared

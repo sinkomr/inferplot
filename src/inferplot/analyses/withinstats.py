@@ -20,8 +20,8 @@ from __future__ import annotations
 import itertools
 import math
 import re
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Final
 
 import numpy as np
@@ -55,7 +55,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
-    tied_count,
+    paired_tied_count,
 )
 from inferplot.text import build_texts, format_value, r_number_text
 
@@ -84,6 +84,13 @@ class _Args:
     results_subtitle: bool
     tr: float
     seed: int
+    # The arguments as the caller gave them, for the warnings that name them
+    # (betweenstats' rule: "pairwise_display='ns' has no effect").
+    passed: Mapping[str, object] = field(default_factory=dict[str, object])
+
+    def shown(self, name: str, value: object) -> str:
+        """``name``'s value as given (else ``value``), as a warning names it."""
+        return repr(self.passed.get(name, value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,14 +411,17 @@ def _within_no_effect_warnings(
         ):
             if value != default:
                 out.append(
-                    f"{name}={value!r} has no effect: " + reason.format(what=what)
+                    f"{name}={args.shown(name, value)} has no effect: "
+                    + reason.format(what=what)
                 )
+    out += _bf_message_no_effect(args)
     if bayes_computed or args.prior_scale == _DEFAULT_BF_PRIOR:
         return out
+    prior = args.shown("bf_prior", args.prior_scale)
     if args.type == "bayes" and k >= 3:
         # Bayes factors are computed, for every pair, at the fixed scale.
         out.append(
-            f"bf_prior={args.prior_scale!r} has no effect: the pairwise Bayes "
+            f"bf_prior={prior} has no effect: the pairwise Bayes "
             f"factors always use the prior scale {r_number_text(_PAIRWISE_BF_PRIOR)}"
             ", as in ggstatsplot; the Bayesian repeated-measures ANOVA arrives in "
             "inferplot 0.2."
@@ -428,11 +438,35 @@ def _within_no_effect_warnings(
         why = "results_subtitle=False leaves the Bayes factor out"
     else:
         why = f"bf_message={args.bf_message!r} leaves the Bayes factor out"
-    out.append(
-        f"bf_prior={args.prior_scale!r} has no effect: no Bayes factor is computed "
-        f"({why})."
-    )
+    out.append(f"bf_prior={prior} has no effect: no Bayes factor is computed ({why}).")
     return out
+
+
+def _bf_message_no_effect(args: _Args) -> list[str]:
+    """``bf_message=False`` where no Bayes factor caption could be drawn: types
+    other than parametric (ggstatsplot draws the caption for type parametric
+    only) and ``results_subtitle=False``. With type parametric and the subtitle it
+    acts: two conditions lose the caption, three or more the note that their
+    caption arrives in 0.2. ``True`` there raises instead (``withinstats``)."""
+    if args.bf_message is not False:
+        return []
+    if args.type != "parametric":
+        where = (
+            "; type='bayes' reports its Bayes factor in the subtitle"
+            if args.type == "bayes"
+            else ""
+        )
+        return [
+            "bf_message=False has no effect: the Bayes factor caption is drawn only "
+            f"for type='parametric' (as in ggstatsplot), and type={args.type!r} "
+            f"draws none{where}."
+        ]
+    if not args.results_subtitle:
+        return [
+            "bf_message=False has no effect: results_subtitle=False leaves the Bayes "
+            "factor caption out."
+        ]
+    return []
 
 
 def _nonparametric(data: WithinData, args: _Args) -> _Parts:
@@ -762,7 +796,11 @@ def _robust(data: WithinData, args: _Args) -> _Parts:
     )
     warnings = _robust_resample_warnings(akp, effect_size, k=len(levels))
     if args.conf_level != _ROBUST_CONF_LEVEL:
-        warnings.append(_robust_level_warning(args.conf_level, k=len(levels)))
+        warnings.append(
+            _robust_level_warning(
+                args.shown("conf_level", args.conf_level), k=len(levels)
+            )
+        )
     warnings += _within_no_effect_warnings(data, args, bayes_computed=False)
     return _Parts(
         test=test,
@@ -896,7 +934,7 @@ def _rmmcp_pairs(
     return _sorted_pairs(rows)
 
 
-def _robust_level_warning(conf_level: float, *, k: int) -> str:
+def _robust_level_warning(conf_level: str, *, k: int) -> str:
     """D53's rule for the within methods: conf_level reaches no interval."""
     what = (
         "the AKP effect size's bootstrap interval is always a 95% interval"
@@ -905,7 +943,7 @@ def _robust_level_warning(conf_level: float, *, k: int) -> str:
         "intervals are always 95% intervals"
     )
     return (
-        f"conf_level={conf_level!r} has no effect: {what}, as in "
+        f"conf_level={conf_level} has no effect: {what}, as in "
         "ggstatsplot, which does not pass conf.level to WRS2 here; the effect size "
         "records conf_level 0.95."
     )
@@ -1073,26 +1111,30 @@ def _within_bayes_no_effect_warnings(k: int, args: _Args) -> list[str]:
     out: list[str] = []
     if args.conf_level != 0.95:
         out.append(
-            f"conf_level={args.conf_level!r} has no effect: type='bayes' shows no "
+            f"conf_level={args.shown('conf_level', args.conf_level)} has no "
+            "effect: type='bayes' shows no "
             "interval in this version (the posterior credible interval arrives in "
             "inferplot 0.2)."
         )
     if k >= 3:
         if args.p_adjust_method != _DEFAULT_P_ADJUST:
             out.append(
-                f"p_adjust_method={args.p_adjust_method!r} has no effect: Bayes "
+                f"p_adjust_method={args.shown('p_adjust_method', args.p_adjust_method)}"
+                " has no effect: Bayes "
                 "factors are not adjusted for multiple comparisons (as in "
                 "ggstatsplot)."
             )
         if args.pairwise_alpha != _DEFAULT_ALPHA:
             out.append(
-                f"pairwise_alpha={args.pairwise_alpha!r} has no effect: Bayes factors "
+                f"pairwise_alpha={args.shown('pairwise_alpha', args.pairwise_alpha)}"
+                " has no effect: Bayes factors "
                 "are not compared with a significance level, and every pair is "
                 "drawn."
             )
         if args.pairwise_display == "non-significant":
+            display = args.shown("pairwise_display", args.pairwise_display)
             out.append(
-                f"pairwise_display={args.pairwise_display!r} has no effect: Bayes "
+                f"pairwise_display={display} has no effect: Bayes "
                 "factors have no significance, so every pair is drawn (as in "
                 "ggstatsplot); pass pairwise_display='none' to draw none."
             )
@@ -1201,7 +1243,7 @@ def _assemble(
         n_dropped=data.n_dropped,
         dropped_subjects=len(data.dropped_subjects),
         dropped_subject_rows=data.n_rows_of_dropped_subjects,
-        n_tied=tied_count(observations),
+        n_tied=paired_tied_count(observations),
         warnings=(*_data_warnings(data), *parts.warnings),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
@@ -1396,6 +1438,13 @@ def withinstats(
         results_subtitle=subtitle_on,
         tr=trim,
         seed=rng_seed,
+        passed={
+            "p_adjust_method": p_adjust_method,
+            "pairwise_display": pairwise_display,
+            "pairwise_alpha": pairwise_alpha,
+            "conf_level": conf_level,
+            "bf_prior": bf_prior,
+        },
     )
     _check_design(within, args)
     parts = _ANALYSES[type_name](within, args)
