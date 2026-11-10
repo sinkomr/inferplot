@@ -180,6 +180,19 @@ def check_options(result: StatsResult, options: Options, ax: Axes | None) -> Non
         raise TypeError(
             f"ax must be a matplotlib Axes or None; got {type(ax).__name__}."
         )
+    if ax is not None:
+        check_axes(ax)
+
+
+def check_axes(ax: Axes) -> None:
+    """A given Axes is a plain rectangular 2D one; checked before drawing."""
+    name = str(getattr(ax, "name", ""))
+    if name != "rectilinear":
+        raise ValueError(
+            f"ax is a {name!r} Axes; inferplot draws only into a plain rectangular "
+            "2D Axes, where the levels lie along x and the values along y. Pass an "
+            "Axes made without projection=, for example figure.add_subplot()."
+        )
 
 
 def draw(
