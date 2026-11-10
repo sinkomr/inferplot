@@ -556,7 +556,7 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
             )
         )
     issues += _path_issues(fig, extents)
-    issues += view_issues(fig)
+    issues += view_issues(fig, extents)
     sub = fig.subsample
     if sub is not None:
         whole = (

@@ -56,7 +56,9 @@ from inferplot.render.figure import (
     DrawnView,
     StatsFigure,
     Subsample,
+    axes_background,
     describe_text,
+    figure_background,
     plain_text,
     remember,
     root_figure,
@@ -752,6 +754,7 @@ class Drawing:
             self.layout_own()
         else:
             self.layout_in_axes()
+            self.finish_ink()
         self.finish_fonts()
         result = self.result
         if self.warnings:
@@ -776,6 +779,7 @@ class Drawing:
             ),
             paths=self.drawn_paths(),
             view=self.view,
+            colors=tuple(self.colors),
         )
 
     def draw_data(self) -> None:
@@ -1338,6 +1342,33 @@ class Drawing:
         for panel, lay in zip(panels, layouts, strict=True):
             panel.place_bracket_levels(lay)
             panel.view.ylim = (lo, hi)
+
+    def finish_ink(self) -> None:
+        """With ``ax=``: inferplot's ink in contrast with what it is drawn on.
+
+        Texts and lines drawn inside the Axes (subtitle, caption, bracket lines
+        and labels) take :func:`theme.ink_for` of the Axes background, and the
+        axis texts and title outside it that of the figure background: the usual
+        near-black on a light background, a near-white on a dark one. The
+        centrality labels keep theirs, on their own white boxes. On a light
+        background nothing is changed.
+        """
+        inside = axes_background(self.ax)
+        outside = figure_background(self.figure)
+        ink_in, ink_out = theme.ink_for(inside), theme.ink_for(outside)
+        if ink_in != theme.INK:
+            for text in [*self.header, *self.captions, *self.bracket_labels]:
+                text.set_color(ink_in)
+            for line in self.bracket_lines:
+                line.set_color(ink_in)
+        if ink_out != theme.INK:
+            ax = self.ax
+            ax.xaxis.label.set_color(ink_out)
+            ax.yaxis.label.set_color(ink_out)
+            ax.tick_params(axis="both", labelcolor=ink_out)
+            for text in ax.findobj(Text):
+                if self.roles.get(id(text), "").startswith("title"):
+                    text.set_color(ink_out)
 
     def finish_fonts(self) -> None:
         """DejaVu Sans, also for mathtext, on every text inferplot draws.

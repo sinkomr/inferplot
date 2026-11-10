@@ -30,8 +30,10 @@ __all__ = [
     "DrawnView",
     "StatsFigure",
     "Subsample",
+    "axes_background",
     "describe_text",
     "drawn_before",
+    "figure_background",
     "plain_text",
     "remember",
     "root_figure",
@@ -87,6 +89,7 @@ class StatsFigure:
     __slots__ = (
         "_axes",
         "_brackets",
+        "_colors",
         "_figure",
         "_inside",
         "_own",
@@ -110,6 +113,7 @@ class StatsFigure:
         brackets: tuple[tuple[Text, Line2D, str], ...] = (),
         paths: DrawnPaths | None = None,
         view: DrawnView | None = None,
+        colors: tuple[theme.Color, ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -121,6 +125,7 @@ class StatsFigure:
         self._brackets = brackets
         self._paths = paths
         self._view = view
+        self._colors = colors
 
     @property
     def figure(self) -> Figure:
@@ -229,6 +234,11 @@ class StatsFigure:
         return self._paths
 
     @property
+    def colors(self) -> tuple[theme.Color, ...]:
+        """Each level's colour from the palette, in level order."""
+        return self._colors
+
+    @property
     def view(self) -> DrawnView | None:
         """The axis limits inferplot set, or None."""
         return self._view
@@ -300,6 +310,24 @@ def describe_text(role: str, shown: str, *, limit: int = 40) -> str:
     if len(flat) > limit:
         flat = flat[: limit - 3] + "..."
     return f"{role} {flat!r}"
+
+
+def figure_background(figure: object) -> tuple[float, float, float]:
+    """The colour the figure's patch paints, over white where it is not opaque
+    (or not drawn)."""
+    root = root_figure(figure)
+    if not root.patch.get_visible():
+        return (1.0, 1.0, 1.0)
+    return theme.over(root.get_facecolor(), "white")
+
+
+def axes_background(ax: Axes) -> tuple[float, float, float]:
+    """The colour behind what is drawn inside ``ax``: its patch over the figure's
+    background."""
+    below = figure_background(ax.figure)
+    if not (ax.patch.get_visible() and ax.axison and ax.get_frame_on()):
+        return below
+    return theme.over(ax.get_facecolor(), below)
 
 
 def root_figure(figure: object) -> Figure:

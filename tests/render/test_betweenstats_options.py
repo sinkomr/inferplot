@@ -106,7 +106,8 @@ def test_palette_list_and_colormap_names() -> None:
     assert _rgba(_points(fig, 2))[:3] == pytest.approx(set2(2)[:3])
     fig = betweenstats(result, palette="viridis")
     viridis = matplotlib.colormaps["viridis"]
-    assert _rgba(_points(fig, 2))[:3] == pytest.approx(viridis(1.0)[:3])
+    # A continuous colormap is sampled at the centres of k bins, (i + 0.5) / k.
+    assert _rgba(_points(fig, 2))[:3] == pytest.approx(viridis(2.5 / 3)[:3])
     assert fig.result.warnings == result.warnings
 
 

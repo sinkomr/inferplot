@@ -53,6 +53,7 @@ MANY_LEVELS_COLORMAP: Final = "tab20"
 
 INK: Final = "#222222"
 SOFT_INK: Final = "#4D4D4D"
+LIGHT_INK: Final = "#EEEEEE"  # inferplot's ink on a dark background (ax=)
 CENTRALITY_COLOR: Final = "#8B0000"  # ggstatsplot's "darkred" centrality point
 
 RC: Final[dict[str, object]] = {
@@ -101,6 +102,38 @@ def font(size: float, *, weight: str = "normal") -> FontProperties:
     )
 
 
+def luminance(color: object) -> float:
+    """Relative luminance of an opaque colour (WCAG 2.1, "relative luminance")."""
+    rgb = mcolors.to_rgb(color)  # pyright: ignore[reportArgumentType]
+
+    def channel(u: float) -> float:
+        return u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(float(u)) for u in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a: object, b: object) -> float:
+    """WCAG 2.1 contrast ratio of two opaque colours, from 1 to 21."""
+    la, lb = sorted((luminance(a), luminance(b)))
+    return (lb + 0.05) / (la + 0.05)
+
+
+def over(color: object, background: object) -> tuple[float, float, float]:
+    """``color`` (with its alpha) composited over an opaque ``background``."""
+    r, g, b, a = mcolors.to_rgba(color)  # pyright: ignore[reportArgumentType]
+    br, bg, bb = mcolors.to_rgb(background)  # pyright: ignore[reportArgumentType]
+    return (r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a))
+
+
+def ink_for(background: object) -> str:
+    """inferplot's ink for text and lines on ``background``: :data:`INK`, or
+    :data:`LIGHT_INK` where that has the higher contrast (a dark background)."""
+    if contrast(LIGHT_INK, background) > contrast(INK, background):
+        return LIGHT_INK
+    return INK
+
+
 def _rgba(color: object, where: str) -> Color:
     try:
         return cast("Color", tuple(float(c) for c in mcolors.to_rgba(color)))  # pyright: ignore[reportArgumentType]
@@ -130,10 +163,9 @@ def _colormap_colors(name: str, k: int) -> list[Color]:
                 "choose a colormap with more colors or pass a list of colors."
             )
         return [_rgba(cmap(i), f"index {i}") for i in range(k)]
-    # A continuous colormap: k evenly spaced colors.
-    if k == 1:
-        return [_rgba(cmap(0.5), "0.5")]
-    return [_rgba(cmap(i / (k - 1)), f"{i / (k - 1):.3f}") for i in range(k)]
+    # A continuous colormap: k colors at the centres of k equal bins, (i + 0.5) / k,
+    # so that no level gets an end of the map (the near-white end of "Blues").
+    return [_rgba(cmap((i + 0.5) / k), f"{(i + 0.5) / k:.3f}") for i in range(k)]
 
 
 def resolve_palette(palette: object, k: int) -> tuple[list[Color], str | None]:
