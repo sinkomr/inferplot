@@ -4,6 +4,14 @@ One table maps every ggstatsplot argument the oracle uses to its inferplot keywo
 R's dotted names become snake_case, and JSON already holds TRUE, FALSE and NULL as
 Python booleans and None. An argument without a mapping raises, so a new fixture
 argument fails loudly until it is added here.
+
+``split`` separates the keywords of the analysis (``ip.analyze.<name>``) from those
+of the drawing (``ip.render.<name>``), and handles the two ggscatterstats arguments
+that have no inferplot keyword: ``label.expression`` (a dplyr filter of the points
+to label; inferplot labels the points whose ``label_var`` is present, so the test
+sets the others' labels to missing, ``apply_label_filter``) and
+``smooth.line.args`` (ggplot2's smoothing settings; kept in ``unsupported`` for
+the renderer's tests to decide on).
 """
 
 from __future__ import annotations
@@ -12,6 +20,8 @@ from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
+
+from inferplot._validate import DRAWING_KEYWORDS
 
 FUNCTIONS: Mapping[str, str] = MappingProxyType(
     {
@@ -105,3 +115,51 @@ def _respell(spellings: Mapping[Any, Any], value: Any) -> Any:
     if isinstance(value, Hashable):
         return spellings.get(value, value)
     return value
+
+
+# ggscatterstats arguments without an inferplot keyword (see the module docstring).
+LABEL_FILTER = "label.expression"
+UNSUPPORTED = frozenset({"smooth.line.args"})
+
+
+@dataclass(frozen=True)
+class SplitCall:
+    """A fixture's call as ``ip.analyze.<function>(data, *args, **analysis)`` and
+    ``ip.render.<function>(result, **drawing)``. ``label_filter`` is the R filter of
+    the points to label (``label.expression``), ``unsupported`` the R arguments
+    inferplot has no keyword for."""
+
+    function: str
+    args: tuple[Any, ...]
+    analysis: Mapping[str, Any]
+    drawing: Mapping[str, Any]
+    label_filter: str | None = None
+    unsupported: Mapping[str, Any] = field(default_factory=dict)
+
+
+def split(r_function: str, r_args: Mapping[str, Any]) -> SplitCall:
+    """``translate`` with the analysis and drawing keywords apart."""
+    unsupported = {k: v for k, v in r_args.items() if k in UNSUPPORTED}
+    label_filter = r_args.get(LABEL_FILTER)
+    rest = {
+        k: v for k, v in r_args.items() if k not in UNSUPPORTED and k != LABEL_FILTER
+    }
+    call = translate(r_function, rest)
+    drawing_names = DRAWING_KEYWORDS[call.function]
+    return SplitCall(
+        function=call.function,
+        args=call.args,
+        analysis={k: v for k, v in call.kwargs.items() if k not in drawing_names},
+        drawing={k: v for k, v in call.kwargs.items() if k in drawing_names},
+        label_filter=None if label_filter is None else str(label_filter),
+        unsupported=unsupported,
+    )
+
+
+def apply_label_filter(frame: Any, label_var: str, expression: str) -> Any:
+    """A pandas ``frame`` whose ``label_var`` is missing where the R filter
+    ``expression`` is not true: inferplot's way to label only some points.
+    ``pandas.eval`` reads the fixtures' expressions (``mpg > 25 | wt > 5``) as R
+    does."""
+    keep = frame.eval(expression)
+    return frame.assign(**{label_var: frame[label_var].where(keep)})

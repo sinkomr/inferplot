@@ -44,6 +44,7 @@ __all__ = [
     "check_bool",
     "check_conf_level",
     "check_digits",
+    "check_finite_number",
     "check_layers",
     "check_optional_bool",
     "check_optional_text",
@@ -323,6 +324,9 @@ _LAYERED_DRAWING: Final = _COMMON_DRAWING | {
 DRAWING_KEYWORDS: Final[Mapping[str, frozenset[str]]] = {
     "betweenstats": _LAYERED_DRAWING,
     "withinstats": _LAYERED_DRAWING | {"point_path", "centrality_path"},
+    "histostats": _COMMON_DRAWING | {"binwidth", "centrality_plotting", "bar_args"},
+    "scatterstats": _COMMON_DRAWING
+    | {"marginal", "smooth", "point_args", "smooth_args", "marginal_args"},
 }
 # Keywords only the analysis functions (ip.analyze.<name>, ip.<name>) take, so a
 # drawing function ip.render.<name> can point to them.
@@ -346,6 +350,7 @@ ANALYSIS_KEYWORDS: Final = frozenset(
         "order",
         "subject_id",
         "test_value",
+        "label_var",
         "counts",
         "paired",
         "ratio",
@@ -388,6 +393,10 @@ def _targeted(
     """SPEC.md section 2's message for a removed or borrowed keyword, if ``key`` (the
     snake_case spelling of ``arg``) is one of them. ``filled`` names the arguments
     the call already gives."""
+    if fn in _NO_LEVEL_FUNCTIONS:
+        own = _no_level_targeted(arg, key, fn, valid)
+        if own is not None:
+            return own
     if key == "var_equal":
         if fn in _SUBJECT_FUNCTIONS:
             why = (
@@ -734,6 +743,217 @@ _NO_EQUIVALENT_WITHIN: Mapping[str, str] = {
         "point_path=False leaves them out."
     ),
 }
+# Functions without levels of x: one column (histostats) or a pair of columns
+# (scatterstats). Many messages of the comparison functions speak of groups and
+# levels; these functions get their own (``_no_level_targeted``).
+_NO_LEVEL_FUNCTIONS: Final = frozenset({"histostats", "scatterstats"})
+_PAIRWISE_KEYS: Final = frozenset(
+    {"pairwise_display", "p_adjust_method", "pairwise_alpha"}
+)
+_COLOUR_KEYS: Final = frozenset({"color", "colour", "colors", "colours"})
+
+
+def _drawing_note(fn: str, valid: frozenset[str]) -> str:
+    """Where a drawing option of ``fn`` is passed, said from ``fn``'s own form."""
+    if "ax" in valid or "result" in valid:
+        return f"a drawing option of {fn}()"
+    return f"a drawing option of ip.{fn}(...) and ip.render.{fn}(result, ...)"
+
+
+def _no_level_targeted(
+    arg: str, key: str, fn: str, valid: frozenset[str]
+) -> TypeError | None:
+    """The messages of histostats and scatterstats for keywords whose usual
+    message would speak of groups or levels, for ggstatsplot's own arguments of
+    gghistostats and ggscatterstats, and for seaborn and matplotlib habits."""
+    histo = fn == "histostats"
+    drawing = _drawing_note(fn, valid)
+    what = (
+        "histostats() tests one numeric column, x, against test_value"
+        if histo
+        else "scatterstats() tests the correlation of two numeric columns, x and y"
+    )
+
+    def no(reason: str) -> TypeError:
+        return TypeError(
+            f"{arg}= is not an argument of {fn}(): {reason} Remove {arg}=."
+        )
+
+    if key == "y" and histo:
+        return no(
+            f"{what}. To relate x to another column use scatterstats(data, x, y); "
+            "to compare a column across the groups of x use "
+            "betweenstats(data, x, y)."
+        )
+    if key in {"subject", "id", "subject_id"}:
+        pairing = "" if histo else ", pairing them by row,"
+        return no(
+            f"{what}{pairing} and has no subjects. For repeated measures of the "
+            "same subjects use withinstats(data, x, y, subject_id=...)."
+        )
+    if key == "paired":
+        if histo:
+            return no(
+                f"{what}. To test paired measurements, use withinstats(data, x, y, "
+                "subject_id=...), or pass a column of the paired differences as x "
+                "with test_value=0."
+            )
+        return no(f"{what}; it always pairs x and y by row.")
+    if key in _PAIRWISE_KEYS or key == "pairwise_comparisons":
+        if key == "pairwise_comparisons":
+            return None  # its removal message says the function has none
+        return no(
+            f"{what} and has no pairwise comparisons; {arg}= belongs to "
+            "betweenstats() and withinstats(), which compare groups pair by pair."
+        )
+    if key == "order" or key in _ORDER_NAMES:
+        return no(f"{what} and has no levels to order.")
+    if key in _PATH_NAMES:
+        return no(
+            "it is an argument of withinstats(), which joins each subject's "
+            f"points across conditions; {fn}() draws no paths."
+        )
+    if key in _DIRECTION_NAMES or (key == "alternative" and not histo):
+        if histo:
+            return TypeError(
+                f"{arg}= is not an argument of histostats(); the direction of the "
+                "test is set by alternative=: 'two-sided' (the default), 'greater' "
+                "(x tends to be greater than test_value) or 'less'. Remove "
+                f"{arg}=."
+            )
+        return no(
+            "correlations are tested two-sided in ggscatterstats and in inferplot, "
+            "so there is no direction to choose."
+        )
+    if key == "test_value" and not histo:
+        return no(
+            "it is an argument of histostats(), which tests one column against a "
+            "value; scatterstats() tests whether the correlation of x and y is 0."
+        )
+    if key == "label_var" and histo:
+        return no(
+            "it is an argument of scatterstats(), whose points it labels; a "
+            "histogram has no points to label."
+        )
+    if key == "label_expression":
+        where = (
+            "and pass label_var='label'"
+            if not histo
+            else "and pass label_var='label' to scatterstats()"
+        )
+        return TypeError(
+            f"{arg}= is a ggstatsplot argument (a dplyr filter) that inferplot does "
+            "not have: inferplot labels every point whose label_var value is "
+            "present. To label only some points, set the labels of the others to "
+            "missing first, for example data.assign(label=data['model'].where("
+            f"(data['mpg'] > 25) | (data['wt'] > 5))), {where}. Remove {arg}=."
+        )
+    if key in {"normal_curve", "normal_curve_args"}:
+        return TypeError(
+            f"{arg}= is not an argument of ggstatsplot 1.1.4's gghistostats (its ... "
+            "accepts it and draws nothing), and inferplot draws no normal curve. "
+            f"Remove {arg}=."
+        )
+    if key == "bin_args" and histo:
+        return no(
+            "the bars are styled with bar_args=, matplotlib properties such as "
+            f"bar_args={{'facecolor': 'grey', 'alpha': 0.7}}, {drawing}."
+        )
+    if key == "centrality_line_args" and histo:
+        return no(
+            "the centrality line is not styled by an argument; "
+            "centrality_plotting=False leaves the line and its label out."
+        )
+    if key == "point_label_args" and not histo:
+        return no(
+            "the point labels are not styled by an argument; label_var= chooses "
+            "the column they come from."
+        )
+    if key == "smooth_line_args" and not histo:
+        return no(
+            "inferplot always draws the least-squares line with its conf_level "
+            "band (ggstatsplot's default, method 'lm') and has no other smoothing "
+            "method such as 'loess'. Style it with smooth_args=, matplotlib "
+            f"properties, {drawing}, or leave it out with smooth=False."
+        )
+    if key in {"xsidehistogram_args", "ysidehistogram_args"} and not histo:
+        return no(
+            "the marginal histograms are styled together with marginal_args=, "
+            f"matplotlib properties, {drawing}; marginal=False leaves them out."
+        )
+    if key == "bins":
+        if histo:
+            return no(
+                "the width of the bars is set by binwidth=, "
+                f"{drawing}; by default it is (max - min) / sqrt(n), as in "
+                "ggstatsplot."
+            )
+        return no("the marginal histograms use 30 bins each, as in ggstatsplot.")
+    if key in {"kde", "kde_kws"}:
+        return no("it is a seaborn argument; inferplot draws no density curve.")
+    if key in {"stat", "density"} and histo:
+        return no(
+            "the left axis counts the values in each bin and the right axis gives "
+            "the same as a percentage of n, as in ggstatsplot; there is no density "
+            "scale."
+        )
+    if key == "fit_reg" and not histo:
+        return no(
+            f"it is a seaborn argument; smooth=False, {drawing}, leaves out the "
+            "line and its band."
+        )
+    if key in {"x_jitter", "y_jitter", "jitter"} and not histo:
+        return no("every point is drawn at its values; there is no jitter.")
+    if key == "line_kws" and not histo:
+        return no(
+            f"it is a seaborn argument; style the line with smooth_args=, {drawing}."
+        )
+    if key == "scatter_kws" and not histo:
+        return no(
+            f"it is a seaborn argument; style the points with point_args=, {drawing}."
+        )
+    if key in _COLOUR_KEYS:
+        artists = "bar_args" if histo else "point_args, smooth_args, marginal_args"
+        return no(f"colours are set with palette= or {artists}, {drawing}.")
+    if key == "alpha":
+        artist = "bar_args" if histo else "point_args"
+        return no(
+            "conf_level= sets the level of the confidence interval (conf_level=0.95 "
+            f"for 95%); for transparency use {artist}={{'alpha': 0.5}}, {drawing}."
+        )
+    if key == "hue":
+        return TypeError(
+            f"hue= is a seaborn argument; {fn}() has no grouping by colour. "
+            "grouping_var (one plot per value of a column) arrives in inferplot "
+            f"v0.2; for now call {fn}() once per subset of the data. Remove hue=."
+        )
+    if key == "legend":
+        return no("there is no legend.")
+    if key in _LABEL_NAMES and not histo:
+        return no(
+            "point labels come from a column, label_var='name'; the axis labels and "
+            f"the title are xlab=, ylab= and title=, {drawing}."
+        )
+    if key == "var_equal":
+        test = "the one-sample t-test" if histo else "a correlation"
+        return TypeError(
+            _removed(
+                arg,
+                "1.0.0",
+                f"{test} has no equal-variance option, so there is nothing to set.",
+            )
+        )
+    if key == "effsize_type":
+        rest = (
+            "Hedges' g is always used (type parametric), so there is nothing to choose."
+            if histo
+            else "the correlation coefficient is itself the effect size, so there "
+            "is nothing to choose."
+        )
+        return TypeError(_removed(arg, "1.0.0", rest))
+    return None
+
+
 # Functions whose analysis takes subject_id (their drawing functions share the name).
 _SUBJECT_FUNCTIONS: Final = frozenset({"withinstats"})
 # Functions whose analysis computes pairwise comparisons.
@@ -838,6 +1058,13 @@ def _positional_problem(
             )
     elif other is not None:
         hint = f" For example {fn}(..., {other}={first!r})."
+    elif fn == "histostats" and positional == ("data", "x") and isinstance(first, str):
+        # A column name after x: very likely a y for another function.
+        hint = (
+            " histostats() tests one column against test_value; to relate x to "
+            f"{first!r} use scatterstats(data, x, {first!r}), and to compare "
+            f"{first!r} across the groups of x use betweenstats(data, x, {first!r})."
+        )
     plural = "argument" if len(positional) == 1 else "arguments"
     return TypeError(
         f"{fn}() takes {len(positional)} positional {plural} ({names}) but {given} "
@@ -855,11 +1082,12 @@ def _type_name(value: object) -> str:
 
 
 def _not_a_result(fn: str, got: str) -> TypeError:
+    columns = "data, x" if fn == "histostats" else "data, x, y"
     return TypeError(
-        f"render.{fn}() draws the result of ip.analyze.{fn}(data, x, y); got "
+        f"render.{fn}() draws the result of ip.analyze.{fn}({columns}); got "
         f"{got}. Compute it first with "
-        f"result = ip.analyze.{fn}(data, x, y, ...) and pass result, or use "
-        f"ip.{fn}(data, x, y, ...) to analyze and draw in one call."
+        f"result = ip.analyze.{fn}({columns}, ...) and pass result, or use "
+        f"ip.{fn}({columns}, ...) to analyze and draw in one call."
     )
 
 
@@ -1088,6 +1316,18 @@ def check_positive(value: object, name: str, *, example: str = "0.707") -> float
         raise ValueError(
             f"{name} must be a finite number greater than 0, for example "
             f"{name}={example}; got {_show(value)}."
+        )
+    return number
+
+
+def check_finite_number(value: object, name: str, *, example: str = "0") -> float:
+    """A finite real number, such as ``test_value`` (bool rejected; a NumPy
+    float32 is read as the number it prints as)."""
+    number = _real(value, name, example)
+    if not math.isfinite(number):
+        raise ValueError(
+            f"{name} must be a finite number, for example {name}={example}; got "
+            f"{_show(value)}."
         )
     return number
 

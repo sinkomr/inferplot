@@ -13,7 +13,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 from inferplot import analyze
-from inferplot._api import betweenstats, withinstats
+from inferplot._api import betweenstats, histostats, scatterstats, withinstats
 from inferplot.check import Issue
 from inferplot.result import StatsResult
 
@@ -30,7 +30,9 @@ __all__ = [
     "__version__",
     "analyze",
     "betweenstats",
+    "histostats",
     "render",
+    "scatterstats",
     "withinstats",
 ]
 

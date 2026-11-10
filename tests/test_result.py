@@ -266,13 +266,14 @@ def test_from_dict_rejects_bad_input(anova: StatsResult) -> None:
 
 
 def test_schema_version_is_the_first_key(anova: StatsResult) -> None:
-    assert SCHEMA_VERSION == 2
+    # 3 since histostats and scatterstats (point_labels, label_var, test_value).
+    assert SCHEMA_VERSION == 3
     for text in (anova.to_json(), anova.to_json(indent=None, include_values=False)):
         data = _strict_loads(text)
         assert next(iter(data)) == "schema_version"
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == 3
     assert next(iter(anova.to_dict())) == "schema_version"
-    assert anova.to_dict()["schema_version"] == 2
+    assert anova.to_dict()["schema_version"] == 3
     # Not a field of the result: it describes the JSON, not the analysis.
     assert "schema_version" not in {f.name for f in dataclasses.fields(anova)}
 
@@ -287,17 +288,18 @@ def test_from_json_refuses_another_schema_version(anova: StatsResult) -> None:
     assert type(info.value) is ValueError
     message = str(info.value)
     assert "schema version 1" in message
-    assert "schema version 2 only" in message
+    assert "schema version 3 only" in message
     assert rerun in message
-    # JSON from a newer (or older, versioned) inferplot.
-    for other in (1, 3, "2", 2.0, None):
+    # JSON from a newer (or older, versioned) inferplot: version 2 is the field
+    # set before histostats and scatterstats.
+    for other in (1, 2, 4, "3", 3.0, None):
         data = json.loads(anova.to_json())
         data["schema_version"] = other
         with pytest.raises(ValueError, match="has schema_version") as info:
             StatsResult.from_json(json.dumps(data))
         assert type(info.value) is ValueError
         assert f"schema_version {other!r}" in str(info.value)
-        assert "schema version 2 only" in str(info.value)
+        assert "schema version 3 only" in str(info.value)
         assert rerun in str(info.value)
 
 
@@ -669,3 +671,323 @@ def test_texts_match_builders(anova: StatsResult) -> None:
         settings=anova.settings,
     )
     assert rebuilt == anova.text
+
+
+# --------------------------------------------------------------------------- #
+# designs without levels: one-sample (histostats) and correlation (scatterstats)
+# --------------------------------------------------------------------------- #
+
+
+def _no_level_case(function: str, name: str) -> OracleCase:
+    (case,) = [c for c in load_cases() if c.name == f"{function}-{name}"]
+    return case
+
+
+@pytest.fixture
+def one_sample() -> StatsResult:
+    from tests.no_level_cases import assembled
+
+    return assembled(_no_level_case("gghistostats", "edge_one_missing-parametric"))
+
+
+@pytest.fixture
+def correlation() -> StatsResult:
+    from tests.no_level_cases import assembled
+
+    return assembled(_no_level_case("ggscatterstats", "mtcars-labels-parametric"))
+
+
+def _bayes_factor() -> Any:
+    from inferplot.result import BayesFactor
+
+    return BayesFactor(
+        bf10=3.0, log_bf01=-math.log(3.0), prior="cauchy", prior_scale=0.707, test="x"
+    )
+
+
+def test_settings_test_value_defaults_to_none(anova: StatsResult) -> None:
+    assert anova.settings.test_value is None
+    assert anova.point_labels == ()
+    assert anova.label_var is None
+    assert "test_value" in json.loads(anova.to_json())["settings"]
+
+
+def test_new_designs_round_trip_with_special_values(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    for result in (one_sample, correlation):
+        assert result.test is not None
+        assert result.effect_size is not None
+        special = dataclasses.replace(
+            result,
+            test=dataclasses.replace(result.test, statistic=-math.inf),
+            effect_size=dataclasses.replace(
+                result.effect_size, conf_low=-math.inf, conf_high=math.inf
+            ),
+        )
+        assert StatsResult.from_json(special.to_json()) == special
+        assert StatsResult.from_dict(special.to_dict()) == special
+        data = _strict_loads(special.to_json())
+        assert data["test"]["statistic"] == "-Inf"
+    assert one_sample.y is None
+    assert json.loads(one_sample.to_json())["y"] is None
+    assert one_sample.settings.test_value == 10.0
+    assert StatsResult.from_json(one_sample.to_json()).settings.test_value == 10.0
+
+
+def test_point_labels_are_left_out_of_the_embedded_copy(
+    correlation: StatsResult,
+) -> None:
+    assert correlation.label_var == "model"
+    assert len(correlation.point_labels) == correlation.n_obs == 32
+    data = json.loads(correlation.to_json(include_values=False))
+    assert (data["values"], data["subjects"], data["point_labels"]) == ([], [], [])
+    embedded = StatsResult.from_json(correlation.to_json(include_values=False))
+    assert (embedded.values, embedded.point_labels) == ((), ())
+    assert embedded.label_var == "model"
+    assert embedded.check() == correlation.check()
+
+
+def test_to_frame_has_the_main_row_only(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    for result in (one_sample, correlation):
+        frame = result.to_frame()
+        assert len(frame) == 1
+        assert frame["group1"].isna().all()
+        assert frame["group2"].isna().all()
+        assert result.test is not None
+        assert frame["statistic"][0] == result.test.statistic
+        assert len(result.to_frame(backend="polars")) == 1
+    # A Bayes factor without a test names its design.
+    for result, label in (
+        (correlation, "Bayesian Pearson correlation"),
+        (one_sample, "Bayesian one-sample t-test"),
+    ):
+        bayes = dataclasses.replace(
+            result, type="bayes", test=None, effect_size=None, bayes=_bayes_factor()
+        )
+        assert bayes.to_frame()["label"][0] == label
+
+
+@pytest.mark.parametrize(
+    ("design", "changes", "problem"),
+    [
+        ("one-sample", {"y": "len"}, "y is None in design 'one-sample'"),
+        ("one-sample", {"levels": ("a",)}, "levels must be empty"),
+        ("one-sample", {"subject_id": "s"}, "subject_id must be None"),
+        ("one-sample", {"values": ((1.0,), (2.0,))}, "values must hold 1 tuple(s)"),
+        ("one-sample", {"values": ((1.0, 2.0),)}, "must hold n_obs = 10 values"),
+        ("one-sample", {"descriptives": ()}, "descriptives must hold one entry"),
+        ("one-sample", {"analysis": "scatterstats"}, "comes from histostats"),
+        ("one-sample", {"analysis": "piestats"}, "unknown analysis 'piestats'"),
+        ("one-sample", {"label_var": "m"}, "belong to design 'correlation' only"),
+        ("one-sample", {"dropped_subjects": 1}, "dropped_subjects and"),
+        ("correlation", {"y": None}, "y is None in design 'one-sample'"),
+        ("correlation", {"values": ((1.0,),)}, "values must hold 2 tuple(s)"),
+        ("correlation", {"point_labels": ("a", "b")}, "one text per pair"),
+        ("correlation", {"label_var": None}, "point_labels need label_var"),
+        ("correlation", {"descriptives": "first"}, "descriptives must be empty"),
+        ("correlation", {"pairwise": "any"}, "pairwise must be empty"),
+        ("correlation", {"subjects": ("s1",)}, "subjects must be empty"),
+        ("correlation", {"design": "pairs"}, "unknown design"),
+    ],
+)
+def test_wrong_shapes_are_refused(
+    one_sample: StatsResult,
+    correlation: StatsResult,
+    anova: StatsResult,
+    design: str,
+    changes: dict[str, Any],
+    problem: str,
+) -> None:
+    result = one_sample if design == "one-sample" else correlation
+    if changes.get("descriptives") == "first":
+        changes = {"descriptives": anova.descriptives[:1]}
+    if changes.get("pairwise") == "any":
+        changes = {"pairwise": anova.pairwise}
+    with pytest.raises(ValueError, match=re.escape(problem)):
+        dataclasses.replace(result, **changes)
+
+
+def test_settings_must_fit_the_design(
+    one_sample: StatsResult, correlation: StatsResult, anova: StatsResult
+) -> None:
+    settings = one_sample.settings
+    with pytest.raises(ValueError, match="test_value is required"):
+        dataclasses.replace(
+            one_sample, settings=dataclasses.replace(settings, test_value=None)
+        )
+    with pytest.raises(ValueError, match="test_value must be finite"):
+        dataclasses.replace(
+            one_sample, settings=dataclasses.replace(settings, test_value=math.inf)
+        )
+    with pytest.raises(ValueError, match="must be None in every other design"):
+        dataclasses.replace(
+            anova, settings=dataclasses.replace(anova.settings, test_value=1.0)
+        )
+    with pytest.raises(ValueError, match="correlations are tested two-sided"):
+        dataclasses.replace(
+            correlation,
+            settings=dataclasses.replace(correlation.settings, alternative="less"),
+        )
+    # The comparison designs keep their y and refuse the new fields.
+    with pytest.raises(ValueError, match="y is None in design 'one-sample'"):
+        dataclasses.replace(anova, y=None)
+    with pytest.raises(ValueError, match="belong to design 'correlation' only"):
+        dataclasses.replace(anova, point_labels=("a",))
+    # JSON that breaks a rule is refused when read back.
+    data = json.loads(one_sample.to_json())
+    data["levels"] = ["a"]
+    with pytest.raises(ValueError, match="levels must be empty"):
+        StatsResult.from_dict(data)
+
+
+def test_the_copy_without_values_is_valid(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    for result in (one_sample, correlation):
+        assert dataclasses.replace(result, values=(), point_labels=()).values == ()
+
+
+def test_new_tied_counts() -> None:
+    from inferplot.result import correlation_tied_count, one_sample_tied_count
+
+    # |x - 3|: 0 (dropped), 1, 1, 2: 4 values, 2 distinct nonzero sizes.
+    assert one_sample_tied_count([3.0, 2.0, 4.0, 5.0], 3.0) == 2
+    assert one_sample_tied_count([1.0, 2.0, 4.0], 0.0) == 0
+    assert correlation_tied_count([1.0, 1.0, 2.0], [5.0, 6.0, 7.0]) == 1
+    assert correlation_tied_count([1.0, 1.0, 1.0], [5.0, 5.0, 7.0]) == 3
+    with pytest.raises(ValueError, match="must pair up"):
+        correlation_tied_count([1.0], [1.0, 2.0])
+
+
+def test_checks_of_the_new_designs_speak_of_values_and_pairs(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    # edge_one_missing: 2 rows without x.
+    (issue,) = one_sample.check()
+    assert issue.code == "rows_dropped"
+    assert issue.message == "2 rows were left out because 'value' is missing."
+    assert correlation.check() == ()
+    small = dataclasses.replace(
+        one_sample,
+        n_obs=4,
+        values=(),
+        descriptives=(dataclasses.replace(one_sample.descriptives[0], n=4),),
+        n_dropped=0,
+    )
+    (issue,) = small.check()
+    assert issue.message == (
+        "Only 4 values of 'value' were analyzed, fewer than 5. The test and its "
+        "interval are unreliable with so few values."
+    )
+    pairs = dataclasses.replace(
+        correlation, n_obs=3, values=(), point_labels=(), n_dropped=2
+    )
+    codes = {i.code: i for i in pairs.check()}
+    assert codes["small_n"].message == (
+        "Only 3 complete pairs of 'wt' and 'mpg' were analyzed, fewer than 5. The "
+        "test and its interval are unreliable with so few pairs."
+    )
+    assert codes["rows_dropped"].message == (
+        "2 rows were left out because 'wt' or 'mpg' is missing."
+    )
+
+
+def test_heavy_ties_of_the_new_designs(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    ranked = dataclasses.replace(one_sample, type="nonparametric", n_tied=4)
+    (issue,) = [i for i in ranked.check() if i.code == "heavy_ties"]
+    assert issue.message.startswith(
+        "4 of the 10 values of 'value' (40%) equal 10 or lie as far from it as "
+        "another value, so the signed-rank test drops the equal ones and ranks only "
+        "6 distinct distances."
+    )
+    fewer = dataclasses.replace(ranked, n_tied=2)
+    assert "heavy_ties" not in [i.code for i in fewer.check()]
+    spearman = dataclasses.replace(correlation, type="nonparametric", n_tied=17)
+    (issue,) = [i for i in spearman.check() if i.code == "heavy_ties"]
+    assert issue.message.startswith(
+        "17 of the 64 values of 'wt' and 'mpg' (27%) tie with another value of the "
+        "same column"
+    )
+    # Only the rank methods.
+    parametric = dataclasses.replace(correlation, n_tied=60)
+    assert "heavy_ties" not in [i.code for i in parametric.check()]
+
+
+def test_provisional_texts_of_the_new_designs(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    # PROVISIONAL (text.py): no subtitle, caption or labels until the texts are
+    # compared with ggstatsplot's; a plain sentence from the result's numbers.
+    for result in (one_sample, correlation):
+        texts = result.text
+        assert (texts.subtitle, texts.caption) == (None, None)
+        assert texts.centrality_labels == texts.tick_labels == ()
+        assert texts.pairwise_labels == ()
+        assert texts.alt_text.endswith(texts.apa)
+        assert str(result) == texts.apa
+    assert one_sample.text.apa.startswith("One-sample t-test against 10: t(9) = ")
+    assert one_sample.text.alt_text.startswith(
+        "Values of value (n = 10, mean 11.02) tested against 10. One-sample t-test"
+    )
+    assert correlation.text.apa == (
+        "Pearson's r correlation test: t(30) = -9.56, p < .001, Pearson's r = -.87, "
+        "95% CI [-.93, -.74], n = 32 pairs."
+    )
+    assert correlation.text.alt_text == (
+        "Correlation of mpg with wt over 32 complete pairs. " + correlation.text.apa
+    )
+
+
+def _rebuilt(result: StatsResult, **changes: Any) -> Any:
+    """The texts of ``result`` with ``changes`` to its parts."""
+    parts = {
+        "x": result.x,
+        "y": result.y,
+        "descriptives": result.descriptives,
+        "test": result.test,
+        "effect_size": result.effect_size,
+        "bayes": result.bayes,
+        "pairwise": (),
+        "n_obs": result.n_obs,
+        "settings": result.settings,
+        "design": result.design,
+    }
+    return tx.build_texts(**{**parts, **changes})
+
+
+def test_provisional_sentences_name_direction_and_bayes(
+    one_sample: StatsResult, correlation: StatsResult
+) -> None:
+    assert one_sample.test is not None
+    less = dataclasses.replace(one_sample.test, alternative="less")
+    assert _rebuilt(one_sample, test=less).apa.startswith(
+        "One-sample t-test (one-sided: less than 10): t(9) = "
+    )
+    bayes = _bayes_factor()
+    one = _rebuilt(one_sample, test=None, effect_size=None, bayes=bayes)
+    assert one.apa == (
+        "Bayesian one-sample t-test against 10 (JZS prior, r = 0.707): BF10 = 3.00, "
+        "log(BF01) = -1.10, n = 10."
+    )
+    pair = _rebuilt(correlation, test=None, effect_size=None, bayes=bayes)
+    assert pair.apa == (
+        "Bayesian Pearson correlation (stretched beta prior, scale 0.707): BF10 = "
+        "3.00, log(BF01) = -1.10, n = 32 pairs."
+    )
+    none = _rebuilt(correlation, test=None, effect_size=None, bayes=None)
+    assert none.apa == "No test was computed (results_subtitle=False), n = 32 pairs."
+    # Long column names are shortened in the description, never in the sentence.
+    long = _rebuilt(correlation, x="w" * 300, y="m" * 300)
+    assert len(long.alt_text) <= 400
+    assert long.alt_text.endswith(correlation.text.apa)
+    with pytest.raises(ValueError, match="has no pairwise comparisons"):
+        _rebuilt(correlation, pairwise=_anova_pairs())
+
+
+def _anova_pairs() -> Any:
+    return _no_nan(result_from_fixture(_case("PlantGrowth-parametric"))).pairwise

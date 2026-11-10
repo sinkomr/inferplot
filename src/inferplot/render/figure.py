@@ -240,8 +240,9 @@ class StatsFigure:
 
     def __repr__(self) -> str:
         r = self._result
+        what = r.x if r.y is None else f"{r.y} by {r.x}"
         return (
-            f"<StatsFigure {r.analysis}: {r.y} by {r.x}, {len(r.levels)} levels; "
+            f"<StatsFigure {r.analysis}: {what}, {len(r.levels)} levels; "
             "fig.check() lists problems, fig.save(path) writes it>"
         )
 

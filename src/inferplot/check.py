@@ -42,6 +42,8 @@ class Issue:
 
 
 def _small_n(result: StatsResult) -> Issue | None:
+    if result.design in ("one-sample", "correlation"):
+        return _small_sample(result)
     small = [d for d in result.descriptives if d.n < SMALL_N]
     if not small:
         return None
@@ -73,17 +75,44 @@ def _small_n(result: StatsResult) -> Issue | None:
     )
 
 
+def _small_sample(result: StatsResult) -> Issue | None:
+    """``small_n`` for the designs without groups: fewer than ``SMALL_N`` values
+    (one-sample) or complete pairs (correlation), reported once."""
+    n = result.n_obs
+    if n >= SMALL_N:
+        return None
+    if result.design == "one-sample":
+        what = f"{n} {'value' if n == 1 else 'values'} of {result.x!r}"
+        unit = "values"
+    else:
+        what = (
+            f"{n} complete {'pair' if n == 1 else 'pairs'} of {result.x!r} and "
+            f"{result.y!r}"
+        )
+        unit = "pairs"
+    return Issue(
+        code="small_n",
+        severity="warning",
+        message=(
+            f"Only {what} {'was' if n == 1 else 'were'} analyzed, fewer than "
+            f"{SMALL_N}. The test and its interval are unreliable with so few {unit}."
+        ),
+        fix="Collect more data, or report the result as exploratory.",
+    )
+
+
 def _rows_dropped(result: StatsResult) -> Issue | None:
     if result.n_dropped <= 0 and result.dropped_subjects <= 0:
         return None
     parts: list[str] = []
     if result.n_dropped > 0:
         rows = "row was" if result.n_dropped == 1 else "rows were"
-        columns = (
-            f"{result.x!r} or {result.y!r}"
-            if result.subject_id is None
-            else f"{result.x!r}, {result.y!r} or {result.subject_id!r}"
-        )
+        if result.y is None:  # one-sample: a single column
+            columns = repr(result.x)
+        elif result.subject_id is None:
+            columns = f"{result.x!r} or {result.y!r}"
+        else:
+            columns = f"{result.x!r}, {result.y!r} or {result.subject_id!r}"
         parts.append(f"{result.n_dropped} {rows} left out because {columns} is missing")
     if result.dropped_subjects > 0:
         one = result.dropped_subjects == 1
@@ -158,6 +187,10 @@ def _heavy_ties(result: StatsResult) -> Issue | None:
         return None
     if result.design == "within":
         return _paired_heavy_ties(result)
+    if result.design == "one-sample":
+        return _one_sample_heavy_ties(result)
+    if result.design == "correlation":
+        return _correlation_heavy_ties(result)
     total = sum(d.n for d in result.descriptives)
     tied = result.n_tied
     distinct = total - tied
@@ -210,6 +243,54 @@ def _paired_heavy_ties(result: StatsResult) -> Issue | None:
         fix=(
             "Report the ties. If y takes only a few values (a rating or a count), "
             "say so when you report the test."
+        ),
+    )
+
+
+def _one_sample_heavy_ties(result: StatsResult) -> Issue | None:
+    """``heavy_ties`` for the one-sample signed-rank test, which ranks the sizes
+    of the nonzero x - test_value (``one_sample_tied_count``)."""
+    n, tied = result.n_obs, result.n_tied
+    if n == 0 or tied / n <= HEAVY_TIES:
+        return None
+    test_value = result.settings.test_value
+    shown = "the test value" if test_value is None else f"{test_value:g}"
+    return Issue(
+        code="heavy_ties",
+        severity="warning",
+        message=(
+            f"{tied} of the {n} values of {result.x!r} ({tied / n:.0%}) equal "
+            f"{shown} or lie as far from it as another value, so the signed-rank "
+            f"test drops the equal ones and ranks only {n - tied} distinct "
+            "distances. Its normal approximation corrects for ties, but with this "
+            "many the p-value is coarse and the ranks carry less information."
+        ),
+        fix=(
+            "Report the ties. If x takes only a few values (a rating or a count), "
+            "say so when you report the test."
+        ),
+    )
+
+
+def _correlation_heavy_ties(result: StatsResult) -> Issue | None:
+    """``heavy_ties`` for Spearman's rho, which ranks x and y separately
+    (``correlation_tied_count``: ties within x plus ties within y, of 2 n)."""
+    total, tied = 2 * result.n_obs, result.n_tied
+    if total == 0 or tied / total <= HEAVY_TIES:
+        return None
+    return Issue(
+        code="heavy_ties",
+        severity="warning",
+        message=(
+            f"{tied} of the {total} values of {result.x!r} and {result.y!r} "
+            f"({tied / total:.0%}) tie with another value of the same column, so "
+            "Spearman's rho gives many values a shared (average) rank. With this "
+            "many ties its t approximation and interval are coarse and the ranks "
+            "carry less information."
+        ),
+        fix=(
+            "Report the ties. If x or y takes only a few values (a rating or a "
+            "count), say so when you report the correlation."
         ),
     )
 
@@ -274,13 +355,22 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
     parts: list[str] = []
     if estimate_infinite:
         parts.append(f"{_named(es.label)} is infinite.")
+    one_sample = result.design == "one-sample"
     if infinite:
         total = es.bootstrap_resamples or 0
         interval = (
             f"{_percent(es.conf_level)} CI [{_bound(es.conf_low)}, "
             f"{_bound(es.conf_high)}] may be unbounded"
         )
-        if es.name == "akp_delta_avg":
+        if one_sample:
+            # The bootstrap-t test of the trimmed mean: a resample whose
+            # winsorized values are all equal has a standard error of 0.
+            parts.append(
+                f"{infinite:,} of {total:,} bootstrap resamples have a standard "
+                "error of 0 and an infinite bootstrap t, so the "
+                f"{es.label}'s {interval}."
+            )
+        elif es.name == "akp_delta_avg":
             # Counted per pair, in resamples: the most of any one pair.
             parts.append(
                 f"In up to {infinite:,} of the {total:,} bootstrap resamples a "
@@ -292,12 +382,17 @@ def _infinite_effect_size(result: StatsResult) -> Issue | None:
                 f"{infinite:,} of {total:,} bootstrap resamples give an infinite "
                 f"{es.label}, so its {interval}."
             )
+    cause = (
+        " A resample whose winsorized values are all equal has a winsorized "
+        "variance of 0."
+        if one_sample
+        else " A winsorized variance of 0 next to trimmed means that differ makes "
+        "the effect size infinite."
+    )
     return Issue(
         code="infinite_effect_size",
         severity="warning",
-        message=" ".join(parts)
-        + " A winsorized variance of 0 next to trimmed means that differ makes the "
-        "effect size infinite.",
+        message=" ".join(parts) + cause,
         fix=(
             "Report the effect size as unbounded, pass a smaller tr, or use "
             "type='nonparametric'."
@@ -330,10 +425,14 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
         f"CI [{_three(es.conf_low)}, {_three(es.conf_high)}]."
     )
     if es.bootstrap_resamples is not None:
-        between = "conditions" if result.design == "within" else "groups"
+        between = {"within": "conditions", "between": "groups"}.get(result.design)
+        larger = (
+            "resampling adds chance variation"
+            if between is None
+            else f"resampling adds chance differences between the {between}"
+        )
         shift = (
-            f"resampling adds chance differences between the {between}, so the "
-            "resampled effect sizes run larger than the estimate"
+            f"{larger}, so the resampled effect sizes run larger than the estimate"
             if es.estimate < es.conf_low
             else "the resampled effect sizes run smaller than the estimate"
         )

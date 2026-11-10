@@ -7,6 +7,8 @@ Nothing here imports matplotlib.
 from __future__ import annotations
 
 from inferplot.analyses.betweenstats import betweenstats
+from inferplot.analyses.histostats import histostats
+from inferplot.analyses.scatterstats import scatterstats
 from inferplot.analyses.withinstats import withinstats
 
-__all__ = ["betweenstats", "withinstats"]
+__all__ = ["betweenstats", "histostats", "scatterstats", "withinstats"]

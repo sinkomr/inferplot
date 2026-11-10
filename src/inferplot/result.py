@@ -14,7 +14,10 @@ and refuses any other version with a ``ValueError``.
 
 Schema versions: 1 is the field set before the version was written (JSON without
 ``schema_version``); 2 added ``schema_version`` itself,
-``effect_size.undefined_resamples``, ``dropped_subject_rows`` and ``n_tied``.
+``effect_size.undefined_resamples``, ``dropped_subject_rows`` and ``n_tied``; 3
+added ``point_labels``, ``label_var`` and ``settings.test_value``, made ``y``
+optional (None for histostats) and added the designs "one-sample" and
+"correlation".
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ if TYPE_CHECKING:
     from inferplot.check import Issue
 
 __all__ = [
+    "DESIGNS",
     "PARITY_TARGET",
     "SCHEMA_VERSION",
     "BayesFactor",
@@ -45,7 +49,9 @@ __all__ = [
     "StatsResult",
     "TestResult",
     "Texts",
+    "correlation_tied_count",
     "current_provenance",
+    "one_sample_tied_count",
     "paired_tied_count",
     "tied_count",
 ]
@@ -54,7 +60,15 @@ PARITY_TARGET: Final = "ggstatsplot 1.1.4"
 
 # The version of the JSON field set, written as the first key of to_json() and
 # to_dict(). Raise it whenever a field is added, removed, renamed or changes meaning.
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
+
+# Each design and the analysis that makes it (SPEC section 6).
+DESIGNS: Final[dict[str, str]] = {
+    "between": "betweenstats",
+    "within": "withinstats",
+    "one-sample": "histostats",
+    "correlation": "scatterstats",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -392,7 +406,14 @@ def current_provenance(*, seed: int, citations: tuple[str, ...]) -> Provenance:
 
 @dataclass(frozen=True, slots=True)
 class Settings(_Plain):
-    """The analysis settings that shaped the numbers and texts."""
+    """The analysis settings that shaped the numbers and texts.
+
+    ``test_value`` is the value histostats tests against (ggstatsplot's
+    ``test.value``); None in every other design. The pairwise settings keep their
+    defaults in the designs without pairs (histostats, scatterstats), and
+    ``alternative`` is "two-sided" in scatterstats, whose correlations are always
+    tested two-sided.
+    """
 
     conf_level: float
     digits: int
@@ -405,6 +426,7 @@ class Settings(_Plain):
     results_subtitle: bool
     seed: int
     tr: float
+    test_value: float | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -564,6 +586,27 @@ def paired_tied_count(columns: Sequence[Sequence[float]]) -> int:
     return sum(k - len(set(row)) for row in rows)
 
 
+def one_sample_tied_count(values: Sequence[float], test_value: float) -> int:
+    """The ties among what the one-sample signed-rank test ranks
+    (``StatsResult.n_tied`` of design "one-sample"): it ranks the sizes of the
+    nonzero x - test_value, so the count is the values minus the distinct nonzero
+    |x - test_value| (a value equal to test_value and each repeat of a size
+    count once), as for paired differences (D71)."""
+    sizes = {abs(v - test_value) for v in values}
+    sizes.discard(0.0)
+    return len(values) - len(sizes)
+
+
+def correlation_tied_count(x: Sequence[float], y: Sequence[float]) -> int:
+    """The ties among what Spearman's rho ranks (``StatsResult.n_tied`` of design
+    "correlation"): x and y are ranked separately, so the count is the pairs minus
+    the distinct values of x plus the pairs minus the distinct values of y, out of
+    2 n ranked values."""
+    if len(x) != len(y):
+        raise ValueError(f"x and y must pair up; got {len(x)} and {len(y)} values")
+    return (len(x) - len(set(x))) + (len(y) - len(set(y)))
+
+
 # --------------------------------------------------------------------------- #
 # the result
 # --------------------------------------------------------------------------- #
@@ -633,13 +676,34 @@ class StatsResult(_Plain):
     frequentist test: its two-group Bayes factor is in ``bayes`` and, with three or
     more groups, each pair's in ``pairwise`` (the Bayesian ANOVA and posterior
     estimates arrive in inferplot 0.2, DECISIONS.md D41).
+
+    Design "one-sample" (``histostats``): ``x`` is the analyzed column and ``y``
+    None; ``levels``, ``subjects`` and ``pairwise`` are empty; ``values`` holds one
+    tuple, the analyzed values of ``x`` in row order; ``descriptives`` holds one
+    entry whose ``level`` is the column name; ``settings.test_value`` is the value
+    tested against. ``n_obs`` counts the values, ``n_dropped`` the rows with a
+    missing ``x``, and ``n_tied`` the values minus the distinct nonzero |x -
+    test_value| (:func:`one_sample_tied_count`).
+
+    Design "correlation" (``scatterstats``): ``x`` and ``y`` are the two columns;
+    ``levels``, ``subjects``, ``descriptives`` and ``pairwise`` are empty;
+    ``values`` holds two tuples of equal length, x and y of the complete pairs in
+    row order. ``point_labels`` holds one text per pair, the ``label_var`` value
+    ("" for no label), and is empty without ``label_var``. ``n_obs`` counts the
+    complete pairs, ``n_dropped`` the rows with a missing ``x`` or ``y``, and
+    ``n_tied`` the ties within x plus those within y (:func:`correlation_tied_count`).
+
+    ``point_labels`` is the user's data, like ``values`` and ``subjects``:
+    ``to_json(include_values=False)`` leaves all three out. Every result is
+    checked on construction: a field set that does not fit its design raises
+    ``ValueError``.
     """
 
     analysis: str
     design: str
     type: str
     x: str
-    y: str
+    y: str | None
     subject_id: str | None
     levels: tuple[str, ...]
     values: tuple[tuple[float, ...], ...]
@@ -658,6 +722,14 @@ class StatsResult(_Plain):
     provenance: Provenance
     settings: Settings
     text: Texts
+    point_labels: tuple[str, ...] = ()
+    label_var: str | None = None
+
+    def __post_init__(self) -> None:
+        _Plain.__post_init__(self)
+        problem = _shape_problem(self)
+        if problem is not None:
+            raise ValueError(f"StatsResult (design {self.design!r}): {problem}")
 
     # -- export -------------------------------------------------------------- #
 
@@ -676,17 +748,19 @@ class StatsResult(_Plain):
         The first key is ``schema_version`` (:data:`SCHEMA_VERSION`), the version of
         the field set, which :meth:`from_json` checks.
 
-        ``include_values=False`` writes ``values`` and ``subjects`` as empty lists:
-        every number and text except the analyzed observations and the subject
-        labels, which can be large and are the user's data. ``save()`` embeds this
-        form in figure files; a result read back from it has ``values == ()`` and
-        ``subjects == ()`` and cannot be drawn again, but ``check()`` reports the
-        same issues (every check reads stored fields, not the observations).
+        ``include_values=False`` writes ``values``, ``subjects`` and
+        ``point_labels`` as empty lists: every number and text except the analyzed
+        observations, the subject labels and the point labels, which can be large
+        and are the user's data. ``save()`` embeds this form in figure files; a
+        result read back from it has ``values == ()``, ``subjects == ()`` and
+        ``point_labels == ()`` and cannot be drawn again, but ``check()`` reports
+        the same issues (every check reads stored fields, not the observations).
         """
         fields = cast("dict[str, object]", _encode(self))
         if not include_values:
             fields["values"] = []
             fields["subjects"] = []
+            fields["point_labels"] = []
         encoded = {"schema_version": SCHEMA_VERSION, **fields}
         return json.dumps(encoded, indent=indent, allow_nan=False, ensure_ascii=True)
 
@@ -754,11 +828,7 @@ class StatsResult(_Plain):
                 {
                     **dict.fromkeys(name for name, _ in _FRAME_COLUMNS),
                     "test": bayes.test,
-                    "label": (
-                        "Bayesian paired t-test"
-                        if self.design == "within"
-                        else "Bayesian t-test"
-                    ),
+                    "label": _BAYES_ROW_LABELS.get(self.design, "Bayesian t-test"),
                     "alternative": "two-sided",
                     "bf10": bayes.bf10,
                     "log_bf01": bayes.log_bf01,
@@ -855,6 +925,94 @@ class StatsResult(_Plain):
         if not self.pairwise:
             return self.text.apa
         return self.text.apa + "\n\n" + _pairwise_table(self)
+
+
+# The to_frame() label of a Bayes factor without a frequentist test, by design.
+_BAYES_ROW_LABELS: Final = {
+    "between": "Bayesian t-test",
+    "within": "Bayesian paired t-test",
+    "one-sample": "Bayesian one-sample t-test",
+    "correlation": "Bayesian Pearson correlation",
+}
+
+
+def _shape_problem(result: StatsResult) -> str | None:
+    """What makes ``result``'s fields unfit for its design, or None.
+
+    Every design: a known design and analysis; ``point_labels`` and
+    ``label_var`` only in design "correlation", ``test_value`` only in
+    "one-sample", ``y`` None only there. Designs "one-sample" and "correlation"
+    are checked in full (SPEC section 6): no levels, subjects or pairs, the
+    values and labels in their shape. The checks allow the copy without
+    observations (``values``, ``subjects`` and ``point_labels`` empty).
+    """
+    design, analysis = result.design, result.analysis
+    if design not in DESIGNS:
+        known = ", ".join(repr(d) for d in DESIGNS)
+        return f"unknown design; known: {known}"
+    if analysis not in DESIGNS.values():
+        known = ", ".join(repr(a) for a in DESIGNS.values())
+        return f"unknown analysis {analysis!r}; known: {known}"
+    one_sample, correlation = design == "one-sample", design == "correlation"
+    if not correlation and (result.point_labels or result.label_var is not None):
+        return "point_labels and label_var belong to design 'correlation' only"
+    if one_sample != (result.settings.test_value is not None):
+        return (
+            "settings.test_value is required in design 'one-sample' and must be None "
+            "in every other design"
+        )
+    if one_sample != (result.y is None):
+        return "y is None in design 'one-sample' and a column name in every other"
+    if not (one_sample or correlation):
+        return None
+    if analysis != DESIGNS[design]:
+        return f"comes from {DESIGNS[design]}, not {analysis}"
+    n = result.n_obs
+    empty: dict[str, tuple[object, ...]] = {
+        "levels": result.levels,
+        "subjects": result.subjects,
+        "pairwise": result.pairwise,
+    }
+    if correlation:
+        empty["descriptives"] = result.descriptives
+    for name, value in empty.items():
+        if value:
+            return f"{name} must be empty"
+    if result.subject_id is not None:
+        return "subject_id must be None"
+    if result.dropped_subjects or result.dropped_subject_rows:
+        return "dropped_subjects and dropped_subject_rows must be 0"
+    columns = 1 if one_sample else 2
+    if result.values:
+        if len(result.values) != columns:
+            return f"values must hold {columns} tuple(s), got {len(result.values)}"
+        lengths = {len(v) for v in result.values}
+        if lengths != {n}:
+            return f"every tuple of values must hold n_obs = {n} values, got {lengths}"
+    if one_sample:
+        test_value = result.settings.test_value
+        if test_value is not None and not math.isfinite(test_value):
+            return f"settings.test_value must be finite, got {test_value!r}"
+        if len(result.descriptives) != 1:
+            return f"descriptives must hold one entry, got {len(result.descriptives)}"
+        (descriptive,) = result.descriptives
+        if descriptive.level != result.x or descriptive.n != n:
+            return (
+                f"the descriptive must be of the column {result.x!r} with n = {n}; "
+                f"got {descriptive.level!r} with n = {descriptive.n}"
+            )
+        return None
+    if result.point_labels:
+        if result.label_var is None:
+            return "point_labels need label_var, the column they come from"
+        if len(result.point_labels) != n:
+            return (
+                f"point_labels must hold one text per pair (n_obs = {n}), got "
+                f"{len(result.point_labels)}"
+            )
+    if result.settings.alternative != "two-sided":
+        return "correlations are tested two-sided; settings.alternative must say so"
+    return None
 
 
 def _p_cell(p: float | None) -> str:
