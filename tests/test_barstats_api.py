@@ -636,39 +636,26 @@ def test_cell_percentages_are_shares_of_their_bar() -> None:
     assert thirds == [1 / 3 * 100] * 3
 
 
-def test_provisional_texts() -> None:
-    # PROVISIONAL (text.py): no subtitle, caption or labels yet; the APA sentence
-    # and alt text come from the result's own numbers.
+def test_texts_are_built_with_the_result() -> None:
+    # Every text against ggstatsplot's: tests/test_barstats_texts.py.
     two_way = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-am-parametric"])
     texts = two_way.text
-    assert (texts.subtitle, texts.caption) == (None, None)
-    assert (texts.tick_labels, texts.pairwise_labels, texts.centrality_labels) == (
-        (),
-        (),
-        (),
-    )
-    assert texts.apa == (
-        "Pearson's chi-square test: chi2(2) = 8.74, p = .013, Cramer's V = .46, 95% "
-        "CI [.00, .82], n = 32."
-    )
-    assert texts.alt_text == (
-        f"Counts of the 3 levels of cyl within the 2 levels of am (n = 32). {texts.apa}"
-    )
-    paired = bc.assembled(bc.BY_NAME["ggbarstats-edge_bar_paired-less-parametric"])
-    assert paired.text.apa == (
-        "McNemar's test: chi2(1) = 4.00, p = .046, Cohen's g = .25, 95% one-sided CI "
-        "[-.50, .38], n = 40 pairs."
-    )
-    assert paired.text.alt_text.startswith(
-        "Paired counts of before and after over 2 levels (n = 40 pairs). "
-    )
-    one_way = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-parametric"])
-    assert one_way.text.alt_text.startswith("Counts of the 3 levels of cyl (n = 32). ")
+    assert texts.subtitle is not None
+    assert texts.subtitle.startswith("\u03c7_Pearson^2(2) = 8.74, p = 0.01, ")
+    assert texts.caption is None  # the Bayes caption arrives in 0.2
+    assert texts.cell_labels == ("16%", "21%", "63%", "62%", "23%", "15%")
+    assert texts.bar_labels == ("p = 0.02", "p = 0.09")
+    assert texts.n_labels == ("(n = 19)", "(n = 13)")
     quiet = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-am-nosubtitle-parametric"])
-    assert quiet.text.apa == "No test was computed (results_subtitle=False), n = 32."
+    assert quiet.text.subtitle is None
+    assert quiet.text.apa.startswith(
+        "No test of independence was computed (results_subtitle=False), n = 32. "
+    )
     long_names = module._assemble(*_long_names(), digits=2)
     assert len(long_names.text.alt_text) <= 400
-    assert long_names.text.alt_text.endswith(long_names.text.apa)
+    assert long_names.text.alt_text.endswith(
+        "No test of independence was computed (results_subtitle=False), n = 4."
+    )
 
 
 def _long_names() -> tuple[Any, Any, Any]:
