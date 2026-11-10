@@ -37,6 +37,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from inferplot.stats import (
     games_howell,
@@ -672,6 +673,8 @@ def result_from_fixture(case: OracleCase) -> StatsResult:
         n_obs=n_obs,
         n_dropped=int(case.raw["dataset"]["rows"]) - n_obs,
         dropped_subjects=0,
+        dropped_subject_rows=0,
+        n_tied=tied_count(data),
         warnings=(),
         provenance=current_provenance(seed=0, citations=("Welch 1947",)),
         settings=settings,

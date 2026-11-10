@@ -61,6 +61,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from inferplot.stats.parametric import TINY
 from inferplot.stats.robust import SMM_ROWS
@@ -698,6 +699,7 @@ def _nonparametric(
             sidedness=epsilon.sidedness,
             bootstrap_resamples=epsilon.resamples,
             bootstrap_seed=epsilon.seed,
+            undefined_resamples=epsilon.undefined_resamples,
             infinite_resamples=epsilon.infinite_resamples,
         )
         pairwise = _dunn_pairs(levels, values, args)
@@ -968,6 +970,7 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
                 sidedness=akp.sidedness,
                 bootstrap_resamples=akp.resamples,
                 bootstrap_seed=akp.seed,
+                undefined_resamples=akp.undefined_resamples,
                 infinite_resamples=akp.infinite_resamples,
             )
             citations = [_YUEN_1974, _AKP_2005, _EFRON_TIBSHIRANI_1993]
@@ -998,6 +1001,7 @@ def _robust(levels: Sequence[str], values: Sequence[FloatArray], args: _Args) ->
                 sidedness=xi.sidedness,
                 bootstrap_resamples=xi.resamples,
                 bootstrap_seed=xi.seed,
+                undefined_resamples=xi.undefined_resamples,
                 infinite_resamples=xi.infinite_resamples,
             )
             pairwise = _lincon_pairs(levels, values, args)
@@ -1597,6 +1601,7 @@ def betweenstats(
         n_obs=between.n_obs,
         settings=settings,
     )
+    observations = tuple(tuple(float(v) for v in arr.tolist()) for arr in values)
     return StatsResult(
         analysis="betweenstats",
         design="between",
@@ -1605,7 +1610,7 @@ def betweenstats(
         y=y,
         subject_id=None,
         levels=levels,
-        values=tuple(tuple(float(v) for v in arr.tolist()) for arr in values),
+        values=observations,
         subjects=(),
         descriptives=descriptives,
         test=parts.test,
@@ -1615,6 +1620,8 @@ def betweenstats(
         n_obs=between.n_obs,
         n_dropped=between.n_dropped,
         dropped_subjects=0,
+        dropped_subject_rows=0,
+        n_tied=tied_count(observations),
         warnings=tuple(warnings),
         provenance=current_provenance(seed=rng_seed, citations=parts.citations),
         settings=settings,

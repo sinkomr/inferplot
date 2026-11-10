@@ -7,8 +7,14 @@ prints and serializes cleanly.
 
 JSON (:meth:`StatsResult.to_json`) is strict JSON: infinite values are written as
 the strings "Inf" and "-Inf" and NaN as null, never as the ``Infinity`` or ``NaN``
-literals Python's ``json`` module writes by default. :meth:`StatsResult.from_json`
-reads it back into an equal result.
+literals Python's ``json`` module writes by default. Its first key is
+``schema_version`` (:data:`SCHEMA_VERSION`), the version of the field set;
+:meth:`StatsResult.from_json` reads JSON of this version back into an equal result
+and refuses any other version with a ``ValueError``.
+
+Schema versions: 1 is the field set before the version was written (JSON without
+``schema_version``); 2 added ``schema_version`` itself,
+``effect_size.undefined_resamples``, ``dropped_subject_rows`` and ``n_tied``.
 """
 
 from __future__ import annotations
@@ -20,7 +26,7 @@ import json
 import math
 import types
 import typing
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypeVar, Union, cast
 
@@ -29,6 +35,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PARITY_TARGET",
+    "SCHEMA_VERSION",
     "BayesFactor",
     "Descriptive",
     "EffectSize",
@@ -39,9 +46,14 @@ __all__ = [
     "TestResult",
     "Texts",
     "current_provenance",
+    "tied_count",
 ]
 
 PARITY_TARGET: Final = "ggstatsplot 1.1.4"
+
+# The version of the JSON field set, written as the first key of to_json() and
+# to_dict(). Raise it whenever a field is added, removed, renamed or changes meaning.
+SCHEMA_VERSION: Final = 2
 
 
 # --------------------------------------------------------------------------- #
@@ -184,16 +196,23 @@ class TestResult(_Plain):
 
 @dataclass(frozen=True, slots=True)
 class EffectSize(_Plain):
-    """The effect size and its CI; ``sidedness`` "greater" means [low, max].
+    """The effect size and its CI.
+
+    ``sidedness`` says which interval ``conf_low`` and ``conf_high`` are:
+    "two-sided"; "greater", a one-sided [low, max] interval (max is 1 for bounded
+    effect sizes, Inf otherwise); "less", a one-sided [min, high] interval.
 
     A bootstrap CI (``ci_method`` "percentile bootstrap") records its number of
-    resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``, and
+    resamples and its seed in ``bootstrap_resamples`` and ``bootstrap_seed``; in
+    ``undefined_resamples`` how many resamples had no effect size and were left
+    out (rank epsilon squared when every value of a resample is tied, D54), so the
+    interval comes from ``bootstrap_resamples - undefined_resamples`` values; and
     in ``infinite_resamples`` how many resamples gave an infinite effect size (the
     AKP and explanatory effect sizes when a resample's winsorized variance is 0;
-    kept, so a bound can be infinite); all three are None for a CI
-    without resampling. With unequal group sizes the explanatory effect size's
-    estimate is itself the median of the bootstrap values, so it depends on the
-    seed too.
+    kept, so a bound can be infinite). All four are None for a CI without
+    resampling, and a bootstrap CI must give the two counts. With unequal group
+    sizes the explanatory effect size's estimate is itself the median of the
+    bootstrap values, so it depends on the seed too.
     """
 
     name: str
@@ -206,7 +225,26 @@ class EffectSize(_Plain):
     sidedness: str
     bootstrap_resamples: int | None = None
     bootstrap_seed: int | None = None
+    undefined_resamples: int | None = None
     infinite_resamples: int | None = None
+
+    def __post_init__(self) -> None:
+        _Plain.__post_init__(self)
+        counts = (self.undefined_resamples, self.infinite_resamples)
+        if self.bootstrap_resamples is None:
+            if any(count is not None for count in counts):
+                raise ValueError(
+                    "EffectSize: undefined_resamples and infinite_resamples are "
+                    "counts of bootstrap resamples; give bootstrap_resamples too, or "
+                    "leave all three None for an interval without resampling"
+                )
+        elif any(count is None for count in counts):
+            raise ValueError(
+                "EffectSize: a bootstrap interval must record undefined_resamples "
+                "and infinite_resamples (0 when there are none), so that "
+                "bootstrap_resamples - undefined_resamples is the number of values "
+                "the interval comes from"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,6 +460,39 @@ def _from_mapping(cls: type[_T], value: object, where: str) -> _T:
     return cls(**kwargs)
 
 
+def _check_schema_version(data: Mapping[str, object]) -> None:
+    """Refuse a result whose field set is not this version's (SCHEMA_VERSION)."""
+    rerun = (
+        "Results cannot be converted between schema versions: compute the result "
+        "again with this version of inferplot (the analysis call, or the figure "
+        "file's script)."
+    )
+    if "schema_version" not in data:
+        raise ValueError(
+            "This result has no schema_version, so it was written by an inferplot "
+            f"that used schema version 1; this inferplot reads schema version "
+            f"{SCHEMA_VERSION} only. {rerun}"
+        )
+    version = data["schema_version"]
+    if type(version) is not int or version != SCHEMA_VERSION:
+        raise ValueError(
+            f"This result has schema_version {version!r}; this inferplot reads "
+            f"schema version {SCHEMA_VERSION} only. {rerun}"
+        )
+
+
+def tied_count(values: Iterable[Iterable[float]]) -> int:
+    """The tied values among ``values`` (every level pooled): their number minus
+    the number of distinct ones (``StatsResult.n_tied``; DECISIONS.md D47)."""
+    total = 0
+    distinct: set[float] = set()
+    for level in values:
+        for value in level:
+            total += 1
+            distinct.add(value)
+    return total - len(distinct)
+
+
 # --------------------------------------------------------------------------- #
 # the result
 # --------------------------------------------------------------------------- #
@@ -444,6 +515,7 @@ _FRAME_COLUMNS: Final = (
     ("conf_level", "float"),
     ("conf_low", "float"),
     ("conf_high", "float"),
+    ("ci_sidedness", "str"),
     ("bf10", "float"),
     ("log_bf01", "float"),
     ("significant", "bool"),
@@ -467,8 +539,17 @@ class StatsResult(_Plain):
     ``dropped_subjects`` counts the subjects left out because they lack a value at
     some level; ``n_obs`` is the number of complete subjects (ggstatsplot's
     ``n.obs``, printed as the number of pairs), and ``n_dropped`` counts rows
-    dropped for a missing ``x``, ``y`` or ``subject_id``. Design "between" has
-    ``subject_id`` None and ``subjects`` empty.
+    dropped for a missing ``x``, ``y`` or ``subject_id``. ``dropped_subject_rows``
+    counts the rows, complete in themselves, that belong to the dropped subjects,
+    so the rows read are ``n_obs * len(levels) + n_dropped +
+    dropped_subject_rows``. Design "between" has ``subject_id`` None,
+    ``subjects`` empty and ``dropped_subjects`` and ``dropped_subject_rows`` 0;
+    its rows read are ``n_obs + n_dropped``.
+
+    ``n_tied`` counts the tied analyzed values: all of them (every level pooled)
+    minus the number of distinct ones. It is stored with the result, not derived
+    from ``values``, so ``check()`` gives the same answer on the copy without
+    values that ``save()`` embeds (``heavy_ties``, SPEC section 8).
 
     ``test`` and ``effect_size`` are None for type "bayes", which has no
     frequentist test: its two-group Bayes factor is in ``bayes`` and, with three or
@@ -493,6 +574,8 @@ class StatsResult(_Plain):
     n_obs: int
     n_dropped: int
     dropped_subjects: int
+    dropped_subject_rows: int
+    n_tied: int
     warnings: tuple[str, ...]
     provenance: Provenance
     settings: Settings
@@ -501,32 +584,55 @@ class StatsResult(_Plain):
     # -- export -------------------------------------------------------------- #
 
     def to_dict(self) -> dict[str, Any]:
-        """Nested dicts and lists; floats stay floats (``inf`` and ``nan`` kept)."""
-        return cast("dict[str, Any]", _to_dict(self))
+        """Nested dicts and lists; floats stay floats (``inf`` and ``nan`` kept).
+
+        The first key is ``schema_version`` (:data:`SCHEMA_VERSION`), then the
+        fields in order.
+        """
+        fields = cast("dict[str, Any]", _to_dict(self))
+        return {"schema_version": SCHEMA_VERSION, **fields}
 
     def to_json(self, indent: int | None = 2, *, include_values: bool = True) -> str:
         """Strict, ASCII-only JSON: inf as "Inf", -inf as "-Inf", nan as null.
+
+        The first key is ``schema_version`` (:data:`SCHEMA_VERSION`), the version of
+        the field set, which :meth:`from_json` checks.
 
         ``include_values=False`` writes ``values`` and ``subjects`` as empty lists:
         every number and text except the analyzed observations and the subject
         labels, which can be large and are the user's data. ``save()`` embeds this
         form in figure files; a result read back from it has ``values == ()`` and
-        ``subjects == ()`` and cannot be drawn again.
+        ``subjects == ()`` and cannot be drawn again, but ``check()`` reports the
+        same issues (every check reads stored fields, not the observations).
         """
-        encoded = _encode(self)
+        fields = cast("dict[str, object]", _encode(self))
         if not include_values:
-            cast("dict[str, object]", encoded)["values"] = []
-            cast("dict[str, object]", encoded)["subjects"] = []
+            fields["values"] = []
+            fields["subjects"] = []
+        encoded = {"schema_version": SCHEMA_VERSION, **fields}
         return json.dumps(encoded, indent=indent, allow_nan=False, ensure_ascii=True)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> StatsResult:
-        """Rebuild a result from :meth:`to_dict` or parsed :meth:`to_json` output."""
-        return _from_mapping(cls, data, "result")
+        """Rebuild a result from :meth:`to_dict` or parsed :meth:`to_json` output.
+
+        Raises ``ValueError`` when ``schema_version`` is missing (a result written
+        by an inferplot before version 2 of the field set) or is not
+        :data:`SCHEMA_VERSION`: such a result has to be computed again.
+        """
+        if not isinstance(cast("object", data), Mapping):
+            raise TypeError(f"result: expected an object, got {data!r}")
+        _check_schema_version(data)
+        fields = {key: value for key, value in data.items() if key != "schema_version"}
+        return _from_mapping(cls, fields, "result")
 
     @classmethod
     def from_json(cls, text: str) -> StatsResult:
-        """Rebuild a result from :meth:`to_json` output ("Inf" becomes inf again)."""
+        """Rebuild a result from :meth:`to_json` output ("Inf" becomes inf again).
+
+        Also reads the copy ``fig.save()`` embeds in a figure file. Raises
+        ``ValueError`` for JSON of another schema version (see :meth:`from_dict`).
+        """
         return cls.from_dict(json.loads(text))
 
     def frame_rows(self) -> list[dict[str, Any]]:
@@ -558,6 +664,7 @@ class StatsResult(_Plain):
                     "conf_level": None if es is None else es.conf_level,
                     "conf_low": None if es is None else es.conf_low,
                     "conf_high": None if es is None else es.conf_high,
+                    "ci_sidedness": None if es is None else es.sidedness,
                     "bf10": None if bayes is None else bayes.bf10,
                     "log_bf01": None if bayes is None else bayes.log_bf01,
                     "significant": None,
@@ -595,6 +702,8 @@ class StatsResult(_Plain):
                     "conf_level": pair.conf_level,
                     "conf_low": pair.conf_low,
                     "conf_high": pair.conf_high,
+                    # Pairwise intervals (lincon) are two-sided.
+                    "ci_sidedness": None if pair.conf_low is None else "two-sided",
                     "bf10": None if pair.bayes is None else pair.bayes.bf10,
                     "log_bf01": None if pair.bayes is None else pair.bayes.log_bf01,
                     "significant": pair.significant,
@@ -605,6 +714,11 @@ class StatsResult(_Plain):
 
     def to_frame(self, backend: Literal["pandas", "polars"] = "pandas") -> Any:
         """One row per test: the main test first, then each pair.
+
+        ``alternative`` is the test's hypothesis; ``ci_sidedness`` is the interval's
+        own sidedness (``EffectSize.sidedness`` on the main row, "two-sided" for a
+        pair's interval, null without an interval): a two-sided test can carry a
+        one-sided interval, such as partial omega squared's [low, 1].
 
         Missing values are nulls (pandas: NaN in float columns, None in text
         columns, ``<NA>`` in the nullable boolean columns).

@@ -175,6 +175,30 @@ def test_heavy_ties_check() -> None:
     assert "heavy_ties" not in _codes(betweenstats(distinct, "g", "y", type="np"))
 
 
+def test_undefined_resamples_are_in_the_result() -> None:
+    # Three groups of three on two values: some resamples tie every value, where
+    # rank epsilon squared is undefined; they are left out of the interval (D54).
+    data = frame({"a": [1.0, 1, 2], "b": [1.0, 2, 2], "c": [1.0, 1, 2]})
+    result = betweenstats(data, "g", "y", type="np")
+    es = result.effect_size
+    assert es.bootstrap_resamples == stats.BOOTSTRAP_RESAMPLES
+    assert es.undefined_resamples is not None
+    assert 0 < es.undefined_resamples < es.bootstrap_resamples
+    used = es.bootstrap_resamples - es.undefined_resamples
+    (note,) = [w for w in result.warnings if "resamples" in w]
+    assert f"{es.undefined_resamples:,} of {es.bootstrap_resamples:,}" in note
+    assert f"{used:,}" in note
+    assert StatsResult.from_json(result.to_json()).effect_size == es
+    # Every bootstrap interval records the count; analytic ones do not.
+    a = [1.3, 2.1, 3.7, 4.2, 5.9, 6.4, 2.8]
+    plain = frame({"a": a, "b": [2.2, 4.8, 6.1, 8.5, 10.3, 11.1, 7.7]})
+    counts = {
+        kind: betweenstats(plain, "g", "y", type=kind).effect_size.undefined_resamples
+        for kind in ("r", "np", "p")
+    }
+    assert counts == {"r": 0, "np": None, "p": None}
+
+
 def test_nonparametric_row_order_and_relabelling(plants: pd.DataFrame) -> None:
     base = betweenstats(plants, "group", "weight", type="np")
     shuffled = plants.sample(frac=1.0, random_state=3).reset_index(drop=True)

@@ -85,10 +85,13 @@ def _rows_dropped(result: StatsResult) -> Issue | None:
         parts.append(f"{result.n_dropped} {rows} left out because {columns} is missing")
     if result.dropped_subjects > 0:
         one = result.dropped_subjects == 1
+        rows = result.dropped_subject_rows
+        their_rows = f" ({rows} {'row' if rows == 1 else 'rows'})" if rows else ""
         parts.append(
-            f"{result.dropped_subjects} {'subject was' if one else 'subjects were'} "
-            f"left out because {'it lacks' if one else 'they lack'} a value at some "
-            f"level of {result.x!r}"
+            f"{result.dropped_subjects} {'subject' if one else 'subjects'}"
+            f"{their_rows} {'was' if one else 'were'} left out because "
+            f"{'it lacks' if one else 'they lack'} a value at some level of "
+            f"{result.x!r}"
         )
     return Issue(
         code="rows_dropped",

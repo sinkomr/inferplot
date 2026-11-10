@@ -16,11 +16,14 @@ from inferplot import text as tx
 from inferplot.check import SMALL_N, Issue, result_issues
 from inferplot.result import (
     PARITY_TARGET,
+    SCHEMA_VERSION,
     Descriptive,
+    EffectSize,
     PairwiseComparison,
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from tests.oracle_fixtures import OracleCase, load_cases
 from tests.test_text_expressions import result_from_fixture
@@ -259,6 +262,75 @@ def test_from_dict_rejects_bad_input(anova: StatsResult) -> None:
         StatsResult.from_dict(data)
 
 
+def test_schema_version_is_the_first_key(anova: StatsResult) -> None:
+    assert SCHEMA_VERSION == 2
+    for text in (anova.to_json(), anova.to_json(indent=None, include_values=False)):
+        data = _strict_loads(text)
+        assert next(iter(data)) == "schema_version"
+        assert data["schema_version"] == 2
+    assert next(iter(anova.to_dict())) == "schema_version"
+    assert anova.to_dict()["schema_version"] == 2
+    # Not a field of the result: it describes the JSON, not the analysis.
+    assert "schema_version" not in {f.name for f in dataclasses.fields(anova)}
+
+
+def test_from_json_refuses_another_schema_version(anova: StatsResult) -> None:
+    rerun = "compute the result again with this version of inferplot"
+    # A result written before the version existed (schema version 1).
+    data = anova.to_dict()
+    del data["schema_version"]
+    with pytest.raises(ValueError, match="no schema_version") as info:
+        StatsResult.from_dict(data)
+    assert type(info.value) is ValueError
+    message = str(info.value)
+    assert "schema version 1" in message
+    assert "schema version 2 only" in message
+    assert rerun in message
+    # JSON from a newer (or older, versioned) inferplot.
+    for other in (1, 3, "2", 2.0, None):
+        data = json.loads(anova.to_json())
+        data["schema_version"] = other
+        with pytest.raises(ValueError, match="has schema_version") as info:
+            StatsResult.from_json(json.dumps(data))
+        assert type(info.value) is ValueError
+        assert f"schema_version {other!r}" in str(info.value)
+        assert "schema version 2 only" in str(info.value)
+        assert rerun in str(info.value)
+
+
+def test_effect_size_resample_counts_go_together() -> None:
+    base = {
+        "name": "rank_epsilon_squared",
+        "label": "rank epsilon squared",
+        "estimate": 0.2,
+        "conf_level": 0.95,
+        "conf_low": 0.1,
+        "conf_high": 1.0,
+        "ci_method": "percentile bootstrap",
+        "sidedness": "greater",
+    }
+    full = EffectSize(
+        **base,
+        bootstrap_resamples=2000,
+        bootstrap_seed=0,
+        undefined_resamples=13,
+        infinite_resamples=0,
+    )
+    assert full.undefined_resamples == 13
+    assert EffectSize(**base).undefined_resamples is None
+    with pytest.raises(ValueError, match="must record undefined_resamples"):
+        EffectSize(**base, bootstrap_resamples=2000, bootstrap_seed=0)
+    with pytest.raises(ValueError, match="give bootstrap_resamples too"):
+        EffectSize(**base, undefined_resamples=0)
+    # JSON key order follows SPEC section 6.
+    keys = _field_names(full)
+    assert keys.index("undefined_resamples") == keys.index("infinite_resamples") - 1
+
+
+def _field_names(value: object) -> list[str]:
+    return [f.name for f in dataclasses.fields(value)]  # type: ignore[arg-type]
+
+
 def test_json_holds_every_text(anova: StatsResult) -> None:
     data = _strict_loads(anova.to_json())
     assert data["text"]["apa"] == anova.text.apa
@@ -312,6 +384,32 @@ def test_to_frame_backends_agree(one_sided: StatsResult) -> None:
     assert list(pd_frame.columns) == pl_frame.columns
     assert pd_frame["conf_high"].iloc[0] == pl_frame["conf_high"][0] == math.inf
     assert pd_frame["bf10"].iloc[0] == pl_frame["bf10"][0] == one_sided.bayes.bf10  # type: ignore[union-attr]
+
+
+def test_to_frame_says_which_intervals_are_one_sided(
+    anova: StatsResult, one_sided: StatsResult
+) -> None:
+    # Welch's ANOVA is a two-sided test whose omega squared interval is [low, 1].
+    frame = anova.to_frame()
+    assert list(frame.columns).index("ci_sidedness") == (
+        list(frame.columns).index("conf_high") + 1
+    )
+    assert frame["alternative"].iloc[0] == "two-sided"
+    assert frame["ci_sidedness"].iloc[0] == "greater"
+    assert frame["conf_high"].iloc[0] == 1.0
+    # Games-Howell pairs have no interval.
+    assert frame["ci_sidedness"].iloc[1:].isna().all()
+    assert one_sided.to_frame("polars")["ci_sidedness"].to_list() == ["greater"]
+    two_sided = result_from_fixture(_case("ToothGrowth-parametric"))
+    assert two_sided.to_frame()["ci_sidedness"].to_list() == ["two-sided"]
+
+
+def test_tied_count() -> None:
+    assert tied_count(()) == 0
+    assert tied_count(((1.0, 2.0), (3.0,))) == 0
+    # Values beyond the first of each distinct value, every level pooled.
+    assert tied_count(((1.0, 1.0, 2.0), (2.0, 2.0, 3.0))) == 3
+    assert tied_count(((0.0,), (-0.0,))) == 1
 
 
 def test_to_frame_rejects_unknown_backend(anova: StatsResult) -> None:

@@ -52,6 +52,7 @@ from inferplot.result import (
     StatsResult,
     TestResult,
     current_provenance,
+    tied_count,
 )
 from inferplot.text import build_texts, r_number_text
 
@@ -709,6 +710,7 @@ def _assemble(
         n_obs=n_subjects,
         settings=settings,
     )
+    observations = tuple(tuple(float(v) for v in col.tolist()) for col in columns)
     return StatsResult(
         analysis="withinstats",
         design="within",
@@ -717,7 +719,7 @@ def _assemble(
         y=data.y,
         subject_id=data.subject_id,
         levels=data.levels,
-        values=tuple(tuple(float(v) for v in col.tolist()) for col in columns),
+        values=observations,
         subjects=data.subjects,
         descriptives=descriptives,
         test=parts.test,
@@ -727,6 +729,8 @@ def _assemble(
         n_obs=n_subjects,
         n_dropped=data.n_dropped,
         dropped_subjects=len(data.dropped_subjects),
+        dropped_subject_rows=data.n_rows_of_dropped_subjects,
+        n_tied=tied_count(observations),
         warnings=(*_data_warnings(data), *parts.warnings),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
