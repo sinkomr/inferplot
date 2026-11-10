@@ -55,6 +55,8 @@ from inferplot.render.figure import (
     StatsFigure,
     Subsample,
     describe_text,
+    plain_text,
+    remember,
     root_figure,
 )
 from inferplot.result import StatsResult
@@ -557,9 +559,9 @@ class Drawing:
 
     def role(self, text: Text, name: str, plain: str | None = None) -> Text:
         """Record what ``text`` is (and its plain wording) for check() messages."""
-        self.roles[id(text)] = describe_text(
-            name, text.get_text() if plain is None else plain
-        )
+        described = describe_text(name, plain_text(text) if plain is None else plain)
+        self.roles[id(text)] = described
+        remember(text, described)
         return text
 
     # -- hooks -------------------------------------------------------------------

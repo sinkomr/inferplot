@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
+import weakref
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.text import Text
 
 from inferplot.render import theme
 
@@ -17,12 +21,20 @@ if TYPE_CHECKING:
     from matplotlib.collections import LineCollection
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
-    from matplotlib.text import Text
 
     from inferplot.check import Issue
     from inferplot.result import StatsResult
 
-__all__ = ["DrawnPaths", "StatsFigure", "Subsample", "describe_text", "root_figure"]
+__all__ = [
+    "DrawnPaths",
+    "StatsFigure",
+    "Subsample",
+    "describe_text",
+    "drawn_before",
+    "plain_text",
+    "remember",
+    "root_figure",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,8 +159,9 @@ class StatsFigure:
         "Description", the PDF "Subject". ``dpi`` is at most 2,400, and a PNG at
         most 100 million pixels.
 
-        The figure is not pyplot's, so ``plt.savefig()`` after an inferplot call
-        writes pyplot's own, empty figure. Save with ``fig.save(path)``; the
+        The figure is not pyplot's current figure, so saving with pyplot after an
+        inferplot call writes pyplot's own, empty figure. Save with
+        ``fig.save(path)``; the
         figure's own ``fig.figure.savefig(path)`` also works, but writes text as
         paths and embeds no result.
         """
@@ -176,8 +189,16 @@ class StatsFigure:
         return self._own
 
     def describe(self, text: Text) -> str | None:
-        """What a text inferplot drew is, in words; None for other texts."""
-        return self._roles.get(id(text))
+        """What a text inferplot drew is, in words; None for other texts.
+
+        A text an earlier inferplot drawing left in the same figure is named as
+        such.
+        """
+        own = self._roles.get(id(text))
+        if own is not None:
+            return own
+        before = drawn_before(text)
+        return None if before is None else f"{before} of another inferplot drawing"
 
     @property
     def inside(self) -> tuple[Text, ...]:
@@ -202,6 +223,57 @@ class StatsFigure:
                 _draw(root)
         else:
             _draw(root)
+
+
+# What each text inferplot drew is, in words, for every drawing: a figure's check
+# names the texts an earlier drawing into the same Axes left there. Weak keys, so
+# a text removed from its figure is forgotten.
+_DRAWN: weakref.WeakKeyDictionary[Text, str] = weakref.WeakKeyDictionary()
+
+
+def remember(text: Text, described: str) -> None:
+    """Record what a text inferplot drew is, for later drawings' checks."""
+    _DRAWN[text] = described
+
+
+def drawn_before(text: Text) -> str | None:
+    """What an inferplot text of any drawing is, in words; None for other texts."""
+    return _DRAWN.get(text)
+
+
+_DOLLAR: Final = re.compile(r"(?<!\\)\$")
+
+
+def plain_text(text: Text) -> str:
+    """A text as it reads on the figure, without mathtext source.
+
+    Math segments (between two unescaped dollar signs) become the characters
+    mathtext draws for them, left to right and without accents
+    (``$\\hat{\\mu}_{a}$`` reads "μa"); the rest is kept, with ``\\$`` read as a
+    dollar sign.
+    """
+    shown = text.get_text()
+    marks = [m.start() for m in _DOLLAR.finditer(shown)]
+    if not text.get_parse_math() or len(marks) < 2:
+        return shown.replace("\\$", "$")
+    from matplotlib.mathtext import MathTextParser
+
+    parser = MathTextParser("path")
+    out: list[str] = []
+    start = 0
+    for a, b in zip(marks[0::2], marks[1::2], strict=False):
+        out.append(shown[start:a].replace("\\$", "$"))
+        try:
+            parsed = parser.parse(shown[a : b + 1], 72, text.get_fontproperties())
+            # (font, size, code point, glyph index, x, y); accents are left out.
+            glyphs = sorted(parsed.glyphs, key=lambda g: (float(g[4]), -float(g[5])))
+            chars = (chr(int(g[2])) for g in glyphs)
+            out.append("".join(c for c in chars if not unicodedata.combining(c)))
+        except ValueError:
+            out.append("(a math expression)")
+        start = b + 1
+    out.append(shown[start:].replace("\\$", "$"))
+    return "".join(out)
 
 
 def describe_text(role: str, shown: str, *, limit: int = 40) -> str:

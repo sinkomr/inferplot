@@ -35,7 +35,7 @@ from matplotlib.transforms import Bbox, BboxBase
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
-from inferplot.render.figure import describe_text, root_figure
+from inferplot.render.figure import describe_text, plain_text, root_figure
 from inferplot.render.view_checks import view_issues
 
 if TYPE_CHECKING:
@@ -122,7 +122,7 @@ def text_extents(fig: StatsFigure) -> list[tuple[Text, str, Bbox]]:
         if patch is not None:
             box = Bbox.union([box, patch.get_window_extent(renderer)])
         described = fig.describe(text) or describe_text(
-            roles.get(id(text), "text"), text.get_text()
+            roles.get(id(text), "text"), plain_text(text)
         )
         out.append((text, described, box))
     return out

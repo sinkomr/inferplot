@@ -46,3 +46,23 @@ def test_inverted_or_rescaled_axis_is_reported(change: str, words: str) -> None:
     assert message is not None
     assert words in message
     assert "ax." in message  # says how to undo it
+
+
+def test_no_check_message_quotes_mathtext_source() -> None:
+    # Two renders into one Axes: the second figure's check names the first's texts.
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    figure = Figure(figsize=(6, 5))
+    FigureCanvasAgg(figure)
+    ax = figure.add_subplot()
+    ax.text(0.5, 0.5, r"user's $\alpha$ note", transform=ax.transAxes)
+    betweenstats(_three(), ax=ax)
+    second = betweenstats(_three(), ax=ax)
+    issues = [i for i in second.check() if i.code in ("label_overlap", "text_clipped")]
+    assert issues
+    for issue in issues:
+        assert "$" not in issue.message, issue.message
+        assert "\\" not in issue.message, issue.message
+    words = " ".join(i.message for i in issues)
+    assert "centrality label of 'a'" in words  # the first render's, in plain words
