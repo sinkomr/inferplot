@@ -654,6 +654,7 @@ def _assemble(data: OneData, args: _Args, parts: _Parts, *, digits: int) -> Stat
         n_obs=data.n_obs,
         settings=settings,
         design="one-sample",
+        values=(observed,),
     )
     return StatsResult(
         analysis="histostats",

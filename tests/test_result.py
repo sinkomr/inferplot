@@ -924,28 +924,43 @@ def test_heavy_ties_of_the_new_designs(
     assert "heavy_ties" not in [i.code for i in parametric.check()]
 
 
-def test_provisional_texts_of_the_new_designs(
+def test_texts_of_the_new_designs(
     one_sample: StatsResult, correlation: StatsResult
 ) -> None:
-    # PROVISIONAL (text.py): no subtitle, caption or labels until the texts are
-    # compared with ggstatsplot's; a plain sentence from the result's numbers.
+    # ggstatsplot's subtitle and caption, one centrality label for histostats, no
+    # tick or pairwise labels; tests/test_no_level_texts.py checks every fixture.
     for result in (one_sample, correlation):
         texts = result.text
-        assert (texts.subtitle, texts.caption) == (None, None)
-        assert texts.centrality_labels == texts.tick_labels == ()
-        assert texts.pairwise_labels == ()
+        assert texts.tick_labels == texts.pairwise_labels == ()
         assert texts.alt_text.endswith(texts.apa)
         assert str(result) == texts.apa
-    assert one_sample.text.apa.startswith("One-sample t-test against 10: t(9) = ")
-    assert one_sample.text.alt_text.startswith(
-        "Values of value (n = 10, mean 11.02) tested against 10. One-sample t-test"
+    texts = one_sample.text
+    assert texts.subtitle == (
+        "t_Student(9) = 2.22, p = 0.05, g_Hedges = 0.64, CI_95% [-9.17e-03, 1.27], "
+        "n_obs = 10"
     )
-    assert correlation.text.apa == (
+    assert texts.caption == "log_e(BF_01) = -0.52, r_Cauchy^JZS = 0.71"
+    assert texts.centrality_labels == ("\u03bc_mean = 11.02",)
+    assert texts.apa.startswith("One-sample t-test against 10: t(9) = ")
+    assert texts.alt_text.startswith(
+        "Histogram of value (10 values, from 8.90 to 13.20). A vertical line marks "
+        "the mean, 11.02. One-sample t-test"
+    )
+    texts = correlation.text
+    assert texts.subtitle == (
+        "t_Student(30) = -9.56, p = 1.29e-10, r_Pearson = -0.87, CI_95% [-0.93, "
+        "-0.74], n_pairs = 32"
+    )
+    assert texts.caption == "log_e(BF_01) = -17.84, r_beta^JZS = 1.41"
+    assert texts.centrality_labels == ()
+    assert texts.apa == (
         "Pearson correlation: t(30) = -9.56, p < .001, Pearson's r = -.87, "
         "95% CI [-.93, -.74], n = 32 pairs."
     )
-    assert correlation.text.alt_text == (
-        "Correlation of mpg with wt over 32 complete pairs. " + correlation.text.apa
+    assert texts.alt_text == (
+        "Scatter plot of mpg against wt (32 pairs): mpg tends to fall as wt rises. "
+        "It also shows a least-squares line with its 95% confidence band, marginal "
+        "histograms of wt and mpg, and labels from model on every point. " + texts.apa
     )
 
 
@@ -966,13 +981,13 @@ def _rebuilt(result: StatsResult, **changes: Any) -> Any:
     return tx.build_texts(**{**parts, **changes})
 
 
-def test_provisional_sentences_name_direction_and_bayes(
+def test_sentences_name_direction_and_bayes(
     one_sample: StatsResult, correlation: StatsResult
 ) -> None:
     assert one_sample.test is not None
     less = dataclasses.replace(one_sample.test, alternative="less")
     assert _rebuilt(one_sample, test=less).apa.startswith(
-        "One-sample t-test (one-sided: less than 10): t(9) = "
+        "One-sample t-test (one-sided: value less than 10): t(9) = "
     )
     bayes = _bayes_factor()
     one = _rebuilt(one_sample, test=None, effect_size=None, bayes=bayes)
@@ -982,7 +997,7 @@ def test_provisional_sentences_name_direction_and_bayes(
     )
     pair = _rebuilt(correlation, test=None, effect_size=None, bayes=bayes)
     assert pair.apa == (
-        "Bayesian Pearson correlation (stretched beta prior, r = 0.71): BF10 = "
+        "Bayesian Pearson correlation (stretched beta prior, r_beta = 0.71): BF10 = "
         "3.00, log(BF01) = -1.10, n = 32 pairs."
     )
     none = _rebuilt(correlation, test=None, effect_size=None, bayes=None)
