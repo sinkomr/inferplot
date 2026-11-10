@@ -16,11 +16,16 @@ What it does for ``betweenstats`` (``read_between``):
   null and NaN (R's ``is.na()`` is true for NaN).
 * An infinite ``y`` in a row that is otherwise complete raises ``ValueError``.
 * Level order: the declared category order (pandas Categorical, polars Enum, pyarrow
-  dictionary), otherwise the sorted unique values (numbers numerically, text as
-  Python's ``sorted()``, which is R's C-locale order). A polars ``Categorical`` has no
-  stable declared order across polars versions, so it is treated as text.
+  dictionary marked ordered), otherwise the sorted unique values (numbers
+  numerically, text as Python's ``sorted()``, which is R's C-locale order). A polars
+  ``Categorical`` has no stable declared order across polars versions, so it is
+  treated as text. A pyarrow dictionary not marked ordered lists values as they
+  first appear in the rows, so it is read as its values (``dictionary_order`` keeps
+  its order when that differs, for the result's warnings).
 * Declared levels left without rows are dropped and reported (``empty_levels``);
-  ggstatsplot does the same with ``droplevels()``.
+  ggstatsplot does the same with ``droplevels()``. Other levels whose rows all miss
+  ``y`` are reported too (``vanished_levels``), and so are levels that differ only
+  in surrounding whitespace (``lookalike_levels``); ``data_notes`` words them.
 * Labels are the names R gives factor levels: whole numbers without ``.0``.
 * ``order=`` must be a permutation of the levels present.
 
@@ -33,6 +38,7 @@ subject column's order (see ``read_within``).
 
 from __future__ import annotations
 
+import contextlib
 import difflib
 import math
 import numbers
@@ -48,6 +54,7 @@ __all__ = [
     "BetweenData",
     "ColumnNotFoundError",
     "WithinData",
+    "data_notes",
     "level_label",
     "read_between",
     "read_within",
@@ -107,6 +114,14 @@ class BetweenData:
     empty_levels: tuple[str, ...]
     """Declared levels without a complete row, in declared order; not analyzed."""
     level_source: LevelSource
+    dictionary_order: tuple[str, ...] = ()
+    """``levels`` in the order of ``x``'s unordered pyarrow dictionary, when that
+    differs from the sorted order used (empty otherwise, and with ``order=``)."""
+    vanished_levels: tuple[str, ...] = ()
+    """Levels of an ``x`` without declared categories whose rows all miss ``y``,
+    sorted; not analyzed. (Declared ones are in ``empty_levels``.)"""
+    lookalike_levels: tuple[tuple[str, ...], ...] = ()
+    """Sets of analyzed levels that differ only in leading or trailing whitespace."""
 
     def counts(self) -> dict[str, int]:
         """``{level: n}`` in level order."""
@@ -144,6 +159,13 @@ class WithinData:
     empty_levels: tuple[str, ...]
     """Declared levels of ``x`` without a complete row, in declared order."""
     level_source: LevelSource
+    dictionary_order: tuple[str, ...] = ()
+    """As ``BetweenData.dictionary_order``."""
+    vanished_levels: tuple[str, ...] = ()
+    """Levels of an ``x`` without declared categories whose rows all miss ``y`` or
+    ``subject_id``, sorted; not analyzed."""
+    lookalike_levels: tuple[tuple[str, ...], ...] = ()
+    """As ``BetweenData.lookalike_levels``."""
 
     @property
     def n_subjects(self) -> int:
@@ -346,6 +368,55 @@ _SUBJECT_ROLE: Final = _Role(
 )
 
 
+def _undeclared_dictionary(
+    series: nw.Series[Any],
+) -> tuple[nw.Series[Any], list[object] | None]:
+    """A pyarrow dictionary column whose type is not marked ordered, decoded to its
+    values, and its dictionary values in dictionary order; any other column
+    unchanged, with ``None``.
+
+    Arrow declares an order only with ``ordered=True``. ``dictionary_encode()``,
+    ``pyarrow.csv``'s ``auto_dict_encode`` and polars' ``.to_arrow()`` make
+    unordered dictionaries listing the values as they first appear, which depends
+    on the row order; decoded, such a column is read as its values are (text sorted,
+    numbers numerically). The dictionary of a column of several chunks is unified
+    first, so it is one list.
+    """
+    if not series.implementation.is_pyarrow():
+        return series, None
+    native: Any = series.to_native()
+    dtype = native.type
+    if not hasattr(dtype, "index_type") or dtype.ordered:
+        return series, None
+    unified = native.unify_dictionaries()
+    dictionary: list[object] = (
+        unified.chunk(0).dictionary.to_pylist() if unified.num_chunks else []
+    )
+    decoded = nw.from_native(native.cast(dtype.value_type), series_only=True)
+    return decoded, dictionary
+
+
+def _dictionary_order(
+    dictionary: list[object] | None, levels: Sequence[str]
+) -> tuple[str, ...]:
+    """``levels`` in the order of an unordered dictionary, when that differs from
+    ``levels``; otherwise empty."""
+    if dictionary is None:
+        return ()
+    present = set(levels)
+    ordered: list[str] = []
+    for value in dictionary:
+        if value is None:
+            continue
+        try:
+            label = level_label(value)
+        except TypeError:
+            return ()
+        if label in present and label not in ordered:
+            ordered.append(label)
+    return tuple(ordered) if ordered != list(levels) else ()
+
+
 def _x_kind(series: nw.Series[Any], name: str, role: _Role = _X_ROLE) -> XKind:
     dtype = series.dtype
     if isinstance(dtype, nw.Enum):
@@ -513,6 +584,48 @@ def _grouping_order(
     return sorted(present, key=int), [], "sorted"
 
 
+def _quiet_labels(group: _Grouping, series: nw.Series[Any], rows: IntArray) -> set[str]:
+    """The labels of ``rows`` that can be made, without raising for the others.
+
+    For the rows ``read_between`` drops because ``y`` is missing: their ``x`` is
+    not analyzed, so a value that cannot be a level (a float that is not whole)
+    is not an error there; it is only not reported as a level.
+    """
+    if rows.size == 0:
+        return set()
+    labels: set[str] = set()
+    if group.kind in ("declared", "text"):
+        for i in rows.tolist():
+            with contextlib.suppress(TypeError):
+                labels.add(level_label(group.raw[i]))
+    elif group.kind == "integer":
+        full: list[Any] = series.to_list()
+        labels.update(str(int(full[i])) for i in rows.tolist())
+    else:
+        values = _float_values(series)[rows]
+        whole = values[np.isfinite(values) & (values == np.round(values))]
+        labels.update(str(int(v)) for v in whole.tolist())
+    return labels
+
+
+def _vanished(group: _Grouping, seen: set[str], present: set[str]) -> list[str]:
+    """Labels ``seen`` in rows with ``x`` present but not ``present`` among the
+    analyzed rows, in the column's order. Declared levels are reported as empty
+    levels instead, so they are left out here."""
+    if group.kind == "declared":
+        return []
+    return _grouping_order(group, seen - present)[0]
+
+
+def _lookalikes(levels: Sequence[str]) -> tuple[tuple[str, ...], ...]:
+    """Sets of ``levels`` that are equal once leading and trailing whitespace is
+    removed, in level order."""
+    by_core: dict[str, list[str]] = {}
+    for level in levels:
+        by_core.setdefault(level.strip(), []).append(level)
+    return tuple(tuple(same) for same in by_core.values() if len(same) > 1)
+
+
 def _order_item(item: object) -> object:
     """A pyarrow scalar as its Python value; anything else unchanged."""
     if type(item).__module__.split(".")[0] == "pyarrow":
@@ -677,7 +790,7 @@ def read_between(
     values, fewer than ``min_levels`` levels with data, or a bad ``order``.
     """
     frame = to_frame(data)
-    x_col = _column(frame, x, "x")
+    x_col, x_dictionary = _undeclared_dictionary(_column(frame, x, "x"))
     y_col = _column(frame, y, "y")
     if x == y:
         raise ValueError(f"x and y must be different columns; both are {x!r}.")
@@ -695,10 +808,14 @@ def read_between(
 
     row_labels = _grouping_labels(group, x_col, rows)
     levels, empty, source = _grouping_order(group, set(row_labels))
+    dictionary_order = _dictionary_order(x_dictionary, levels)
+    lost = np.nonzero(~missing_x & missing_y)[0]
+    vanished = _vanished(group, _quiet_labels(group, x_col, lost), set(levels))
 
     if order is not None:
-        levels = _check_order(order, levels, empty)
+        levels = _check_order(order, levels, [*empty, *vanished])
         source = "order"
+        dictionary_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} groups with data; found "
@@ -727,6 +844,9 @@ def read_between(
         n_missing_y=int(missing_y.sum()),
         empty_levels=tuple(empty),
         level_source=source,
+        dictionary_order=dictionary_order,
+        vanished_levels=tuple(vanished),
+        lookalike_levels=_lookalikes(levels),
     )
 
 
@@ -855,9 +975,9 @@ def read_within(
     above, a column used twice, or a bad ``order``.
     """
     frame = to_frame(data)
-    x_col = _column(frame, x, "x")
+    x_col, x_dictionary = _undeclared_dictionary(_column(frame, x, "x"))
     y_col = _column(frame, y, "y")
-    s_col = _column(frame, subject_id, "subject_id")
+    s_col, _ = _undeclared_dictionary(_column(frame, subject_id, "subject_id"))
     if x == y:
         raise ValueError(f"x and y must be different columns; both are {x!r}.")
     if subject_id in (x, y):
@@ -902,9 +1022,14 @@ def read_within(
     row_levels = [level_of[r] for r in rows.tolist()]
     row_subjects = [subject_of[r] for r in rows.tolist()]
     levels, empty, source = _grouping_order(x_group, set(row_levels))
+    dictionary_order = _dictionary_order(x_dictionary, levels)
+    vanished = _vanished(x_group, set(level_of.values()), set(levels))
     if order is not None:
-        levels = _check_order(order, levels, empty, complete=_COMPLETE_WITHIN)
+        levels = _check_order(
+            order, levels, [*empty, *vanished], complete=_COMPLETE_WITHIN
+        )
         source = "order"
+        dictionary_order = ()
     if len(levels) < min_levels:
         raise ValueError(
             f"x={x!r} needs at least {min_levels} conditions with data; found "
@@ -961,4 +1086,69 @@ def read_within(
         n_rows_of_dropped_subjects=in_dropped,
         empty_levels=tuple(empty),
         level_source=source,
+        dictionary_order=dictionary_order,
+        vanished_levels=tuple(vanished),
+        lookalike_levels=_lookalikes(levels),
     )
+
+
+# --- notes for the result's warnings ----------------------------------------------
+
+# How many levels a note names before it shortens the list.
+_MAX_LEVELS_SHOWN: Final = 6
+
+
+def _quoted(levels: Sequence[str]) -> str:
+    """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'``."""
+    quoted = [repr(level) for level in levels]
+    if len(quoted) == 1:
+        return quoted[0]
+    return ", ".join(quoted[:-1]) + " and " + quoted[-1]
+
+
+def _listed(levels: Sequence[str]) -> str:
+    """``'a', 'b', 'c'``, shortened after ``_MAX_LEVELS_SHOWN`` levels."""
+    if len(levels) <= _MAX_LEVELS_SHOWN:
+        return ", ".join(repr(level) for level in levels)
+    shown = ", ".join(repr(level) for level in levels[: _MAX_LEVELS_SHOWN - 1])
+    return f"{shown}, ... ({len(levels)} levels)"
+
+
+def data_notes(data: BetweenData | WithinData) -> list[str]:
+    """Plain-English notes on how the levels of ``x`` were read, for the result's
+    ``warnings``: an unordered dictionary whose order was not used, levels left out
+    because every row of them misses a value, and levels that differ only in
+    surrounding whitespace. They name levels of ``x``, never subjects (D36)."""
+    notes: list[str] = []
+    x = data.x
+    if data.dictionary_order:
+        notes.append(
+            f"The levels of {x!r} are in sorted order ({_listed(data.levels)}), not "
+            f"in the order of its pyarrow dictionary "
+            f"({_listed(data.dictionary_order)}): a dictionary that is not marked "
+            "ordered, as dictionary_encode(), pyarrow.csv and polars' .to_arrow() "
+            "make, lists values in the order they first appear in the rows, so it "
+            "does not declare an order. To choose the order, pass order= (a list "
+            "of the levels) or mark the dictionary ordered."
+        )
+    vanished = data.vanished_levels
+    if vanished:
+        needs = (
+            f"{data.y!r} or {data.subject_id!r}"
+            if isinstance(data, WithinData)
+            else repr(data.y)
+        )
+        one = len(vanished) == 1
+        notes.append(
+            f"The {'level' if one else 'levels'} {_quoted(vanished)} of {x!r} "
+            f"{'was' if one else 'were'} left out of the analysis: every row of "
+            f"{'it' if one else 'them'} has a missing {needs}."
+        )
+    for same in data.lookalike_levels:
+        notes.append(
+            f"The levels {_quoted(same)} of {x!r} differ only in spaces at their "
+            "start or end, so they are analyzed as separate groups whose labels "
+            "look alike. If they are the same group, remove the spaces first, for "
+            "example with .str.strip() in pandas or .str.strip_chars() in polars."
+        )
+    return notes

@@ -692,7 +692,7 @@ def read_dataset(case: OracleCase, backend: Backend = "pandas") -> Any:
 
     Only empty fields are missing values (R: ``na.strings = ""``). Declared factor
     levels become a pandas Categorical, a polars Enum or a pyarrow dictionary
-    column with that level order, including empty levels.
+    column marked ordered with that level order, including empty levels.
     """
     return read_csv(case.dataset_file, backend, case.factor_levels)
 
@@ -732,6 +732,10 @@ def read_csv(
     if backend == "pyarrow":
         import pyarrow as pa
 
+        # Arrow declares a dictionary's order only when its type is marked ordered
+        # (an unordered dictionary is read as text); R's factor declared it.
+        for column in factor_levels:
+            frame[column] = frame[column].cat.as_ordered()
         return pa.Table.from_pandas(frame, preserve_index=False)
     raise ValueError(f"unknown backend {backend!r}")
 

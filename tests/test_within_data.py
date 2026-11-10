@@ -351,7 +351,20 @@ def test_subject_nullable_and_categorical_columns() -> None:
         ),
         (
             pa.table({**base, "s": pa.array(base["s"]).dictionary_encode()}),
-            ("b", "c", "a"),  # dictionary order (encounter order here)
+            ("a", "b", "c"),  # an unordered dictionary is text: sorted
+        ),
+        (
+            pa.table(
+                {
+                    **base,
+                    "s": pa.DictionaryArray.from_arrays(
+                        pa.array([0, 0, 1, 1, 2, 2], type=pa.int8()),
+                        pa.array(["b", "c", "a"]),
+                        ordered=True,
+                    ),
+                }
+            ),
+            ("b", "c", "a"),  # a dictionary marked ordered declares its order
         ),
         (
             pd.DataFrame(
@@ -629,3 +642,111 @@ def test_integer_y_too_large_for_a_double_raises(backend: str) -> None:
     )
     with pytest.raises(ValueError, match="too large to analyze exactly"):
         read_within(frame, "g", "y", "s")
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_a_condition_without_complete_rows_is_named(backend: str) -> None:
+    from inferplot.analyses.withinstats import (
+        _data_warnings,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    # Condition 'c' has rows, but each misses y or the subject: it is left out
+    # and the warnings say so; 'a' and 'b' are analyzed.
+    rows = [
+        (1, "a", 1.0),
+        (1, "b", 2.0),
+        (2, "a", 3.0),
+        (2, "b", 5.0),
+        (3, "a", 4.0),
+        (3, "b", 4.5),
+        (1, "c", None),
+        (None, "c", 7.0),
+    ]
+    data = read_within(make(backend, long(rows)), "g", "y", "s")
+    assert (data.levels, data.vanished_levels, data.dropped_subjects) == (
+        ("a", "b"),
+        ("c",),
+        (),
+    )
+    assert _data_warnings(data) == [
+        "The level 'c' of 'g' was left out of the analysis: every row of it has a "
+        "missing 'y' or 's'."
+    ]
+    # A condition with complete rows only for subjects that lack another condition
+    # keeps every subject from being complete: that raises, naming a subject.
+    rows = [
+        (1, "a", 1.0),
+        (1, "b", 2.0),
+        (2, "a", 3.0),
+        (2, "b", 5.0),
+        (3, "c", 4.0),
+    ]
+    with pytest.raises(ValueError, match="needs at least 2 subjects") as info:
+        read_within(make(backend, long(rows)), "g", "y", "s")
+    assert "none has a value at every level" in str(info.value)
+
+
+def test_within_lookalike_and_dictionary_notes() -> None:
+    from inferplot.analyses.withinstats import (
+        _data_warnings,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    rows = [(s, g, float(s + i)) for s in (1, 2, 3) for i, g in enumerate(["b", "b "])]
+    data = read_within(
+        pa.table({**long(rows), "g": pa.array(long(rows)["g"]).dictionary_encode()}),
+        "g",
+        "y",
+        "s",
+    )
+    assert data.lookalike_levels == (("b", "b "),)
+    assert data.dictionary_order == ()  # first appearance is sorted here
+    notes = _data_warnings(data)
+    assert len(notes) == 1
+    assert notes[0].startswith("The levels 'b' and 'b ' of 'g' differ only in spaces")
+    rows = [(s, g, float(s + i)) for s in (1, 2, 3) for i, g in enumerate("ba")]
+    table = pa.table({**long(rows), "g": pa.array(long(rows)["g"]).dictionary_encode()})
+    data = read_within(table, "g", "y", "s")
+    assert (data.levels, data.dictionary_order) == (("a", "b"), ("b", "a"))
+    assert _data_warnings(data)[0].startswith(
+        "The levels of 'g' are in sorted order ('a', 'b'), not in the order of its "
+        "pyarrow dictionary ('b', 'a')"
+    )
+
+
+def test_dictionary_encoded_columns_do_not_follow_row_order() -> None:
+    # The review's example: dictionary_encode() and polars .to_arrow() list the
+    # values in order of first appearance, which is not a declared order; the
+    # levels and the subjects are sorted, so shuffling the rows changes nothing.
+    subjects = np.repeat([f"s{i}" for i in range(5)], 2)
+    x = np.tile(["pre", "post"], 5)
+    y = np.arange(10.0)
+    reference = read_within(
+        pd.DataFrame({"s": subjects, "x": x, "y": y}), "x", "y", "s"
+    )
+    assert reference.levels == ("post", "pre")
+    for seed in range(4):
+        perm = np.random.default_rng(seed).permutation(10)
+        frames = [
+            pa.table(
+                {
+                    "s": pa.array(subjects[perm]).dictionary_encode(),
+                    "x": pa.array(x[perm]).dictionary_encode(),
+                    "y": y[perm],
+                }
+            ),
+            pl.DataFrame(
+                {
+                    "s": pl.Series(subjects[perm], dtype=pl.Categorical),
+                    "x": pl.Series(x[perm], dtype=pl.Categorical),
+                    "y": y[perm],
+                }
+            ).to_arrow(),
+        ]
+        for frame in frames:
+            data = read_within(frame, "x", "y", "s")
+            assert (data.levels, data.subjects) == (
+                reference.levels,
+                reference.subjects,
+            )
+            assert data.values.tobytes() == reference.values.tobytes()
+            assert data.level_source == "sorted"
