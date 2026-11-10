@@ -10,6 +10,15 @@ name: Oracle
 
 on:
   workflow_dispatch:
+    inputs:
+      subset:
+        description: >-
+          Debugging only: a regular expression (ORACLE_SUBSET) that limits the run to
+          the probes and cases whose names match it. Such a run writes no manifest, so
+          nothing is attested and the Python loader refuses its output. Leave empty
+          for fixtures to commit.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -120,8 +129,17 @@ jobs:
         run: |
           git status --short -- oracle/datasets
           git diff --exit-code --stat -- oracle/datasets
+          # A dataset the export wrote that is not committed fails too: download it
+          # from this run's oracle-datasets artifact, review it and commit it first.
+          untracked=$(git ls-files --others --exclude-standard -- oracle/datasets)
+          if [ -n "$untracked" ]; then
+            echo "::error::export_datasets.R wrote datasets that are not committed: $untracked"
+            exit 1
+          fi
 
       - name: Generate fixtures
+        env:
+          ORACLE_SUBSET: ${{ inputs.subset }}
         run: Rscript oracle/generate.R oracle/datasets oracle/out
 
       - name: Upload fixtures
