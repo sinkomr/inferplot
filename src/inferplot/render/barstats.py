@@ -29,10 +29,12 @@
 inferplot's own figure gives every bar the same slot, at least MIN_SPACING_IN
 wide and wider for a wide label (the cell labels, the column of moved labels,
 the bar's test label, the tick label's lines; level names wrap on spaces into
-at most three lines of the slot's width): the figure widens with the number of
-bars, as betweenstats' does with its levels. The legend is right of the plot;
-with ``ax=`` it goes inside the Axes, right of the bars. The renderer computes
-no statistics: every number is the result's.
+at most three lines TICK_LINE_IN wide, shortened with "…" beyond): the figure
+widens with the number of bars, as betweenstats' does with its levels. 0% to
+100% is BARS_HEIGHT_IN high, taller where the legend or a column of moved
+labels needs it. The legend is right of the plot; with ``ax=`` it goes inside
+the Axes, right of the bars, and the bars share what is left of its width. The
+texts are ``figure_texts``'; the renderer computes no statistics.
 """
 
 from __future__ import annotations
