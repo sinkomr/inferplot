@@ -421,9 +421,11 @@ def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
     else:
         ((drawn),) = case.layer_data("GeomLabelRepel")
         # The labelled points are those ggstatsplot labelled (every point, or
-        # those label.expression selects: mtcars 9 of 32).
+        # those label.expression selects: mtcars 9 of 32). A missing label stays
+        # in R's label layer as NA, which ggrepel draws as nothing
+        # (edge_corr_label_missing); inferplot holds "" for it.
         assert [label for label in result.point_labels if label] == [
-            str(row[label_var]) for row in drawn
+            str(row[label_var]) for row in drawn if row[label_var] is not None
         ]
     assert (result.text.subtitle, result.text.caption) == (None, None)
     assert result.text.apa.endswith(f"n = {n:,} pairs.")

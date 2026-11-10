@@ -217,7 +217,9 @@ class OracleCase:
         """ggbarstats and ggpiestats: the plot's ``labels`` (``ggplot2::get_labs``)
         and the fill legend's title (``legend_title``)."""
         if self.function not in BAR_FUNCTIONS:
-            raise ValueError(f"{self.name}: only {sorted(BAR_FUNCTIONS)} record plot_texts")
+            raise ValueError(
+                f"{self.name}: only {sorted(BAR_FUNCTIONS)} record plot_texts"
+            )
         texts = self.raw["plot_texts"]
         if texts is None:
             raise ValueError(f"{self.name}: ggstatsplot failed ({self.error})")
@@ -360,8 +362,9 @@ class OracleCase:
 
         For ggbetweenstats and ggwithinstats the generator records parameters only
         for the significance brackets (``GeomSignif``); any other geom raises
-        ``KeyError``. Empty when this plot draws no brackets. gghistostats and
-        ggscatterstats record them for every layer but the raw points.
+        ``KeyError``. Empty when this plot draws no brackets. gghistostats,
+        ggscatterstats, ggbarstats and ggpiestats record them for every layer but
+        the raw points.
         """
         if self.function in NO_LEVEL_FUNCTIONS | BAR_FUNCTIONS:
             _check_geom(geom)
@@ -379,9 +382,10 @@ class OracleCase:
 
     def layer_built(self, geom: str) -> list[list[Row]]:
         """The rows ggplot2 computed for drawing each layer drawn with ``geom`` (the
-        histogram's bins, the smooth line and its band, the marginal histograms).
-        Recorded for the brackets, and for every gghistostats and ggscatterstats
-        layer but the raw points; a geom no fixture draws raises ``KeyError``."""
+        histogram's bins, the smooth line and its band, the marginal histograms, the
+        bars and their labels). Recorded for the brackets, and for every
+        gghistostats, ggscatterstats, ggbarstats and ggpiestats layer but the raw
+        points; a geom no fixture draws raises ``KeyError``."""
         _check_geom(geom)
         return [
             list(layer["built"])
@@ -764,6 +768,134 @@ def check_simulated_lincon_pair(
     what = f"{case_name} {group1}-{group2}"
     assert abs(r_critical - r_pinned) <= 5e-7, (what, r_critical, r_pinned)
     assert abs(critical - ours_pinned) <= 5e-7, (what, critical, ours_pinned)
+
+
+# Noncentral chi-square interval bounds (Cramer's V, Pearson's C) where effectsize's
+# root search stops measurably short of the interval's tail probability, so R's
+# bound misses the accurate root by more than `noncentral_ci`. Following D31,
+# inferplot reports the accurate bound; both are pinned here.
+# (effect, chi-square to 10 digits, df, n, rows, columns, the probability P(X <=
+# chi-square) the bound solves for) -> (R's bound, the accurate bound). For Pearson's
+# C, rows is the number of categories and columns 1. probe-contingency records R's
+# own pchisq at the noncentrality behind each R bound: it misses the target
+# probability by as much (`tails_at_bounds`), so the miss is effectsize's root
+# search, not the conversion.
+CHISQ_ROOT_MISSES: Mapping[
+    tuple[str, str, int, int, int, int, str], tuple[float, float]
+] = MappingProxyType(
+    {
+        # probe-contingency [[4, 4], [4, 5]] adjust=True less 0.9
+        ("cramers_v", "0.0524691358", 1, 17, 2, 2, "0.1"): (
+            0.0960703348423435,
+            0.09606951029288392,
+        ),
+        # edge_bar_large a-d V
+        ("cramers_v", "0.5712719541", 3, 1600, 2, 4, "0.025"): (
+            0.00492699945891901,
+            0.004926841663390233,
+        ),
+        # probe-contingency [[30, 20], [25, 25]] adjust=True two.sided 0.95
+        ("cramers_v", "1.01010101", 1, 100, 2, 2, "0.025"): (
+            0.2803559602313689,
+            0.28030062931891925,
+        ),
+        # mtcars-cyl-am-cl90 4-6 V
+        ("cramers_v", "1.606004385", 1, 18, 2, 2, "0.05"): (
+            0.661841179620059,
+            0.6618447207789281,
+        ),
+        # probe-contingency [[0, 5], [5, 0]] adjust=True two.sided 0.9
+        ("cramers_v", "10", 1, 10, 2, 2, "0.95"): (
+            0.36619560650257615,
+            0.36610792157522376,
+        ),
+        # edge_bar_rounding-both a-c V
+        ("cramers_v", "2.055143541", 3, 23, 2, 4, "0.025"): (
+            0.487570846997423,
+            0.48660605947583674,
+        ),
+        # mtcars-cyl-am-cl90 6-8 V
+        ("cramers_v", "2.1", 1, 21, 2, 2, "0.05"): (
+            0.653532973765489,
+            0.6536044608624483,
+        ),
+        # probe-contingency [[1, 9], [8, 4]] adjust=True two.sided 0.9
+        ("cramers_v", "7.245584046", 1, 22, 2, 2, "0.95"): (
+            0.041362654215823386,
+            0.04711645457770814,
+        ),
+        # edge_bar_large d-e V
+        ("cramers_v", "8.956052385", 3, 1880, 2, 4, "0.025"): (
+            0.100292715320786,
+            0.10039836796829989,
+        ),
+        # probe-contingency [[30, 20], [25, 25]] adjust=False two.sided 0.95
+        ("cramers_v_unadjusted", "1.01010101", 1, 100, 2, 2, "0.025"): (
+            0.2964903717729267,
+            0.2964385809291418,
+        ),
+        # probe-contingency [[0, 5], [5, 0]] adjust=False two.sided 0.9
+        ("cramers_v_unadjusted", "10", 1, 10, 2, 2, "0.95"): (
+            0.47990667817056043,
+            0.47984720738550857,
+        ),
+        # probe-contingency [[100, 80], [90, 110]] adjust=False greater 0.9
+        ("cramers_v_unadjusted", "4.222222222", 1, 380, 2, 2, "0.9"): (
+            0.038962696528633434,
+            0.038945426388399124,
+        ),
+        # probe-contingency [[1, 9], [8, 4]] adjust=False two.sided 0.9
+        ("cramers_v_unadjusted", "7.245584046", 1, 22, 2, 2, "0.95"): (
+            0.2219199108296628,
+            0.22300963099419044,
+        ),
+        # probe-contingency [[6, 0, 4], [3, 7, 5]] adjust=False two.sided 0.95
+        ("cramers_v_unadjusted", "7.407407407", 2, 25, 2, 3, "0.975"): (
+            0.017945318568214193,
+            0.01794539405002942,
+        ),
+        # probe-contingency [19.0, 13.0] two.sided 0.95
+        ("pearsons_c", "0.005208333333", 1, 32, 2, 1, "0.025"): (
+            0.22269726345537777,
+            0.2226983961808426,
+        ),
+        # probe-contingency [19.0, 13.0] two.sided 0.9
+        ("pearsons_c", "0.005208333333", 1, 32, 2, 1, "0.05"): (
+            0.09332768209432078,
+            0.09332239655103432,
+        ),
+        # probe-contingency [11.0, 7.0, 14.0] two.sided 0.95
+        ("pearsons_c", "1.5", 2, 32, 3, 1, "0.025"): (
+            0.45758495024971,
+            0.45770178962145786,
+        ),
+        # mtcars-cyl-both C
+        ("pearsons_c", "2.3125", 2, 32, 3, 1, "0.025"): (
+            0.498657092188216,
+            0.49839686593823995,
+        ),
+        # edge_bar_paired-cl90 bar yes C
+        ("pearsons_c", "2.571428571", 1, 14, 2, 1, "0.025"): (
+            0.689654356864838,
+            0.6896598585701019,
+        ),
+        # edge_bar_paired_small bar yes C
+        ("pearsons_c", "4", 1, 4, 2, 1, "0.025"): (
+            0.892604325331052,
+            0.8926150029188886,
+        ),
+        # probe-contingency [11.0, 7.0, 14.0] two.sided 0.9
+        ("pearsons_c", "6.1875", 2, 32, 3, 1, "0.95"): (
+            0.04536280151024879,
+            0.04536288991437883,
+        ),
+        # mtcars-am-cyl bar 8 C
+        ("pearsons_c", "7.142857143", 1, 14, 2, 1, "0.025"): (
+            0.777970250284562,
+            0.7779443765348086,
+        ),
+    }
+)
 
 
 # Geoms whose layer parameters generate.R records (the drawn pairs and labels).

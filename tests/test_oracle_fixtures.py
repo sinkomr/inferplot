@@ -416,6 +416,9 @@ EXPECTED_FAILURES = frozenset(
         # Every subject constant across conditions: the subtitle fails silently and
         # the Durbin-Conover table has no rows (T7).
         "ggwithinstats-edge_rm_all_tied-nonparametric",
+        # A weight of 2.5: tidyr::uncount() refuses it while ggbarstats prepares the
+        # data, before any hidden call.
+        "ggbarstats-edge_bar_counts-frac-parametric",
     }
 )
 EXPECTED_PROBES = frozenset(
@@ -896,6 +899,19 @@ DECLARED_R_NOISE: dict[tuple[str, str, str], str] = {
     ("message", "correlation record", "`ci` is too small or x does not contain"): (
         "constant x: the correlation record replays the bayes subtitle's call"
     ),
+    # ggbarstats: chisq.test warns when an expected count is below 5. ggstatsplot
+    # mutes it (subtitle) or suppressWarnings() it (each bar's test); it changes no
+    # number (statsExpressions never asks for a simulated p).
+    ("warning", "subtitle", "Chi-squared approximation may be incorrect"): (
+        "chisq.test with an expected count below 5 (independence or goodness of fit)"
+    ),
+    ("warning", "proportion_test", "Chi-squared approximation may be incorrect"): (
+        "the same warning for a bar's goodness-of-fit test"
+    ),
+    ("warning", "proportion_test", "Using an external vector in selections was"): (
+        "tidyselect's once-per-session deprecation note on contingency_table()'s "
+        "select(); it lands in the first per-bar test of each generator shard"
+    ),
 }
 
 
@@ -1148,7 +1164,16 @@ def test_bootstrap_reference_is_consistent(case: OracleCase) -> None:
         assert ref["ggstatsplot"]["resamples"] == 100
     estimate = number(ref["estimate"])
     low, high = number(ref["conf_low"]), number(ref["conf_high"])
-    assert low <= estimate <= high
+    if math.isnan(low) or math.isnan(high):
+        # Constant data (edge_one_constant): every resample's winsorized SD is 0,
+        # trimcibt's bootstrap t is 0/0 and its interval NA, in ggstatsplot's run,
+        # the reference and every replicate alike; the case declares the NA.
+        assert case.function == "gghistostats"
+        assert "subtitle" in case.raw["expected_na_values"]
+        assert ref["ggstatsplot"]["conf_low"] is None
+        keys = tuple(k for k in keys if not math.isnan(number(ref[k])))
+    else:
+        assert low <= estimate <= high
     # The 20,000-resample reference lies within the spread of 2,000-resample runs.
     for key in keys:
         assert_within_monte_carlo(
@@ -1564,6 +1589,10 @@ def test_histogram_bins_and_centrality_line(case: OracleCase) -> None:
     width = float(params["stat"]["binwidth"])
     given = case.args.get("binwidth")
     expected = float(given) if given is not None else (max(x) - min(x)) / math.sqrt(n)
+    if given is None and max(x) == min(x):
+        # No range (edge_one_constant, ten values of 5): ggstatsplot's .binwidth()
+        # gives 0.1, one bin [4.95, 5.05] (not |x| / 1000 = 0.005).
+        expected = 0.1
     assert math.isclose(width, expected, rel_tol=1e-13), (width, expected)
     (bins,) = case.layer_built("GeomBar")
     assert sum(int(b["count"]) for b in bins) == n
@@ -1694,3 +1723,349 @@ def test_correlation_row_replays_the_subtitle(case: OracleCase) -> None:
     if record["error"] is None:
         (row,) = record["value"]
         assert int(row["n_Obs"]) == case.analyzed_data["n"]
+
+
+# Contingency tables (ggbarstats, ggpiestats) ----------------------------------------
+
+BAR = ("ggbarstats", "ggpiestats")
+
+
+def _bar_all() -> list[Any]:
+    """Every ggbarstats and ggpiestats case, failed ones included."""
+    cases = require_cases(
+        [c for c in load_cases() if c.function in BAR], "ggbarstats or ggpiestats"
+    )
+    return [pytest.param(case, id=case.name) for case in cases]
+
+
+def _bar_completed() -> list[Any]:
+    return [param for function in BAR for param in oracle_params(function)]
+
+
+def _bar_design(case: OracleCase) -> tuple[int, int, int]:
+    """x's levels, y's levels (0 without y) and the levels of y that hold data, as
+    ggstatsplot's .pie_bar_data_prep() leaves them."""
+    data = case.contingency_data
+    table = case.counts_table()
+    y_levels = len(data["y_levels"])
+    held = sum(1 for j in range(y_levels) if sum(row[j] for row in table) > 0)
+    return len(data["x_levels"]), y_levels, held
+
+
+def _bar_hidden_calls(case: OracleCase) -> list[str]:
+    """The hidden calls of ggbarstats and ggpiestats 1.1.4, in order: with
+    results.subtitle the subtitle; the Bayes caption when bf.message holds, the type
+    is not bayes, paired is FALSE and y does not have exactly one level (so also
+    without y); the pairwise Fisher tests when x has more than two levels, y more
+    than one and paired is FALSE; then, with y, one proportion test per level of y
+    that holds data, whatever results.subtitle and proportion.test say."""
+    x_levels, y_levels, held = _bar_design(case)
+    paired = case.args.get("paired", False) is True
+    calls: list[str] = []
+    if case.args.get("results.subtitle", True) is not False:
+        calls.append("subtitle")
+        if (
+            case.args.get("bf.message", True) is not False
+            and case.type != "bayes"
+            and not paired
+            and y_levels != 1
+        ):
+            calls.append("caption")
+        if x_levels > 2 and y_levels > 1 and not paired:
+            calls.append("pairwise_comparisons")
+    return calls + ["proportion_test"] * held
+
+
+def _bar_proportion_test(case: OracleCase) -> bool:
+    """Whether the per-bar proportion tests are drawn (ggbarstats: never for type
+    bayes or with fewer than two levels of x or of y; ggpiestats: never for type
+    bayes or one level of x with several pies)."""
+    x_levels, y_levels, _ = _bar_design(case)
+    wanted = case.args.get(
+        "proportion.test", case.args.get("results.subtitle", True) is not False
+    )
+    if case.function == "ggbarstats":
+        off = case.type == "bayes" or x_levels < 2 or y_levels < 2
+    else:
+        off = case.type == "bayes" or (x_levels == 1 and y_levels > 1)
+    return bool(wanted) and not off
+
+
+@pytest.mark.parametrize("case", _bar_completed())
+def test_bar_fixture_contents(case: OracleCase) -> None:
+    versions = case.raw["versions"]
+    assert versions["packages"]["ggstatsplot"] == PARITY_VERSION
+    data = case.contingency_data
+    assert data["error"] is None
+    calls = _bar_hidden_calls(case)
+    assert [entry["component"] for entry in case.suppressed] == calls
+    # The per-bar tests run in the order of y's levels that hold data.
+    table = case.counts_table()
+    held = [
+        str(level)
+        for j, level in enumerate(data["y_levels"])
+        if sum(row[j] for row in table) > 0
+    ]
+    tests = [e for e in case.suppressed if e["component"] == "proportion_test"]
+    assert [str(e["level"]) for e in tests] == held
+    swallowed = {e["component"] for e in case.suppressed if e["error"] is not None}
+    declared = set(case.expected_hidden_errors)
+    assert swallowed == declared
+    nothing = set(case.raw["expected_null_outputs"])
+    if "subtitle" in calls and not {"subtitle"} & (declared | nothing):
+        assert case.subtitle
+        for row in case.subtitle_rows:
+            # The one-way Bayes factor's row has no n.
+            if "n.obs" in row:
+                assert int(number(row["n.obs"])) == data["n"]
+    else:
+        assert case.subtitle is None
+        assert case.subtitle_rows == []
+    if "caption" in calls and not {"caption"} & (declared | nothing):
+        assert case.caption
+        assert case.caption_data is not None
+    else:
+        assert case.caption is None
+    if "pairwise_comparisons" in calls and "pairwise_comparisons" not in declared:
+        assert case.pairwise
+    else:
+        assert case.pairwise == []
+    # The counts ggstatsplot labels are the recorded table, cell by cell.
+    x, y = data["x"], data["y"]
+    x_levels = [str(v) for v in data["x_levels"]]
+    y_levels = [str(v) for v in data["y_levels"]]
+    for row in case.table("descriptive_data"):
+        i = x_levels.index(str(row[x]))
+        j = 0 if y is None else y_levels.index(str(row[y]))
+        assert int(row["counts"]) == table[i][j]
+    assert sum(map(sum, table)) == data["n"]
+    # NA numbers only where the case declares them.
+    declared_na = set(case.raw["expected_na_values"])
+    tables = {
+        "subtitle": "subtitle_data",
+        "caption": "caption_data",
+        "pairwise": "pairwise_comparisons_data",
+        "one_sample": "one_sample_data",
+    }
+    for kind, name in tables.items():
+        rows = case.table(name)
+        has_na = any(
+            math.isnan(number(row[column]))
+            for row in rows
+            for column in (*NUMBER_COLUMNS, "p.value.adj")
+            if column in row
+        )
+        assert has_na == (kind in declared_na), kind
+    # The layers the arguments imply.
+    geoms = [layer["geom"] for layer in case.plot_layers]
+    drawn = _bar_proportion_test(case)
+    if case.function == "ggbarstats":
+        expected = ["GeomCol", "GeomLabel"]
+        expected += (
+            (["GeomText"] if drawn else []) + ["GeomText"] if y else ["GeomText"]
+        )
+    else:
+        expected = ["GeomCol", "GeomLabel"] + (
+            ["GeomText"] if len(y_levels) > 1 and drawn else []
+        )
+    assert geoms == expected
+    # The texts: the fill legend names x; ggbarstats' x axis names y (no title
+    # without y); the y axis has none.
+    texts = case.plot_texts
+    assert texts["legend_title"] == x
+    labels = texts["labels"]
+    assert labels["fill"] == x
+    assert labels["y"] is None
+    assert labels["x"] == (y if case.function == "ggbarstats" and y else None)
+    call = translate(case.function, case.args)
+    assert call.function == "barstats"
+    assert call.args == tuple(case.args[k] for k in ("x", "y") if k in case.args)
+    assert call.kwargs["type"] == case.type
+
+
+def _r_sort_key(value: object) -> tuple[int, float, str]:
+    """R's order of factor levels made by as.factor(): numbers numerically, text in
+    the C locale."""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return (0, float(value), "")
+    return (1, 0.0, str(value))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("case", _bar_all())
+def test_backends_see_the_table_r_analyzed(case: OracleCase, backend: Backend) -> None:
+    # Rows with x, y or the counts column missing are dropped, each row counts its
+    # weight (1 without counts), and the levels are the declared ones (empty ones
+    # included) or the sorted values that remain: the same table on every backend.
+    data = case.contingency_data
+    columns = [data[k] for k in ("x", "y", "counts") if data[k] is not None]
+    frame = nw.from_native(read_dataset(case, backend), eager_only=True)
+    lists = {column: frame[column].to_list() for column in columns}
+    keep = [
+        i
+        for i in range(len(frame))
+        if not any(_is_missing(lists[column][i]) for column in columns)
+    ]
+    assert [i + 1 for i in keep] == list(data["rows"])
+    assert data["rows_dropped"] == len(frame) - len(keep)
+    weights = [1.0] * len(keep)
+    if data["counts"] is not None:
+        weights = [float(lists[data["counts"]][i]) for i in keep]
+    if data["error"] is not None:
+        # tidyr::uncount() refuses a weight that is not whole.
+        assert any(not w.is_integer() for w in weights)
+        assert "loss of precision" in data["error"]
+        return
+
+    def levels(column: str) -> list[str]:
+        declared = case.factor_levels.get(column)
+        if declared is not None:
+            return list(declared)
+        present = {
+            lists[column][i] for i, w in zip(keep, weights, strict=True) if w > 0
+        }
+        return [r_level_label(v) for v in sorted(present, key=_r_sort_key)]
+
+    x_levels = levels(data["x"])
+    y_levels = levels(data["y"]) if data["y"] is not None else []
+    assert x_levels == [str(v) for v in data["x_levels"]]
+    assert y_levels == [str(v) for v in data["y_levels"]]
+    table = [[0] * max(1, len(y_levels)) for _ in x_levels]
+    for i, w in zip(keep, weights, strict=True):
+        if w == 0:  # uncount() drops the row
+            continue
+        row = x_levels.index(r_level_label(lists[data["x"]][i]))
+        column = (
+            0
+            if data["y"] is None
+            else y_levels.index(r_level_label(lists[data["y"]][i]))
+        )
+        table[row][column] += int(w)
+    assert table == case.counts_table()
+    assert sum(map(sum, table)) == data["n"]
+    assert case.n_per_level == dict(zip(x_levels, map(sum, table), strict=True))
+
+
+def _r_round_text(value: float, digits: int) -> str:
+    """paste0(round(value, digits)): R's round() (probe-contingency's 927 labels:
+    Python's round() on the same double, ties to even on the exact binary value)
+    printed with up to 15 significant digits, no trailing zeros."""
+    return format(round(value, digits), ".15g")
+
+
+@pytest.mark.parametrize("case", _bar_completed())
+def test_bar_labels(case: OracleCase) -> None:
+    # The label inside each cell: the percentage of its bar ((counts / bar total) x
+    # 100, rounded to digits.perc as R rounds, no trailing zeros: "12.5%", "33%",
+    # "6.2%"), the count (with a thousands comma) or both ("3\n(16%)"); a zero cell
+    # has no label (NA). Percentages of a bar need not sum to 100 (three thirds:
+    # 33% each).
+    data = case.contingency_data
+    x, y = data["x"], data["y"]
+    table = case.counts_table()
+    x_levels = [str(v) for v in data["x_levels"]]
+    y_levels = [str(v) for v in data["y_levels"]]
+    digits = int(case.args.get("digits.perc", 0))
+    kind = case.args.get("label", "percentage")
+    labels: list[str] = []
+    for row in case.table("descriptive_data"):
+        j = 0 if y is None else y_levels.index(str(row[y]))
+        count = table[x_levels.index(str(row[x]))][j]
+        total = sum(r[j] for r in table)
+        perc = (count / total) * 100
+        assert math.isclose(number(row["perc"]), perc, rel_tol=1e-14, abs_tol=0)
+        if count == 0:
+            assert row[".label"] is None
+            continue
+        percent = f"{_r_round_text(perc, digits)}%"
+        expected = {
+            "percentage": percent,
+            "counts": f"{count:,}",
+            "both": f"{count:,}\n({percent})",
+        }[kind]
+        assert row[".label"] == expected
+        labels.append(expected)
+    (built,) = case.layer_built("GeomLabel")
+    assert sorted(str(b["label"]) for b in built if b["label"] is not None) == sorted(
+        labels
+    )
+    # Under each bar its n; ggbarstats without y: under the single bar.
+    texts = [
+        layer["built"] for layer in case.plot_layers if layer["geom"] == "GeomText"
+    ]
+    if case.function == "ggbarstats":
+        if y is None:
+            assert [str(b["label"]) for b in texts[-1]] == [f"(n = {data['n']:,})"]
+        else:
+            totals = {
+                level: sum(r[j] for r in table) for j, level in enumerate(y_levels)
+            }
+            expected_n = {f"(n = {n:,})" for n in totals.values() if n > 0}
+            assert {str(b["label"]) for b in texts[-1]} == expected_n
+    pies = case.function == "ggpiestats" and len(y_levels) > 1
+    if _bar_proportion_test(case) and (case.function == "ggbarstats" or pies):
+        # The proportion tests' labels: p alone above each bar (ggbarstats), the
+        # whole goodness-of-fit result beside each pie (ggpiestats); no stars.
+        column = ".p.label" if case.function == "ggbarstats" else ".label"
+        drawn = {str(b["label"]) for b in texts[0]}
+        assert drawn == {str(row[column]) for row in case.one_sample}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(c, id=c.name)
+        for c in load_cases()
+        if c.function in BAR and c.error is not None
+    ],
+)
+def test_bar_failed_case(case: OracleCase) -> None:
+    # ggstatsplot failed while preparing the data: no hidden call ran, and the
+    # generator's own preparation (ggstatsplot's function) failed the same way.
+    expected = case.expected_error
+    assert expected is not None
+    assert expected["component"] == "data"
+    assert case.error is not None
+    assert expected["message"] in case.error
+    assert case.suppressed == []
+    assert case.raw["partial"] == []
+    assert case.contingency_data["error"] == case.error
+    assert case.raw["stats"] is None
+
+
+def test_probe_contingency_covers_its_grid() -> None:
+    # The rules are tested in tests/test_reference_vs_oracle.py; the percent labels
+    # here: paste0(round(perc, d), "%") is Python's round() on the same double
+    # (ties to even on the exact binary value: 12.5 -> 12, 6.25 -> 6.2, 31.25 ->
+    # 31.2), printed with up to 15 significant digits.
+    contingency = probe("probe-contingency")
+    assert len(contingency.rows("chisq")) == 22
+    assert len(contingency.rows("goodness_of_fit")) == 13
+    assert len(contingency.rows("cramers_v")) == 22
+    assert all(len(entry["rows"]) == 12 for entry in contingency.rows("cramers_v"))
+    assert len(contingency.rows("paired")) == 12
+    assert len(contingency.rows("fisher")) == 19
+    labels = contingency.rows("percent_labels")
+    assert len(labels) == 927
+    for row in labels:
+        perc = r_double(str(row["perc_hex"]))
+        assert perc is not None
+        assert perc == (row["k"] / row["n"]) * 100
+        rounded = round(perc, row["digits"])
+        assert r_double(str(row["rounded_hex"])) == rounded
+        assert row["label"] == f"{_r_round_text(perc, row['digits'])}%"
+    ties = {row["label"] for row in labels if row["n"] in (8, 16)}
+    assert {"12%", "38%", "6.2%", "31.2%", "6.25%"} <= ties
+
+
+def test_pie_and_bar_compute_the_same() -> None:
+    # ggpiestats' one-way cases next to ggbarstats': the same tables, statistics and
+    # labels (the one-way Bayes factor is a Monte Carlo estimate from the same seed).
+    by_name = {case.name: case for case in load_cases()}
+    pies = [name for name in by_name if name.startswith("ggpiestats-")]
+    assert len(pies) == 5
+    for name in pies:
+        pie, bar = by_name[name], by_name[name.replace("ggpiestats-", "ggbarstats-", 1)]
+        assert pie.contingency_data == bar.contingency_data
+        for table in ("subtitle_data", "caption_data", "descriptive_data"):
+            assert pie.table(table) == bar.table(table), (name, table)

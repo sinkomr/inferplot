@@ -543,9 +543,17 @@ def test_assembled_result_of_each_fixture(case: OracleCase) -> None:
     assert len(result.text.alt_text) <= 400
     back = StatsResult.from_json(result.to_json())
     assert back.to_json() == result.to_json()
+    # NaN is not equal to itself: a result holding one (a statistic, or the NA
+    # interval of the bootstrap-t on constant data, edge_one_constant) is compared
+    # through its JSON above.
+    effect = result.effect_size
     if not any(
         isinstance(x, float) and math.isnan(x)
-        for x in (result.test.statistic if result.test else 0.0,)
+        for x in (
+            result.test.statistic if result.test else 0.0,
+            effect.conf_low if effect else 0.0,
+            effect.conf_high if effect else 0.0,
+        )
     ):
         assert back == result
     embedded = StatsResult.from_json(result.to_json(include_values=False))
