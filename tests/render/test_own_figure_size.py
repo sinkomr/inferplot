@@ -69,6 +69,30 @@ def assert_size(fig: StatsFigure, which: str, case: Any) -> None:
     assert "figure_oversized" not in [i.code for i in fig.check()], case
 
 
+# Values that differ by less than a double resolves at their magnitude (1e-6
+# around 1.7e9, where doubles are 2.4e-7 apart) cannot be binned: the bin rule
+# refuses them with this plain message, which is not a layout.
+UNRESOLVED = "is too small to resolve at the magnitude of the values"
+
+
+def assert_drawn_size(make: Any, which: str, case: Any) -> None:
+    """``assert_size`` on the figure ``make(case)`` draws, unless the bins of
+    values too close together for doubles are refused (UNRESOLVED)."""
+    refused: ValueError | None = None
+    fig: StatsFigure | None = None
+    try:
+        fig = make(case)
+    except ValueError as error:
+        refused = error
+    if refused is not None:
+        assert UNRESOLVED in str(refused), (case, refused)
+        location, scale = case[0], case[1]
+        assert scale / abs(location) < 1e-14, case
+        return
+    assert fig is not None
+    assert_size(fig, which, case)
+
+
 def _values(location: float, scale: float, n: int, seed: int) -> np.ndarray:
     rng = np.random.default_rng([seed, n])
     return location + scale * rng.normal(0.0, 1.0, n)
@@ -95,24 +119,24 @@ def _scatter(case: tuple[float, float, int, str, object]) -> StatsFigure:
 
 @pytest.mark.parametrize("case", QUICK, ids=str)
 def test_histogram_size(case: Any) -> None:
-    assert_size(_histogram(case), "hist", case)
+    assert_drawn_size(_histogram, "hist", case)
 
 
 @pytest.mark.parametrize("case", QUICK, ids=str)
 def test_scatter_size(case: Any) -> None:
-    assert_size(_scatter(case), "scatter", case)
+    assert_drawn_size(_scatter, "scatter", case)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("case", SLOW, ids=str)
 def test_histogram_size_many(case: Any) -> None:
-    assert_size(_histogram(case), "hist", case)
+    assert_drawn_size(_histogram, "hist", case)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("case", SLOW[::2], ids=str)
 def test_scatter_size_many(case: Any) -> None:
-    assert_size(_scatter(case), "scatter", case)
+    assert_drawn_size(_scatter, "scatter", case)
 
 
 CONSTANT: Final = list(
