@@ -757,20 +757,30 @@ def _level_too_extreme(conf_level: float, count: int) -> ValueError:
     )
 
 
-def _rounded_percentile_bounds(
-    ordered: NDArray[np.float64], conf_level: float
+def rounded_percentile_bounds(
+    ordered: NDArray[np.float64], conf_level: float, alpha: float
 ) -> tuple[float, float]:
-    """t1way's percentile interval (Wilcox 2017, section 3.1): with
-    l = round(alpha / 2 B), alpha = 1 - conf_level computed in floating point and
-    R's rounding half to even, the (l + 1)-th and (B - l)-th smallest values
-    (oracle replay: the 4th and 97th of 100, because alpha / 2 B is
-    2.5000000000000022 there; the 501st and 19,500th of 20,000)."""
+    """The rounded percentile rule (Wilcox 2017, section 3.1): with
+    l = round(alpha / 2 B), rounded half to even on the binary value as R's
+    ``round`` does (Python's ``round`` does the same), the (l + 1)-th and
+    (B - l)-th smallest of the B sorted values. ``conf_level`` names the level in
+    the message when l would be 0 (the bounds would be the most extreme values at
+    any level)."""
     count = ordered.size
-    alpha = 1.0 - conf_level
     low = round(alpha / 2.0 * count)
     if low < 1:
         raise _level_too_extreme(conf_level, count)
     return float(ordered[low]), float(ordered[count - low - 1])
+
+
+def _rounded_percentile_bounds(
+    ordered: NDArray[np.float64], conf_level: float
+) -> tuple[float, float]:
+    """t1way's percentile interval (``rounded_percentile_bounds``) with
+    alpha = 1 - conf_level computed in floating point (oracle replay: the 4th and
+    97th of 100, because alpha / 2 B is 2.5000000000000022 there; the 501st and
+    19,500th of 20,000; probe-bootrules: 12 of 12 at B = 39 to 200)."""
+    return rounded_percentile_bounds(ordered, conf_level, 1.0 - conf_level)
 
 
 def akp_effect(
@@ -813,9 +823,33 @@ def akp_effect(
             so many resamples are 0 / 0 that the others are too few for the
             percentile interval, or an invalid ``tr``, ``conf_level`` or ``seed``.
     """
-    t_trim = check_trim(tr)
     level = check_conf_level(conf_level)
     rng_seed = check_bootstrap_seed(seed)
+    estimate, values = _akp_replicates(a, b, tr=tr, seed=rng_seed)
+    replicates = split_replicates(values)
+    low, high = replicate_bounds(
+        replicates, level, floor_percentile_bounds, "the AKP effect size"
+    )
+    return BootstrapEffectSizeCI(
+        estimate=estimate,
+        conf_low=low,
+        conf_high=high,
+        conf_level=level,
+        sidedness="two-sided",
+        seed=rng_seed,
+        resamples=BOOTSTRAP_RESAMPLES,
+        undefined_resamples=replicates.undefined,
+        infinite_resamples=replicates.infinite,
+    )
+
+
+def _akp_replicates(
+    a: SampleLike, b: SampleLike, *, tr: float, seed: int
+) -> tuple[float, NDArray[np.float64]]:
+    """``akp_effect``'s estimate and its BOOTSTRAP_RESAMPLES resampled values in
+    the order drawn, NaN for a 0 / 0 resample (tests read them to apply other
+    percentile rules)."""
+    t_trim = check_trim(tr)
     raw_a = as_sample(a, name="a", min_size=2)
     raw_b = as_sample(b, name="b", min_size=2)
     scale = common_scale(raw_a, raw_b)
@@ -846,22 +880,9 @@ def akp_effect(
             out[row] = math.nan if sign == 0.0 else sign * math.inf
         return out
 
-    rng = np.random.Generator(np.random.PCG64(rng_seed))
-    replicates = split_replicates(
-        bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
-    )
-    low, high = replicate_bounds(replicates, level, floor_percentile_bounds, method)
-    return BootstrapEffectSizeCI(
-        estimate=estimate,
-        conf_low=low,
-        conf_high=high,
-        conf_level=level,
-        sidedness="two-sided",
-        seed=rng_seed,
-        resamples=BOOTSTRAP_RESAMPLES,
-        undefined_resamples=replicates.undefined,
-        infinite_resamples=replicates.infinite,
-    )
+    rng = np.random.Generator(np.random.PCG64(seed))
+    values = bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
+    return estimate, values
 
 
 def explanatory_effect(

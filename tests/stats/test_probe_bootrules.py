@@ -26,11 +26,25 @@ from scipy import special
 from inferplot.stats.nonparametric import (
     _percentile_lower,  # pyright: ignore[reportPrivateUsage]
 )
+from inferplot.stats.one_sample import bootstrap_t_critical_value
 from inferplot.stats.robust import (
+    _akp_replicates,  # pyright: ignore[reportPrivateUsage]
     _rounded_percentile_bounds,  # pyright: ignore[reportPrivateUsage]
+    akp_effect,
     floor_percentile_bounds,
+    winsorized_normal_variance,
 )
-from tests.oracle_fixtures import Row, probe, r_double
+from inferplot.stats.within_robust import dep_effect_percentile_bounds
+from tests.oracle_fixtures import (
+    Row,
+    cases_for,
+    number,
+    probe,
+    r_double,
+    read_csv,
+    wrs2_akp_constant,
+)
+from tests.tolerances import assert_close, assert_within_monte_carlo
 
 FloatArray = NDArray[np.float64]
 B_GRID = (39, 40, 99, 100, 199, 200)
@@ -193,8 +207,12 @@ def test_dep_effect_takes_the_rounded_rule_at_alpha_005(row: Row) -> None:
     ordered = _sorted_inputs(row)[0]
     _, low, high = _bounds(row)
     assert _round_rule(ordered, 0.05) == (low, high)
-    # inferplot applies the floor rule to dep.effect (D66). The two pick the same
-    # order statistics at inferplot's 2,000 resamples, not at every B.
+    assert dep_effect_percentile_bounds(ordered, 0.95) == (low, high)
+    # t1way's alpha (1 - 0.95 in floating point) is another rule at B = 100.
+    t1way = _rounded_percentile_bounds(ordered, 0.95)
+    assert (t1way == (low, high)) == (row["B"] != 100)
+    # D66 used to apply the floor rule to dep.effect. The two pick the same order
+    # statistics at inferplot's 2,000 resamples, not at every B.
     floor = _floor_rule(ordered, 0.95)
     differs = DEP_EFFECT_FLOOR_DIFFERS.get(row["B"])
     assert (floor[0] != low) == (differs == "low")
@@ -204,6 +222,20 @@ def test_dep_effect_takes_the_rounded_rule_at_alpha_005(row: Row) -> None:
 def test_dep_effect_rules_agree_at_inferplots_resample_count() -> None:
     ordered = np.arange(INFERPLOT_RESAMPLES, dtype=np.float64)
     assert floor_percentile_bounds(ordered, 0.95) == _round_rule(ordered, 0.05)
+    assert dep_effect_percentile_bounds(ordered, 0.95) == _round_rule(ordered, 0.05)
+
+
+def test_dep_effect_rule_counts_the_defined_resamples() -> None:
+    # With 0/0 resamples left out (D65) B is the number of the others, where the
+    # rules can differ: B = 1,990 gives l = round(49.75) = 50 (the 51st and
+    # 1,940th), the floor rule the 50th and 1,940th. Rounding is half to even, as
+    # R's round: B = 100 gives 2.5, rounded to 2; B = 140 gives 3.5, rounded to 4.
+    ordered = np.arange(1990, dtype=np.float64)
+    assert dep_effect_percentile_bounds(ordered, 0.95) == (50.0, 1939.0)
+    assert floor_percentile_bounds(ordered, 0.95) == (49.0, 1939.0)
+    assert dep_effect_percentile_bounds(np.arange(100.0), 0.95) == (2.0, 97.0)
+    assert dep_effect_percentile_bounds(np.arange(140.0), 0.95) == (4.0, 135.0)
+    assert dep_effect_percentile_bounds(np.arange(100.0), 0.9) == (5.0, 94.0)
 
 
 @pytest.mark.parametrize("row", _ids("wmcpAKP"))
@@ -216,8 +248,10 @@ def test_wmcpakp_averages_pair_bounds_from_separate_runs(row: Row) -> None:
     ordered = _sorted_inputs(row)
     assert len(ordered) == 27
     _, low, high = _bounds(row)
-    lows = [_round_rule(ordered[9 * p + 3], 0.05)[0] for p in range(3)]
-    highs = [_round_rule(ordered[9 * p + 6], 0.05)[1] for p in range(3)]
+    lows = [dep_effect_percentile_bounds(ordered[9 * p + 3], 0.95)[0] for p in range(3)]
+    highs = [
+        dep_effect_percentile_bounds(ordered[9 * p + 6], 0.95)[1] for p in range(3)
+    ]
     assert math.isclose(math.fsum(lows) / 3, low, rel_tol=1e-15, abs_tol=1e-15)
     assert math.isclose(math.fsum(highs) / 3, high, rel_tol=1e-15, abs_tol=1e-15)
 
@@ -236,6 +270,7 @@ def test_trimcibt_is_a_symmetric_bootstrap_t(row: Row) -> None:
     se = (estimate - 0.5) / statistic  # nv = 0.5
     alpha = 1.0 - _conf(row)
     c = float(abs_t[round((1.0 - alpha) * abs_t.size) - 1])
+    assert bootstrap_t_critical_value(abs_t, _conf(row)) == c
     assert math.isclose(estimate - c * se, low, rel_tol=1e-14)
     assert math.isclose(estimate + c * se, high, rel_tol=1e-14)
     assert p_value == float(np.mean(abs_t >= abs(statistic)))
@@ -299,3 +334,80 @@ def test_effectsize_does_not_count_undefined_resamples_as_zero(name: str) -> Non
         if undefined > 0.05 * t.size:
             as_zero = np.where(np.isnan(t), 0.0, t)
             assert _percentile_lower(as_zero, 0.05) == 0.0
+
+
+# D65 against WRS2's rule for 0/0 AKP resamples (review T7, SPEC.md section 5 item
+# 17), on inferplot's own 2,000 replicates: WRS2's rule is the floor rule with the
+# undefined resamples sorted last (positions counted over all B), D65's the floor
+# rule over the defined resamples.
+
+
+def _akp_groups(name: str) -> tuple[FloatArray, FloatArray]:
+    frame = read_csv(f"{name}.csv")
+    values = frame["value"].to_numpy(dtype=np.float64)
+    labels = frame["group"].to_numpy()
+    return values[labels == "a"], values[labels == "b"]
+
+
+def _r_rule_bounds(values: FloatArray) -> tuple[float, float]:
+    """WRS2's bounds from inferplot's replicates: NaN sorted last, then the floor
+    rule over all B (``test_akp_effect_drops_undefined_resamples_but_counts_...``)."""
+    undefined = np.isnan(values)
+    last = np.concatenate(
+        [np.sort(values[~undefined]), np.full(int(undefined.sum()), math.nan)]
+    )
+    return floor_percentile_bounds(last, 0.95)
+
+
+def _heldout_reference(name: str) -> Row:
+    (entry,) = [e for e in probe("probe-heldout").rows("cases") if e["name"] == name]
+    return entry["fixture"]
+
+
+def test_akp_undefined_d65_and_r_rule_on_edge_akp_undefined() -> None:
+    # 17% of the resamples are 0/0. D65 gives a finite interval with the undefined
+    # resamples counted; WRS2's rule gives an upper bound of NA, as ggstatsplot
+    # prints (CI [0.22, NA]); the lower bounds agree (one resample value, scaled by
+    # WRS2's AKP constant, D42).
+    a, b = _akp_groups("edge_akp_undefined")
+    estimate, values = _akp_replicates(a, b, tr=0.2, seed=0)
+    result = akp_effect(a, b, seed=0)
+    assert result.estimate == estimate
+    assert result.undefined_resamples == int(np.isnan(values).sum()) == 333
+    assert (result.conf_low, result.conf_high) == pytest.approx(
+        (0.2214902789187356, 0.8799217738686194), rel=1e-12
+    )
+    r_low, r_high = _r_rule_bounds(values)
+    assert math.isnan(r_high)
+    assert r_low == result.conf_low
+    fixture = _heldout_reference("ggbetweenstats-edge_akp_undefined-robust")
+    (row,) = fixture["stats"]["subtitle_data"]
+    assert row["conf.high"] is None
+    scale = wrs2_akp_constant(0.2) / math.sqrt(winsorized_normal_variance(0.2))
+    assert_close("closed_form", r_low * scale, number(row["conf.low"]), what="low")
+    assert_close("closed_form", estimate * scale, number(row["estimate"]), what="AKP")
+
+
+def test_akp_undefined_d65_and_r_rule_on_edge_akp_undefined2() -> None:
+    # 2% of the resamples are 0/0. WRS2's rule applied to inferplot's replicates
+    # lands within 4 Monte Carlo SDs of R's 20,000-resample reference; D65's upper
+    # bound lies 2.5 SDs below it (inside the parity allowance, so this fixture
+    # cannot tell the rules apart by the 4-SD test alone).
+    (case,) = [
+        c
+        for c in cases_for("ggbetweenstats")
+        if c.name == "ggbetweenstats-edge_akp_undefined2-robust"
+    ]
+    reference = case.bootstrap_reference
+    assert reference is not None
+    expected = number(reference["conf_high"])
+    mc_sd = number(reference["replicates"]["conf_high_sd"])
+    a, b = _akp_groups("edge_akp_undefined2")
+    _, values = _akp_replicates(a, b, tr=0.2, seed=0)
+    assert int(np.isnan(values).sum()) == 45
+    _, r_high = _r_rule_bounds(values)
+    assert_within_monte_carlo(r_high, expected, mc_sd, what="R's rule, upper")
+    assert (r_high - expected) / mc_sd == pytest.approx(1.38, abs=0.01)
+    d65 = akp_effect(a, b, seed=0)
+    assert (d65.conf_high - expected) / mc_sd == pytest.approx(-2.52, abs=0.01)
+    assert d65.conf_high < r_high

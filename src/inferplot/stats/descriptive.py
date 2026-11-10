@@ -30,6 +30,7 @@ __all__ = [
     "deviations_from_weighted_mean",
     "differences_same_within_rounding",
     "exact_mean",
+    "exact_sum",
     "exact_variance",
     "mean",
     "median",
@@ -75,6 +76,15 @@ def _exact_sum_scaled(x: FloatArray) -> tuple[int, int]:
             exact = (int(sum_hi[shift]) << 27) + int(sum_lo[shift])
             total += exact << shift
     return total, e_min - 53
+
+
+def exact_sum(x: FloatArray) -> Fraction:
+    """The sum of the finite float64 values ``x`` as an exact rational (not
+    rounded; 0 for an empty array)."""
+    numerator, scale = _exact_sum_scaled(x)
+    if scale >= 0:
+        return Fraction(numerator << scale)
+    return Fraction(numerator, 1 << -scale)
 
 
 def exact_mean(x: FloatArray) -> Fraction:

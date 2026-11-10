@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from fractions import Fraction
 from typing import Final
 
@@ -56,8 +57,8 @@ from inferplot.stats.robust import (
     check_trim,
     exact_trimmed_mean,
     f_upper_p,
-    floor_percentile_bounds,
     replicate_bounds,
+    rounded_percentile_bounds,
     rows_trimmed,
     split_replicates,
     trim_count,
@@ -648,6 +649,26 @@ def _chunks(total_rows: int, values_per_row: int) -> list[int]:
     return [size] * full + ([rest] if rest else [])
 
 
+def dep_effect_percentile_bounds(
+    ordered: NDArray[np.float64], conf_level: float
+) -> tuple[float, float]:
+    """The percentile interval of WRS2's ``dep.effect`` and ``wmcpAKP``: the
+    rounded rule (``rounded_percentile_bounds``), l = round(alpha / 2 B) and the
+    (l + 1)-th and (B - l)-th smallest of the B values, with alpha = 1 -
+    ``conf_level`` as written in decimal (exactly 0.05 at 0.95: those functions
+    take a fixed alpha of 0.05, not 1 - 0.95 computed in floating point, which is
+    0.050000000000000044). probe-bootrules, R's own sorted replicates at B = 39,
+    40, 99, 100, 199 and 200: 6 of 6 for dep.effect and 6 of 6 for wmcpAKP's pair
+    bounds (B = 100: the 3rd and 98th, where t1way's alpha gives the 4th and 97th
+    and akp.effect's floor rule the 3rd and 97th). At 2,000 defined resamples it
+    picks the same order statistics as the floor rule; with undefined (0 / 0)
+    resamples left out (D65) B is the number of the others, and the two rules can
+    differ by one order statistic.
+    """
+    alpha = float(Decimal(1) - Decimal(repr(float(conf_level))))
+    return rounded_percentile_bounds(ordered, conf_level, alpha)
+
+
 @dataclass(frozen=True, slots=True)
 class _PairAkp:
     """One pair's AKP estimate and the centred differences its bootstrap draws:
@@ -765,7 +786,7 @@ def _akp_bootstrap(
     for values in _akp_replicates(rng, fitted, n, t_trim, constant):
         replicates = split_replicates(values)
         bounds.append(
-            replicate_bounds(replicates, level, floor_percentile_bounds, method)
+            replicate_bounds(replicates, level, dep_effect_percentile_bounds, method)
         )
         undefined.append(replicates.undefined)
         infinite.append(replicates.infinite)
@@ -794,9 +815,10 @@ def dependent_akp(
     value at tr 0.2, 4.6e-9 at 0.1; DECISIONS.md D42, ``akp_constant``).
 
     CI: BOOTSTRAP_RESAMPLES resamples of the pairs (subjects drawn with
-    replacement, their two values together), the (floor(alpha / 2 B) + 1)-th and
-    floor((1 - alpha / 2) B)-th smallest delta, alpha = 1 - conf_level
-    (``akp_effect``'s rule; at B = 2,000 and 95% it coincides with t1way's). The
+    replacement, their two values together), the (l + 1)-th and (B - l)-th
+    smallest delta, l = round(alpha / 2 B) with alpha = 1 - conf_level as written
+    (``dep_effect_percentile_bounds``; probe-bootrules: R's own replicates, 6 of
+    6; at B = 2,000 and 95% it coincides with ``akp_effect``'s floor rule). The
     scheme was read off the fixtures' 20,000-resample references: over 40 seeds
     resampling pairs puts every bound's mean within 1.9 standard errors of the
     mean of R's 50 replicate runs on the 11 distinct two-condition references;
