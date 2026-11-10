@@ -145,10 +145,29 @@ def test_histogram_definition() -> None:
     assert on_edge.counts == (2, 2)
 
 
+def test_constant_x_gets_one_bin_a_tenth_wide() -> None:
+    # ggstatsplot's default for zero-range data, as edge_one_constant records it
+    # (ten values of 5: [4.95, 5.05]; with binwidth = 1, [4.5, 5.5]); 0.1 whatever
+    # the magnitude of the value (replaces D89's refusal).
+    assert histogram_binwidth([2.0, 2.0]) == 0.1
+    for value in (2.0, 0.0, -5.0, 1234.5):
+        one = histogram_bins([value] * 3)
+        assert (one.counts, one.binwidth) == ((3,), 0.1)
+        assert math.isclose(one.edges[0], value - 0.05, rel_tol=1e-13, abs_tol=1e-13)
+        assert math.isclose(one.edges[1], value + 0.05, rel_tol=1e-13, abs_tol=1e-13)
+    (case,) = [c for c in HISTO if c.name == "gghistostats-edge_one_constant-parametric"]
+    _assert_edges(histogram_bins(case.analyzed_values("x")).edges, [4.95, 5.05])
+
+
 def test_histogram_given_width_and_limits() -> None:
     assert histogram_bins([3.0, 3.0, 3.0], binwidth=0.5).counts == (3,)
-    with pytest.raises(ValueError, match="binwidth="):
-        histogram_bins([2.0, 2.0])
+    # A width below the spacing of doubles at the values' magnitude would merge
+    # edges into empty or zero-width bins: refused, with or without binwidth.
+    for values, width in (([1e20, 1e20], None), ([1e20, 1e20], 1.0)):
+        with pytest.raises(ValueError, match="too small to resolve"):
+            histogram_bins(values, binwidth=width)
+    with pytest.raises(ValueError, match="too small to resolve"):
+        histogram_bins([1e17, 1e17 + 16.0])
     with pytest.raises(ValueError, match="binwidth must be"):
         histogram_bins([1.0, 2.0], binwidth=0.0)
     with pytest.raises(ValueError, match="1,000,000"):

@@ -7,7 +7,7 @@ histograms. The renderers draw these; nothing here plots.
 
 The R references are the layers ggstatsplot 1.1.4 builds (ggplot2 4.0.3): the
 fixtures record each built layer, and every function here reproduces them on all
-76 gghistostats and 64 ggscatterstats cases (tests/stats/test_plot_geometry.py).
+92 gghistostats and 73 ggscatterstats cases (tests/stats/test_plot_geometry.py).
 The binning rules are ggplot2's ``stat_bin`` as its documentation describes it
 (bins of ``binwidth`` laid on a grid with a bin boundary at ``boundary``, default
 half a bin width, or ``bins`` bins centred on the smallest value, intervals closed
@@ -91,19 +91,19 @@ class OlsBand:
 
 def histogram_binwidth(x: SampleLike) -> float:
     """gghistostats' default bin width: (max(x) - min(x)) / sqrt(n), ggstatsplot's
-    ``.binwidth()`` as the fixtures record it (all 75 cases without ``binwidth``).
+    ``.binwidth()`` as the fixtures record it (all 87 cases without ``binwidth``).
+    Where every value is the same that width is 0, and the fixtures record 0.1
+    instead (edge_one_constant: ten values of 5 give one bin [4.95, 5.05]), the
+    width ggplot2 gives zero-range data, whatever the magnitude of the value.
 
     Raises:
-        ValueError: x is empty or not finite, or every value is the same (the
-            width would be 0; pass a ``binwidth``).
+        ValueError: x is empty or not finite, or its range exceeds the largest
+            double.
     """
     arr = as_sample(x)
     spread = float(arr.max()) - float(arr.min())
     if spread == 0.0:
-        raise ValueError(
-            "every value of x is the same, so the default bin width "
-            "(max - min) / sqrt(n) is 0; give the bin width (binwidth=)"
-        )
+        return _ZERO_RANGE_WIDTH
     if math.isinf(spread):
         raise ValueError(
             "the range of x exceeds the largest double (about 1.8e308); rescale x"
@@ -137,6 +137,13 @@ def _bins(values: FloatArray, width: float, boundary: float) -> HistogramBins:
     edges = _seq_by(origin, high + (1.0 - _FUZZ) * width, width)
     if edges.size == 1:
         edges = np.array([edges[0], edges[0] + width])
+    if not bool(np.all(np.diff(edges) > 0.0)):
+        # A width below the spacing of doubles at this magnitude: edges merge.
+        raise ValueError(
+            f"the bin width {width!r} is too small to resolve at the magnitude of "
+            f"the values (about {max(abs(low), abs(high)):.3g}): bin edges would "
+            "coincide; use a larger bin width or rescale x"
+        )
     fuzz = _FUZZ * float(np.median(np.diff(edges)))
     fuzzy = edges + fuzz
     fuzzy[0] = edges[0] - fuzz
@@ -159,13 +166,13 @@ def histogram_bins(x: SampleLike, *, binwidth: float | None = None) -> Histogram
     (k + 1/2) w (ggplot2's default boundary, half a bin width), from the bin
     holding min(x) to the one holding max(x), every value counted once (intervals
     closed on the right). ``proportions`` is count / n, what the right axis shows
-    as a percentage. Every one of the 76 gghistostats fixtures' built bins: edges
-    within rounding, counts exactly.
+    as a percentage. Every one of the 92 gghistostats fixtures' built bins: edges
+    within rounding, counts exactly (a constant x: one bin, 0.1 wide by default).
 
     Raises:
         ValueError: x empty or not finite, a binwidth that is not a finite positive
-            number, every value the same without a binwidth, or more than a
-            million bins.
+            number, more than a million bins, or a width too small for doubles to
+            separate the edges at the magnitude of x.
     """
     arr = as_sample(x)
     if binwidth is None:
