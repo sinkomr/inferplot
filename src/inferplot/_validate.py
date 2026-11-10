@@ -1216,6 +1216,14 @@ def _bar_targeted(
             f"the axis labels, title and legend title are xlab=, ylab=, title= and "
             f"legend_title=, {drawing}."
         )
+    if key in {"xlabel", "ylabel"}:
+        # Without this, label= (one edit away) would be the did-you-mean.
+        axis, text = key[0], shown or "'...'"
+        where = f"Write {axis}lab={text}." if "ax" in valid else f"It is {drawing}."
+        return no(
+            f"it is matplotlib's name for the {axis} axis label, which inferplot "
+            f"calls {axis}lab=. {where}"
+        )
     if key in {"order", "x_order", "level_order", "levels", "categories"}:
         return no(
             "barstats has no order=, as ggbarstats has none: the levels of x and y "

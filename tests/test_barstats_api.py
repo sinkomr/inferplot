@@ -499,6 +499,8 @@ TARGETED = {
     "centrality.type": "barstats counts categories and has no centrality",
     "sampling.plan": "removed from ggbarstats in ggstatsplot 1.0.0",
     "ggtheme": "there are no ggplot2 themes in matplotlib",
+    "xlabel": "matplotlib's name for the x axis label, which inferplot calls xlab=",
+    "ylabel": "which inferplot calls ylab=",
 }
 
 
@@ -623,3 +625,44 @@ def test_cell_percentages_are_shares_of_their_bar() -> None:
     # (count / n) * 100, as ggstatsplot computes perc: 33.33333333333333, not
     # 100 / 3 = 33.333333333333336.
     assert thirds == [1 / 3 * 100] * 3
+
+
+def test_provisional_texts() -> None:
+    # PROVISIONAL (text.py): no subtitle, caption or labels yet; the APA sentence
+    # and alt text come from the result's own numbers.
+    two_way = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-am-parametric"])
+    texts = two_way.text
+    assert (texts.subtitle, texts.caption) == (None, None)
+    assert (texts.tick_labels, texts.pairwise_labels, texts.centrality_labels) == (
+        (),
+        (),
+        (),
+    )
+    assert texts.apa == (
+        "Pearson's chi-square test: chi2(2) = 8.74, p = .013, Cramer's V = .46, 95% "
+        "CI [.00, .82], n = 32."
+    )
+    assert texts.alt_text == (
+        f"Counts of the 3 levels of cyl within the 2 levels of am (n = 32). {texts.apa}"
+    )
+    paired = bc.assembled(bc.BY_NAME["ggbarstats-edge_bar_paired-less-parametric"])
+    assert paired.text.apa == (
+        "McNemar's test: chi2(1) = 4.00, p = .046, Cohen's g = .25, 95% one-sided CI "
+        "[-.50, .38], n = 40 pairs."
+    )
+    assert paired.text.alt_text.startswith(
+        "Paired counts of before and after over 2 levels (n = 40 pairs). "
+    )
+    one_way = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-parametric"])
+    assert one_way.text.alt_text.startswith("Counts of the 3 levels of cyl (n = 32). ")
+    quiet = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-am-nosubtitle-parametric"])
+    assert quiet.text.apa == "No test was computed (results_subtitle=False), n = 32."
+    long_names = module._assemble(*_long_names(), digits=2)
+    assert len(long_names.text.alt_text) <= 400
+    assert long_names.text.alt_text.endswith(long_names.text.apa)
+
+
+def _long_names() -> tuple[Any, Any, Any]:
+    data = pd.DataFrame({"x" * 300: list("aabb"), "y" * 300: list("pqpq")})
+    table, args, _ = prepare(data, "x" * 300, "y" * 300, results_subtitle=False)
+    return table, args, _stand_in(table, args)
