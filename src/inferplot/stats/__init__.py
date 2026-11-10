@@ -7,7 +7,7 @@ function it must match (SPEC.md section 4).
 
 from __future__ import annotations
 
-from inferplot.stats.bayes import jzs_bf10_two_sample, jzs_log_bf10
+from inferplot.stats.bayes import jzs_bf10_paired, jzs_bf10_two_sample, jzs_log_bf10
 from inferplot.stats.density import MapEstimate, bw_sj, map_estimate
 from inferplot.stats.descriptive import (
     common_scale,
@@ -67,6 +67,17 @@ from inferplot.stats.robust import (
 )
 from inferplot.stats.smm import smm_cdf, smm_quantile
 from inferplot.stats.srange import srange_logsf, srange_sf
+from inferplot.stats.within_parametric import (
+    PairedT,
+    PairedTPair,
+    RepeatedMeasuresAnova,
+    paired_differences_constant,
+    paired_hedges_g,
+    paired_t,
+    paired_t_pairs,
+    rm_anova,
+    rm_partial_omega_squared,
+)
 
 __all__ = [
     "ALTERNATIVES",
@@ -82,6 +93,9 @@ __all__ = [
     "MapEstimate",
     "PAdjustMethod",
     "PairResult",
+    "PairedT",
+    "PairedTPair",
+    "RepeatedMeasuresAnova",
     "ScaledWelch",
     "Sidedness",
     "StudentT",
@@ -98,6 +112,7 @@ __all__ = [
     "games_howell",
     "hedges_g",
     "hedges_j",
+    "jzs_bf10_paired",
     "jzs_bf10_two_sample",
     "jzs_log_bf10",
     "kruskal_wallis",
@@ -107,9 +122,15 @@ __all__ = [
     "mean",
     "median",
     "p_adjust",
+    "paired_differences_constant",
+    "paired_hedges_g",
+    "paired_t",
+    "paired_t_pairs",
     "partial_omega_squared",
     "rank_biserial",
     "rank_epsilon_squared",
+    "rm_anova",
+    "rm_partial_omega_squared",
     "scaled_variance",
     "smm_cdf",
     "smm_critical_value",

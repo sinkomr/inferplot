@@ -30,10 +30,11 @@ from scipy import optimize
 
 from inferplot.stats.descriptive import SampleLike, as_sample
 from inferplot.stats.parametric import student_t
+from inferplot.stats.within_parametric import paired_t
 
 FloatArray = NDArray[np.float64]
 
-__all__ = ["jzs_bf10_two_sample", "jzs_log_bf10"]
+__all__ = ["jzs_bf10_paired", "jzs_bf10_two_sample", "jzs_log_bf10"]
 
 _LOG_SQRT_2PI: Final = 0.5 * math.log(2.0 * math.pi)
 # Nodes are added until the log integrand is this far below its peak (e^-60 = 9e-27).
@@ -195,6 +196,42 @@ def jzs_bf10_two_sample(
     student = student_t(x, y)
     n_eff = x.size * y.size / (x.size + y.size)
     log_bf10 = jzs_log_bf10(student.t, n_eff, student.df, prior_scale=prior_scale)
+    try:
+        bf10 = math.exp(log_bf10)
+    except OverflowError:
+        bf10 = math.inf
+    return bf10, -log_bf10
+
+
+def jzs_bf10_paired(
+    a: SampleLike, b: SampleLike, *, prior_scale: float
+) -> tuple[float, float]:
+    """JZS Bayes factor of paired samples: ``(bf10, log_bf01)``.
+
+    The one-sample Bayes factor of the differences a - b (Rouder et al. 2009, eq. 1
+    with N = n and nu = n - 1): the paired t (``paired_t``, from the exact
+    differences) in ``jzs_log_bf10`` with n_eff = n and df = n - 1; two-sided
+    whatever the frequentist ``alternative`` is. Matches R's
+    ``BayesFactor::ttestBF(x = a, y = b, paired = TRUE, rscale = prior_scale)`` as
+    statsExpressions 2.2.1 calls it for ggwithinstats with ``bf.prior`` (0.707 by
+    default, not sqrt(2)/2): every paired Bayes factor of the ggwithinstats
+    fixtures agrees within ``ttest_bayes_factor``. BayesFactor's own quadrature
+    misses the accurate value at large |t| (probe-pairedbf, against 40-digit
+    mpmath quadratures in tests/data/pairedbf_reference.json: +68% at n 5 and t
+    1,000, -0.78% at n 30 and t 50, within 2.6e-6 up to |t| 12); this function
+    computes the accurate one (DECISIONS.md D50). ``bf10`` is ``inf`` when it
+    overflows a double; ``log_bf01`` = -log(BF10) stays finite.
+
+    Raises:
+        ValueError: as ``paired_t`` (fewer than two pairs, unequal lengths,
+            non-finite values, every difference the same, or differences that vary
+            too little next to the values), or prior_scale is not a finite positive
+            number.
+    """
+    paired = paired_t(a, b)
+    log_bf10 = jzs_log_bf10(
+        paired.t, float(paired.n), paired.df, prior_scale=prior_scale
+    )
     try:
         bf10 = math.exp(log_bf10)
     except OverflowError:
