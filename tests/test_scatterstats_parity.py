@@ -19,7 +19,15 @@ Fixtures inferplot answers differently from ggstatsplot, by name:
   [r, r], S = 0 or (n^3 - n) / 3, and the Bayes factor's limit, +Inf, with a
   ``warnings`` entry (D85); R prints its rounding noise (t = 2^27, p = 1.06e-62)
   and an empty Bayes factor. R's side is pinned as the fixture holds it
-  (``R_DIFFERS``, tests/stats/test_correlation_parity.py).
+  (``R_DIFFERS``, tests/stats/test_correlation_parity.py);
+* edge_corr_n3, types parametric, nonparametric and robust (3 pairs): the Fisher
+  z interval needs 4 pairs (D85), so inferplot raises; ggstatsplot prints r = 0.50,
+  t(1) = 0.58 or S = 2.00, p = 0.67 and the interval [NA, NA] (Pearson,
+  winsorized) or [-1.00, 1.00] (Spearman's rho). R's side is pinned
+  (``test_three_pairs_are_refused``). Type bayes is answered and matches.
+
+edge_corr_label_missing: a point whose label is missing is kept; R's label layer
+holds NA (drawn as nothing), inferplot's ``point_labels`` holds "".
 """
 
 from __future__ import annotations
@@ -37,7 +45,10 @@ from tests.stats.test_correlation_parity import R_DIFFERS
 from tests.tolerances import assert_close
 
 CASES = nl.SCATTER
-CONSTANT_X = sorted(n for n in nl.REFUSALS if n.startswith("ggscatterstats-"))
+CONSTANT_X = sorted(
+    n for n in nl.REFUSALS if n.startswith("ggscatterstats-edge_corr_constant_x-")
+)
+THREE_PAIRS = sorted(n for n in nl.REFUSALS if n.startswith("ggscatterstats-edge_corr_n3-"))
 COLLINEAR = sorted(c.name for c in CASES if "edge_corr_perfect" in c.name)
 _METHODS = {
     "pearson_correlation": "Pearson correlation",
@@ -80,17 +91,24 @@ def _compare(case: OracleCase, column: str, mine: float, row: Any, key: str) -> 
 
 
 def test_fixture_counts() -> None:
-    assert len(CASES) == 64
+    # 64, and 9 from the barstats oracle run: edge_corr_n3 and edge_corr_n4 in
+    # four types each, edge_corr_label_missing (parametric).
+    assert len(CASES) == 73
     counts = {
         t: sum(c.type == t for c in CASES)
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
-    assert counts == {"parametric": 20, "nonparametric": 14, "robust": 15, "bayes": 15}
+    assert counts == {"parametric": 23, "nonparametric": 16, "robust": 17, "bayes": 17}
     assert len(CONSTANT_X) == 4
+    assert THREE_PAIRS == [
+        f"ggscatterstats-edge_corr_n3-{t}"
+        for t in ("nonparametric", "parametric", "robust")
+    ]
+    assert set(nl.REFUSALS) & {c.name for c in CASES} == {*CONSTANT_X, *THREE_PAIRS}
     assert len(COLLINEAR) == 8
     assert not [c.name for c in CASES if c.error is not None]
-    # 60 answered cases on three backends, the label filter case on pandas only.
-    assert len(nl.params(CASES)) == 59 * 3 + 1
+    # 66 answered cases on three backends, the label filter case on pandas only.
+    assert len(nl.params(CASES)) == 65 * 3 + 1
 
 
 @pytest.mark.parametrize("name", CONSTANT_X)
@@ -111,6 +129,54 @@ def test_constant_x_is_refused(name: str, backend: nl.Backend) -> None:
     for column in ("estimate", "statistic", "p.value", "conf.low", "conf.high"):
         assert row[column] is None, column
     assert case.correlation["warnings"] == ["the standard deviation is zero"]
+
+
+# R's subtitle at 3 pairs (edge_corr_n3): the coefficient, statistic and p it
+# prints, and its interval (None for NA).
+_THREE_PAIRS_R = {
+    "parametric": ("Pearson correlation", 0.5, 0.577350269189626, (None, None)),
+    "robust": ("Winsorized Pearson correlation", 0.5, 0.577350269189626, (None, None)),
+    "nonparametric": ("Spearman correlation", 0.5, 2.0, (-1.0, 1.0)),
+}
+
+
+@pytest.mark.parametrize("name", THREE_PAIRS)
+@pytest.mark.parametrize("backend", nl.BACKENDS)
+def test_three_pairs_are_refused(name: str, backend: nl.Backend) -> None:
+    case = nl.BY_NAME[name]
+    refusal = nl.REFUSALS[name]
+    with pytest.raises(refusal.error) as info:
+        nl.analyze(case, nl.frame_of(case, backend))
+    assert str(info.value) == refusal.match
+    assert nl.analyzed(name, backend) is None
+    # The remedy works: type bayes answers the same pairs (and matches R:
+    # edge_corr_n3-bayes).
+    answered = nl.analyze(case, nl.frame_of(case, backend), type="bayes")
+    assert answered.bayes is not None
+    assert answered.n_obs == 3
+    # R's side as the fixture holds it.
+    method, estimate, statistic, interval = _THREE_PAIRS_R[case.type]
+    row = case.subtitle_data
+    assert (row["method"], int(number(row["n.obs"]))) == (method, 3)
+    assert_close("closed_form", number(row["estimate"]), estimate, what="r")
+    assert_close("closed_form", number(row["statistic"]), statistic, what="stat")
+    assert_close("closed_form", number(row["p.value"]), 2 / 3, what="p")
+    assert (row["conf.low"], row["conf.high"]) == interval
+    if case.type != "nonparametric":
+        assert number(row["df.error"]) == 1
+        assert case.raw["expected_na_values"] == ["subtitle"]
+        assert '"[" * "NA", "NA" * "]"' in str(case.subtitle)
+    # The parametric caption (the Bayes factor) is the bayes case's subtitle:
+    # inferplot gives it through type='bayes'.
+    if case.type == "parametric":
+        caption = case.caption_data
+        assert caption is not None
+        assert_close(
+            "correlation_bayes_factor",
+            answered.bayes.bf10,
+            number(caption["bf10"]),
+            what="caption BF10",
+        )
 
 
 @pytest.mark.parametrize(("name", "backend"), nl.params(CASES))
@@ -279,8 +345,8 @@ def test_results_do_not_depend_on_the_backend() -> None:
 
 def test_every_fixture_is_answered_or_refused_by_name() -> None:
     answered = {p.values[0] for p in nl.params(CASES)}
-    assert answered | set(CONSTANT_X) == {c.name for c in CASES}
-    assert not answered & set(CONSTANT_X)
+    assert answered | set(CONSTANT_X) | set(THREE_PAIRS) == {c.name for c in CASES}
+    assert not answered & {*CONSTANT_X, *THREE_PAIRS}
     frame = nl.frame_of(nl.BY_NAME[CONSTANT_X[0]])
     with pytest.raises(ValueError, match="Every value of x='x' is 5"):
         ip.analyze.scatterstats(frame, "x", "y", type="bayes")

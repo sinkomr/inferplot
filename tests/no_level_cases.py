@@ -16,7 +16,18 @@ ggstatsplot's output:
   (ggstatsplot ignores it: ToothGrowth-greater-robust and -bayes equal the
   two-sided cases), so the replay leaves it out and must give ggstatsplot's output;
 * a constant x raises ``ValueError`` for every type (ggstatsplot prints NA for
-  every number and drops the Bayes factor; edge_corr_constant_x), with no replay.
+  every number and drops the Bayes factor; edge_corr_constant_x), with no replay;
+* a constant one-sample x (edge_one_constant, ten values of 5, with the default
+  bin width and with binwidth = 1) raises ``ValueError`` for types parametric and
+  bayes (no standard deviation, D74; R's t.test stops with "data are essentially
+  constant", which ggstatsplot swallows: no subtitle and no caption) and robust (a
+  winsorized standard deviation of 0, so no interval exists; ggstatsplot prints
+  t = Inf, p = 2.23e-308 and the interval [NA, NA]), with no replay. Type
+  nonparametric is answered as R answers it;
+* three pairs (edge_corr_n3) raise ``ValueError`` for types parametric,
+  nonparametric and robust (the Fisher z interval needs 4 pairs, D85;
+  ggstatsplot prints r, t or S and p with the interval [NA, NA], or [-1, 1] for
+  Spearman's rho), with no replay. Type bayes is answered as R answers it.
 """
 
 from __future__ import annotations
@@ -65,13 +76,58 @@ _CONSTANT_X = Refusal(
     "with it is undefined for every type (ggstatsplot prints NA for every number).",
     None,
 )
+_NONPARAMETRIC_ADVICE = (
+    " Use type='nonparametric': the signed-rank test needs only values that differ "
+    "from test_value."
+)
+_CONSTANT_ONE = {
+    "parametric": Refusal(
+        ValueError,
+        "Every value of x='value' is 5, so the one-sample t-test has no standard "
+        "deviation." + _NONPARAMETRIC_ADVICE,
+        None,
+    ),
+    "bayes": Refusal(
+        ValueError,
+        "Every value of x='value' is 5, so the one-sample t-test behind the Bayes "
+        "factor has no standard deviation." + _NONPARAMETRIC_ADVICE,
+        None,
+    ),
+    "robust": Refusal(
+        ValueError,
+        "Every value of x='value' is 5, so the bootstrap-t test of the trimmed mean "
+        "has no standard deviation." + _NONPARAMETRIC_ADVICE,
+        None,
+    ),
+}
+_THREE_PAIRS_ADVICE = " Collect more pairs, or use type='bayes', whose Bayes factor needs 3."
+_THREE_PAIRS = {
+    t: Refusal(
+        ValueError,
+        "x='x' and y='y' have 3 complete pairs; the Fisher z confidence interval of "
+        f"{what} needs at least 4 (its variance is {variance} / (n - 3))."
+        + _THREE_PAIRS_ADVICE,
+        None,
+    )
+    for t, what, variance in (
+        ("parametric", "Pearson's r", "1"),
+        ("nonparametric", "Spearman's rho", "1.06"),
+        ("robust", "the winsorized correlation", "1"),
+    )
+}
 REFUSALS: Mapping[str, Refusal] = {
     "gghistostats-ToothGrowth-greater-robust": _ONE_SIDED,
     "gghistostats-ToothGrowth-greater-bayes": _ONE_SIDED,
     **{
+        f"gghistostats-edge_one_constant{width}-{t}": refusal
+        for width in ("", "-binwidth1")
+        for t, refusal in _CONSTANT_ONE.items()
+    },
+    **{
         f"ggscatterstats-edge_corr_constant_x-{t}": _CONSTANT_X
         for t in ("parametric", "nonparametric", "robust", "bayes")
     },
+    **{f"ggscatterstats-edge_corr_n3-{t}": r for t, r in _THREE_PAIRS.items()},
 }
 
 
