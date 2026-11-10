@@ -322,6 +322,7 @@ class _WithinDrawing(comparison.Drawing):
             result,
             subject_paths=self.drawn_subjects if self.with_subject_paths else 0,
             centrality_path=self.with_centrality_path,
+            centrality=self.options.centrality,
         )
         if alt == result.text.alt_text:
             return result

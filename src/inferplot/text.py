@@ -40,6 +40,7 @@ particular it never imports matplotlib.
 
 from __future__ import annotations
 
+import itertools
 import math
 import re
 import sys
@@ -1343,9 +1344,17 @@ def _centrality_word(centrality: str, tr: float) -> str:
 
 
 def _alt_groups_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
     short = _shortened([d.level for d in descriptives], limit)
+    if not centrality:
+        return ", ".join(
+            f"{short[d.level]} (n = {format_n(d.n)})" for d in descriptives
+        )
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1360,7 +1369,11 @@ def _alt_groups_detailed(
 
 
 def _alt_groups_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
     ns = [d.n for d in descriptives]
     n_text = (
@@ -1373,7 +1386,7 @@ def _alt_groups_summary(
         for d in descriptives
         if d.value is not None and math.isfinite(d.value)
     ]
-    if not finite:
+    if not finite or not centrality:
         return n_text
     short = _shortened([d.level for d in descriptives], limit)
     low, low_value = min(finite, key=lambda item: item[1])
@@ -1430,11 +1443,17 @@ def _alt_bayes_pairs(
 
 
 def _alt_conditions_detailed(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
-    """Each condition with its centrality value; n is the same for all and is
-    named once, in the head."""
+    """Each condition with its centrality value (only the names without
+    centrality points); n is the same for all and is named once, in the head."""
     short = _shortened([d.level for d in descriptives], limit)
+    if not centrality:
+        return ", ".join(short[d.level] for d in descriptives)
     parts: list[str] = []
     for d in descriptives:
         word = _centrality_word(d.centrality, tr)
@@ -1448,10 +1467,14 @@ def _alt_conditions_detailed(
 
 
 def _alt_conditions_summary(
-    descriptives: Sequence[Descriptive], digits: int, limit: int, tr: float
+    descriptives: Sequence[Descriptive],
+    digits: int,
+    limit: int,
+    tr: float,
+    centrality: bool = True,
 ) -> str:
     """The range of the conditions' centrality values, or "" without any."""
-    summary = _alt_groups_summary(descriptives, digits, limit, tr)
+    summary = _alt_groups_summary(descriptives, digits, limit, tr, centrality)
     _, _, values = summary.partition("; ")
     return values
 
@@ -1469,6 +1492,12 @@ def _alt_paths(
     the number of subjects whose paths are drawn (fewer than all when a large
     figure draws a random sample of whole subjects)."""
     word = _centrality_word(descriptives[0].centrality, tr) + "s"
+    # A centrality path is a line only where two neighbouring levels have a
+    # value (a level without a MAP estimate breaks it, D55).
+    centrality_path = centrality_path and any(
+        a.value is not None and b.value is not None
+        for a, b in itertools.pairwise(descriptives)
+    )
     if subject_paths >= n_subjects:
         whose = "each subject's values"
     else:
@@ -1499,6 +1528,7 @@ def alt_text(
     design: str = "between",
     subject_paths: int | None = None,
     centrality_path: bool | None = None,
+    centrality: bool = True,
 ) -> str:
     """Alt text for the figure: 2 to 4 sentences, at most 400 characters.
 
@@ -1516,7 +1546,10 @@ def alt_text(
     carries its own alt text (:func:`figure_alt_text`). Its result sentence says
     what n counts ("n = 10 pairs", "n = 88 subjects").
 
-    It describes only what the figure shows. With ``results_subtitle=False`` the
+    It describes only what the figure shows. Without centrality points
+    (``centrality``, a figure drawn with ``centrality_plotting=False``) it names
+    the levels without their centrality values, and a centrality path is named
+    only where one is drawn. With ``results_subtitle=False`` the
     figure shows no test, so the result sentence reads "No test result is shown
     (results_subtitle=False), n = <n>." (type "bayes" with two groups computes
     none: "No test was computed ..."), while the APA sentence still reports a
@@ -1601,8 +1634,12 @@ def alt_text(
                 f"Plot comparing {_short(y, limit)} across the {k} conditions of "
                 f"{_short(x, limit)}, measured on the same {format_n(n_obs)} subjects"
             )
-            detailed = _alt_conditions_detailed(descriptives, digits, limit, tr)
-            summary = _alt_conditions_summary(descriptives, digits, limit, tr)
+            detailed = _alt_conditions_detailed(
+                descriptives, digits, limit, tr, centrality
+            )
+            summary = _alt_conditions_summary(
+                descriptives, digits, limit, tr, centrality
+            )
             candidates = [f"{head}: {detailed}{paths}. {result}{pairs}"]
             if summary:
                 candidates.append(f"{head} ({summary}){paths}. {result}{pairs}")
@@ -1611,8 +1648,8 @@ def alt_text(
                 f"Plot comparing {_short(y, limit)} across the {k} groups of "
                 f"{_short(x, limit)}"
             )
-            detailed = _alt_groups_detailed(descriptives, digits, limit, tr)
-            summary = _alt_groups_summary(descriptives, digits, limit, tr)
+            detailed = _alt_groups_detailed(descriptives, digits, limit, tr, centrality)
+            summary = _alt_groups_summary(descriptives, digits, limit, tr, centrality)
             candidates = [
                 f"{head}: {detailed}. {result}{pairs}",
                 f"{head} ({summary}). {result}{pairs}",
@@ -1629,10 +1666,15 @@ def alt_text(
 
 
 def figure_alt_text(
-    result: StatsResult, *, subject_paths: int, centrality_path: bool
+    result: StatsResult,
+    *,
+    subject_paths: int | None = None,
+    centrality_path: bool | None = None,
+    centrality: bool = True,
 ) -> str:
-    """The alt text of a within-subjects figure that draws ``subject_paths``
-    subjects' paths (0 for none) and the centrality path or not
+    """The alt text of a figure that draws ``subject_paths`` subjects' paths (0
+    for none) and the centrality path or not (within subjects; None for
+    independent groups), with or without the ``centrality`` points and labels
     (:func:`alt_text`); the renderer gives it to the result it returns."""
     return alt_text(
         x=result.x,
@@ -1647,6 +1689,7 @@ def figure_alt_text(
         design=result.design,
         subject_paths=subject_paths,
         centrality_path=centrality_path,
+        centrality=centrality,
     )
 
 
@@ -1812,7 +1855,12 @@ def build_texts(
             bayes=bayes,
             design=design,
         ),
-        centrality_labels=tuple(to_plain(node) for node in ex.centrality),
+        # A level without a centrality value (a MAP without a density, D55)
+        # draws no label: its text is empty.
+        centrality_labels=tuple(
+            "" if d.value is None else to_plain(node)
+            for d, node in zip(descriptives, ex.centrality, strict=True)
+        ),
         tick_labels=tuple(tick_label(d.level, d.n) for d in descriptives),
         pairwise_labels=tuple(to_plain(node) for node in ex.pairwise),
     )

@@ -69,7 +69,7 @@ from inferplot.render.figure import (
 )
 from inferplot.render.labels import ambiguities, covered
 from inferplot.result import StatsResult
-from inferplot.text import FigureTexts, figure_texts
+from inferplot.text import FigureTexts, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -1013,9 +1013,15 @@ class Drawing:
         del entry
 
     def finish_result(self, result: StatsResult) -> StatsResult:
-        """Hook: the result the figure returns, told what was drawn (the alt
-        text of a within-subjects figure names the paths it draws)."""
-        return result
+        """Hook: the result the figure returns, told what was drawn: without
+        centrality points the alt text does not give their values (the alt
+        text of a within-subjects figure also names the paths it draws)."""
+        if self.options.centrality:
+            return result
+        alt = figure_alt_text(result, centrality=False)
+        return dataclasses.replace(
+            result, text=dataclasses.replace(result.text, alt_text=alt)
+        )
 
     # -- main ------------------------------------------------------------------
 
