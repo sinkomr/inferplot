@@ -16,10 +16,13 @@ the order of (size, sorted values); subjects in lexicographic order of their
 values (withinstats); the one-sample deviations from the trimmed mean in the order
 (|d|, d) of the deviations as written, ties in the order of the sorted values.
 
-Run the invariance table (each method under about two minutes):
+Run the invariance table (each method and kind under about two minutes):
 
     uv run python -I tools/reference/decimal_replay.py one_sample
-    uv run python -I tools/reference/decimal_replay.py akp xi dependent average
+    uv run python -I tools/reference/decimal_replay.py akp xi:ratings xi:one-decimal
+    uv run python -I tools/reference/decimal_replay.py dependent
+    uv run python -I tools/reference/decimal_replay.py average:ratings
+    uv run python -I tools/reference/decimal_replay.py average:one-decimal
 
 For every method it draws 60 rating-scale and 60 one-decimal data sets, writes
 each in whole numbers, in tenths and shifted by a tenth, compares inferplot with
@@ -393,90 +396,95 @@ def _shown(method: str, key: str, value: Any, unit: float, shift: float) -> Any:
     return value
 
 
-def table(method: str, per_kind: int = 60, seed: int = 2026) -> list[str]:
-    """Rows of the invariance table for ``method``."""
-    rng = np.random.default_rng([seed, sorted(METHODS).index(method)])
+def table(method: str, kind: str, per_kind: int = 60, seed: int = 2026) -> list[str]:
+    """Rows of the invariance table for ``method`` on ``kind`` of data: at least
+    ``per_kind`` data sets that inferplot computes (refused ones are counted)."""
+    rng = np.random.default_rng(
+        [seed, sorted(METHODS).index(method), KINDS.index(kind)]
+    )
     lines: list[str] = []
-    for kind in ("ratings", "one-decimal"):
-        computed = refused = 0
-        replay_diff = {name: 0 for name, w in WRITINGS.items() if w[3]}
-        invariance_diff = dict.fromkeys(WRITINGS, 0)
-        examples: list[str] = []
-        while computed + refused < per_kind:
-            base = _data(method, kind, rng)
-            mu_whole = float(
-                rng.choice([2.5, 3.0])
-                if kind == "ratings"
-                else rng.choice([368.0, 370.0, 372.5])
-            )
+    computed = refused = 0
+    replay_diff = {name: 0 for name, w in WRITINGS.items() if w[3]}
+    invariance_diff = dict.fromkeys(WRITINGS, 0)
+    examples: list[str] = []
+    while computed < per_kind:
+        base = _data(method, kind, rng)
+        mu_whole = float(
+            rng.choice([2.5, 3.0])
+            if kind == "ratings"
+            else rng.choice([368.0, 370.0, 372.5])
+        )
+        try:
+            reference = _inferplot(method, base, mu_whole)
+        except ValueError:
+            refused += 1
+            continue
+        computed += 1
+        for name, (f, unit, shift, replayed) in WRITINGS.items():
+            data = [_apply(f, d) for d in base]
+            mu = f(mu_whole)
             try:
-                reference = _inferplot(method, base, mu_whole)
-            except ValueError:
-                refused += 1
+                got = _inferplot(method, data, mu)
+            except ValueError as error:
+                invariance_diff[name] += 1
+                examples.append(f"{kind} {name}: refused ({error})"[:160])
                 continue
-            computed += 1
-            for name, (f, unit, shift, replayed) in WRITINGS.items():
-                data = [_apply(f, d) for d in base]
-                mu = f(mu_whole)
-                try:
-                    got = _inferplot(method, data, mu)
-                except ValueError as error:
-                    invariance_diff[name] += 1
-                    examples.append(f"{kind} {name}: refused ({error})"[:160])
-                    continue
-                if replayed:
-                    want = _replay(method, data, mu)
-                    keys = ["undefined", "infinite"] + (
-                        ["p", "t_zero"] if method == "one_sample" else []
-                    )
-                    bad = [k for k in keys if got[k] != want[k]] + [
-                        k
-                        for k in ("conf_low", "conf_high")
-                        if not _same(got[k], want[k])
-                    ]
-                    if bad:
-                        replay_diff[name] += 1
-                        if len(examples) < 6:
-                            examples.append(
-                                f"{kind} {name} replay: "
-                                + ", ".join(f"{k} {got[k]} vs {want[k]}" for k in bad)
-                            )
+            if replayed:
+                want = _replay(method, data, mu)
                 keys = ["undefined", "infinite"] + (
                     ["p", "t_zero"] if method == "one_sample" else []
                 )
-                bad = [k for k in keys if got[k] != reference[k]] + [
-                    k
-                    for k in ("conf_low", "conf_high", "estimate")
-                    if not _same(_rescaled(method, got[k], unit, shift), reference[k])
+                bad = [k for k in keys if got[k] != want[k]] + [
+                    k for k in ("conf_low", "conf_high") if not _same(got[k], want[k])
                 ]
                 if bad:
-                    invariance_diff[name] += 1
+                    replay_diff[name] += 1
                     if len(examples) < 6:
                         examples.append(
-                            f"{kind} {name} vs whole: "
-                            + ", ".join(
-                                f"{k} {_shown(method, k, got[k], unit, shift)}"
-                                f" vs {reference[k]}"
-                                for k in bad
-                            )
+                            f"{kind} {name} replay: "
+                            + ", ".join(f"{k} {got[k]} vs {want[k]}" for k in bad)
                         )
-        lines.append(
-            f"{method:10s} {kind:11s} {computed} data sets ({refused} refused): "
-            + "replay differences "
-            + ", ".join(f"{k} {v}" for k, v in replay_diff.items())
-            + " | differences from whole numbers "
-            + ", ".join(f"{k} {v}" for k, v in invariance_diff.items() if k != "whole")
-        )
-        lines.extend("    " + e for e in examples)
+            keys = ["undefined", "infinite"] + (
+                ["p", "t_zero"] if method == "one_sample" else []
+            )
+            bad = [k for k in keys if got[k] != reference[k]] + [
+                k
+                for k in ("conf_low", "conf_high", "estimate")
+                if not _same(_rescaled(method, got[k], unit, shift), reference[k])
+            ]
+            if bad:
+                invariance_diff[name] += 1
+                if len(examples) < 6:
+                    examples.append(
+                        f"{kind} {name} vs whole: "
+                        + ", ".join(
+                            f"{k} {_shown(method, k, got[k], unit, shift)}"
+                            f" vs {reference[k]}"
+                            for k in bad
+                        )
+                    )
+    lines.append(
+        f"{method:10s} {kind:11s} {computed} data sets ({refused} refused): "
+        + "replay differences "
+        + ", ".join(f"{k} {v}" for k, v in replay_diff.items())
+        + " | differences from whole numbers "
+        + ", ".join(f"{k} {v}" for k, v in invariance_diff.items() if k != "whole")
+    )
+    lines.extend("    " + e for e in examples)
     return lines
 
 
 METHODS: tuple[str, ...] = ("one_sample", "akp", "xi", "dependent", "average")
 
+KINDS: tuple[str, ...] = ("ratings", "one-decimal")
+
 if __name__ == "__main__":
     import warnings
 
     warnings.simplefilter("ignore")
-    for name in sys.argv[1:] or METHODS:
-        for line in table(name):
-            print(line, flush=True)
+    # Arguments: methods, each optionally with a kind (akp:ratings).
+    for argument in sys.argv[1:] or METHODS:
+        name, _, only = argument.partition(":")
+        for kind in (only,) if only else KINDS:
+            for line in table(name, kind):
+                print(line, flush=True)

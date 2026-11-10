@@ -60,6 +60,7 @@ from inferplot.stats.nonparametric import (
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import TINY, satterthwaite_df
 from inferplot.stats.smm import smm_quantile
+from inferplot.stats.written import written_trim, written_values
 
 __all__ = [
     "SMM_MAX_TABLED",
@@ -607,7 +608,8 @@ def rows_trimmed(
     its trimmed mean: computed in floating point, the mean of eleven copies of 0.9
     is not 0.9 and their variance is about 1e-33, not 0, so a resample that is
     0 / 0 or infinite by the definition would come out as an arbitrary finite
-    number. The callers decide such rows exactly (``exact_zero_sum``).
+    number. The callers decide such rows, and rows whose winsorized values may be
+    one number as written, exactly on the numbers as written (``written``).
     """
     m = draws.shape[1]
     g = trim_count(m, tr)
@@ -623,18 +625,6 @@ def rows_trimmed(
     tmeans[flat] = low[flat]
     wvars[flat] = 0.0
     return tmeans, wvars
-
-
-def exact_zero_sum(positive: Sequence[float], negative: Sequence[float]) -> float:
-    """The sign of sum(positive) - sum(negative), exactly: 0.0, 1.0 or -1.0.
-
-    ``math.fsum`` returns the correctly rounded sum of the doubles, which is 0
-    only when the exact sum is 0 and has its sign otherwise. Used to decide
-    whether a resample with a winsorized variance of 0 is 0 / 0 (undefined) or
-    infinite, which a rounded difference of rounded means cannot decide.
-    """
-    total = math.fsum([*positive, *(-value for value in negative)])
-    return 0.0 if total == 0.0 else math.copysign(1.0, total)
 
 
 def _chunks(total_rows: int, values_per_row: int) -> list[int]:
@@ -701,6 +691,24 @@ def _centred(ordered: Sequence[FloatArray]) -> list[FloatArray]:
     pooled = _sorted(_joined(list(ordered)))
     middle = float(pooled[pooled.size // 2])
     return [o - middle for o in ordered]
+
+
+def _near_flat(*samples: FloatArray) -> float:
+    """The largest spread of resampled values that may still be one number as
+    written: values with one reading lie within 2 x READ_ULPS units in the last
+    place of each other (``written``), and each centring adds a rounding; eight
+    units of the largest value of ``samples`` (the scaled data and their centred
+    copies) and of the centred ones, generously. Spreads up to this are decided
+    exactly."""
+    return 8.0 * sum(float(np.spacing(np.max(np.abs(s)))) for s in samples if s.size)
+
+
+def _rounding_band(count: int, *centred: FloatArray) -> float:
+    """How far a floating-point trimmed mean (or difference of two) of ``count``
+    centred values may lie from the exact one, generously: 64 count eps times the
+    largest |centred value|. Differences within it are decided exactly."""
+    reach = max(float(np.max(np.abs(c))) for c in centred)
+    return 64.0 * count * float(np.finfo(np.float64).eps) * reach
 
 
 @dataclass(frozen=True, slots=True)
@@ -835,6 +843,15 @@ def akp_effect(
     is counted in ``undefined_resamples`` (DECISIONS.md D54's rule; the fixtures
     have too few such resamples to tell it from WRS2's alternatives, S3).
 
+    Whether a resample's winsorized values of a are one number, and whether its
+    trimmed means are equal, is decided exactly on the numbers as written
+    (``written_values``; D74), so the same data in whole numbers, in tenths or
+    shifted by a tenth give the same resamples 0 / 0, infinite or 0 (a resample
+    whose trimmed means are equal as written is 0, as is the estimate then):
+    tools/reference/decimal_replay.py replays every resample in exact decimal
+    arithmetic. Deciding on the doubles counted resamples differently on 24 of 60
+    rating data sets in tenths (Phase 4 review, Z1).
+
     WRS2 evaluates s_N numerically, off the exact value used here by an amount
     that varies with tr: 1.2e-9 relative above it at tr = 0.2, 4.6e-9 at 0.1, up
     to 4.2e-7 at 0.49 (probe-akp; tolerance ``akp_constant``; DECISIONS.md D42).
@@ -873,38 +890,59 @@ def _akp_replicates(
     the order drawn, NaN for a 0 / 0 resample (tests read them to apply other
     percentile rules)."""
     t_trim = check_trim(tr)
-    raw_a = as_sample(a, name="a", min_size=2)
-    raw_b = as_sample(b, name="b", min_size=2)
+    raw_a = _sorted(as_sample(a, name="a", min_size=2))
+    raw_b = _sorted(as_sample(b, name="b", min_size=2))
     scale = common_scale(raw_a, raw_b)
-    x, y = _sorted(raw_a * scale), _sorted(raw_b * scale)
+    x, y = raw_a * scale, raw_b * scale  # a power of two: exact, order kept
     method = "the AKP effect size"
     ka = _kernel(x, t_trim, "sample a", method)
     kb = _kernel(y, t_trim, "sample b", method)
     if not ka.wvar >= TINY:
         raise ValueError(_zero_spread_message("sample a", raw_a, t_trim, method))
     constant = math.sqrt(winsorized_normal_variance(t_trim))
-    estimate = constant * float(ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
+    g_a, g_b = trim_count(x.size, t_trim), trim_count(y.size, t_trim)
+    # The numbers as written decide which differences are 0 (D74; ``written``).
+    written_a, written_b = written_values(raw_a), written_values(raw_b)
+    equal = written_trim(written_a, g_a)[0] == written_trim(written_b, g_b)[0]
+    estimate = (
+        0.0 if equal else constant * float(ka.tmean - kb.tmean) / math.sqrt(ka.wvar)
+    )
 
-    g_b = trim_count(y.size, t_trim)
-    h_b = y.size - 2 * g_b
+    centred = _centred((x, y))
+    near = _near_flat(x, y, *centred)
+    rounding = _rounding_band(x.size + y.size, *centred)
 
-    def deltas(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
-        tm_a, wv_a = rows_trimmed(draws[0], t_trim)
-        tm_b, _ = rows_trimmed(draws[1], t_trim)
+    def deltas(positions: list[NDArray[np.int64]]) -> NDArray[np.float64]:
+        index_a, index_b = positions
+        draws_a = centred[0][index_a]
+        tm_a, wv_a = rows_trimmed(draws_a, t_trim)
+        tm_b, _ = rows_trimmed(centred[1][index_b], t_trim)
+        numerator = tm_a - tm_b
         with np.errstate(divide="ignore", invalid="ignore"):
-            out: NDArray[np.float64] = constant * (tm_a - tm_b) / np.sqrt(wv_a)
-        # A winsorized variance of 0: the resample is +/-inf, or 0 / 0 when the
-        # trimmed means are equal, decided exactly: tm_a is then one value of a,
-        # and h_b tm_a - sum(the values b's trimmed mean averages) has the sign of
-        # the difference of the exact trimmed means.
-        for row in (wv_a == 0.0).nonzero()[0].tolist():
-            middle = draws[1][row, g_b : y.size - g_b].tolist()
-            sign = exact_zero_sum([float(tm_a[row])] * h_b, middle)
-            out[row] = math.nan if sign == 0.0 else sign * math.inf
+            out: NDArray[np.float64] = constant * numerator / np.sqrt(wv_a)
+        # Exactly from the numbers as written: a resample of a whose winsorized
+        # values may be one number (then +/-inf, or 0 / 0 when the trimmed means
+        # are equal), and one whose trimmed means may be equal (then 0).
+        spread = draws_a[:, x.size - g_a - 1] - draws_a[:, g_a]
+        candidates = (spread <= near) | (np.abs(numerator) <= rounding)
+        for row in candidates.nonzero()[0].tolist():
+            sample_a = [written_a[int(i)] for i in index_a[row]]
+            sample_b = [written_b[int(i)] for i in index_b[row]]
+            tm_wa, wss_a = written_trim(sample_a, g_a)
+            difference = tm_wa - written_trim(sample_b, g_b)[0]
+            if wss_a == 0:
+                out[row] = (
+                    math.nan if difference == 0 else math.copysign(math.inf, difference)
+                )
+            elif difference == 0:
+                out[row] = 0.0
+            elif not math.isfinite(float(out[row])):  # one number in binary only
+                ratio = difference * difference * (x.size - 1) / wss_a
+                out[row] = math.copysign(constant * math.sqrt(float(ratio)), difference)
         return out
 
     rng = np.random.Generator(np.random.PCG64(seed))
-    values = bootstrap_replicates(rng, _centred((x, y)), (x.size, y.size), deltas)
+    values = bootstrap_indices(rng, (x.size, y.size), (x.size, y.size), deltas)
     return estimate, values
 
 
@@ -935,6 +973,8 @@ def explanatory_effect(
     xi = inf; it is kept and counted in ``infinite_resamples``. One whose trimmed
     means are also equal gives 0 / 0: it is left out, B is the number of the
     others, and it is counted in ``undefined_resamples`` (as ``akp_effect``).
+    Both are decided exactly on the numbers as written, as is a resample whose
+    trimmed means are all equal (xi = 0), as ``akp_effect`` does.
     The groups draw from the stream in an order fixed by their contents (size,
     then sorted values), so the result does not depend on the order of the
     groups.
@@ -965,31 +1005,16 @@ def explanatory_effect(
         as_sample(g, name=f"group {i + 1}", min_size=2) for i, g in enumerate(groups)
     ]
     scale = common_scale(*raw)
-    ordered = [_sorted(r * scale) for r in raw]
+    sorted_raw = [_sorted(r) for r in raw]
+    ordered = [r * scale for r in sorted_raw]  # a power of two: exact, order kept
     size = min(o.size for o in ordered)
     normal = winsorized_normal_variance(t_trim)
     k = len(ordered)
-
     g_draw = trim_count(size, t_trim)
-
-    def xis(draws: list[NDArray[np.float64]]) -> NDArray[np.float64]:
-        _, pooled = rows_trimmed(_joined(draws), t_trim)
-        tmeans = _joined([rows_trimmed(d, t_trim)[0][:, None] for d in draws])
-        top = tmeans.var(axis=1, ddof=1)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            out: NDArray[np.float64] = np.sqrt(top / (pooled / normal))
-        # A pooled winsorized variance of 0: the resample is infinite, or 0 / 0
-        # when the trimmed means of all groups are equal, decided exactly (every
-        # group draws the same number of values, so equal trimmed means are equal
-        # sums of the values they average).
-        for row in (pooled == 0.0).nonzero()[0].tolist():
-            first = draws[0][row, g_draw : size - g_draw].tolist()
-            equal = all(
-                exact_zero_sum(d[row, g_draw : size - g_draw].tolist(), first) == 0.0
-                for d in draws[1:]
-            )
-            out[row] = math.nan if equal else math.inf
-        return out
+    g_pooled = trim_count(size * k, t_trim)
+    # The numbers as written decide which trimmed means are equal and which
+    # winsorized values are one number (D74; ``written``).
+    written = [written_values(r) for r in sorted_raw]
 
     estimate: float | None = None
     if all(o.size == size for o in ordered):
@@ -999,21 +1024,64 @@ def explanatory_effect(
         wvar = scaled_variance(
             winsorize_sorted(pooled, trim_count(pooled.size, t_trim))
         )
-        if wvar == 0.0:
-            if top == 0.0:
+        means_equal = len({written_trim(w, g_draw)[0] for w in written}) == 1
+        flat = written_trim([v for w in written for v in w], g_pooled)[1] == 0
+        if flat or wvar == 0.0:
+            if means_equal:
                 raise ValueError(
                     f"{method} is undefined (0 / 0): the trimmed means are equal and "
                     "the pooled winsorized variance is 0"
                 )
             estimate = math.inf
         else:
-            estimate = math.sqrt(top / (wvar / normal))
+            estimate = 0.0 if means_equal else math.sqrt(top / (wvar / normal))
     rng = np.random.Generator(np.random.PCG64(rng_seed))
     # The groups draw from the stream in an order fixed by their contents (size,
     # then sorted values), so the result does not depend on the order of the
     # groups (``rank_epsilon_squared`` does the same).
-    canonical = sorted(_centred(ordered), key=lambda o: (o.size, o.tolist()))
-    replicates = split_replicates(bootstrap_replicates(rng, canonical, [size] * k, xis))
+    centred = _centred(ordered)
+    canonical = sorted(range(k), key=lambda j: (centred[j].size, centred[j].tolist()))
+    groups_ = [centred[j] for j in canonical]
+    sources = [written[j] for j in canonical]
+    near = _near_flat(*ordered, *centred)
+    rounding = _rounding_band(size * k, *centred)
+
+    def xis(positions: list[NDArray[np.int64]]) -> NDArray[np.float64]:
+        draws = [g_[i] for g_, i in zip(groups_, positions, strict=True)]
+        joined = _joined(draws)
+        _, pooled = rows_trimmed(joined, t_trim)
+        tmeans = _joined([rows_trimmed(d, t_trim)[0][:, None] for d in draws])
+        top = tmeans.var(axis=1, ddof=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out: NDArray[np.float64] = np.sqrt(top / (pooled / normal))
+        # Exactly from the numbers as written: a resample whose pooled winsorized
+        # values may be one number (then infinite, or 0 / 0 when the trimmed means
+        # of all groups are equal), and one whose trimmed means may all be equal
+        # (then 0).
+        spread = joined[:, size * k - g_pooled - 1] - joined[:, g_pooled]
+        candidates = (spread <= near) | (np.sqrt(top) <= rounding)
+        for row in candidates.nonzero()[0].tolist():
+            samples = [
+                [s[int(i)] for i in p[row]]
+                for s, p in zip(sources, positions, strict=True)
+            ]
+            means = [written_trim(s, g_draw)[0] for s in samples]
+            equal = len(set(means)) == 1
+            _, wss = written_trim([v for s in samples for v in s], g_pooled)
+            if wss == 0:
+                out[row] = math.nan if equal else math.inf
+            elif equal:
+                out[row] = 0.0
+            elif not math.isfinite(float(out[row])):  # one number in binary only
+                centre = sum(means, Fraction(0)) / k
+                spread_ = sum(((m - centre) ** 2 for m in means), Fraction(0)) / (k - 1)
+                pooled_ = wss / (size * k - 1) / Fraction(normal)
+                out[row] = math.sqrt(float(spread_ / pooled_))
+        return out
+
+    replicates = split_replicates(
+        bootstrap_indices(rng, [g_.size for g_ in groups_], [size] * k, xis)
+    )
     low, high = replicate_bounds(replicates, level, _rounded_percentile_bounds, method)
     if estimate is None:
         estimate = float(np.median(replicates.defined))

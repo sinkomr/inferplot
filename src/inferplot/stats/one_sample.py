@@ -502,19 +502,27 @@ def trimmed_mean_bootstrap_t(
     references). ``alternative`` is not an argument: it has no effect in
     ggstatsplot (ToothGrowth-greater-robust equals the two-sided case).
 
-    The resamples are drawn from the deviations of x from its rounded trimmed
-    mean, in the order of their absolute value (then their value), so the row
-    order of x does not matter, the scale of x does not either, and x and mu
-    shifted together, or both negated, give the same T* (a negated sample draws
-    the mirror images, except where two values lie exactly as far above as below
-    the trimmed mean).
+    The exact questions are decided on the numbers as written (``written_values``,
+    D74): t is 0 when the trimmed mean equals mu as written (p = 1); a T* equal
+    to |t| as written counts toward p; and the resamples are drawn from the
+    deviations of x from its trimmed mean in the order (|d|, d) of the deviations
+    as written (ties in the order of the values). So the row order of x does not
+    matter, nor does writing x and mu in another decimal unit (tenths, times 2.54)
+    or shifting both by a decimal: the same resamples are drawn and classified
+    alike (tools/reference/decimal_replay.py replays every resample in exact
+    decimal arithmetic). Negating x and mu draws the mirror images, except where
+    two values lie as far above as below the trimmed mean: their order (|d|, d)
+    puts the one below first either way, so the negated sample draws them
+    swapped. A power of two keeps the draw for whole numbers and for decimals
+    that stay short (0.3 x 1024); a decimal that does not (0.3 / 2^30, 24
+    significant digits) is read as its double.
 
-    A resample whose winsorized values are all one number has s_w* = 0 exactly:
-    T* is 0 / 0 when that number is the sample's trimmed mean and infinite
-    otherwise, decided exactly (``exact_zero_sum``, D74's rule). An infinite T* is
-    kept (it counts toward p, and c is infinite when it falls among them); a 0 / 0
-    one is left out and c and p come from the others (D65's rule), counted in
-    ``undefined_resamples``.
+    A resample whose winsorized values are all one number (as written) has
+    s_w* = 0: T* is 0 / 0 when that number is the sample's trimmed mean and
+    infinite otherwise. An infinite T* is kept (it counts toward p, and c is
+    infinite when it falls among them); a 0 / 0 one is left out and c and p come
+    from the others (D65's rule), counted in ``undefined_resamples``. t itself is
+    formed from exact quantities and rounded once (D49).
 
     Raises:
         ValueError: fewer than two values left after trimming (n - 2 floor(tr n)
