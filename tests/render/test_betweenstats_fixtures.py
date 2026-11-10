@@ -16,7 +16,7 @@ import pytest
 from matplotlib.lines import Line2D
 
 from inferplot.render import betweenstats
-from inferplot.render.betweenstats import (
+from inferplot.render.comparison import (
     BRACKET_TIP_PT,
     LABEL_PAD_PT,
     MIN_AXES_HEIGHT_IN,

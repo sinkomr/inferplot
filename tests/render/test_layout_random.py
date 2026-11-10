@@ -18,7 +18,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from inferplot.render import betweenstats
-from inferplot.render.betweenstats import MIN_DATA_HEIGHT_IN
+from inferplot.render.comparison import MIN_DATA_HEIGHT_IN
 from inferplot.result import StatsResult
 from tests.render._helpers import figure_codes, stroke_reach
 from tests.render._results import frame_result
