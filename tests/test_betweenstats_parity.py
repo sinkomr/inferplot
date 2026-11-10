@@ -492,6 +492,7 @@ def test_failed_case_computes(name: str, backend: Backend) -> None:
         assert pair.df < 2.0
         assert pair.p_value is not None
         assert pair.p_adjusted is not None
+        assert pair.statistic is not None
         assert math.isfinite(pair.p_value)
         assert math.isfinite(pair.p_adjusted)
         assert pair.p_value == stats.srange_sf(abs(pair.statistic), k, pair.df)

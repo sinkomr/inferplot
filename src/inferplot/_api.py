@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from inferplot.render import StatsFigure
 
-__all__ = ["betweenstats", "histostats", "scatterstats", "withinstats"]
+__all__ = ["barstats", "betweenstats", "histostats", "scatterstats", "withinstats"]
 
 
 @checked
@@ -397,5 +397,95 @@ def scatterstats(
         point_args=point_args,
         smooth_args=smooth_args,
         marginal_args=marginal_args,
+        ax=ax,
+    )
+
+
+@checked
+def barstats(
+    data: object,
+    x: str,
+    y: str | None = None,
+    *,
+    counts: str | None = None,
+    paired: bool = False,
+    ratio: Sequence[float] | None = None,
+    label: str = "percentage",
+    proportion_test: bool | None = None,
+    p_adjust_method: str = "holm",
+    digits_perc: int = 0,
+    type: str = "parametric",
+    conf_level: float = 0.95,
+    digits: int = 2,
+    alternative: str = "two-sided",
+    bf_message: bool | None = None,
+    results_subtitle: bool = True,
+    seed: int = 0,
+    xlab: str | None = None,
+    ylab: str | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    caption: str | None = None,
+    legend_title: str | None = None,
+    palette: str | Sequence[object] | None = None,
+    bar_args: Mapping[str, object] | None = None,
+    ax: Axes | None = None,
+) -> StatsFigure:
+    """Count the categories of ``x`` within each level of ``y``, test them, and
+    draw the stacked bars with the result.
+
+    The Python counterpart of ggstatsplot's ``ggbarstats()``. The analysis
+    arguments are those of :func:`inferplot.analyze.barstats`; the drawing
+    arguments those of :func:`inferplot.render.barstats`. The drawing arguments
+    are checked first, then the analysis runs, then the figure is drawn.
+
+    Returns:
+        A ``StatsFigure``, as :func:`betweenstats` returns.
+
+    Raises:
+        NotImplementedError: the statistics and the drawing are not in this
+            version yet.
+    """
+    from inferplot import render  # imports matplotlib
+    from inferplot.render.barstats import check_drawing
+
+    check_drawing(
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        legend_title=legend_title,
+        bar_args=bar_args,
+    )
+    result = analyze.barstats(
+        data,
+        x,
+        y,
+        counts=counts,
+        paired=paired,
+        ratio=ratio,
+        label=label,
+        proportion_test=proportion_test,
+        p_adjust_method=p_adjust_method,
+        digits_perc=digits_perc,
+        type=type,
+        conf_level=conf_level,
+        digits=digits,
+        alternative=alternative,
+        bf_message=bf_message,
+        results_subtitle=results_subtitle,
+        seed=seed,
+    )
+    return render.barstats(
+        result,
+        xlab=xlab,
+        ylab=ylab,
+        title=title,
+        subtitle=subtitle,
+        caption=caption,
+        legend_title=legend_title,
+        palette=palette,
+        bar_args=bar_args,
         ax=ax,
     )

@@ -17,7 +17,10 @@ Schema versions: 1 is the field set before the version was written (JSON without
 ``effect_size.undefined_resamples``, ``dropped_subject_rows`` and ``n_tied``; 3
 added ``point_labels``, ``label_var`` and ``settings.test_value``, made ``y``
 optional (None for histostats) and added the designs "one-sample" and
-"correlation".
+"correlation"; 4 added the design "contingency" (barstats) with ``y_levels``,
+``counts``, ``cells``, ``bars``, ``counts_var`` and the settings ``paired``,
+``ratio``, ``label``, ``digits_perc`` and ``proportion_test``, and made a
+pair's ``statistic`` optional (Fisher's exact test has none).
 """
 
 from __future__ import annotations
@@ -37,10 +40,13 @@ if TYPE_CHECKING:
     from inferplot.check import Issue
 
 __all__ = [
+    "CELL_LABELS",
     "DESIGNS",
     "PARITY_TARGET",
     "SCHEMA_VERSION",
+    "Bar",
     "BayesFactor",
+    "Cell",
     "Descriptive",
     "EffectSize",
     "PairwiseComparison",
@@ -60,7 +66,7 @@ PARITY_TARGET: Final = "ggstatsplot 1.1.4"
 
 # The version of the JSON field set, written as the first key of to_json() and
 # to_dict(). Raise it whenever a field is added, removed, renamed or changes meaning.
-SCHEMA_VERSION: Final = 3
+SCHEMA_VERSION: Final = 4
 
 # Each design and the analysis that makes it (SPEC section 6).
 DESIGNS: Final[dict[str, str]] = {
@@ -68,6 +74,7 @@ DESIGNS: Final[dict[str, str]] = {
     "within": "withinstats",
     "one-sample": "histostats",
     "correlation": "scatterstats",
+    "contingency": "barstats",
 }
 
 
@@ -332,12 +339,17 @@ class PairwiseComparison(_Plain):
       group1 - group2; df n - 1.
     * Bayes pairs: Student's t (pooled; between subjects) or the paired t
       (within), signed group1 - group2; df n1 + n2 - 2 or n - 1.
+    * "fisher_exact" (barstats, design "contingency"): no test statistic
+      (``statistic`` None, ``statistic_name`` ""), no df; the pair's table is
+      group1 and group2 by the levels of y that either holds. ``estimate`` is
+      the pair's Cramér's V with its interval; ``displayed`` is always False
+      (ggstatsplot computes the pairs but never draws them).
     """
 
     group1: str
     group2: str
     statistic_name: str
-    statistic: float
+    statistic: float | None
     df: float | None
     p_value: float | None
     p_adjusted: float | None
@@ -351,6 +363,41 @@ class PairwiseComparison(_Plain):
     conf_low: float | None = None
     conf_high: float | None = None
     bayes: BayesFactor | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Cell(_Plain):
+    """One cell of a barstats figure (design "contingency"): level ``level`` of x
+    within the bar of level ``bar`` of y (None for the single bar without y).
+
+    ``percent`` is the cell's share of its bar as ggstatsplot computes it, (count
+    / bar total) * 100 in double precision, before the label rounds it to
+    ``digits_perc``; it need not sum to 100 over a bar once rounded.
+    """
+
+    bar: str | None
+    level: str
+    count: int
+    percent: float
+
+
+@dataclass(frozen=True, slots=True)
+class Bar(_Plain):
+    """One bar of a barstats figure (design "contingency"): a level of y that
+    holds observations (None for the single bar without y), its ``n``, and its
+    proportion test: the goodness-of-fit test of x within the bar against
+    ``settings.ratio`` (equal shares by default), always two-sided and at 95%,
+    never adjusted (ggstatsplot's ``onesample_data()``), with Pearson's C and
+    its interval in ``effect_size``. ``test`` and ``effect_size`` are None where
+    no test exists, ``no_test_reason`` says why (the single bar without y: its
+    test is the result's main test).
+    """
+
+    level: str | None
+    n: int
+    test: TestResult | None
+    effect_size: EffectSize | None
+    no_test_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,6 +460,15 @@ class Settings(_Plain):
     defaults in the designs without pairs (histostats, scatterstats), and
     ``alternative`` is "two-sided" in scatterstats, whose correlations are always
     tested two-sided.
+
+    Design "contingency" (barstats) alone sets ``paired`` (McNemar's test of the
+    two measurements x and y), ``ratio`` (the expected shares of the levels of x,
+    in their order, or None for equal shares), ``label`` ("percentage",
+    "counts" or "both": what each cell's label shows), ``digits_perc`` (the
+    decimals of a percentage label) and ``proportion_test`` (whether the figure
+    labels each bar with its proportion test's p); they are None in every other
+    design. Its ``pairwise_display`` is "none" (the pairs are never drawn), and
+    ``bf_prior`` and ``tr`` keep their defaults (barstats has neither).
     """
 
     conf_level: float
@@ -427,6 +483,23 @@ class Settings(_Plain):
     seed: int
     tr: float
     test_value: float | None = None
+    paired: bool | None = None
+    ratio: tuple[float, ...] | None = None
+    label: str | None = None
+    digits_perc: int | None = None
+    proportion_test: bool | None = None
+
+
+# The settings only design "contingency" (barstats) sets.
+_CONTINGENCY_SETTINGS: Final = (
+    "paired",
+    "ratio",
+    "label",
+    "digits_perc",
+    "proportion_test",
+)
+# What a barstats cell label may show (Settings.label).
+CELL_LABELS: Final = ("percentage", "counts", "both")
 
 
 # --------------------------------------------------------------------------- #
@@ -693,6 +766,24 @@ class StatsResult(_Plain):
     complete pairs, ``n_dropped`` the rows with a missing ``x`` or ``y``, and
     ``n_tied`` the ties within x plus those within y (:func:`correlation_tied_count`).
 
+    Design "contingency" (``barstats``): ``x`` is the column whose levels fill
+    the bars and ``levels`` its levels; ``y`` is the column whose levels are the
+    bars and ``y_levels`` its levels (``y`` None and ``y_levels`` empty in the
+    one-way design, a single bar). Declared levels without observations are
+    kept in both, as ggstatsplot keeps them. ``counts`` is the table of counts,
+    one row per level of x and one column per level of y (a single column
+    without y), as ints; it is aggregate data, so ``to_json(include_values=
+    False)`` keeps it. ``bars`` holds one entry per bar drawn (the levels of y
+    that hold observations, in order) with its n and proportion test, and
+    ``cells`` one entry per bar and level of x, in that order, with the count
+    and its share of the bar. ``counts_var`` is the column of counts when the
+    data are a table (``counts=``), else None. ``values``, ``subjects`` and
+    ``descriptives`` are empty; ``n_obs`` is the table total (pairs with
+    ``settings.paired``), ``n_dropped`` the rows with a missing ``x``, ``y`` or
+    ``counts``, and ``n_tied`` 0 (no rank test). ``pairwise`` holds Fisher's
+    exact test between every two levels of x that hold observations (when
+    ggstatsplot computes them), never drawn.
+
     ``point_labels`` is the user's data, like ``values`` and ``subjects``:
     ``to_json(include_values=False)`` leaves all three out. Every result is
     checked on construction: a field set that does not fit its design raises
@@ -724,6 +815,11 @@ class StatsResult(_Plain):
     text: Texts
     point_labels: tuple[str, ...] = ()
     label_var: str | None = None
+    y_levels: tuple[str, ...] = ()
+    counts: tuple[tuple[int, ...], ...] = ()
+    cells: tuple[Cell, ...] = ()
+    bars: tuple[Bar, ...] = ()
+    counts_var: str | None = None
 
     def __post_init__(self) -> None:
         _Plain.__post_init__(self)
@@ -793,6 +889,14 @@ class StatsResult(_Plain):
         Type "bayes" has no frequentist test: its main row is the two-group Bayes
         factor, and with three or more groups there is no main row (the Bayesian
         ANOVA arrives in inferplot 0.2).
+
+        Design "contingency" (barstats): the main test, then each bar's
+        proportion test (``group1`` names the bar's level of y, ``displayed``
+        says whether the figure labels it), then the pairs. A Fisher pair's
+        ``alternative`` is the analysis' only where its table is 2 x 2 (R's
+        ``fisher.test`` ignores it otherwise), and its interval's sidedness
+        follows ``alternative`` (effectsize's ``cramers_v`` as ggstatsplot calls
+        it).
         """
         test, es, bayes = self.test, self.effect_size, self.bayes
         rows: list[dict[str, Any]] = []
@@ -834,6 +938,8 @@ class StatsResult(_Plain):
                     "log_bf01": bayes.log_bf01,
                 }
             )
+        rows.extend(_bar_rows(self))
+        contingency = self.design == "contingency"
         for pair in self.pairwise:
             rows.append(
                 {
@@ -841,21 +947,30 @@ class StatsResult(_Plain):
                     "label": pair.test_label,
                     "group1": pair.group1,
                     "group2": pair.group2,
-                    "statistic_name": pair.statistic_name,
+                    "statistic_name": None
+                    if pair.statistic is None
+                    else pair.statistic_name,
                     "statistic": pair.statistic,
                     "df": pair.df,
                     "df_error": None,
                     "p_value": pair.p_value,
                     "p_adjusted": pair.p_adjusted,
                     "adjust_method": pair.adjust_method,
-                    "alternative": "two-sided",
+                    "alternative": _pair_alternative(self, pair)
+                    if contingency
+                    else "two-sided",
                     "effect_size": None,
                     "estimate": pair.estimate,
                     "conf_level": pair.conf_level,
                     "conf_low": pair.conf_low,
                     "conf_high": pair.conf_high,
-                    # Pairwise intervals (lincon) are two-sided.
-                    "ci_sidedness": None if pair.conf_low is None else "two-sided",
+                    # Pairwise intervals (lincon) are two-sided; a barstats
+                    # pair's Cramér's V interval follows alternative.
+                    "ci_sidedness": None
+                    if pair.conf_low is None
+                    else self.settings.alternative
+                    if contingency
+                    else "two-sided",
                     "bf10": None if pair.bayes is None else pair.bayes.bf10,
                     "log_bf01": None if pair.bayes is None else pair.bayes.log_bf01,
                     "significant": pair.significant,
@@ -927,6 +1042,52 @@ class StatsResult(_Plain):
         return self.text.apa + "\n\n" + _pairwise_table(self)
 
 
+def _bar_rows(result: StatsResult) -> list[dict[str, Any]]:
+    """The :meth:`StatsResult.to_frame` rows of the per-bar proportion tests
+    (design "contingency"), in bar order; bars without a test have none."""
+    rows: list[dict[str, Any]] = []
+    for bar in result.bars:
+        test, es = bar.test, bar.effect_size
+        if test is None:
+            continue
+        rows.append(
+            {
+                **dict.fromkeys(name for name, _ in _FRAME_COLUMNS),
+                "test": test.name,
+                "label": test.label,
+                "group1": bar.level,
+                "statistic_name": test.statistic_name,
+                "statistic": test.statistic,
+                "df": test.df,
+                "df_error": test.df_error,
+                "p_value": test.p_value,
+                "alternative": test.alternative,
+                "effect_size": None if es is None else es.name,
+                "estimate": None if es is None else es.estimate,
+                "conf_level": None if es is None else es.conf_level,
+                "conf_low": None if es is None else es.conf_low,
+                "conf_high": None if es is None else es.conf_high,
+                "ci_sidedness": None if es is None else es.sidedness,
+                "displayed": bool(result.settings.proportion_test),
+            }
+        )
+    return rows
+
+
+def _pair_alternative(result: StatsResult, pair: PairwiseComparison) -> str:
+    """The hypothesis of a barstats Fisher pair: the analysis' ``alternative``
+    where the pair's table (its two rows of ``counts``, over the levels of y
+    either holds) is 2 x 2, else "two-sided"."""
+    side = result.settings.alternative
+    if side == "two-sided" or not result.counts:
+        return "two-sided"
+    index = {level: i for i, level in enumerate(result.levels)}
+    first = result.counts[index[pair.group1]]
+    second = result.counts[index[pair.group2]]
+    held = sum(1 for a, b in zip(first, second, strict=True) if a or b)
+    return side if held == 2 else "two-sided"
+
+
 # The to_frame() label of a Bayes factor without a frequentist test, by design.
 _BAYES_ROW_LABELS: Final = {
     "between": "Bayesian t-test",
@@ -961,6 +1122,11 @@ def _shape_problem(result: StatsResult) -> str | None:
             "settings.test_value is required in design 'one-sample' and must be None "
             "in every other design"
         )
+    if design == "contingency":
+        return _contingency_problem(result)
+    contingency_only = _contingency_fields_problem(result)
+    if contingency_only is not None:
+        return contingency_only
     if one_sample != (result.y is None):
         return "y is None in design 'one-sample' and a column name in every other"
     if not (one_sample or correlation):
@@ -1012,6 +1178,137 @@ def _shape_problem(result: StatsResult) -> str | None:
             )
     if result.settings.alternative != "two-sided":
         return "correlations are tested two-sided; settings.alternative must say so"
+    return None
+
+
+def _contingency_fields_problem(result: StatsResult) -> str | None:
+    """The fields of design "contingency" set in another design, or None."""
+    filled = [
+        name
+        for name in ("y_levels", "counts", "cells", "bars")
+        if getattr(result, name)
+    ]
+    if result.counts_var is not None:
+        filled.append("counts_var")
+    filled += [
+        f"settings.{name}"
+        for name in _CONTINGENCY_SETTINGS
+        if getattr(result.settings, name) is not None
+    ]
+    if filled:
+        return f"{', '.join(filled)} belong to design 'contingency' only"
+    return None
+
+
+def _contingency_problem(result: StatsResult) -> str | None:
+    """What makes a barstats result's fields unfit for design "contingency"
+    (SPEC section 6), or None: the table, its levels, bars and cells agree with
+    each other and with ``n_obs``; the settings of the design are set; nothing
+    of the other designs is."""
+    if result.analysis != "barstats":
+        return f"comes from barstats, not {result.analysis}"
+    for name in ("values", "subjects", "descriptives"):
+        if getattr(result, name):
+            return f"{name} must be empty"
+    if result.subject_id is not None:
+        return "subject_id must be None"
+    if result.dropped_subjects or result.dropped_subject_rows or result.n_tied:
+        return "dropped_subjects, dropped_subject_rows and n_tied must be 0"
+    problem = _contingency_settings_problem(result)
+    if problem is not None:
+        return problem
+    levels, y_levels = result.levels, result.y_levels
+    if len(levels) < 2 or len(set(levels)) != len(levels):
+        return f"levels must hold two or more distinct levels of x, got {levels!r}"
+    if (result.y is None) != (not y_levels):
+        return "y_levels name the levels of y, and are empty only without y"
+    if y_levels and (len(y_levels) < 2 or len(set(y_levels)) != len(y_levels)):
+        return f"y_levels must hold two or more distinct levels, got {y_levels!r}"
+    columns = len(y_levels) if y_levels else 1
+    counts = result.counts
+    if len(counts) != len(levels) or any(len(row) != columns for row in counts):
+        return (
+            f"counts must hold {len(levels)} rows (levels of x) of {columns} "
+            "count(s) each"
+        )
+    if any(type(v) is not int or v < 0 for row in counts for v in row):
+        return "counts must be whole numbers >= 0"
+    if sum(sum(row) for row in counts) != result.n_obs:
+        return f"counts must add up to n_obs = {result.n_obs}"
+    if result.settings.paired and y_levels != levels:
+        return "a paired table has the same levels, in the same order, in x and y"
+    problem = _bars_problem(result, columns)
+    if problem is not None:
+        return problem
+    for pair in result.pairwise:
+        if pair.displayed:
+            return "barstats pairs are never drawn: displayed must be False"
+        if pair.group1 not in levels or pair.group2 not in levels:
+            return f"the pair {pair.group1!r}, {pair.group2!r} must be levels of x"
+    return None
+
+
+def _contingency_settings_problem(result: StatsResult) -> str | None:
+    settings = result.settings
+    unset = [
+        name
+        for name in _CONTINGENCY_SETTINGS
+        if name != "ratio" and getattr(settings, name) is None
+    ]
+    if unset:
+        return f"settings.{', settings.'.join(unset)} must be set"
+    if settings.label not in CELL_LABELS:
+        return f"settings.label must be one of {CELL_LABELS!r}, got {settings.label!r}"
+    if settings.paired and result.y is None:
+        return "settings.paired needs y, the second measurement"
+    ratio = settings.ratio
+    if ratio is not None and (
+        len(ratio) != len(result.levels)
+        or not all(math.isfinite(r) and r > 0 for r in ratio)
+    ):
+        return (
+            "settings.ratio must hold one positive share per level of x "
+            f"({len(result.levels)}), got {ratio!r}"
+        )
+    if settings.pairwise_display != "none":
+        return "barstats pairs are never drawn: settings.pairwise_display is 'none'"
+    return None
+
+
+def _bars_problem(result: StatsResult, columns: int) -> str | None:
+    """``bars`` and ``cells`` against ``counts``: a bar per level of y that
+    holds observations (one bar without y), a cell per bar and level of x."""
+    totals = [sum(row[j] for row in result.counts) for j in range(columns)]
+    if result.y_levels:
+        expected = [
+            (level, n)
+            for level, n in zip(result.y_levels, totals, strict=True)
+            if n > 0
+        ]
+    else:
+        expected = [(None, totals[0])]
+    got = [(bar.level, bar.n) for bar in result.bars]
+    if got != expected:
+        return f"bars must be the bars with observations, {expected!r}; got {got!r}"
+    index = {level: j for j, level in enumerate(result.y_levels)}
+    cells = [
+        (
+            bar.level,
+            level,
+            result.counts[i][0 if bar.level is None else index[bar.level]],
+        )
+        for bar in result.bars
+        for i, level in enumerate(result.levels)
+    ]
+    if [(c.bar, c.level, c.count) for c in result.cells] != cells:
+        return "cells must hold every bar's count of each level of x, in order"
+    by_bar = {bar.level: bar.n for bar in result.bars}
+    for cell in result.cells:
+        if cell.percent != cell.count / by_bar[cell.bar] * 100:
+            return (
+                f"the cell {cell.bar!r}, {cell.level!r} must hold its share of the "
+                "bar, count / n * 100"
+            )
     return None
 
 
@@ -1122,6 +1419,10 @@ def _pairwise_table(result: StatsResult) -> str:
         )
         for pair in result.pairwise
     ]
+    if all(pair.statistic is None for pair in result.pairwise):
+        # Fisher's exact test (barstats) has no statistic and no df.
+        rows = [(*row[:2], *row[4:]) for row in rows]
+        header = rows[0]
     widths = [max(len(row[i]) for row in rows) for i in range(len(header))]
     lines = [
         "  ".join(

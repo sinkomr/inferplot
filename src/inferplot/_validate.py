@@ -327,6 +327,7 @@ DRAWING_KEYWORDS: Final[Mapping[str, frozenset[str]]] = {
     "histostats": _COMMON_DRAWING | {"binwidth", "centrality_plotting", "bar_args"},
     "scatterstats": _COMMON_DRAWING
     | {"marginal", "smooth", "point_args", "smooth_args", "marginal_args"},
+    "barstats": _COMMON_DRAWING | {"legend_title", "bar_args"},
 }
 # Keywords only the analysis functions (ip.analyze.<name>, ip.<name>) take, so a
 # drawing function ip.render.<name> can point to them.
@@ -398,6 +399,10 @@ def _targeted(
         own = _no_level_targeted(arg, key, value, fn, valid)
         if own is not None:
             return own
+    if fn == "barstats":
+        bar = _bar_targeted(arg, key, value, valid)
+        if bar is not None:
+            return bar
     if key == "var_equal":
         if fn in _SUBJECT_FUNCTIONS:
             why = (
@@ -1033,6 +1038,269 @@ def _no_level_targeted(
     return None
 
 
+# --- barstats' keywords -------------------------------------------------------------
+#
+# barstats counts the categories of x within each level of y (ggbarstats). Many
+# messages of the comparison functions speak of measurements, groups and
+# brackets; barstats gets its own for those keywords, for ggbarstats' and
+# ggpiestats' own arguments, and for the habits of seaborn (countplot, histplot),
+# pandas (crosstab, value_counts, plot) and matplotlib users.
+
+# Other names of a column of counts (seaborn's and pandas' weights, dplyr's wt).
+_COUNTS_NAMES: Final = frozenset(
+    {"weights", "weight", "wt", "freq", "frequency", "frequencies", "n_col"}
+)
+# Other names of the expected shares of the one-way test (R's chisq.test p,
+# SciPy's chisquare f_exp).
+_RATIO_NAMES: Final = frozenset(
+    {"p", "probs", "prob", "probabilities", "proportions", "expected", "f_exp"}
+)
+# barstats' analysis arguments that ANALYSIS_KEYWORDS does not list (they are
+# valid keywords of other functions' drawings or of none).
+_BAR_ANALYSIS: Final = frozenset({"label", "digits_perc"})
+# Drawing arguments of the comparison functions that barstats does not have.
+_OTHER_LAYERS: Final = frozenset(
+    {
+        "layers",
+        "point_args",
+        "boxplot_args",
+        "violin_args",
+        "centrality_plotting",
+        "binwidth",
+        "marginal",
+        "smooth",
+    }
+)
+
+
+def _bar_targeted(
+    arg: str, key: str, value: object, valid: frozenset[str]
+) -> TypeError | None:
+    """barstats' message for ``arg`` (snake_case ``key``), or None."""
+    analysis_form = "data" in valid  # ip.analyze.barstats or ip.barstats
+    render_form = "result" in valid
+    drawing = (
+        "a drawing option of barstats()"
+        if "ax" in valid
+        else "a drawing option of ip.barstats(...) and ip.render.barstats(result, ...)"
+    )
+
+    def no(reason: str) -> TypeError:
+        return TypeError(
+            f"{arg}= is not an argument of barstats(): {reason} Remove {arg}=."
+        )
+
+    def analysis_argument(name: str, what: str) -> TypeError:
+        if analysis_form:
+            return no(what)
+        return TypeError(
+            f"{arg}= is not an argument of render.barstats(): {what} {name}= is an "
+            "argument of the analysis: pass it to ip.analyze.barstats() or "
+            f"ip.barstats() and draw that result. Remove {arg}=."
+        )
+
+    shown = _show(value) if isinstance(value, str) else None
+    if render_form and key in _BAR_ANALYSIS | {"paired"}:
+        return TypeError(
+            f"{arg}= is an argument of the analysis, ip.analyze.barstats(data, x, "
+            f"y, ...); render.barstats() draws a result that already holds it. Pass "
+            f"{key}= to ip.analyze.barstats() or ip.barstats() and draw that "
+            f"result. Remove {arg}=."
+        )
+    if key == "perc_k":
+        number = _show(value) if isinstance(value, int) else "0"
+        return analysis_argument(
+            "digits_perc",
+            f"perc.k was renamed digits.perc in ggstatsplot 0.12.0; inferplot "
+            f"writes digits_perc={number}.",
+        )
+    if key in _COUNTS_NAMES:
+        column = shown or "'<column>'"
+        return analysis_argument(
+            "counts",
+            "a column that says how many observations each row stands for (data "
+            f"given as a table) is passed as counts={column}.",
+        )
+    if key in _RATIO_NAMES:
+        return analysis_argument(
+            "ratio",
+            "the expected shares of the levels of x, in their order and summing to "
+            "1, are passed as ratio=, for example ratio=[0.5, 0.25, 0.25]; equal "
+            "shares by default.",
+        )
+    if key in {"correct", "yates", "correction", "continuity_correction"}:
+        return no(
+            "barstats uses Pearson's chi-square and McNemar's test without a "
+            "continuity correction, as ggbarstats does (chisq.test(correct = "
+            "FALSE)), so there is nothing to set."
+        )
+    if key == "simulate_p_value":
+        return no(
+            "barstats computes the chi-square p-value from its distribution, as "
+            "ggbarstats does; there is no simulated p-value."
+        )
+    if key == "hue":
+        column = shown or "'<hue column>'"
+        return TypeError(
+            "hue= is a seaborn argument. barstats() colours each bar by x: the "
+            "levels of x fill the bars and y makes the bars, so seaborn's "
+            f"countplot(data, x='<bars>', hue={column}) is barstats(data, "
+            f"x={column}, y='<bars>'). Remove hue=."
+        )
+    if key == "stacked":
+        return no(
+            "the bars are always stacked to 100%: each bar shows how the levels of "
+            "x divide one level of y, as in ggbarstats."
+        )
+    if key in {"normalize", "stat", "percent", "percentage"}:
+        return analysis_argument(
+            "label",
+            "each bar already shows the shares of 100% of the levels of x; label= "
+            "chooses what the cells say: 'percentage' (the default), 'counts' or "
+            "'both'.",
+        )
+    if key == "dodge":
+        return no("the bars are always stacked, not side by side, as in ggbarstats.")
+    if key in {"orient", "orientation", "horizontal"}:
+        return no("the bars are vertical, one for each level of y, as in ggbarstats.")
+    if key == "kind":
+        return no(
+            "it is an argument of pandas' plot(); barstats() always draws a "
+            "stacked bar chart of percentages, as ggbarstats."
+        )
+    if key in {"index", "columns"}:
+        role = "x" if key == "index" else "y"
+        return no(
+            f"pandas.crosstab(index=a, columns=b) puts a in the rows and b in the "
+            "columns of the table; barstats(data, x=a, y=b) counts the same table, "
+            f"with x as the rows (the fill) and y as the columns (the bars). Pass "
+            f"the column as {role}=."
+        )
+    if key in {"values", "aggfunc"}:
+        return analysis_argument(
+            "counts",
+            "pandas.crosstab(..., values=<counts>, aggfunc='sum') adds a column of "
+            "counts in each cell; barstats does the same with counts='<column>'.",
+        )
+    if key == "margins":
+        return no(
+            "the totals of the table are each bar's n (result.bars) and n "
+            "(result.n_obs); the counts are in result.counts."
+        )
+    if key == "legend":
+        return no(
+            "the legend of the levels of x is always drawn; its title is "
+            f"legend_title=, {drawing}."
+        )
+    if key in {"label_args", "sample_size_label_args"}:
+        what = (
+            "the labels inside the bars are not styled by an argument; label= "
+            "chooses what they say ('percentage', 'counts' or 'both') and "
+            "digits_perc= the decimals of a percentage."
+            if key == "label_args"
+            else "the n below each bar is not styled by an argument."
+        )
+        return TypeError(
+            f"{arg}= is a ggstatsplot argument that inferplot does not have: {what} "
+            f"Remove {arg}=."
+        )
+    if key == "label_repel":
+        return TypeError(
+            f"{arg}= is an argument of ggstatsplot's ggpiestats (labels beside the "
+            "slices of a pie); barstats() draws stacked bars with the labels inside, "
+            f"so there is nothing to repel. Remove {arg}=."
+        )
+    if key == "labels":
+        return no(
+            "label= chooses what the cells say ('percentage', 'counts' or 'both'); "
+            f"the axis labels, title and legend title are xlab=, ylab=, title= and "
+            f"legend_title=, {drawing}."
+        )
+    if key in {"xlabel", "ylabel"}:
+        # Without this, label= (one edit away) would be the did-you-mean.
+        axis, text = key[0], shown or "'...'"
+        where = f"Write {axis}lab={text}." if "ax" in valid else f"It is {drawing}."
+        return no(
+            f"it is matplotlib's name for the {axis} axis label, which inferplot "
+            f"calls {axis}lab=. {where}"
+        )
+    if key in {"order", "x_order", "level_order", "levels", "categories"}:
+        return no(
+            "barstats has no order=, as ggbarstats has none: the levels of x and y "
+            "follow their declared categories, else their sorted values. To choose "
+            "an order, pass the column as a pandas Categorical, for example "
+            "data['x'] = pd.Categorical(data['x'], categories=['low', 'mid', "
+            "'high']), or a polars Enum."
+        )
+    if key in {"subject", "id", "subject_id"}:
+        return no(
+            "with paired=True each row holds one unit's two measurements, x and y "
+            "(McNemar's test), so there are no subjects to name. For a measurement "
+            "repeated over conditions use withinstats(data, x, y, subject_id=...)."
+        )
+    if key in {"test_value", "mu"}:
+        return no(
+            "without y, barstats tests the shares of the levels of x against "
+            "ratio=, equal shares by default; histostats() tests one numeric "
+            "column against test_value=."
+        )
+    if key in {"tr", "trim", "trimming"}:
+        return no(
+            "barstats has no trimmed methods: a test of counts has no robust "
+            "variant (type='robust' is refused)."
+        )
+    if key in {"bf_prior", "prior"}:
+        return no(
+            "ggbarstats has no bf.prior: its Bayes factor for contingency tables "
+            "(arriving in inferplot 0.2) uses ggstatsplot's fixed prior "
+            "concentration of 1."
+        )
+    if key in {"pairwise_display", "pairwise_alpha", "pairwise_comparisons"}:
+        return no(
+            "barstats computes Fisher's exact test between every two levels of x "
+            "(result.pairwise) but never draws them, as ggbarstats; "
+            "p_adjust_method= sets their adjustment."
+        )
+    if key in {"var_equal", "effsize_type"}:
+        rest = (
+            "the tests of counts have no equal-variance option, so there is nothing "
+            "to set."
+            if key == "var_equal"
+            else "the effect size follows the design (Cramér's V, Cohen's g or "
+            "Pearson's C), so there is nothing to choose."
+        )
+        return TypeError(_removed(arg, "1.0.0", rest))
+    if key in {"method", "test"}:
+        return no(
+            "the test follows the design, as in ggbarstats: Pearson's chi-square "
+            "test of independence with y, McNemar's test with paired=True, and the "
+            "goodness-of-fit test against ratio= without y."
+        )
+    if key in _COLOUR_KEYS:
+        return no(
+            f"colours are set with palette= (one per level of x) or bar_args=, "
+            f"{drawing}."
+        )
+    if key == "alpha":
+        return no(
+            "conf_level= sets the level of the confidence intervals (conf_level=0.95 "
+            "for 95%); for transparency use bar_args={'alpha': 0.5}, "
+            f"{drawing}."
+        )
+    if key in _OTHER_LAYERS:
+        return no(
+            "barstats draws stacked bars, not the points, boxes, violins or "
+            f"histograms of the other functions; style the bars with bar_args=, "
+            f"{drawing}."
+        )
+    if key == "centrality_type":
+        return TypeError(
+            f"{arg}= is a ggstatsplot argument that inferplot does not have: "
+            f"barstats counts categories and has no centrality. Remove {arg}=."
+        )
+    return None
+
+
 # Functions whose analysis takes subject_id (their drawing functions share the name).
 _SUBJECT_FUNCTIONS: Final = frozenset({"withinstats"})
 # Functions whose analysis computes pairwise comparisons.
@@ -1137,6 +1405,13 @@ def _positional_problem(
             )
     elif other is not None:
         hint = f" For example {fn}(..., {other}={first!r})."
+    elif fn == "barstats" and "counts" in valid and isinstance(first, str):
+        # A column name after x and y: very likely the column of counts.
+        hint = (
+            f" If {first!r} is the column of counts of a table (how many "
+            f"observations each row stands for), write barstats(..., "
+            f"counts={first!r})."
+        )
     elif fn == "histostats" and positional == ("data", "x") and isinstance(first, str):
         # A column name after x: very likely a y for another function.
         hint = (

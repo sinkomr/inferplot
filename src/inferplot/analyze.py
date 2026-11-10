@@ -8,6 +8,12 @@ imports, never imports matplotlib.
 
 from __future__ import annotations
 
-from inferplot.analyses import betweenstats, histostats, scatterstats, withinstats
+from inferplot.analyses import (
+    barstats,
+    betweenstats,
+    histostats,
+    scatterstats,
+    withinstats,
+)
 
-__all__ = ["betweenstats", "histostats", "scatterstats", "withinstats"]
+__all__ = ["barstats", "betweenstats", "histostats", "scatterstats", "withinstats"]
