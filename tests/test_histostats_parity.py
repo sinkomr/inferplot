@@ -123,7 +123,9 @@ def test_one_sided_robust_and_bayes_are_refused(name: str, backend: nl.Backend) 
     # ggstatsplot ignored the argument: its output equals the two-sided case's.
     two_sided = nl.BY_NAME[name.replace("-greater-", "-")]
     assert case.subtitle_data == two_sided.subtitle_data
-    assert _result(name, backend).to_json() == _result(two_sided.name, backend).to_json()
+    assert (
+        _result(name, backend).to_json() == _result(two_sided.name, backend).to_json()
+    )
 
 
 @pytest.mark.parametrize(("name", "backend"), nl.params(CASES))
@@ -251,9 +253,10 @@ def test_effect_size(name: str, backend: nl.Backend) -> None:
             name.replace("-nosubtitle-", "-"), 0
         )
         assert_close("closed_form", es.estimate, number(row["estimate"]), what="tm")
-        reference = case.bootstrap_reference or nl.BY_NAME[
-            case.name.replace("-nosubtitle-", "-")
-        ].bootstrap_reference
+        reference = (
+            case.bootstrap_reference
+            or nl.BY_NAME[case.name.replace("-nosubtitle-", "-")].bootstrap_reference
+        )
         assert reference is not None
         assert reference["conf_level"] == level
         for value, key in ((es.conf_low, "conf_low"), (es.conf_high, "conf_high")):
@@ -287,7 +290,8 @@ def test_bayes_factor(name: str, backend: nl.Backend) -> None:
         # No caption: the type has none, or bf.message = FALSE, or no subtitle.
         assert bayes is None
         return
-    assert bayes is not None and row is not None
+    assert bayes is not None
+    assert row is not None
     prior = float(case.args.get("bf.prior", 0.707))
     assert (bayes.prior, bayes.prior_scale, bayes.test) == (
         "cauchy",
@@ -308,7 +312,10 @@ def test_bayes_factor(name: str, backend: nl.Backend) -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["gghistostats-ToothGrowth-tv100-parametric", "gghistostats-ToothGrowth-tv100-bayes"],
+    [
+        "gghistostats-ToothGrowth-tv100-parametric",
+        "gghistostats-ToothGrowth-tv100-bayes",
+    ],
 )
 def test_tv100_reports_the_accurate_values(name: str) -> None:
     # D81: the interval and the Bayes factor are the statistics layer's accurate
@@ -379,10 +386,12 @@ def test_seed_reaches_the_bootstrap_only() -> None:
     again = nl.analyze(case, frame)
     other = nl.analyze(case, frame, seed=7)
     assert first == again
-    assert first.effect_size is not None and other.effect_size is not None
+    assert first.effect_size is not None
+    assert other.effect_size is not None
     assert first.effect_size.conf_low != other.effect_size.conf_low
     assert other.effect_size.bootstrap_seed == other.settings.seed == 7
-    assert first.test is not None and other.test is not None
+    assert first.test is not None
+    assert other.test is not None
     assert first.test.statistic == other.test.statistic  # exact, not resampled
 
 

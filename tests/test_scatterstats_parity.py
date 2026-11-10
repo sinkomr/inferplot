@@ -151,7 +151,8 @@ def test_correlation(name: str, backend: nl.Backend) -> None:
     if case.type == "bayes":
         assert (test, es) == (None, None)  # D45
         return
-    assert test is not None and es is not None  # computed also without a subtitle
+    assert test is not None
+    assert es is not None
     row = _row(case)
     key = case.name.replace("-nosubtitle-", "-")
     assert test.method == row["method"] == _METHODS[test.name]
@@ -232,7 +233,8 @@ def test_exactly_collinear_data(name: str) -> None:
         assert "BF10 infinite" in warning
     else:
         test, es = result.test, result.effect_size
-        assert test is not None and es is not None
+        assert test is not None
+        assert es is not None
         assert (es.estimate, es.conf_low, es.conf_high) == (sign, sign, sign)
         assert test.p_value == 0.0
         if case.type == "nonparametric":

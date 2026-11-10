@@ -685,16 +685,22 @@ def _no_level_case(function: str, name: str) -> OracleCase:
 
 @pytest.fixture
 def one_sample() -> StatsResult:
-    from tests.no_level_cases import assembled
+    from tests.no_level_cases import analyzed
 
-    return assembled(_no_level_case("gghistostats", "edge_one_missing-parametric"))
+    result = analyzed(
+        _no_level_case("gghistostats", "edge_one_missing-parametric").name
+    )
+    assert result is not None
+    return result
 
 
 @pytest.fixture
 def correlation() -> StatsResult:
-    from tests.no_level_cases import assembled
+    from tests.no_level_cases import analyzed
 
-    return assembled(_no_level_case("ggscatterstats", "mtcars-labels-parametric"))
+    result = analyzed(_no_level_case("ggscatterstats", "mtcars-labels-parametric").name)
+    assert result is not None
+    return result
 
 
 def _bayes_factor() -> Any:
@@ -935,7 +941,7 @@ def test_provisional_texts_of_the_new_designs(
         "Values of value (n = 10, mean 11.02) tested against 10. One-sample t-test"
     )
     assert correlation.text.apa == (
-        "Pearson's r correlation test: t(30) = -9.56, p < .001, Pearson's r = -.87, "
+        "Pearson correlation: t(30) = -9.56, p < .001, Pearson's r = -.87, "
         "95% CI [-.93, -.74], n = 32 pairs."
     )
     assert correlation.text.alt_text == (
@@ -976,7 +982,7 @@ def test_provisional_sentences_name_direction_and_bayes(
     )
     pair = _rebuilt(correlation, test=None, effect_size=None, bayes=bayes)
     assert pair.apa == (
-        "Bayesian Pearson correlation (stretched beta prior, scale 0.707): BF10 = "
+        "Bayesian Pearson correlation (stretched beta prior, r = 0.707): BF10 = "
         "3.00, log(BF01) = -1.10, n = 32 pairs."
     )
     none = _rebuilt(correlation, test=None, effect_size=None, bayes=None)
