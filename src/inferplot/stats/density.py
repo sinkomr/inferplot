@@ -180,12 +180,22 @@ def _functional(
     the double sum over all i and j, the diagonal included, with each distance
     replaced by its binned value.
     """
-    u = np.arange(counts.size, dtype=np.float64) * width / h
-    keep = u * u < _DELMAX
+    power = h ** (order + 1)
+    if not power > 0.0:
+        # h^(order + 1) underflows: the bandwidth is below about 1e-44 of the
+        # largest |value| (one value far beyond the others' spread).
+        raise _UnresolvedSpread
+    with np.errstate(over="ignore"):
+        u = np.arange(counts.size, dtype=np.float64) * width / h
+        keep = u * u < _DELMAX
     kernel = _phi4 if order == 4 else _phi6
     zero = kernel(np.zeros(1))[0]
     total = 2.0 * float(np.sum(counts[keep] * kernel(u[keep]))) + n * float(zero)
-    return total / (n * (n - 1.0) * h ** (order + 1))
+    return total / (n * (n - 1.0) * power)
+
+
+class _UnresolvedSpread(ArithmeticError):
+    """A power of the bandwidth underflowed (``_bw_sj_scaled`` explains it)."""
 
 
 def _zeroin(
@@ -239,7 +249,24 @@ def _zeroin(
     return b  # pragma: no cover - uniroot warns and returns the last iterate
 
 
-def _bw_sj_scaled(x: FloatArray) -> float:
+def _bw_sj_scaled(x: FloatArray, scale: float = 1.0) -> float:
+    """``bw_sj`` of values already times their common scale (``scale``, used only
+    to name a value in a message)."""
+    try:
+        return _bw_sj_unguarded(x)
+    except _UnresolvedSpread:
+        middle = float(np.median(x))
+        far = float(x[int(np.argmax(np.abs(x - middle)))]) / scale
+        raise ValueError(
+            "no Sheather-Jones bandwidth, so no MAP estimate: the value "
+            f"{far!r} lies so far from the others next to their spread that a "
+            "kernel density resolving both is below what double precision can "
+            "compute (the bandwidth's 7th power underflows). Check that value "
+            "for an entry or unit error"
+        ) from None
+
+
+def _bw_sj_unguarded(x: FloatArray) -> float:
     n = x.size
     ordered = np.sort(x)
     iqr = _quantile7(ordered, 0.75) - _quantile7(ordered, 0.25)
@@ -318,7 +345,7 @@ def bw_sj(x: SampleLike) -> float:
     """
     arr = as_sample(x, min_size=2)
     scale = common_scale(arr)
-    return _bw_sj_scaled(arr * scale) / scale
+    return _bw_sj_scaled(arr * scale, scale) / scale
 
 
 def _density_on_grid(x: FloatArray, bw: float) -> FloatArray:
@@ -400,7 +427,7 @@ def map_estimate(x: SampleLike) -> MapEstimate:
         )
     scale = common_scale(arr)
     scaled = arr * scale
-    bw = _bw_sj_scaled(scaled)
+    bw = _bw_sj_scaled(scaled, scale)
     density = _density_on_grid(scaled, bw)
     # The first point within FFT rounding of the maximum: exactly tied points (a
     # symmetric sample) come out of the FFT unequal in the last bits, either way.
