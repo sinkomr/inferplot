@@ -57,9 +57,14 @@ def _stirling_remainder(a: float) -> float:
             - ((a - 0.5) * math.log(a) - a)
             - (0.5 * math.log(2.0 * math.pi))
         )
+    # Seven terms B_2k / (2k (2k - 1) a^(2k - 1)); the first one left out,
+    # 3617 / (122400 a^15), is below 3e-17 from a = 10.
     inv2 = 1.0 / (a * a)
+    tail = 1.0 / 1188.0 - inv2 * (691.0 / 360360.0 - inv2 / 156.0)
     return (
-        1.0 / 12.0 - inv2 * (1.0 / 360.0 - inv2 * (1.0 / 1260.0 - inv2 / 1680.0))
+        1.0 / 12.0
+        - inv2
+        * (1.0 / 360.0 - inv2 * (1.0 / 1260.0 - inv2 * (1.0 / 1680.0 - inv2 * tail)))
     ) / a
 
 
@@ -165,8 +170,10 @@ def smm_quantile(n_comparisons: int, df: float, *, conf_level: float = 0.95) -> 
     and 45 comparisons at alpha 0.05 its values are 3.4% to 6.6% below it (and with
     one comparison it comes within 1% of the one-sided t quantile), while on the
     edge_k9 fixture (36 comparisons) they are above it for 28 of the 36 pairs
-    (-0.35% to +4.7%). So inferplot's intervals there differ from ggstatsplot's,
-    wider or narrower by pair (DECISIONS.md D52).
+    (-0.35% to +4.7%). What its values do follow is a one-sided critical value,
+    the quantile of the largest of C independent signed t variates (within 1% at
+    alpha 0.05 and 0.1 on probe-smm). So inferplot's intervals there differ from
+    ggstatsplot's, wider or narrower by pair (DECISIONS.md D52).
 
     Raises:
         ValueError: ``n_comparisons`` below 1, ``df`` below 1 or NaN, or

@@ -22,9 +22,11 @@ def _rows() -> list[dict[str, object]]:
 
 def test_reference_covers_the_range() -> None:
     rows = _rows()
-    assert len(rows) == 148
+    assert len(rows) == 184
     assert {r["comparisons"] for r in rows} >= {1, 2, 28, 29, 36, 45, 300}
-    assert {r["df"] for r in rows} >= {"1", "1.5", "1e5", "inf"}
+    # df 20 to 25.7: just above df / 2 = 10, where the density switches from
+    # lgamma to the Stirling series (a 4-term series was off by 8e-13 there).
+    assert {r["df"] for r in rows} >= {"1", "1.5", "20", "21.3", "25.7", "1e5", "inf"}
 
 
 @pytest.mark.parametrize(

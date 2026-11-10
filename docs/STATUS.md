@@ -217,16 +217,17 @@ scheme found; scripts in the session scratch folder `reviewS/`). To fix:
   statistics run out) without saying so; rank epsilon squared raises there.
 - [ ] S5: the explanatory effect size and its interval depend on the order of the
   groups when sizes differ (xi 0.5036 against 0.5125 with `order=` reversed).
-- [ ] S6: `smm_quantile` is off by up to 3e-12 relative between df 20 and 30 (4-term
-  Stirling series from df/2 = 10); D52 and the docstring claim 1.1e-14. No printed
-  digit changes.
+- [x] S6: `smm_quantile` was off by up to 3e-12 relative between df 20 and 30 (4-term
+  Stirling series from df/2 = 10) against a claimed 1.1e-14. Fixed with a seven-term
+  series (within 3e-17 of 40-digit values from df 20); 36 reference rows added at df
+  20, 21.3 and 25.7, all of which failed before. No printed digit changed.
 - [ ] S7: the robust pre-check in betweenstats works in raw units: y x 1e-165 raises
   with a false reason (winsorized variance 0), y x 1e156 an overflow error; the other
   types handle both.
-- [ ] S8 (wording): WRS2's critical values above 28 pairs match the quantile of the
-  largest of C signed t variates (one-sided; within -0.4% to +0.9% on all 81 probe
-  pairs), not a noisy modulus quantile; D52 and SPEC §5 should say so. The decision
-  stands; tell the owner the description changed.
+- [x] S8 (wording): WRS2's critical values above 28 pairs match the quantile of the
+  largest of C signed t variates (one-sided; within -0.4% to +0.9% at alpha 0.05 and
+  0.1 on the probe), not a noisy modulus quantile; D52, SPEC §5 and the docstring now
+  say so. The decision stands; the owner was told the description changed.
 - Leads, not verified: the exact-replay emulator behind the robust percentile rules is
   not committed (the committed tests compare within 4 Monte Carlo SDs, which cannot
   resolve a one-order-statistic difference, about 0.14 SD); rank-biserial r of ±1 gets

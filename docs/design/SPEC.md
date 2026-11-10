@@ -409,9 +409,12 @@ Statistical and behavioral differences are exactly these:
     iris Petal.Length setosa-versicolor (+1.16e-3) and setosa-virginica (-6.1e-5); one
     label differs, log_e BF01 -133.68 where ggstatsplot prints -133.69.
 11. With nine or more groups (more than 28 pairs) the robust pairwise intervals use the
-    exact Studentized maximum modulus quantile, where WRS2 uses a seeded simulation
-    that differs from it by -6.6% to +4.7% (D52); estimates and p-values are
-    unchanged.
+    exact Studentized maximum modulus quantile, the distribution WRS2's table holds
+    up to 28 pairs. Above 28, WRS2 uses a seeded simulation that differs from it by
+    -6.6% to +4.7%: its values follow a one-sided critical value (the quantile of
+    the largest of C signed t variates, within 1% at alpha 0.05 and 0.1), so its
+    intervals there are mostly narrower than simultaneous two-sided ones (D52).
+    Estimates and p-values are unchanged.
 12. A group whose MAP has no density estimate (bw.SJ fails on zero IQR) gets no
     centrality label and a `warnings` entry; ggstatsplot draws an empty label (D55).
 13. Differences of means are exact up to one rounding (D49), where R subtracts rounded

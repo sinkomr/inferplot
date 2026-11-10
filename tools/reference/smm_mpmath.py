@@ -34,7 +34,23 @@ TARGET = ROOT / "tests" / "data" / "smm_reference.json"
 mp.mp.dps = 30
 
 COMPARISONS = (1, 2, 3, 6, 10, 28, 29, 36, 45, 66, 120, 300)
-DFS = ("1", "1.5", "2", "3.7", "5.16", "10", "17.85", "45.2", "120", "1490", "1e5")
+DFS = (
+    "1",
+    "1.5",
+    "2",
+    "3.7",
+    "5.16",
+    "10",
+    "17.85",
+    # df / 2 from 10: inferplot's density switches to the Stirling series there.
+    "20",
+    "21.3",
+    "25.7",
+    "45.2",
+    "120",
+    "1490",
+    "1e5",
+)
 LEVELS = ("0.95",)
 EXTRA = (  # (C, df, level): other levels
     (36, "12.3", "0.9"),
