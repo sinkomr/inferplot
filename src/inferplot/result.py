@@ -342,8 +342,14 @@ class PairwiseComparison(_Plain):
     * "fisher_exact" (barstats, design "contingency"): no test statistic
       (``statistic`` None, ``statistic_name`` ""), no df; the pair's table is
       group1 and group2 by the levels of y that either holds. ``estimate`` is
-      the pair's Cramér's V with its interval; ``displayed`` is always False
-      (ggstatsplot computes the pairs but never draws them).
+      the pair's Cramér's V with its interval (None where V is not defined);
+      ``displayed`` is always False (ggstatsplot computes the pairs but never
+      draws them). A pair without a test (its table has a single column, or
+      its exact test would take too long) keeps its place with ``p_value``,
+      ``p_adjusted`` and ``significant`` None and ``no_test_reason`` saying
+      why; the other pairs are adjusted among themselves.
+
+    ``no_test_reason`` is None for every pair that has a p-value.
     """
 
     group1: str
@@ -363,6 +369,7 @@ class PairwiseComparison(_Plain):
     conf_low: float | None = None
     conf_high: float | None = None
     bayes: BayesFactor | None = None
+    no_test_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1245,6 +1252,15 @@ def _contingency_problem(result: StatsResult) -> str | None:
             return "barstats pairs are never drawn: displayed must be False"
         if pair.group1 not in levels or pair.group2 not in levels:
             return f"the pair {pair.group1!r}, {pair.group2!r} must be levels of x"
+        untested = pair.p_value is None
+        if (pair.no_test_reason is not None) != untested or (
+            untested and (pair.p_adjusted is not None or pair.significant is not None)
+        ):
+            return (
+                f"the pair {pair.group1!r}, {pair.group2!r}: a pair without a "
+                "p-value has p_adjusted and significant None and says why in "
+                "no_test_reason; a pair with one has no no_test_reason"
+            )
     return None
 
 

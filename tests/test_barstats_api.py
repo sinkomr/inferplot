@@ -1,10 +1,9 @@
 """``ip.barstats``, ``ip.analyze.barstats`` and ``ip.render.barstats``: signatures,
 argument checks, the design checks that need only the table, and the result a
-contingency design returns (built from the fixtures' own numbers until the
-statistics are joined, ``tests/bar_cases.py``).
+contingency design returns (``tests/bar_cases.py``; the numbers against the
+oracle are tests/test_barstats_parity.py's).
 
-Each design raises ``NotImplementedError`` after reading and checking the table;
-the drawing raises it after checking its arguments.
+The drawing raises ``NotImplementedError`` after checking its arguments.
 """
 
 from __future__ import annotations
@@ -50,11 +49,8 @@ def prepare(data: object, x: str, y: str | None = None, **kwargs: Any) -> Any:
 
 
 def warnings_of(data: object, x: str, y: str | None = None, **kwargs: Any) -> list[str]:
-    """The warnings of the result ``_assemble`` builds with stand-in parts."""
-    table, args, digits = prepare(data, x, y, **kwargs)
-    return list(
-        module._assemble(table, args, _stand_in(table, args), digits=digits).warnings
-    )
+    """The warnings of the analysis' result."""
+    return list(analyze(data, x, y, **kwargs).warnings)
 
 
 def _stand_in(table: Any, args: Any) -> Any:
@@ -128,31 +124,31 @@ def test_signatures() -> None:
 
 
 @pytest.mark.parametrize(
-    ("y", "kwargs", "design"),
+    ("y", "kwargs", "test_name"),
     [
-        ("am", {}, "two-way design (Pearson's chi-square test of independence"),
-        (None, {}, "one-way design (the chi-square goodness-of-fit test"),
-        ("am", {"type": "nonparametric"}, "two-way design"),
+        ("am", {}, "pearson_chi_square"),
+        (None, {}, "chi_square_gof"),
+        ("am", {"type": "nonparametric"}, "pearson_chi_square"),
     ],
 )
-def test_each_design_reads_the_table_then_is_not_implemented(
-    mtcars: pd.DataFrame, y: str | None, kwargs: dict[str, Any], design: str
+def test_each_design_is_analyzed_and_the_drawing_is_not_implemented(
+    mtcars: pd.DataFrame, y: str | None, kwargs: dict[str, Any], test_name: str
 ) -> None:
-    for fn in (analyze, top):
-        text = message(
-            NotImplementedError, lambda fn=fn: fn(mtcars, "cyl", y, **kwargs)
-        )
-        assert text.startswith(f"barstats, {design}")
-        assert "The data were read:" in text
+    result = analyze(mtcars, "cyl", y, **kwargs)
+    assert result.test is not None
+    assert result.test.name == test_name
+    text = message(NotImplementedError, lambda: top(mtcars, "cyl", y, **kwargs))
+    assert text.startswith("render.barstats(): drawing a barstats result is not")
 
 
-def test_the_paired_design_is_not_implemented() -> None:
+def test_the_paired_design_is_analyzed() -> None:
     data = pd.DataFrame({"a": ["no", "yes", "yes"], "b": ["yes", "yes", "no"]})
-    text = message(NotImplementedError, lambda: analyze(data, "a", "b", paired=True))
-    assert text == (
-        "barstats, paired design (McNemar's test with Cohen's g), is not implemented "
-        "yet in this version of inferplot; it arrives with the Phase 4 barstats "
-        "statistics. The data were read: a 2 x 2 table of x='a' by y='b', 3 pairs."
+    result = analyze(data, "a", "b", paired=True)
+    assert result.test is not None
+    assert (result.test.name, result.test.statistic, result.n_obs) == (
+        "mcnemar",
+        0.0,
+        3,
     )
 
 
@@ -195,10 +191,8 @@ def test_analysis_imports_no_matplotlib() -> None:
         import inferplot
         frame = pd.DataFrame({"a": list("xxyyx"), "b": list("ppqqq")})
         for y in ("b", None):
-            try:
-                inferplot.analyze.barstats(frame, "a", y)
-            except NotImplementedError:
-                pass
+            inferplot.analyze.barstats(frame, "a", y)
+        inferplot.analyze.barstats(frame, "a", "b", results_subtitle=False)
         assert "matplotlib" not in sys.modules
         """
     )
@@ -426,7 +420,10 @@ def test_tables_no_test_can_use_raise() -> None:
     )
     # A declared empty category makes a one-way table of two categories.
     declared = data.assign(one=pd.Categorical(data["one"], categories=["a", "b"]))
-    message(NotImplementedError, lambda: analyze(declared, "one"))
+    one_way = analyze(declared, "one")
+    assert one_way.counts == ((4,), (0,))
+    assert one_way.test is not None
+    assert one_way.test.statistic == 4.0  # (4 - 2)^2 / 2 + (0 - 2)^2 / 2
     # ... but not a two-way table: its empty row is left out.
     message(ValueError, lambda: analyze(declared, "one", "y"))
     single = pd.DataFrame(
@@ -581,9 +578,11 @@ def test_refusals(case: OracleCase) -> None:
 
 
 def test_the_answered_and_refused_fixtures() -> None:
+    # 22 refused: 7 robust, 7 bayes, 4 degenerate tables, paired with different
+    # levels, paired without a changing pair, 2 wrong ratios.
     assert len(bc.CASES) == 89
-    assert len(bc.ANSWERED) == 68
-    assert len(bc.REFUSALS) == 21
+    assert len(bc.ANSWERED) == 67
+    assert len(bc.REFUSALS) == 22
 
 
 @pytest.mark.parametrize("case", bc.ANSWERED, ids=[c.name for c in bc.ANSWERED])

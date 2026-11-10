@@ -22,9 +22,17 @@ runs the same tests, as in ggstatsplot):
 
 Each design's analysis is a function ``(table, args) -> _Parts`` in
 ``_ANALYSES``, run after every argument has been validated and the table read
-(``_prepare``); ``_assemble`` builds the result from its parts. The statistics
-are not in this version yet: every design raises ``NotImplementedError`` naming
-itself.
+(``_prepare``); ``_assemble`` builds the result from its parts. With
+``results_subtitle=False`` only the bars' tests are computed (no main test, no
+pairs), as ggstatsplot computes them.
+
+Where ggstatsplot drops a result silently, inferplot raises plainly (D101): no
+pair of units that changes level, or two levels between which none changes
+(McNemar's and Bowker's tests are 0/0). A Fisher pair without a test (its table
+has one column; its exact test is beyond the cost limit) does not fail the
+analysis: it stays in ``pairwise`` with p None and ``no_test_reason``, and the
+other pairs are adjusted among themselves (ggstatsplot loses the whole pairwise
+table there).
 """
 
 from __future__ import annotations
@@ -35,6 +43,9 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass, field
 from typing import Final, Literal, cast
+
+import numpy as np
+from numpy.typing import NDArray
 
 from inferplot import stats
 from inferplot._data import TableData, TableLevels, read_table, table_notes
@@ -73,6 +84,7 @@ Design = Literal["two-way", "paired", "one-way"]
 _DEFAULT_CONF_LEVEL: Final = 0.95
 _DEFAULT_P_ADJUST: Final = "holm"
 _DEFAULT_DIGITS_PERC: Final = 0
+_DEFAULT_SEED: Final = 0
 # What the result records for the settings barstats does not have.
 _NO_BF_PRIOR: Final = 0.707
 _NO_TR: Final = 0.2
@@ -150,52 +162,475 @@ class _Parts:
 # the designs (each takes the table and the validated arguments)
 # --------------------------------------------------------------------------- #
 
-# The methods of each design, for the messages of the designs not implemented yet.
-_METHODS: Final[dict[Design, str]] = {
-    "two-way": "Pearson's chi-square test of independence with Cramér's V",
-    "paired": "McNemar's test with Cohen's g",
-    "one-way": "the chi-square goodness-of-fit test with Pearson's C",
-}
+# What the result records for each test and effect size: ``name`` and ``label``
+# are inferplot's, ``method`` is R's ``method`` string (statsExpressions' row).
+_CHI2: Final = "chi2"
+_NONCENTRAL_CHI2: Final = "noncentral chi-square"
+_WILSON: Final = "Wilson score"
+_GOF_NAME: Final = "chi_square_gof"
+_GOF_LABEL: Final = "Chi-square goodness-of-fit test"
+_GOF_METHOD: Final = "Chi-squared test for given probabilities"
+_FISHER_NAME: Final = "fisher_exact"
+_FISHER_LABEL: Final = "Fisher's exact test"
+# ggstatsplot's threshold for a pair's ``significant`` (pairs are never drawn).
+_PAIR_ALPHA: Final = 0.05
+# Every count is held exactly in a double below this table total.
+_MAX_TOTAL: Final = 2**53
+
+_PEARSON_1900: Final = (
+    "Pearson, K. (1900). Philosophical Magazine 50: 157-175 (the chi-square test)."
+)
+_BERGSMA_2013: Final = (
+    "Bergsma, W. (2013). Journal of the Korean Statistical Society 42: 323-328 "
+    "(bias-corrected Cramér's V)."
+)
+_SMITHSON_2003: Final = (
+    "Smithson, M. (2003). Confidence Intervals. Sage, chapter 5 (noncentral "
+    "chi-square intervals of V and C)."
+)
+_FISHER_1935: Final = (
+    "Fisher, R. A. (1935). Journal of the Royal Statistical Society 98: 39-82 "
+    "(the exact test of a contingency table)."
+)
+_MEHTA_PATEL_1983: Final = (
+    "Mehta, C. R. & Patel, N. R. (1983). Journal of the American Statistical "
+    "Association 78: 427-434 (network algorithm for exact tests of r x c tables)."
+)
+_MCNEMAR_1947: Final = "McNemar, Q. (1947). Psychometrika 12: 153-157 (McNemar's test)."
+_BOWKER_1948: Final = (
+    "Bowker, A. H. (1948). Journal of the American Statistical Association 43: "
+    "572-574 (the test of symmetry)."
+)
+_COHEN_1988: Final = (
+    "Cohen, J. (1988). Statistical Power Analysis for the Behavioral Sciences, "
+    "2nd ed. Erlbaum, chapter 5 (Cohen's g)."
+)
+_WILSON_1927: Final = (
+    "Wilson, E. B. (1927). Journal of the American Statistical Association 22: "
+    "209-212 (the score interval)."
+)
+_PEARSON_1904: Final = (
+    "Pearson, K. (1904). Mathematical Contributions to the Theory of Evolution "
+    "XIII. Drapers' Company Research Memoirs (the contingency coefficient C)."
+)
 
 
-def _shape(table: TableData) -> str:
-    rows = len(table.x_levels.levels)
-    if table.y_levels is None:
-        return f"{rows} categories of x={table.x!r}"
-    columns = len(table.y_levels.levels)
-    return f"a {rows} x {columns} table of x={table.x!r} by y={table.y!r}"
+def _check_total(table: TableData) -> None:
+    """Every count and margin must be an exact double (the statistics' limit)."""
+    if table.n >= _MAX_TOTAL:
+        raise ValueError(
+            f"The table holds {table.n:,} observations; the tests of counts need "
+            "fewer than 2^53 (9,007,199,254,740,992), so that every count and total "
+            "is held exactly. Divide the counts by a common factor only if they "
+            "are not counts of observations (a test of counts reads them as "
+            "observations)."
+        )
 
 
-def _not_implemented(table: TableData, args: _Args) -> NotImplementedError:
-    """The error of a design whose statistics are not in this version yet
-    (CLAUDE.md rule 3: no fallback to another method)."""
-    unit = "pairs" if args.paired else "observations"
-    return NotImplementedError(
-        f"barstats, {args.design} design ({_METHODS[args.design]}), is not "
-        "implemented yet in this version of inferplot; it arrives with the Phase 4 "
-        f"barstats statistics. The data were read: {_shape(table)}, {table.n:,} "
-        f"{unit}."
+def _gof_test(test: stats.GoodnessOfFit) -> TestResult:
+    return TestResult(
+        name=_GOF_NAME,
+        label=_GOF_LABEL,
+        method=_GOF_METHOD,
+        statistic_name=_CHI2,
+        statistic=test.statistic,
+        df=None,
+        df_error=float(test.df),
+        p_value=test.p_value,
+        alternative="two-sided",
     )
 
 
+def _effect(
+    name: str, label: str, effect: stats.EffectSizeCI, ci_method: str
+) -> EffectSize:
+    return EffectSize(
+        name=name,
+        label=label,
+        estimate=effect.estimate,
+        conf_level=effect.conf_level,
+        conf_low=effect.conf_low,
+        conf_high=effect.conf_high,
+        ci_method=ci_method,
+        sidedness=effect.sidedness,
+    )
+
+
+def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], list[str]]:
+    """The proportion test of each bar (the levels of y that hold observations,
+    in order): the goodness-of-fit test of x within the bar against ``ratio``,
+    every level of x kept, two-sided at 95% and unadjusted (ggstatsplot's
+    ``onesample_data()``), with Pearson's C. A bar without a test keeps its
+    entry with the reason, and ``warnings`` says so (R prints NA there)."""
+    if table.y_levels is None:
+        return (), []
+    levels = table.y_levels.levels
+    out: list[_BarTest] = []
+    untested: list[str] = []
+    for bar in stats.proportion_tests(table.table(), args.ratio):
+        if bar.test is None or bar.effect is None:
+            reason = (
+                f"x={args.x!r} has a single level, and a goodness-of-fit test "
+                "compares two or more (ggstatsplot prints NA)"
+            )
+            out.append(_BarTest(test=None, effect_size=None, no_test_reason=reason))
+            untested.append(levels[bar.column])
+            continue
+        out.append(
+            _BarTest(
+                test=_gof_test(bar.test),
+                effect_size=_effect(
+                    "pearsons_c", "Pearson's C", bar.effect, _NONCENTRAL_CHI2
+                ),
+            )
+        )
+    warnings: list[str] = []
+    if untested:
+        warnings.append(
+            f"The {'bar' if len(untested) == 1 else 'bars'} "
+            f"{_levels_text(untested)} of {args.y!r} "
+            f"{'has' if len(untested) == 1 else 'have'} no proportion test: x="
+            f"{args.x!r} has a single level, and a goodness-of-fit test compares two "
+            "or more. The bars are drawn without a p-value label (ggstatsplot "
+            "prints NA)."
+        )
+    return tuple(out), warnings
+
+
 def _two_way(table: TableData, args: _Args) -> _Parts:
-    """Pearson's chi-square test of independence (no Yates' correction) with
-    Cramér's V (Bergsma's bias correction, noncentral chi-square interval), the
-    proportion test of each bar, and Fisher's exact test between every two
-    levels of x where ggstatsplot computes them."""
-    raise _not_implemented(table, args)
+    """Pearson's chi-square test of independence (no Yates' correction) on the
+    table without its empty rows and columns, with Cramér's V (Bergsma's bias
+    correction, noncentral chi-square interval at ``conf_level``, following
+    ``alternative``); the proportion test of each bar; and Fisher's exact test
+    between every two levels of x where ggstatsplot computes them
+    (``_pairs_wanted``). Without the results subtitle only the bars' tests."""
+    _check_total(table)
+    bar_tests, warnings = _bar_tests(table, args)
+    if not args.results_subtitle:
+        return _Parts(
+            test=None,
+            effect_size=None,
+            bar_tests=bar_tests,
+            pairwise=(),
+            warnings=tuple(warnings),
+            citations=(_PEARSON_1900, _PEARSON_1904, _SMITHSON_2003),
+        )
+    full = table.table()
+    kept = full[full.sum(axis=1) > 0][:, full.sum(axis=0) > 0]
+    rows, columns = kept.shape
+    if table.n <= max(rows, columns):
+        raise ValueError(
+            f"The bias-corrected Cramér's V needs more observations than levels of "
+            f"x and of y: the {rows} x {columns} table of x={args.x!r} by "
+            f"y={args.y!r} holds {table.n} (R gives NaN for it, and ggstatsplot "
+            "prints it). Collect more observations; with this few, no test of "
+            "independence can say much."
+        )
+    chi2 = stats.chisq_independence(kept)
+    v = stats.cramers_v(kept, conf_level=args.conf_level, alternative=args.alternative)
+    test = TestResult(
+        name="pearson_chi_square",
+        label="Pearson's chi-square test",
+        method="Pearson's Chi-squared test",
+        statistic_name=_CHI2,
+        statistic=chi2.statistic,
+        df=None,
+        df_error=float(chi2.df),
+        p_value=chi2.p_value,
+        alternative="two-sided",
+    )
+    effect = _effect("cramers_v", "Cramer's V", v, _NONCENTRAL_CHI2)
+    citations = [_PEARSON_1900, _BERGSMA_2013, _SMITHSON_2003, _PEARSON_1904]
+    pairs: tuple[PairwiseComparison, ...] = ()
+    if _pairs_wanted(table, args):
+        pairs, pair_warnings = _fisher_pairs(table, args)
+        warnings.extend(pair_warnings)
+        citations += [_FISHER_1935, _MEHTA_PATEL_1983]
+    return _Parts(
+        test=test,
+        effect_size=effect,
+        bar_tests=bar_tests,
+        pairwise=pairs,
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
 
 
 def _paired(table: TableData, args: _Args) -> _Parts:
-    """McNemar's test (Bowker's beyond 2 x 2) without continuity correction with
-    Cohen's g (Wilson interval), and the proportion test of each bar."""
-    raise _not_implemented(table, args)
+    """McNemar's test (Bowker's test of symmetry beyond 2 x 2) without
+    continuity correction on the square table with every declared level, with
+    Cohen's g (Wilson score interval at ``conf_level``, following
+    ``alternative``), and the proportion test of each bar; no pairs. Without the
+    results subtitle only the bars' tests."""
+    _check_total(table)
+    bar_tests, warnings = _bar_tests(table, args)
+    if not args.results_subtitle:
+        return _Parts(
+            test=None,
+            effect_size=None,
+            bar_tests=bar_tests,
+            pairwise=(),
+            warnings=tuple(warnings),
+            citations=(_PEARSON_1900, _PEARSON_1904, _SMITHSON_2003),
+        )
+    full = table.table()
+    symmetry = stats.mcnemar(full)
+    g = stats.cohens_g(full, conf_level=args.conf_level, alternative=args.alternative)
+    test = TestResult(
+        name="mcnemar",
+        label="McNemar's test",
+        method="McNemar's Chi-squared test",
+        statistic_name=_CHI2,
+        statistic=symmetry.statistic,
+        df=None,
+        df_error=float(symmetry.df),
+        p_value=symmetry.p_value,
+        alternative="two-sided",
+    )
+    citations = [_MCNEMAR_1947]
+    if full.shape[0] > 2:
+        citations.append(_BOWKER_1948)
+    citations += [_COHEN_1988, _WILSON_1927, _PEARSON_1900, _PEARSON_1904]
+    return _Parts(
+        test=test,
+        effect_size=_effect("cohens_g", "Cohen's g", g, _WILSON),
+        bar_tests=bar_tests,
+        pairwise=(),
+        warnings=tuple(warnings),
+        citations=tuple(citations),
+    )
+
+
+def _check_discordant(table: TableData, args: _Args) -> None:
+    """McNemar's test needs pairs that change level, and Bowker's needs some
+    between every two levels (each term is 0 / 0 otherwise: R returns NaN, and
+    ggstatsplot leaves out its subtitle silently)."""
+    levels = table.x_levels.levels
+    counts = table.counts
+    k = len(levels)
+    quiet = [
+        (levels[i], levels[j])
+        for i in range(k)
+        for j in range(i + 1, k)
+        if counts[i][j] + counts[j][i] == 0
+    ]
+    if len(quiet) == k * (k - 1) // 2:
+        held = ", ".join(
+            f"{level!r}: {counts[i][i]:,}" for i, level in enumerate(levels)
+        )
+        raise ValueError(
+            f"McNemar's test compares the pairs whose level changes from "
+            f"{args.x!r} to {args.y!r}, and none does: each of the {table.n:,} "
+            f"pairs has the same level in both ({held}), so the test is not "
+            "defined (R's statistic is 0/0, and ggstatsplot leaves out its subtitle "
+            "silently). Report the agreement as it is, or pass "
+            "results_subtitle=False to draw the bars without a test."
+        )
+    if quiet:
+        listed = _levels_text([f"{a!r} and {b!r}" for a, b in quiet], quote=False)
+        many = len(quiet) > 1
+        raise ValueError(
+            f"Bowker's test of symmetry (McNemar's test beyond two levels) needs "
+            f"pairs that change between every two levels, and no pair changes "
+            f"between {listed}, in either direction: "
+            f"{'those terms are' if many else 'that term is'} 0/0, so the test is "
+            "not defined (R's statistic is NaN, and ggstatsplot leaves out its "
+            "subtitle silently). Merge levels so that every two exchange some "
+            "pairs, or compare two levels that do exchange pairs on their own "
+            "(keep the units whose both measurements are among those two: a 2 x 2 "
+            "McNemar test)."
+        )
 
 
 def _one_way(table: TableData, args: _Args) -> _Parts:
-    """The chi-square goodness-of-fit test against ``ratio`` with Pearson's C
-    (noncentral chi-square interval)."""
-    raise _not_implemented(table, args)
+    """The chi-square goodness-of-fit test of every level of x (declared empty
+    ones as a count of 0) against ``ratio`` (equal shares by default), with
+    Pearson's C (noncentral chi-square interval at ``conf_level``, following
+    ``alternative``). Without the results subtitle there is no test."""
+    _check_total(table)
+    citations = (_PEARSON_1900, _PEARSON_1904, _SMITHSON_2003)
+    if not args.results_subtitle:
+        return _Parts(
+            test=None,
+            effect_size=None,
+            bar_tests=(),
+            pairwise=(),
+            warnings=(),
+            citations=citations,
+        )
+    counts = table.table()[:, 0]
+    fit = stats.goodness_of_fit(counts, args.ratio)
+    c = stats.pearsons_c(
+        counts, args.ratio, conf_level=args.conf_level, alternative=args.alternative
+    )
+    return _Parts(
+        test=_gof_test(fit),
+        effect_size=_effect("pearsons_c", "Pearson's C", c, _NONCENTRAL_CHI2),
+        bar_tests=(),
+        pairwise=(),
+        warnings=(),
+        citations=citations,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Pair:
+    """One pair of levels of x before adjustment: Fisher's p (None with the
+    reason) and Cramér's V (None where it is not defined)."""
+
+    first: int
+    second: int
+    p_value: float | None
+    effect: stats.EffectSizeCI | None
+    reason: str | None
+    warning: str | None
+
+
+def _fisher_pairs(
+    table: TableData, args: _Args
+) -> tuple[tuple[PairwiseComparison, ...], list[str]]:
+    """Fisher's exact test between every two levels of x that hold observations
+    (level order), each on its own 2 x c table (the levels of y either holds),
+    with Cramér's V; the p-values adjusted by ``p_adjust_method`` over the pairs
+    that have a test. A pair without a test (one column; an exact test beyond
+    the cost limit) stays with p None and the reason, and ``warnings`` names it
+    (ggstatsplot loses the whole table where fisher.test stops)."""
+    full = table.table()
+    present = [i for i, row in enumerate(table.counts) if sum(row) > 0]
+    raw = [
+        _one_pair(table, args, full, i, j)
+        for index, i in enumerate(present)
+        for j in present[index + 1 :]
+    ]
+    tested = [pair.p_value for pair in raw if pair.p_value is not None]
+    method = cast("stats.PAdjustMethod", args.p_adjust_method)
+    adjusted = iter(stats.p_adjust(tested, method) if tested else ())
+    levels = table.x_levels.levels
+    out: list[PairwiseComparison] = []
+    warnings: list[str] = []
+    for pair in raw:
+        p_adjusted = None if pair.p_value is None else next(adjusted)
+        effect = pair.effect
+        out.append(
+            PairwiseComparison(
+                group1=levels[pair.first],
+                group2=levels[pair.second],
+                statistic_name="",
+                statistic=None,
+                df=None,
+                p_value=pair.p_value,
+                p_adjusted=p_adjusted,
+                adjust_method=args.p_adjust_method,
+                test=_FISHER_NAME,
+                test_label=_FISHER_LABEL,
+                significant=None if p_adjusted is None else p_adjusted < _PAIR_ALPHA,
+                displayed=False,
+                estimate=None if effect is None else effect.estimate,
+                conf_level=None if effect is None else effect.conf_level,
+                conf_low=None if effect is None else effect.conf_low,
+                conf_high=None if effect is None else effect.conf_high,
+                no_test_reason=pair.reason,
+            )
+        )
+        if pair.warning is not None:
+            warnings.append(pair.warning)
+    missing = sum(pair.p_value is None for pair in raw)
+    if missing:
+        rest = len(raw) - missing
+        warnings.append(
+            f"{missing} of the {len(raw)} pairwise Fisher tests "
+            f"{'has' if missing == 1 else 'have'} no p-value (above); "
+            f"{'it stays' if missing == 1 else 'they stay'} in result.pairwise "
+            f"without one, and p_adjust_method={args.p_adjust_method!r} adjusts the "
+            f"other {rest} among themselves. ggstatsplot loses the whole pairwise "
+            "table here, silently."
+            if rest
+            else f"None of the {len(raw)} pairwise Fisher tests has a p-value "
+            "(above); the pairs stay in result.pairwise without one. ggstatsplot "
+            "loses the whole pairwise table here, silently."
+        )
+    return tuple(out), warnings
+
+
+def _one_pair(
+    table: TableData, args: _Args, full: NDArray[np.int64], i: int, j: int
+) -> _Pair:
+    """Rows i and j of the table: Fisher's p and V (``pairwise_fisher`` on the
+    two rows), or the reason there is no test."""
+    levels = table.x_levels.levels
+    assert table.y_levels is not None
+    y_levels = table.y_levels.levels
+    sub = full[[i, j]]
+    held = [k for k in range(sub.shape[1]) if int(sub[:, k].sum()) > 0]
+    name = f"{levels[i]!r} and {levels[j]!r}"
+    try:
+        (pair,) = stats.pairwise_fisher(
+            sub,
+            p_adjust_method="none",
+            conf_level=args.conf_level,
+            alternative=args.alternative,
+        )
+    except ValueError as error:
+        # The arguments and counts were validated: the exact test is beyond the
+        # cost limit (fisher_exact says so). V is cheap and still defined.
+        kept = sub[:, held]
+        n = int(kept.sum())
+        effect = (
+            stats.cramers_v(
+                kept, conf_level=args.conf_level, alternative=args.alternative
+            )
+            if n > max(kept.shape)
+            else None
+        )
+        return _Pair(
+            first=i,
+            second=j,
+            p_value=None,
+            effect=effect,
+            reason=(
+                f"the exact test of this 2 x {len(held)} table (n = {n:,}) would "
+                "take more than about two seconds, and inferplot does not "
+                "approximate it"
+            ),
+            warning=(
+                f"The pair {name} of {args.x!r} has no Fisher test: {error}. Its "
+                "Cramér's V is reported."
+            ),
+        )
+    if pair.p_value is None:
+        column = y_levels[held[0]]
+        return _Pair(
+            first=i,
+            second=j,
+            p_value=None,
+            effect=None,
+            reason=(
+                f"both levels occur only in {column!r} of y, so their table has a "
+                "single column and no test; R's fisher.test stops there"
+            ),
+            warning=(
+                f"The pair {name} of {args.x!r} has no Fisher test: both levels "
+                f"occur only in {column!r} of {args.y!r}, so their table has a "
+                "single column, and their shares cannot differ across the levels of "
+                f"{args.y!r}. Nothing needs fixing unless you need that comparison."
+            ),
+        )
+    warning = None
+    if pair.effect is None:
+        warning = (
+            f"The pair {name} of {args.x!r} has no Cramér's V: its 2 x "
+            f"{len(pair.columns)} table holds {pair.n} observations, and the "
+            "bias-corrected V needs more than the number of its columns (R gives "
+            "NaN). Its Fisher test is reported."
+        )
+    return _Pair(
+        first=i,
+        second=j,
+        p_value=pair.p_value,
+        effect=pair.effect,
+        reason=None,
+        warning=warning,
+    )
 
 
 _ANALYSES: Final[dict[Design, Callable[[TableData, _Args], _Parts]]] = {
@@ -231,8 +666,10 @@ def _bayes_caption_possible(args: _Args) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _levels_text(levels: Sequence[str]) -> str:
-    quoted = [repr(level) for level in levels]
+def _levels_text(levels: Sequence[str], *, quote: bool = True) -> str:
+    """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'`` (unquoted with
+    ``quote=False``)."""
+    quoted = [repr(level) if quote else level for level in levels]
     if len(quoted) == 1:
         return quoted[0]
     return ", ".join(quoted[:-1]) + " and " + quoted[-1]
@@ -279,29 +716,15 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
     return notes
 
 
-def _no_effect_warnings(table: TableData, args: _Args) -> list[str]:
+def _no_effect_warnings(table: TableData, args: _Args, parts: _Parts) -> list[str]:
     """One plain-English entry per argument that has no effect on these data, or
     a narrower one than the caller may expect (D39), naming the value as the
     caller gave it."""
     out: list[str] = []
     passed = args.passed
-    if args.p_adjust_method != _DEFAULT_P_ADJUST and not _pairs_wanted(table, args):
-        if not args.results_subtitle:
-            why = "results_subtitle=False leaves them out, as in ggstatsplot"
-        elif args.paired:
-            why = "paired data have none"
-        elif args.y is None:
-            why = "without y there are none"
-        else:
-            why = (
-                f"x={args.x!r} has {len(table.x_levels.levels)} levels, and they are "
-                "computed for three or more"
-            )
-        out.append(
-            f"p_adjust_method={passed.get('p_adjust_method')!r} has no effect: it "
-            "adjusts the pairwise Fisher tests between the levels of x, and "
-            f"{why}."
-        )
+    adjust = _p_adjust_note(table, args, parts)
+    if adjust is not None:
+        out.append(adjust)
     level = passed.get("conf_level")
     if args.conf_level == _DEFAULT_CONF_LEVEL:
         pass
@@ -317,11 +740,15 @@ def _no_effect_warnings(table: TableData, args: _Args) -> list[str]:
             f"no main test and no pairs{bars}."
         )
     elif args.y is not None:
+        applies = (
+            "the main effect size and the pairs"
+            if parts.pairwise
+            else "the main effect size"
+        )
         out.append(
             "The proportion test of each bar reports Pearson's C with a 95% "
             f"interval whatever conf_level says (as in ggstatsplot): "
-            f"conf_level={level!r} applies to the main effect size and the pairs "
-            "only."
+            f"conf_level={level!r} applies to {applies} only."
         )
     if args.digits_perc != _DEFAULT_DIGITS_PERC and args.label == "counts":
         out.append(
@@ -344,7 +771,13 @@ def _no_effect_warnings(table: TableData, args: _Args) -> list[str]:
             + " does not use it (as in ggstatsplot)."
         )
     if args.alternative != "two-sided":
-        out.append(_alternative_note(args))
+        out.append(_alternative_note(table, args, parts))
+    if args.seed != _DEFAULT_SEED:
+        out.append(
+            f"seed={args.seed!r} has no effect: no test of counts draws random "
+            "numbers (the chi-square, McNemar and exact Fisher tests use the counts "
+            "as they are); it is recorded in the result."
+        )
     if _bayes_caption_possible(args):
         if args.bf_message is None:
             what = (
@@ -367,37 +800,109 @@ def _no_effect_warnings(table: TableData, args: _Args) -> list[str]:
     return out
 
 
-def _alternative_note(args: _Args) -> str:
+def _p_adjust_note(table: TableData, args: _Args, parts: _Parts) -> str | None:
+    """``p_adjust_method`` changed from Holm where it adjusts nothing: no pairs
+    are computed, or at most one has a test (a single p-value is its own
+    adjusted p-value under every method)."""
+    if args.p_adjust_method == _DEFAULT_P_ADJUST:
+        return None
+    head = (
+        f"p_adjust_method={args.passed.get('p_adjust_method')!r} has no effect: it "
+        "adjusts the pairwise Fisher tests between the levels of x, and "
+    )
+    if not _pairs_wanted(table, args):
+        if not args.results_subtitle:
+            why = "results_subtitle=False leaves them out, as in ggstatsplot"
+        elif args.paired:
+            why = "paired data have none"
+        elif args.y is None:
+            why = "without y there are none"
+        else:
+            why = (
+                f"x={args.x!r} has {len(table.x_levels.levels)} levels, and they are "
+                "computed for three or more"
+            )
+        return f"{head}{why}."
+    tested = [pair for pair in parts.pairwise if pair.p_value is not None]
+    if len(tested) > 1:
+        return None
+    if not tested:
+        why = "none of the pairs has a test"
+    else:
+        (pair,) = tested
+        why = (
+            f"only one pair has a test ({pair.group1!r} and {pair.group2!r}), and "
+            "a single p-value is its own adjusted p-value under every method"
+        )
+    return f"{head}{why}."
+
+
+def _two_by_two_pairs(table: TableData, parts: _Parts) -> int:
+    """The pairs whose table (their two rows, over the levels of y either holds)
+    is 2 x 2: the only ones whose Fisher test follows ``alternative``."""
+    index = {level: i for i, level in enumerate(table.x_levels.levels)}
+    out = 0
+    for pair in parts.pairwise:
+        first = table.counts[index[pair.group1]]
+        second = table.counts[index[pair.group2]]
+        if sum(1 for a, b in zip(first, second, strict=True) if a or b) == 2:
+            out += 1
+    return out
+
+
+def _alternative_note(table: TableData, args: _Args, parts: _Parts) -> str:
     """What a one-sided ``alternative`` changes in barstats: the effect-size
     intervals and the Fisher tests of 2 x 2 pair tables, never the chi-square
-    p-value (ggstatsplot passes it to effectsize and fisher.test only)."""
+    or McNemar p-value (ggstatsplot passes it to effectsize and fisher.test
+    only)."""
     side = args.alternative
     if not args.results_subtitle:
+        bars = (
+            ", and the proportion test of each bar is always two-sided"
+            if args.y is not None
+            else ""
+        )
         return (
             f"alternative={side!r} has no effect: results_subtitle=False computes no "
-            "interval and no pairwise test, and the proportion test of each bar is "
-            "always two-sided."
+            f"interval and no pairwise test{bars}."
         )
     bound = "[low, 1]" if side == "greater" else "[0, high]"
-    effect = {
-        "two-way": f"Cramér's V interval one-sided, {bound}, also for each pair,",
-        "paired": "Cohen's g interval one-sided",
-        "one-way": f"Pearson's C interval one-sided, {bound}",
-    }[args.design]
+    pairs = ""
+    if args.design == "two-way" and parts.pairwise:
+        effect = f"Cramér's V interval one-sided, {bound}, also for each pair,"
+        square = _two_by_two_pairs(table, parts)
+        if square == len(parts.pairwise):
+            pairs = (
+                " and makes the Fisher test of each pair whose table is 2 x 2 one-sided"
+            )
+        elif square:
+            pairs = (
+                f" and makes the Fisher test of the {square} "
+                f"{'pair' if square == 1 else 'pairs'} whose table is 2 x 2 "
+                "one-sided (fisher.test ignores alternative beyond 2 x 2)"
+            )
+        else:
+            effect = effect.rstrip(",")
+            pairs = (
+                "; the pairs' Fisher tests stay two-sided, as no pair's table is "
+                "2 x 2 (fisher.test ignores alternative beyond 2 x 2)"
+            )
+    else:
+        g_bound = "[low, 0.5]" if side == "greater" else "[-0.5, high]"
+        effect = {
+            "two-way": f"Cramér's V interval one-sided, {bound}",
+            "paired": f"Cohen's g interval one-sided, {g_bound}",
+            "one-way": f"Pearson's C interval one-sided, {bound}",
+        }[args.design]
     test = {
         "two-way": "the chi-square test",
         "paired": "McNemar's test",
         "one-way": "the goodness-of-fit test",
     }[args.design]
-    pairs = (
-        " and makes the Fisher test of each pair whose table is 2 x 2 one-sided"
-        if args.design == "two-way"
-        else ""
-    )
+    bars = ", as are the proportion tests of the bars" if args.y is not None else ""
     return (
         f"alternative={side!r} makes the {effect}{pairs}; {test} has no direction, "
-        "so its p-value is the same, as are the proportion tests of the bars "
-        "(as in ggstatsplot)."
+        f"so its p-value is the same{bars} (as in ggstatsplot)."
     )
 
 
@@ -497,7 +1002,7 @@ def _assemble(
         *table_notes(table),
         *_empty_level_notes(table, args),
         *parts.warnings,
-        *_no_effect_warnings(table, args),
+        *_no_effect_warnings(table, args, parts),
     )
     return StatsResult(
         analysis="barstats",
@@ -576,8 +1081,6 @@ def check_label(value: object, name: str = "label") -> str:
 def _ratio_entry(item: object) -> float:
     """One share of ``ratio``: a real number (not a bool), a float32 read as it
     prints (as every number argument is)."""
-    import numpy as np
-
     if isinstance(item, bool | np.bool_) or not isinstance(item, numbers.Real):
         raise TypeError(
             "ratio must hold numbers, the expected share of each level of x, for "
@@ -617,9 +1120,17 @@ def check_ratio(value: object, name: str = "ratio") -> tuple[float, ...] | None:
     shares = tuple(_ratio_entry(item) for item in cast("Iterable[object]", value))
     bad = [s for s in shares if not (math.isfinite(s) and s > 0)]
     if bad:
+        zero = (
+            " A share of 0 expects no observations in its level: the "
+            "goodness-of-fit statistic divides by it (R returns Inf or NaN). If "
+            "the level cannot occur, leave it out of the data (do not declare it) "
+            "and give the shares of the others."
+            if bad[0] == 0
+            else ""
+        )
         raise ValueError(
             f"{name} must hold positive numbers, the expected share of each level "
-            f"of x ({example}); got {bad[0]!r}."
+            f"of x ({example}); got {bad[0]!r}.{zero}"
         )
     total = math.fsum(shares)
     if abs(total - 1.0) > _RATIO_TOLERANCE:
@@ -662,8 +1173,9 @@ def _check_bf_message(*, show_bf: bool | None, subtitle_on: bool, paired: bool) 
 def _check_design(table: TableData, args: _Args) -> None:
     """The tables no test of the design can use (D101; ggstatsplot leaves its
     subtitle out silently for each): one category without y, one level of x or
-    of y with observations (one cell) with y, fewer than two levels paired, and
-    a ``ratio`` of the wrong length."""
+    of y with observations (one cell) with y, fewer than two levels paired, no
+    unit that changes level (or two levels between which none does) where
+    McNemar's test is computed, and a ``ratio`` of the wrong length."""
     x_levels = table.x_levels
     paired_levels = list(x_levels.levels)
     if args.design == "one-way":
@@ -678,6 +1190,8 @@ def _check_design(table: TableData, args: _Args) -> None:
             "change between two or more levels. Declare both columns on every "
             "possible category if some have no rows."
         )
+    elif args.results_subtitle:
+        _check_discordant(table, args)
     if args.ratio is not None and len(args.ratio) != len(x_levels.levels):
         declared = (
             f", the declared empty {'one' if len(x_levels.empty) == 1 else 'ones'} "
@@ -909,13 +1423,20 @@ def barstats(
     Returns:
         A :class:`~inferplot.result.StatsResult` holding every number and text.
 
+    A pair of levels of x without a Fisher test (both occur in one level of y
+    only, or the exact test would take more than about two seconds) stays in
+    ``result.pairwise`` with p None and ``no_test_reason``; the other pairs are
+    adjusted among themselves, and ``result.warnings`` and ``result.check()``
+    say so.
+
     Raises:
         TypeError, ValueError: a bad argument or unusable data (a measurement
-            given as x or y, counts that are not whole, a single category); the
-            message says how to fix the call.
+            given as x or y, counts that are not whole, a single category, no
+            unit that changes level in paired data); the message says how to
+            fix the call.
         KeyError: a column that the data frame does not have.
-        NotImplementedError: the statistics of each design are not in this
-            version yet; type "bayes" and ``bf_message=True`` arrive in 0.2.
+        NotImplementedError: type "bayes" and ``bf_message=True`` arrive in
+            inferplot 0.2.
     """
     table, args, n_digits = _prepare(
         data,

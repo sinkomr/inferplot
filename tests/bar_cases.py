@@ -1,14 +1,17 @@
 """The ggbarstats and ggpiestats fixtures, and how inferplot replays each.
 
 ``prepared(case, backend)`` runs barstats' own argument checks and table reading
-(``_prepare``) on a fixture's dataset with the fixture's analysis arguments;
-``parts(case, table, args)`` makes the parts a design's analysis would return
-from the numbers the fixture records (its subtitle row, its per-bar rows
-``one_sample_data``, its pairwise rows) or, where ggstatsplot printed none
-(``results.subtitle = FALSE``; a table it leaves without a subtitle), from
-stand-in numbers; ``assembled`` builds the result with the analysis' own
-``_assemble``. The names of the tests and effect sizes here are placeholders:
-the statistics package chooses the real ones.
+(``_prepare``) on a fixture's dataset with the fixture's analysis arguments.
+``assembled(case, backend, changes)`` is the real analysis,
+``ip.analyze.barstats`` on that dataset with those arguments (the replay of a
+refused case where ``changes`` give one). ``parts(case, table, args)`` makes the
+parts a design's analysis returns from the numbers the fixture records (its
+subtitle row, its per-bar rows ``one_sample_data``, its pairwise rows), with the
+names, labels and methods the analysis records, or, where ggstatsplot printed
+none (a replay whose call R refused), from stand-in numbers;
+``from_fixture`` builds a result from them with the analysis' own ``_assemble``.
+tests/test_barstats_parity.py checks that the two agree field by field on every
+answered fixture (R's stopped-short interval bounds aside, D99).
 
 Where inferplot refuses a call ggstatsplot answers, by design (SPEC.md section 4,
 DECISIONS.md D101), ``REFUSALS`` says how it refuses and which changed call, if
@@ -25,6 +28,9 @@ any, gives ggstatsplot's output:
 * paired variables with different levels (edge_bar_paired_unequal) raise
   ``ValueError``; declaring both on the same levels (the -declared case) is the
   replay, a fixture of its own;
+* paired data where no unit changes level (edge_bar_paired_agree) raise
+  ``ValueError`` (McNemar's statistic is 0/0; ggstatsplot leaves the subtitle
+  out), with no replay; ``results_subtitle=False`` draws the bars;
 * a ``ratio`` of the wrong length or one that does not sum to 1 raises
   ``ValueError`` (``chisq.test`` stops and ggstatsplot leaves the subtitle out);
   the rescaled ratio of mtcars-cyl-ratio-sum4 is mtcars-cyl-ratio's.
@@ -91,6 +97,10 @@ def _refusal(case: OracleCase) -> Refusal | None:
         return _ONE_LEVEL
     if name == "ggbarstats-edge_bar_paired_unequal-parametric":
         return Refusal(ValueError, "('maybe' only in 'after')", None)
+    if name == "ggbarstats-edge_bar_paired_agree-parametric":
+        return Refusal(
+            ValueError, "from 'before' to 'after', and none does: each of the 20", None
+        )
     if name == "ggbarstats-mtcars-cyl-ratio-short-parametric":
         return Refusal(ValueError, "ratio has 2 shares but x='cyl' has 3 levels", None)
     if name == "ggbarstats-mtcars-cyl-ratio-sum4-parametric":
@@ -138,15 +148,31 @@ def _sidedness(alternative: str) -> str:
     return alternative if alternative in ("less", "greater") else "two-sided"
 
 
-_TESTS = {
-    "two-way": ("pearson_chi_square", "Pearson's chi-square test"),
-    "paired": ("mcnemar", "McNemar's test"),
-    "one-way": ("chi_square_gof", "Chi-square goodness-of-fit test"),
+# What the analysis records for each design's test and effect size: (name, label,
+# R's method) and (name, label, interval method).
+TESTS: Mapping[str, tuple[str, str, str]] = {
+    "two-way": (
+        "pearson_chi_square",
+        "Pearson's chi-square test",
+        "Pearson's Chi-squared test",
+    ),
+    "paired": ("mcnemar", "McNemar's test", "McNemar's Chi-squared test"),
+    "one-way": (
+        "chi_square_gof",
+        "Chi-square goodness-of-fit test",
+        "Chi-squared test for given probabilities",
+    ),
 }
-_EFFECTS = {
-    "two-way": ("cramers_v", "Cramer's V"),
-    "paired": ("cohens_g", "Cohen's g"),
-    "one-way": ("pearsons_c", "Pearson's C"),
+EFFECTS: Mapping[str, tuple[str, str, str]] = {
+    "two-way": ("cramers_v", "Cramer's V", "noncentral chi-square"),
+    "paired": ("cohens_g", "Cohen's g", "Wilson score"),
+    "one-way": ("pearsons_c", "Pearson's C", "noncentral chi-square"),
+}
+# R's effectsize names of each design's effect size, as its rows hold them.
+R_EFFECTS: Mapping[str, str] = {
+    "two-way": "Cramer's V (adj.)",
+    "paired": "Cohen's g",
+    "one-way": "Pearson's C",
 }
 
 
@@ -164,11 +190,11 @@ def _main(case: OracleCase, args: Any) -> tuple[Any, Any]:
     row = dict(rows[0]) if len(rows) == 1 else None
     get = _row_getter(row)
     design = args.design
-    name, label = _TESTS[design]
+    name, label, method = TESTS[design]
     test = TestResult(
         name=name,
         label=label,
-        method=str(row["method"]) if row else label,
+        method=method,
         statistic_name="chi2",
         statistic=get("statistic", 4.0),
         df=None,
@@ -176,7 +202,7 @@ def _main(case: OracleCase, args: Any) -> tuple[Any, Any]:
         p_value=get("p.value", 0.05),
         alternative="two-sided",
     )
-    es_name, es_label = _EFFECTS[design]
+    es_name, es_label, ci_method = EFFECTS[design]
     side = args.alternative
     effect = EffectSize(
         name=es_name,
@@ -185,26 +211,27 @@ def _main(case: OracleCase, args: Any) -> tuple[Any, Any]:
         conf_level=args.conf_level,
         conf_low=get("conf.low", -0.5 if side == "less" else 0.0),
         conf_high=get("conf.high", 1.0 if side == "greater" else 0.5),
-        ci_method="placeholder",
+        ci_method=ci_method,
         sidedness=_sidedness(side),
     )
     return test, effect
 
 
 def _bar_tests(case: OracleCase, table: Any) -> tuple[Any, ...]:
-    """One placeholder per bar from the case's per-bar rows (keyed by the level
-    of y), in the order of y's levels with observations."""
+    """One proportion test per bar from the case's per-bar rows (keyed by the
+    level of y), in the order of y's levels with observations."""
     if table.y_levels is None:
         return ()
     by_level = {str(row[table.y]): row for row in case.one_sample if table.y in row}
     out: list[Any] = []
+    gof_name, gof_label, gof_method = TESTS["one-way"]
     for level in table.y_levels.present:
         row = by_level.get(level)
         get = _row_getter(row)
         test = TestResult(
-            name="chi_square_gof",
-            label="Chi-square goodness-of-fit test",
-            method="Chi-squared test for given probabilities",
+            name=gof_name,
+            label=gof_label,
+            method=gof_method,
             statistic_name="chi2",
             statistic=get("statistic", 1.0),
             df=None,
@@ -219,7 +246,7 @@ def _bar_tests(case: OracleCase, table: Any) -> tuple[Any, ...]:
             conf_level=0.95,
             conf_low=get("conf.low", 0.0),
             conf_high=get("conf.high", 0.6),
-            ci_method="placeholder",
+            ci_method="noncentral chi-square",
             sidedness="two-sided",
         )
         out.append(bars._BarTest(test=test, effect_size=effect))
@@ -227,10 +254,17 @@ def _bar_tests(case: OracleCase, table: Any) -> tuple[Any, ...]:
 
 
 def _pairs(case: OracleCase, table: Any, args: Any) -> tuple[Any, ...]:
+    """The case's pairwise rows in the order the analysis gives them (level
+    order: the earlier level of each pair first, then the later)."""
     if not bars._pairs_wanted(table, args):
         return ()
+    position = {level: i for i, level in enumerate(table.x_levels.levels)}
+    rows = sorted(
+        case.pairwise,
+        key=lambda r: (position[str(r["group1"])], position[str(r["group2"])]),
+    )
     out: list[PairwiseComparison] = []
-    for row in case.pairwise:
+    for row in rows:
         adjusted = number(row["p.value.adj"])
         out.append(
             PairwiseComparison(
@@ -268,15 +302,26 @@ def parts(case: OracleCase, table: Any, args: Any) -> Any:
     )
 
 
-def assembled(
+def from_fixture(
     case: OracleCase,
     backend: Backend = "pandas",
     changes: Mapping[str, Any] | None = None,
 ) -> StatsResult:
     """The result ``_assemble`` builds on the case's table with parts made from
-    its numbers (the replay of a refused case where ``changes`` give one)."""
+    its numbers (R's numbers, before the statistics were joined)."""
     table, args, digits = prepared(case, backend, changes)
     return bars._assemble(table, args, parts(case, table, args), digits=digits)
+
+
+def assembled(
+    case: OracleCase,
+    backend: Backend = "pandas",
+    changes: Mapping[str, Any] | None = None,
+) -> StatsResult:
+    """``ip.analyze.barstats`` on the case's dataset with its arguments (the
+    replay of a refused case where ``changes`` give one)."""
+    args, keywords = call_arguments(case, changes)
+    return bars.barstats(read_dataset(case, backend), *args, **keywords)
 
 
 def finite(x: float | None) -> bool:

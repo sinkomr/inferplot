@@ -587,17 +587,24 @@ def _small_expected(result: StatsResult) -> Issue | None:
     """Expected counts too small for the chi-square approximation of a barstats
     p-value (Cochran's rule: none below 1 and at most 20% below 5), in the main
     test or, where the figure labels them, a bar's proportion test. R's
-    ``chisq.test`` warns ("Chi-squared approximation may be incorrect") and
-    ggstatsplot mutes the warning; inferplot computes no exact test."""
+    ``chisq.test`` warns ("Chi-squared approximation may be incorrect") whenever
+    an expected count is below 5, which Cochran's rule allows for up to 20% of
+    them, and ggstatsplot mutes the warning. R's ``mcnemar.test`` checks
+    nothing; for paired data the rule is applied to half the pairs that change
+    between each two levels, what each count is compared with (2 x 2: fewer
+    than 10 changing pairs fail it, McNemar's usual rule). inferplot computes
+    no exact test."""
     if result.design != "contingency":
         return None
     parts: list[str] = []
     main = expected_counts(result) if result.test is not None else []
+    paired_main = False
     if _fails_cochran(main):
         small = sum(e < SMALL_EXPECTED for e in main)
         tiny = sum(e < MIN_EXPECTED for e in main)
         if result.settings.paired:
             test = "McNemar's test (half the pairs that change between two levels)"
+            paired_main = True
         elif result.y_levels:
             test = "the chi-square test of independence"
         else:
@@ -633,15 +640,22 @@ def _small_expected(result: StatsResult) -> Issue | None:
     if not parts:
         return None
     message = "; ".join(parts)
+    if not paired_main:
+        r_side = (
+            ". R's chisq.test warns about this and ggstatsplot does not pass the "
+            "warning on."
+        )
+    elif len(parts) == 1:
+        r_side = ". R's mcnemar.test does not check this, and ggstatsplot says nothing."
+    else:
+        r_side = (
+            ". R's mcnemar.test does not check this; R's chisq.test warns about the "
+            "bars' tests, and ggstatsplot does not pass the warning on."
+        )
     return Issue(
         code="small_expected",
         severity="warning",
-        message=(
-            message[0].upper()
-            + message[1:]
-            + ". R's chisq.test warns about this and ggstatsplot does not pass the "
-            "warning on."
-        ),
+        message=message[0].upper() + message[1:] + r_side,
         fix=(
             "Report the p-values as approximate, combine sparse categories, or "
             "collect more data."
@@ -649,10 +663,45 @@ def _small_expected(result: StatsResult) -> Issue | None:
     )
 
 
+def _pairs_without_test(result: StatsResult) -> Issue | None:
+    """barstats pairs of levels of x without a Fisher test (``no_test_reason``):
+    a reader of ``result.pairwise`` must see that a comparison is missing and
+    that the others were adjusted without it."""
+    if result.design != "contingency":
+        return None
+    missing = [pair for pair in result.pairwise if pair.no_test_reason is not None]
+    if not missing:
+        return None
+    total = len(result.pairwise)
+    rest = total - len(missing)
+    one = len(missing) == 1
+    listed = "; ".join(
+        f"{pair.group1!r} and {pair.group2!r} ({pair.no_test_reason})"
+        for pair in missing
+    )
+    adjusted = (
+        f" The other {rest} {'is' if rest == 1 else 'are'} adjusted among themselves."
+        if rest
+        else ""
+    )
+    return Issue(
+        code="pairs_without_test",
+        severity="info",
+        message=(
+            f"{len(missing)} of the {total} pairwise comparisons of {result.x!r} "
+            f"{'has' if one else 'have'} no p-value: {listed}.{adjusted}"
+        ),
+        fix=(
+            "Report the missing comparison as not tested; result.warnings says "
+            "what would give it a test."
+        ),
+    )
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, small_expected, heavy_ties,
     infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
-    pairwise_conf_level."""
+    pairs_without_test, pairwise_conf_level."""
     found = (
         _small_n(result),
         _small_expected(result),
@@ -661,6 +710,7 @@ def result_issues(result: StatsResult) -> tuple[Issue, ...]:
         _estimate_outside_interval(result),
         _rows_dropped(result),
         _pairs_hidden(result),
+        _pairs_without_test(result),
         _pairwise_conf_level(result),
     )
     return tuple(issue for issue in found if issue is not None)
