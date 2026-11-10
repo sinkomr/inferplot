@@ -80,7 +80,9 @@ def test_any_scale_the_statistics_accept_draws(scale: float) -> None:
 
     result = _scaled(scale)
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        # RuntimeWarning only (overflow, division): a blanket "error" would also
+        # undo the configured ignore of matplotlib 3.8's pyparsing deprecation.
+        warnings.simplefilter("error", RuntimeWarning)
         fig = betweenstats(result)
     reference = betweenstats(_scaled(1.0))
     # The same picture: the limits scale with the values.

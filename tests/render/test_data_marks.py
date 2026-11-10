@@ -41,7 +41,9 @@ def test_a_far_value_keeps_the_violin(layers: tuple[str, ...]) -> None:
     groups = _heavy()
     result = frame_result(["lognormal", "one far", "plain"], groups)
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # no NaN or division warnings
+        # No NaN or division warnings. RuntimeWarning only: a blanket "error" would
+        # also undo the configured ignore of matplotlib 3.8's pyparsing deprecation.
+        warnings.simplefilter("error", RuntimeWarning)
         fig = betweenstats(result, layers=layers)
     added = fig.result.warnings[len(result.warnings) :]
     assert not [w for w in added if "not drawn" in w]

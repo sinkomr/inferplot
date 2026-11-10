@@ -323,8 +323,9 @@ def plain_text(text: Text) -> str:
         out.append(shown[start:a].replace("\\$", "$"))
         try:
             parsed = parser.parse(shown[a : b + 1], 72, text.get_fontproperties())
-            # (font, size, code point, glyph index, x, y); accents are left out.
-            glyphs = sorted(parsed.glyphs, key=lambda g: (float(g[4]), -float(g[5])))
+            # (font, size, code point, [glyph index from matplotlib 3.9,] x, y):
+            # x and y are the last two fields. Accents are left out.
+            glyphs = sorted(parsed.glyphs, key=lambda g: (float(g[-2]), -float(g[-1])))
             chars = (chr(int(g[2])) for g in glyphs)
             out.append("".join(c for c in chars if not unicodedata.combining(c)))
         except ValueError:

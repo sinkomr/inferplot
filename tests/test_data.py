@@ -409,6 +409,12 @@ def test_x_dates_and_times_are_told_to_become_text(kind: str, frame: Any) -> Non
     assert "categorical" not in text
 
 
+# pandas 2.1 hashes a categorical dtype of Intervals by casting them to text, which
+# numpy 1.26 on Linux reports as an invalid cast (inside pandas, when narwhals reads
+# the column's dtype; nothing inferplot computes is involved).
+@pytest.mark.filterwarnings(
+    "ignore:invalid value encountered in cast:RuntimeWarning:pandas"
+)
 @pytest.mark.parametrize("cut", [pd.cut, pd.qcut])
 def test_x_bins_are_told_to_become_text(cut: Any) -> None:
     age = pd.Series([21, 35, 48, 62, 29, 55])

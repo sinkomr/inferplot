@@ -103,7 +103,9 @@ def test_svg_names_the_fallbacks_and_a_generic_family() -> None:
     with matplotlib.rc_context(_with_serif()):
         fig = betweenstats(_result())
     svg = _bytes(fig, "svg").decode()
-    families = set(re.findall(r"font-family: ([^;\"]*)", svg))
+    # matplotlib 3.9 writes "font-family: ..."; 3.8 the shorthand "font: 10px ...",
+    # with the generic family spelled out as its configured list first.
+    families = set(re.findall(r"font(?:-family)?: (?:[\d.]+px )?([^;\"]*)", svg))
     plain = [f for f in families if f.startswith("'DejaVu Sans', 'DejaVu Serif'")]
     assert plain
     assert all(f.rstrip().endswith("sans-serif") for f in plain)
