@@ -205,25 +205,30 @@ scheme found; scripts in the session scratch folder `reviewS/`). To fix:
   large integers a double holds exactly are read, also on pyarrow, whose cast refused
   them. Decimal columns with more than 17 significant digits are still rounded
   (a decimal is rarely exact in a double, so there is no exactness test to apply).
-- [ ] S2: Hedges' g with a group of n = 2 collapses with Welch's df near 1 (n 2 against
+- [x] S2: Hedges' g with a group of n = 2 collapses with Welch's df near 1 (n 2 against
   50: d 1.16, g 0.026); the formula is the documented one (J at Welch's df), but the
-  warning fires only at df exactly 1. Warn below 2 df; pin effectsize's value with a
-  two-group n = 2 case in the next oracle run.
+  warning fired only at df exactly 1. Now warns below 2 df. Still to do: pin
+  effectsize's value with a two-group n = 2 case in the next oracle run (T7).
 - [ ] S3: `type="robust"`: one 0/0 bootstrap resample of 2,000 raises, so small rating-
   scale data are refused (5-point scale, n 8 per group: 33 of 40 data sets) and the
   outcome depends on the seed (fixture edge_ties raises at seed 3 only). Decide with
   the Phase 3 probe of WRS2's behaviour (D54 leaves undefined resamples out).
-- [ ] S4: AKP and xi intervals stop widening above conf_level about 0.9995 (the order
-  statistics run out) without saying so; rank epsilon squared raises there.
+- [x] S4: AKP and xi intervals stopped widening above conf_level about 0.999 (the order
+  statistics run out) without saying so. Now refused with a plain error, as rank
+  epsilon squared does (SPEC §5 item 14).
 - [ ] S5: the explanatory effect size and its interval depend on the order of the
-  groups when sizes differ (xi 0.5036 against 0.5125 with `order=` reversed).
+  groups when sizes differ (xi 0.5036 against 0.5125 with `order=` reversed), within
+  Monte Carlo error: the groups draw from the random stream in level order. Fix:
+  resample the groups in an order fixed by their contents, as rank epsilon squared
+  does (tried: 5 lines). It changes every seed's stream, so do it together with S3,
+  which decides what happens to the undefined resamples the pinned tests count.
 - [x] S6: `smm_quantile` was off by up to 3e-12 relative between df 20 and 30 (4-term
   Stirling series from df/2 = 10) against a claimed 1.1e-14. Fixed with a seven-term
   series (within 3e-17 of 40-digit values from df 20); 36 reference rows added at df
   20, 21.3 and 25.7, all of which failed before. No printed digit changed.
-- [ ] S7: the robust pre-check in betweenstats works in raw units: y x 1e-165 raises
-  with a false reason (winsorized variance 0), y x 1e156 an overflow error; the other
-  types handle both.
+- [x] S7: the robust pre-check in betweenstats worked in raw units: y x 1e-165 raised
+  with a false reason (winsorized variance 0), y x 1e156 an overflow error. Now asked
+  of the values, not their squares; results are the same from 1e-300 to 1e300.
 - [x] S8 (wording): WRS2's critical values above 28 pairs match the quantile of the
   largest of C signed t variates (one-sided; within -0.4% to +0.9% at alpha 0.05 and
   0.1 on the probe), not a noisy modulus quantile; D52, SPEC §5 and the docstring now

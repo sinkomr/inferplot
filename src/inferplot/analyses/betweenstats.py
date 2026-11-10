@@ -131,6 +131,22 @@ _HEDGES_J_ZERO_WARNING: Final = (
     "about the size of the difference."
 )
 
+# Below this Welch df Hedges' correction J is under 0.57 (J(2) = 0.564) and falls to
+# 0 at df 1: g says little about the size of the difference.
+_HEDGES_J_SMALL_DF: Final = 2.0
+
+
+def _hedges_j_small_warning(df: float, j: float) -> str:
+    """Welch's df between 1 and 2: g is the standardized difference times ``j``."""
+    return (
+        "Hedges' g is the standardized difference times a small-sample correction, "
+        f"which is only {j:.2f} here: Welch's df is {df:.2f}, below 2 because one "
+        "group has two values and most of the variance. g and its confidence "
+        "interval are shrunk toward 0 by that factor and understate the size of "
+        "the difference; collect more observations in the two-value group."
+    )
+
+
 # ggstatsplot 1.1.4 does not pass conf.level to WRS2's lincon, so the robust pairwise
 # intervals are always 95% while the omnibus effect size follows conf_level
 # (PlantGrowth-cl90-robust). Replicated, like Holm on Games-Howell (DECISIONS.md D53).
@@ -499,8 +515,11 @@ def _parametric(
             sidedness=g.sidedness,
         )
         citations += [_WELCH_1947, _HEDGES_1981, _DELACRE_2021, _STEIGER_2004]
-        if stats.hedges_j(welch.df) == 0.0:
+        correction = stats.hedges_j(welch.df)
+        if correction == 0.0:
             warnings.append(_HEDGES_J_ZERO_WARNING)
+        elif welch.df < _HEDGES_J_SMALL_DF:
+            warnings.append(_hedges_j_small_warning(welch.df, correction))
         if args.results_subtitle and args.bf_message is not False:
             bf10, log_bf01 = stats.jzs_bf10_two_sample(
                 a, b, prior_scale=args.prior_scale
@@ -788,8 +807,11 @@ def _named_groups(message: str, levels: Sequence[str], x: str) -> str:
 
     out = _GROUP_NUMBER.sub(name, message)
     if len(levels) == 2:
-        out = out.replace("sample a", f"the group {levels[0]!r} of x={x!r}")
-        out = out.replace("sample b", f"the group {levels[1]!r} of x={x!r}")
+        for letter, level in zip("ab", levels, strict=True):
+            named = f"the group {level!r} of x={x!r}"
+            # A whole word only ("resample beyond" holds "sample b"); a function
+            # as the replacement, so a backslash in a level name stays as it is.
+            out = re.sub(rf"\bsample {letter}\b", lambda _, text=named: text, out)
     if f"x={x!r}" not in out:
         stem = out.removesuffix(".")
         out = f"{stem} (the groups of x={x!r})" + out[len(stem) :]
@@ -803,12 +825,34 @@ def _with_advice(message: str, advice: str, *, given: str) -> str:
     return text if given in text else f"{text} {advice}"
 
 
+def _winsorized_constant(values: FloatArray, tr: float) -> bool:
+    """Whether winsorizing g = floor(tr n) values at each end leaves one distinct
+    value: the (g + 1)-th smallest equals the (g + 1)-th largest."""
+    ordered = values.copy()
+    ordered.sort()
+    g = math.floor(tr * ordered.size)
+    return bool(ordered[g] == ordered[ordered.size - g - 1])
+
+
 def _check_robust(
     x: str, levels: Sequence[str], values: Sequence[FloatArray], args: _Args
 ) -> None:
     """Raise plain errors, naming the levels, for data the trimmed-means methods
     cannot use (SPEC.md section 4), before any of them runs."""
     tr, pct = args.tr, _percent(args.tr)
+    # The percentile rules of the two effect sizes (akp_effect: floor; t1way's
+    # explanatory measure: round) with this many resamples beyond each bound.
+    resamples = stats.BOOTSTRAP_RESAMPLES
+    beyond = (1.0 - args.conf_level) / 2.0 * resamples
+    if (math.floor(beyond) if len(levels) == 2 else round(beyond)) < 1:
+        raise ValueError(
+            f"conf_level={args.conf_level!r} is too close to 1 for the bootstrap "
+            f"confidence interval of the robust effect size: with {resamples:,} "
+            "resamples its bounds would be the most extreme resampled values "
+            "whatever the level, so the interval would stop widening. Pass "
+            "conf_level=0.999 or lower, or use type='parametric', whose intervals "
+            "are not resampled."
+        )
     small = [
         f"{level!r} (n = {v.size})"
         for level, v in zip(levels, values, strict=True)
@@ -835,10 +879,13 @@ def _check_robust(
             f"x={x!r}. Pass a smaller tr (for example tr=0.1), or collect more "
             "observations."
         )
+    # The winsorized variance is 0 exactly when the winsorized values are all the
+    # same, which is asked of the values themselves: their squares underflow or
+    # overflow at extreme units (y in units of 1e-165 or 1e156).
     flat = [
         level
         for level, v in zip(levels, values, strict=True)
-        if stats.winsorized_variance(v, tr=tr) == 0.0
+        if _winsorized_constant(v, tr)
     ]
     k = len(levels)
     why = (

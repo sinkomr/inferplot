@@ -621,6 +621,26 @@ def test_bad_trim(tr: float) -> None:
         trimmed_mean(np.arange(5.0), tr=tr)
 
 
+def test_levels_where_the_interval_would_stop_widening_raise() -> None:
+    # With 2,000 resamples the percentile rules reach the most extreme resampled
+    # values just above conf_level 0.999 (AKP: floor(alpha / 2 B) = 0; xi:
+    # round(alpha / 2 B) = 0 from 0.9995). Above that every level would give the
+    # same interval, so it is refused, as rank epsilon squared refuses it.
+    a, b, c = _draw([20, 25, 15], seed=3)
+    widest = akp_effect(a, b, conf_level=0.999)
+    wide = akp_effect(a, b, conf_level=0.99)
+    assert widest.conf_low < wide.conf_low < wide.conf_high < widest.conf_high
+    for level in (0.9992, 0.9999, 1.0 - 1e-12):
+        with pytest.raises(ValueError, match="too close to 1 for a percentile"):
+            akp_effect(a, b, conf_level=level)
+    widest = explanatory_effect([a, b, c], conf_level=0.9992)
+    wide = explanatory_effect([a, b, c], conf_level=0.99)
+    assert widest.conf_low < wide.conf_low < wide.conf_high < widest.conf_high
+    for level in (0.9995, 0.9999, 1.0 - 1e-12):
+        with pytest.raises(ValueError, match="too close to 1 for a percentile"):
+            explanatory_effect([a, b, c], conf_level=level)
+
+
 def test_constant_and_zero_winsorized_variance() -> None:
     constant = np.full(8, 3.0)
     varying = np.array([1.0, 2.0, 4.0, 4.5, 6.0, 7.0, 9.0, 12.0])

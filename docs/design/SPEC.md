@@ -420,6 +420,17 @@ Statistical and behavioral differences are exactly these:
 13. Differences of means are exact up to one rounding (D49), where R subtracts rounded
     means; the fixtures agree within 1.5e-13, but data whose groups differ by about
     the rounding of their level (0.1 + 0.2 against 0.3) get the correct statistic.
+14. `type="robust"` refuses a `conf_level` so close to 1 that the percentile rule
+    would return the most extreme bootstrap resamples at any level (above 0.999 with
+    two groups, from 0.9995 with three or more, at 2,000 resamples): the interval
+    would stop widening while still being labelled with the level asked for. WRS2
+    returns those bounds, and with ggstatsplot's 100 resamples it already does so
+    from 0.98 (two groups) and 0.99 (three or more). Rank epsilon squared refuses in
+    the same way.
+15. Hedges' g with Welch's df between 1 and 2 (one group of two values holding most
+    of the variance) gets a `warnings` entry: the small-sample correction is then
+    between 0 and 0.56, so g is far below the uncorrected standardized difference.
+    The number is effectsize's; at df exactly 1 it is 0, with its own warning.
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default

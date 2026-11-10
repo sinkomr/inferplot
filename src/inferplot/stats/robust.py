@@ -681,7 +681,20 @@ def _floor_percentile_bounds(
     alpha = 1.0 - conf_level
     low = math.floor(alpha / 2.0 * count)
     high = math.floor((1.0 - alpha / 2.0) * count)
+    if low < 1:
+        raise _level_too_extreme(conf_level, count)
     return float(ordered[low]), float(ordered[high - 1])
+
+
+def _level_too_extreme(conf_level: float, count: int) -> ValueError:
+    """The percentile rule would return the most extreme resamples at any level
+    from here up, so the interval would stop widening with ``conf_level``."""
+    return ValueError(
+        f"conf_level={conf_level!r} is too close to 1 for a percentile interval "
+        f"from {count:,} bootstrap resamples: its bounds would be the most extreme "
+        "resampled values whatever the level. conf_level must leave at least one "
+        f"resample beyond each bound (up to about {1.0 - 2.0 / count:g})"
+    )
 
 
 def _rounded_percentile_bounds(
@@ -695,6 +708,8 @@ def _rounded_percentile_bounds(
     count = ordered.size
     alpha = 1.0 - conf_level
     low = round(alpha / 2.0 * count)
+    if low < 1:
+        raise _level_too_extreme(conf_level, count)
     return float(ordered[low]), float(ordered[count - low - 1])
 
 

@@ -828,6 +828,29 @@ def test_hedges_g_at_one_degree_of_freedom_with_a_varying_group() -> None:
     assert "no variability" not in result.warnings[0]
 
 
+def test_hedges_g_below_two_degrees_of_freedom_warns() -> None:
+    # Two values against fifty: Welch's df is just above 1, where Hedges' correction
+    # shrinks a standardized difference of 1.2 to 0.03 (effectsize does the same).
+    rng = np.random.default_rng(5)
+    a, b = [0.0, 2.0], rng.normal(-0.64, 0.5, 50).tolist()
+    result = betweenstats(frame({"a": a, "b": b}), "g", "y")
+    df = result.test.df_error
+    assert df is not None
+    assert 1.0 < df < 1.1
+    (warning,) = result.warnings
+    assert warning.startswith("Hedges' g is the standardized difference times a")
+    assert f"Welch's df is {df:.2f}, below 2" in warning
+    d = (np.mean(a) - np.mean(b)) / math.sqrt(
+        (np.var(a, ddof=1) + np.var(b, ddof=1)) / 2
+    )
+    assert abs(d) > 1.0
+    assert abs(result.effect_size.estimate) < 0.1 * abs(d)
+    # From 2 df on (two values in each group, equal variances) there is no warning.
+    even = betweenstats(frame({"a": [0.0, 2.0], "b": [5.0, 7.0]}), "g", "y")
+    assert even.test.df_error == 2.0
+    assert even.warnings == ()
+
+
 HEDGES_J_ZERO = (
     "Hedges' g is 0 by construction at 1 degree of freedom. Welch's df is 1 here "
     "because one group has two values and the other group's variance is 0 or "

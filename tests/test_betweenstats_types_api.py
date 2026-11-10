@@ -16,6 +16,9 @@ import pytest
 
 import inferplot as ip
 from inferplot import stats
+from inferplot.analyses.betweenstats import (
+    _named_groups,  # pyright: ignore[reportPrivateUsage]
+)
 from inferplot.result import StatsResult
 from inferplot.text import figure_texts
 from tests.oracle_fixtures import DATASET_DIR
@@ -335,6 +338,61 @@ def test_robust_bootstrap_error_names_x() -> None:
         ValueError, match=r"0 / 0.*\(the groups of x='g'\)\. Pass a smaller tr"
     ):
         betweenstats(data, "g", "y", type="robust")
+
+
+def test_robust_conf_level_too_close_to_one_raises(
+    plants: pd.DataFrame, teeth: pd.DataFrame
+) -> None:
+    # Above about 0.999 the bootstrap bounds would be the most extreme resamples
+    # at any level. The message names the argument and a remedy, and is not the
+    # statistics layer's message with words replaced.
+    for data, x, y in ((teeth, "supp", "len"), (plants, "group", "weight")):
+        with pytest.raises(ValueError, match="conf_level") as refused:
+            ip.analyze.betweenstats(data, x, y, type="robust", conf_level=0.9999)
+        message = str(refused.value)
+        assert message.startswith("conf_level=0.9999 is too close to 1 for the boot")
+        assert message.endswith(
+            "Pass conf_level=0.999 or lower, or use type='parametric', whose "
+            "intervals are not resampled."
+        )
+        result = ip.analyze.betweenstats(data, x, y, type="robust", conf_level=0.999)
+        assert result.effect_size is not None
+        assert result.effect_size.conf_level == 0.999
+
+
+@pytest.mark.parametrize("scale", [1e-300, 1e-165, 1e156, 1e300])
+def test_robust_does_not_depend_on_the_unit_of_y(
+    plants: pd.DataFrame, teeth: pd.DataFrame, scale: float
+) -> None:
+    # The squares of the values underflow or overflow at these units; the checks
+    # before the analysis must not mistake that for constant groups.
+    for data, x, y in ((teeth, "supp", "len"), (plants, "group", "weight")):
+        base = ip.analyze.betweenstats(data, x, y, type="robust")
+        scaled = ip.analyze.betweenstats(
+            data.assign(**{y: data[y] * scale}), x, y, type="robust"
+        )
+        assert base.test is not None
+        assert scaled.test is not None
+        assert base.effect_size is not None
+        assert scaled.effect_size is not None
+        assert scaled.test.statistic == pytest.approx(base.test.statistic, rel=1e-12)
+        assert scaled.test.p_value == pytest.approx(base.test.p_value, rel=1e-10)
+        assert scaled.effect_size.estimate == pytest.approx(
+            base.effect_size.estimate, rel=1e-12
+        )
+        assert scaled.effect_size.conf_low == pytest.approx(
+            base.effect_size.conf_low, rel=1e-12
+        )
+
+
+def test_statistics_messages_keep_words_that_contain_sample_b() -> None:
+    # "sample b" is replaced by the group's name only as whole words: "resample
+    # beyond" must stay, and a backslash in a level name must not be read as an
+    # escape.
+    out = _named_groups(
+        "sample b has one resample beyond the bound", ["a\\1", "b\\g<0>"], "g"
+    )
+    assert out == ("The group 'b\\\\g<0>' of x='g' has one resample beyond the bound")
 
 
 def test_robust_seed_and_order(plants: pd.DataFrame) -> None:
