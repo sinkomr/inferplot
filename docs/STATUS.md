@@ -325,7 +325,14 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   nonparametric, robust; D102, D103). Constant-data histograms draw one 0.1-wide bin
   (D89 amended). Open: two n = 2 subtitle ties pinned (t 1.13 and 0.68 in R, 1.12
   and 0.67 in inferplot; the robust one is being fixed)
-- [ ] barstats: foundation and statistics in progress; then analyses, texts, figure
+- [x] barstats foundation: `read_table` reproduces R's prepared count table (levels,
+  cells, n, dropped rows) on all 90 fixtures and three backends; arguments with
+  targeted messages; result schema 4 (design "contingency": `counts`, `cells`, `bars`,
+  `y_levels`); new check `small_expected` (Cochran's rule); analysis skeleton with 68
+  fixtures answerable and 21 refused by design (D101, D104). The statistics join must
+  raise for no discordant pair and for a Fisher pair with one column; the texts
+  package must confirm the percent formula on edge_bar_rounding
+- [ ] barstats: statistics in progress; then analyses, texts, figure
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
