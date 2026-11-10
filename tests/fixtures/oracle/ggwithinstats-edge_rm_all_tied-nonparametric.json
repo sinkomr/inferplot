@@ -1,0 +1,206 @@
+{
+  "schema_version": 2,
+  "name": "ggwithinstats-edge_rm_all_tied-nonparametric",
+  "function": "ggwithinstats",
+  "call": "ggstatsplot::ggwithinstats(data = data, x = condition, y = value, subject.id = subject, type = \"nonparametric\")",
+  "dataset": {
+    "file": "edge_rm_all_tied.csv",
+    "sha256": "46e17c5773be95d0738a4f39b3a7884d4f37eba3e5bef115742ed407863c69f6",
+    "rows": 15,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "condition",
+    "y": "value",
+    "subject.id": "subject",
+    "type": "nonparametric"
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a",
+    "b",
+    "c"
+  ],
+  "n_per_level": {
+    "a": 5,
+    "b": 5,
+    "c": 5
+  },
+  "within_data": {
+    "subject_id": "subject",
+    "levels": [
+      "a",
+      "b",
+      "c"
+    ],
+    "subjects": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5"
+    ],
+    "subject_order": "sorted by subject as complete_subjects() sorts (numbers numerically, text in the C locale); the analysis holds the rows subject by subject, levels in order",
+    "values": [
+      [
+        3,
+        3,
+        3
+      ],
+      [
+        5,
+        5,
+        5
+      ],
+      [
+        2,
+        2,
+        2
+      ],
+      [
+        4,
+        4,
+        4
+      ],
+      [
+        6,
+        6,
+        6
+      ]
+    ],
+    "dropped_subjects": [],
+    "rows_without_x_or_subject": 0
+  },
+  "error": "arguments imply differing number of rows: 0, 1",
+  "expected_error": {
+    "component": "pairwise_comparisons",
+    "message": "arguments imply differing number of rows: 0, 1",
+    "reason": "every subject constant across conditions: Friedman's statistic is 0/0, the subtitle fails silently, and the Durbin-Conover table has no rows"
+  },
+  "partial": [
+    {
+      "component": "subtitle",
+      "value": null
+    },
+    {
+      "component": "centrality_description",
+      "value": [
+        {
+          "condition": "a",
+          "value": 4,
+          "mad": 1.4826,
+          "iqr": 3,
+          "conf.low": 2,
+          "conf.high": 6,
+          "min": 2,
+          "max": 6,
+          "skewness": 0,
+          "kurtosis": -1.2,
+          "n.obs": 5,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"4.00\")",
+          "n.expression": "a\n(n = 5)"
+        },
+        {
+          "condition": "b",
+          "value": 4,
+          "mad": 1.4826,
+          "iqr": 3,
+          "conf.low": 2,
+          "conf.high": 6,
+          "min": 2,
+          "max": 6,
+          "skewness": 0,
+          "kurtosis": -1.2,
+          "n.obs": 5,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"4.00\")",
+          "n.expression": "b\n(n = 5)"
+        },
+        {
+          "condition": "c",
+          "value": 4,
+          "mad": 1.4826,
+          "iqr": 3,
+          "conf.low": 2,
+          "conf.high": 6,
+          "min": 2,
+          "max": 6,
+          "skewness": 0,
+          "kurtosis": -1.2,
+          "n.obs": 5,
+          "missing.obs": 0,
+          "expression": "list(widehat(mu)[median] == \"4.00\")",
+          "n.expression": "c\n(n = 5)"
+        }
+      ]
+    },
+    {
+      "component": "pairwise_comparisons",
+      "value": null
+    }
+  ],
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": "missing value where TRUE/FALSE needed",
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "pairwise_comparisons",
+      "error": "arguments imply differing number of rows: 0, 1",
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [
+    "subtitle"
+  ],
+  "subtitle": null,
+  "caption": null,
+  "stats": null,
+  "plot_layers": null,
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

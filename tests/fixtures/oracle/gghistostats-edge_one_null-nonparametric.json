@@ -1,0 +1,332 @@
+{
+  "schema_version": 2,
+  "name": "gghistostats-edge_one_null-nonparametric",
+  "function": "gghistostats",
+  "call": "ggstatsplot::gghistostats(data = data, x = value, type = \"nonparametric\", test.value = 50)",
+  "dataset": {
+    "file": "edge_one_null.csv",
+    "sha256": "f7592f054386b9f5fd243557fa25d16f497496d3a7e42ff5377a06cbb09aa48c",
+    "rows": 16,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "value",
+    "type": "nonparametric",
+    "test.value": 50
+  },
+  "seed": 20261107,
+  "analysis_levels": [],
+  "n_per_level": {},
+  "analyzed_data": {
+    "x": "value",
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "x_values": [
+      48.2,
+      51.9,
+      49.4,
+      50.8,
+      52.3,
+      47.6,
+      50.1,
+      49.9,
+      51.2,
+      48.9,
+      50.6,
+      49.2,
+      51.5,
+      48.5,
+      50.3,
+      49.7
+    ],
+    "n": 16,
+    "rows_dropped": 0,
+    "rule": "rows with x present, in file order (tidyr::drop_na on x alone)"
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    },
+    {
+      "component": "centrality_description",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_empty_layers": [],
+  "expected_na_values": [],
+  "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"68.50\", italic(p) == \"1.00\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"7.35e-03\", CI[\"95%\"] ~ \"[\" * \"-0.50\", \"0.51\" * \"]\", italic(\"n\")[\"obs\"] == \"16\")",
+  "caption": null,
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 68.5,
+        "p.value": 1,
+        "method": "Wilcoxon signed rank test",
+        "alternative": "two.sided",
+        "effectsize": "r (rank biserial)",
+        "estimate": 0.00735294117647056,
+        "conf.level": 0.95,
+        "conf.low": -0.500563090223813,
+        "conf.high": 0.511503093317202,
+        "conf.method": "normal",
+        "n.obs": 16,
+        "expression": "list(italic(\"V\")[\"Wilcoxon\"] == \"68.50\", italic(p) == \"1.00\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"7.35e-03\", CI[\"95%\"] ~ \"[\" * \"-0.50\", \"0.51\" * \"]\", italic(\"n\")[\"obs\"] == \"16\")"
+      }
+    ],
+    "caption_data": null,
+    "pairwise_comparisons_data": null,
+    "descriptive_data": null,
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_bar",
+      "geom": "GeomBar",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false,
+          "orientation": null,
+          "binwidth": 1.175,
+          "bins": null,
+          "center": null,
+          "boundary": null,
+          "closed": ["right", "left"],
+          "pad": false,
+          "breaks": null,
+          "drop": "none"
+        },
+        "geom": {
+          "na.rm": false,
+          "orientation": null
+        },
+        "aes": {
+          "colour": "black",
+          "fill": "grey50",
+          "alpha": 0.7
+        }
+      },
+      "built": [
+        {
+          "count": 3,
+          "x": 48.175,
+          "xmin": 47.5875,
+          "xmax": 48.7625,
+          "density": 0.159574468085107,
+          "ncount": 0.6,
+          "ndensity": 0.600000000000004,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 3,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 3,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 5,
+          "x": 49.35,
+          "xmin": 48.7624999999999,
+          "xmax": 49.9375,
+          "density": 0.26595744680851,
+          "ncount": 1,
+          "ndensity": 1,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 5,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 5,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 4,
+          "x": 50.525,
+          "xmin": 49.9375,
+          "xmax": 51.1125,
+          "density": 0.212765957446809,
+          "ncount": 0.8,
+          "ndensity": 0.800000000000005,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 4,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 4,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 3,
+          "x": 51.7,
+          "xmin": 51.1125,
+          "xmax": 52.2875,
+          "density": 0.159574468085107,
+          "ncount": 0.6,
+          "ndensity": 0.600000000000004,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 3,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 3,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        },
+        {
+          "count": 1,
+          "x": 52.875,
+          "xmin": 52.2875,
+          "xmax": 53.4624999999999,
+          "density": 0.0531914893617023,
+          "ncount": 0.2,
+          "ndensity": 0.200000000000001,
+          "flipped_aes": false,
+          "PANEL": "1",
+          "group": -1,
+          "y": 1,
+          "fill": "grey50",
+          "ymin": 0,
+          "ymax": 1,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": 0.7,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_vline",
+      "geom": "GeomVline",
+      "data": [
+        {
+          "xintercept": 50
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed"
+        }
+      },
+      "built": [
+        {
+          "xintercept": 50,
+          "PANEL": "1",
+          "group": -1,
+          "colour": "blue",
+          "linewidth": 1,
+          "linetype": "dashed",
+          "alpha": null
+        }
+      ]
+    }
+  ],
+  "centrality": [
+    {
+      ".x": ".x",
+      "var": 50,
+      "mad": 1.40847,
+      "iqr": 2.12500000000001,
+      "conf.low": 49.3475,
+      "conf.high": 50.8,
+      "min": 47.6,
+      "max": 52.3,
+      "skewness": -0.023149128635645,
+      "kurtosis": -0.705973331550566,
+      "n.obs": 16,
+      "missing.obs": 0,
+      "expression": "list(widehat(mu)[median] == \"50.00\")",
+      "n.expression": ".x\n(n = 16)"
+    }
+  ],
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

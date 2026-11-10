@@ -123,9 +123,7 @@
       "component": "subtitle",
       "error": null,
       "warnings": [],
-      "messages": [
-        "Registered S3 method overwritten by 'lme4':\n  method           from\n  na.action.merMod car \n"
-      ]
+      "messages": []
     },
     {
       "component": "caption",
