@@ -37,6 +37,7 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.text import Text
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.transforms import Bbox, offset_copy
 
 from inferplot import _validate as v
@@ -617,6 +618,8 @@ class BaseDrawing:
         self.inside: list[Text] = []
         self.header: list[Text] = []  # title, subtitle (own figure)
         self.captions: list[Text] = []
+        # Axis labels as set, before an offset text is folded into them.
+        self.unfolded: dict[int, str] = {}
 
     def run(self) -> StatsFigure:
         raise NotImplementedError
@@ -789,11 +792,31 @@ class BaseDrawing:
             for text, box in zip(self.captions, captions, strict=True):
                 text.set_position((margin / width, top / height))
                 top -= box.height + gap
+            self.fold_offsets()
             canvas.draw()
             measured = self.decoration_extra()
             if all(abs(a - b) <= 0.5 for a, b in zip(measured, extra, strict=True)):
                 break
             extra = measured
+
+    def fold_offsets(self) -> None:
+        """inferplot's own figure draws no axis offset text ("1e12", "+1.7e9"
+        above or right of an axis, where it lands on a marginal histogram or the
+        header): where an axis has one, it is hidden and its text follows the
+        axis label in parentheses, "mpg (1e12)", read as matplotlib prints it
+        (a multiplier, then an offset added to the tick values)."""
+        for axis in (self.ax.xaxis, self.ax.yaxis):
+            formatter = axis.get_major_formatter()
+            if not isinstance(formatter, ScalarFormatter):
+                continue
+            label = axis.label
+            plain = self.unfolded.setdefault(id(axis), label.get_text())
+            formatter.set_locs(list(axis.get_majorticklocs()))
+            offset = formatter.get_offset()
+            axis.offsetText.set_visible(not offset)
+            shown = f"{plain} ({offset})" if offset else plain
+            if label.get_text() != shown:
+                label.set_text(shown)
 
     def label_room(self, axes_w: float, axes_h: float) -> tuple[float, float]:
         """Hook: the width of the x-axis label's line and the height of the

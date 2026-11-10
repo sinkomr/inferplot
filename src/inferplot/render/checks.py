@@ -102,6 +102,7 @@ def _axis_roles(ax: Axes) -> dict[int, str]:
     roles: dict[int, str] = {}
     for name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
         roles[id(axis.label)] = f"{name}-axis label"
+        roles[id(axis.offsetText)] = f"{name}-axis offset text"
         for tick in [*axis.get_major_ticks(), *axis.get_minor_ticks()]:
             roles[id(tick.label1)] = f"{name} tick label"
             roles[id(tick.label2)] = f"{name} tick label"
