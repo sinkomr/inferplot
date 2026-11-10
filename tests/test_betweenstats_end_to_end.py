@@ -151,7 +151,7 @@ def test_every_fixture_of_the_other_types(name: str, tmp_path: Path) -> None:
     frame = data[[args[0], args[1]]].dropna()
     constant = [
         str(level)
-        for level, values in frame.groupby(args[0])[args[1]]
+        for level, values in frame.groupby(args[0], observed=True)[args[1]]
         if values.nunique() < 2
     ]
     violins = [w for w in rendering if w.startswith("The violin of level")]
