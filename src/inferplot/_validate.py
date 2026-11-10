@@ -1170,6 +1170,17 @@ def _not_a_result(fn: str, got: str) -> TypeError:
     )
 
 
+def _render_named(
+    error: TypeError | NotImplementedError, name: str
+) -> TypeError | NotImplementedError:
+    """A drawing function's error that starts with its bare name ("histostats()
+    got ..."), named as it is called: "render.histostats() got ..."."""
+    text = str(error)
+    if not text.startswith(f"{name}("):
+        return error
+    return type(error)(f"render.{text}")
+
+
 def checked(fn: Callable[P, R]) -> Callable[P, R]:
     """Check keyword names and the positional count of every call to ``fn``.
 
@@ -1231,15 +1242,17 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
         filled = frozenset(positional[: len(args)]) | (valid & kwargs.keys())
         for arg, value in kwargs.items():
             if arg not in valid:
-                raise _keyword_problem(arg, value, name, valid, order, filled)
+                problem = _keyword_problem(arg, value, name, valid, order, filled)
+                raise _render_named(problem, name) if draws_result else problem
         if len(args) > len(positional):
-            raise _positional_problem(
+            problem = _positional_problem(
                 name,
                 positional,
                 args[len(positional) :],
                 valid,
                 subject_given="subject_id" in kwargs,
             )
+            raise _render_named(problem, name) if draws_result else problem
         if "subject_id" in required and "subject_id" not in kwargs:
             raise subject_id_required(name)
         return fn(*args, **kwargs)

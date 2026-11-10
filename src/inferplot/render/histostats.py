@@ -26,8 +26,9 @@ number the result's.
 from __future__ import annotations
 
 import dataclasses
+import math
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, NoReturn, cast
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -187,9 +188,10 @@ def histostats(
         ),
         palette=palette,
         k=1,
+        uses="the bars",
         options=options,
         artist_args=lambda: base.check_artist_args(
-            [(_BAR_ARGS, options.bar_args, None)]
+            [(_BAR_ARGS, options.bar_args, None)], ax=ax, colors=True
         ),
     )
 
@@ -204,17 +206,32 @@ def _test_value(result: StatsResult) -> float:
 
 
 def _bins(values: Sequence[float], binwidth: float | None) -> HistogramBins:
-    bins = histogram_bins(np.asarray(values, dtype=np.float64), binwidth=binwidth)
+    x = np.asarray(values, dtype=np.float64)
+    if binwidth is not None and x.size:
+        # Refused before the bins are made, with the one message for every width
+        # that gives too many bars (the binning itself refuses a million bins
+        # with a message of its own). Bars of width w that cover the range of
+        # the values number at least range / w.
+        span = float(x.max() - x.min())
+        least = math.ceil(span / binwidth)
+        if least > MAX_BARS:
+            _too_many_bars(binwidth, least, span, about=True)
+    bins = histogram_bins(x, binwidth=binwidth)
     count = len(bins.counts)
     if count > MAX_BARS:
-        span = bins.edges[-1] - bins.edges[0]
-        raise ValueError(
-            f"binwidth={bins.binwidth!r} gives {count:,} bars, more than the "
-            f"{MAX_BARS:,} inferplot draws (each would be narrower than a pixel). "
-            f"Pass a larger binwidth, for example binwidth={span / 100:.3g} "
-            "(100 bars)."
-        )
+        _too_many_bars(bins.binwidth, count, bins.edges[-1] - bins.edges[0])
     return bins
+
+
+def _too_many_bars(
+    binwidth: float, count: int, span: float, *, about: bool = False
+) -> NoReturn:
+    raise ValueError(
+        f"binwidth={binwidth!r} gives {'at least ' if about else ''}{count:,} "
+        f"bars, more than the {MAX_BARS:,} inferplot draws (each would be "
+        "narrower than a pixel). Pass a larger binwidth, for example "
+        f"binwidth={span / 100:.3g} (100 bars)."
+    )
 
 
 def _bar_artist(
@@ -249,14 +266,18 @@ _BAR_ARGS: Final = LayerArgs(
 
 
 class _NonNegative(MaxNLocator):
-    """Integer-friendly ticks from 0 up: counts and their shares are never
-    negative, also where the view reaches below 0 (the caption's room with
-    ``ax=``)."""
+    """Integer-friendly ticks from 0 up to ``most``: counts and their shares are
+    never negative, also where the view reaches below 0 (the caption's room with
+    ``ax=``), and never above n values or 100% (the label strip's room above
+    the tallest bar)."""
+
+    most: float = math.inf
 
     def tick_values(self, vmin: float, vmax: float) -> Any:
         low, high = sorted((float(vmin), float(vmax)))
         ticks = np.asarray(super().tick_values(max(low, 0.0), max(high, 0.0)))
-        return ticks[(ticks >= 0.0) & (ticks <= high * (1 + 1e-9))]
+        top = min(high, self.most) * (1 + 1e-9)
+        return ticks[(ticks >= 0.0) & (ticks <= top)]
 
 
 def _percent(value: float, position: object) -> str:
@@ -475,8 +496,10 @@ class _HistDrawing(base.BaseDrawing):
             parse_math=options.ylab is not None,
         )
         ax.tick_params(axis="both", labelsize=theme.SIZE_TICK)
-        ax.yaxis.set_major_locator(_NonNegative(integer=True))
         n = float(self.bins.n)
+        counts = _NonNegative(integer=True)
+        counts.most = n
+        ax.yaxis.set_major_locator(counts)
 
         def share(count: FloatArray) -> FloatArray:
             return np.asarray(count, dtype=np.float64) * 100.0 / n
@@ -486,11 +509,17 @@ class _HistDrawing(base.BaseDrawing):
 
         # matplotlib types the functions over ArrayLike; they get float arrays.
         percent = ax.secondary_yaxis("right", functions=cast("Any", (share, count)))
-        percent.yaxis.set_major_locator(_NonNegative(steps=[1, 2, 5, 10]))
+        shares = _NonNegative(steps=[1, 2, 5, 10])
+        shares.most = 100.0
+        percent.yaxis.set_major_locator(shares)
         percent.yaxis.set_major_formatter(FuncFormatter(_percent))
-        percent.set_ylabel(
-            "percent of values", fontproperties=theme.font(theme.SIZE_AXIS_LABEL)
+        # With a y axis shared with other panels the count axis is theirs too,
+        # while each panel's percentages are of its own values: say how many.
+        shared = not self.own and len(base.siblings(ax, "y")) > 1
+        words = (
+            f"percent of the {self.bins.n:,} values" if shared else "percent of values"
         )
+        percent.set_ylabel(words, fontproperties=theme.font(theme.SIZE_AXIS_LABEL))
         percent.tick_params(axis="y", labelsize=theme.SIZE_TICK)
         # A SecondaryAxis: an Axes for every use here (labels, ticks, fonts).
         self.percent = cast("Axes", percent)
@@ -747,7 +776,8 @@ class _HistDrawing(base.BaseDrawing):
             result,
             centrality=self.center is not None,
             test_value_line=self.test_mark == "line",
-            bins=len(self.bins.counts),
+            # Bars made invisible by bar_args are not described.
+            bins=None if "bar_args" in self.hidden else len(self.bins.counts),
         )
         if alt == result.text.alt_text:
             return result

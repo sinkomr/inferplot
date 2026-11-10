@@ -292,7 +292,7 @@ class StatsFigure:
         Text stays editable (SVG text elements, PDF TrueType fonts) and the result's
         JSON goes into the file's metadata: the PNG text chunk and SVG metadata
         "Description", the PDF "Subject". ``dpi`` is at most 2,400, and a PNG at
-        most 100 million pixels.
+        least 10 dpi and at most 100 million pixels.
 
         The figure is not pyplot's current figure, so saving with pyplot after an
         inferplot call writes pyplot's own, empty figure. Save with

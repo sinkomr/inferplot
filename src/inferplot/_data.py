@@ -1757,9 +1757,11 @@ def _label_text(value: object) -> str:
 
 
 def _point_labels(series: nw.Series[Any], rows: IntArray) -> tuple[str, ...]:
-    """The label of each of ``rows``; "" where the label is missing."""
+    """The label of each of ``rows``; "" where the label is missing or only
+    white space (nothing would be drawn: no label)."""
     raw: list[object] = series.to_list()
-    return tuple(_label_text(raw[i]) for i in rows.tolist())
+    texts = (_label_text(raw[i]) for i in rows.tolist())
+    return tuple(text if text.strip() else "" for text in texts)
 
 
 def read_pair(
