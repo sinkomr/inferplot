@@ -44,7 +44,7 @@ fig.save("score.svg")
 | `bf_prior` | `0.707` | numeric, exactly as ggstatsplot (not sqrt(2)/2) |
 | `bf_message` | `None` | Bayes factor caption. ggstatsplot draws one only when `results_subtitle` is true and either the type is parametric (betweenstats, withinstats, histostats, scatterstats) or, in barstats, the type is not bayes, `paired=False` and `y` is None or has more than one level (ggstatsplot: `y` does not have exactly one level); otherwise it draws none and says nothing. Within that condition `None` draws the caption when v0.1 computes the Bayes factor (two groups or conditions, one sample, correlation) and otherwise adds a `warnings` entry saying it arrives in v0.2 (ANOVA with three or more groups or conditions, contingency tables, one-way goodness of fit); outside it, `None` draws no caption and adds no warning. `True` raises `NotImplementedError` for the v0.2 designs and `ValueError` outside the condition; `False` never draws it. The caption's Bayes factor is two-sided whatever `alternative` says, as ggstatsplot's; with a one-sided `alternative`, `warnings` says so. See §5 item 5 |
 | `results_subtitle` | `True` | |
-| `alternative` | `"two-sided"` | `"less"`, `"greater"` only for two-group, paired and one-sample tests with type parametric or nonparametric; otherwise `ValueError` (ggstatsplot silently ignores it for robust and bayes types, for correlations, which have no `alternative` in ggscatterstats or `corr_test`, for the Bayes caption and for pairwise comparisons) |
+| `alternative` | `"two-sided"` | `"less"`, `"greater"` only for two-group, paired and one-sample tests with type parametric or nonparametric; otherwise `ValueError` (ggstatsplot silently ignores it for robust and bayes types, for the Bayes caption and for pairwise comparisons); scatterstats has no `alternative` at all, as ggscatterstats has none: a `TypeError` says correlations are tested two-sided |
 | `seed` | `0` | every random step; recorded in provenance |
 | `xlab`, `ylab`, `title` | `None` | user text (see below the table) |
 | `subtitle` | `None` | used only when `results_subtitle=False`; passing it with `results_subtitle=True` raises `ValueError` (ggstatsplot silently ignores it there) |
@@ -66,8 +66,8 @@ labels and the texts it draws; texts already in that Axes keep their font.
 | --- | --- | --- |
 | `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. Before anything is drawn, each is applied to a scratch artist made as the drawing makes it, which is drawn and written as SVG and PDF (matplotlib checks some values only then); a property name the artist does not have raises `TypeError` with the closest property name, and any value matplotlib rejects, when setting it or only when drawing, raises `ValueError` naming the argument, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
 | `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=None` (join each subject's points with a line; None and True draw them with two conditions and the `"points"` layer, as ggwithinstats draws them only for two conditions; False leaves them out), `centrality_path=None` (join the centrality points; None and True draw it with `centrality_plotting=True`, as in ggwithinstats). An explicit `point_path` (True or False) where no subject paths can be drawn and an explicit `centrality_path` with `centrality_plotting=False` add a `warnings` entry each (D39, D72); the defaults add nothing (D57) |
-| `histostats` | `data, x` | `test_value=0.0`, `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True` |
-| `scatterstats` | `data, x, y` | `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `label_var=None` |
+| `histostats` | `data, x` | `test_value=0.0` (a finite number); drawing: `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True`, `bar_args` (matplotlib properties of the bars) (D82) |
+| `scatterstats` | `data, x, y` | `label_var=None` (an analysis argument: a column whose values label the points; a missing or empty value means no label, which replaces ggstatsplot's `label.expression`); drawing: `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `point_args`, `smooth_args`, `marginal_args`; `ax` needs `marginal=False` and is refused otherwise before anything is drawn (D82) |
 | `barstats` | `data, x, y=None` | `counts=None`, `paired=False`, `ratio=None`, `label="percentage"` (`"counts"`, `"both"`), `proportion_test=True`, `p_adjust_method="holm"`, `digits_perc=0` |
 
 `p_adjust_method` accepts R's names: `holm`, `hochberg`, `hommel`, `bonferroni`, `BH`,
@@ -245,6 +245,16 @@ raise `ValueError` naming the label.
   own library (pandas `melt`, polars `unpivot`, pyarrow through `to_pandas().melt`).
   betweenstats with a non-whole numeric `x` whose values are mostly distinct says it
   looks like a measurement and does not advise converting it to text.
+- histostats and scatterstats (`read_one`, `read_pair`): `x` (and `y`) must be numeric.
+  Text and categories are told to use betweenstats or barstats; booleans, dates and
+  numbers stored as text or as Python objects are told how to convert them. Rows with
+  a missing value are dropped and counted, and named in `warnings`; a scatterstats row
+  is analyzed when both `x` and `y` are present, in row order (the analyzed values of
+  all 140 fixtures on three backends). `label_var` is any column, read as text ("" where
+  missing or empty: no label); a missing label never drops a row. `x` and `y` naming
+  one column raises. An infinite value, or an integer a double cannot hold, raises.
+  Fewer than 2 values or 3 complete pairs raise; each type's own minimum is the
+  analysis'.
 - Parametric type (Welch's t and ANOVA, Games-Howell): every level needs n >= 2, two
   groups may not both be constant, and with three or more groups every level needs a
   variance above 0. The error names the levels (D35). A group that varies by less
@@ -660,7 +670,8 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); a bootstrap interval records both counts (0 when there are none), so `bootstrap_resamples` - `undefined_resamples` is the number of values it comes from (for the average AKP, `akp_delta_avg`, both counts are the largest of any one pair, in resamples, so it is the fewest values any pair's bounds come from; the `warnings` entry gives the totals over the pairs, D78); `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
 | `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46). Signs: Games-Howell q group2 minus group1; lincon's and rmmcp's t and estimate, the paired t and a Bayes pair's t group1 minus group2; Dunn's z and Durbin-Conover's t unsigned |
-| `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: the ties among what the design's rank test ranks (`heavy_ties` reads it; D71): betweenstats, analyzed values pooled minus distinct values; withinstats with two conditions, subjects minus distinct nonzero \|a - b\| (zero differences and repeated sizes); with three or more, the sum over subjects of levels minus the subject's distinct values |
+| `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: the ties among what the design's rank test ranks (`heavy_ties` reads it; D71): betweenstats, analyzed values pooled minus distinct values; withinstats with two conditions, subjects minus distinct nonzero \|a - b\| (zero differences and repeated sizes); with three or more, the sum over subjects of levels minus the subject's distinct values; histostats: `n_obs` the analyzed values, `n_dropped` the rows with a missing `x`; scatterstats: `n_obs` the complete pairs, `n_dropped` the rows missing `x` or `y` |
+| design shapes | `design` is "between", "within", "one-sample" (histostats) or "correlation" (scatterstats). One-sample: `y` None, `levels`, `subjects` and `pairwise` empty, `values` one tuple (the analyzed values in row order), `descriptives` one entry whose `level` is the column name, `settings.test_value` the value tested against. Correlation: `levels`, `subjects`, `descriptives` and `pairwise` empty, `values` two tuples of equal length (x and y of the complete pairs), `point_labels` one text per pair ("" for no label; empty without `label_var`), `label_var` the column or None, `settings.alternative` "two-sided". A result whose fields do not fit its design is refused when it is built (D84) |
 | `warnings` | plain-English strings, no internal jargon |
 | `provenance` | inferplot, numpy, scipy, matplotlib and narwhals versions (read from package metadata, so matplotlib is not imported); seed; parity target `"ggstatsplot 1.1.4"`; method citations |
 | `settings` | the analysis arguments that shaped the numbers and texts, canonical values |
@@ -670,8 +681,10 @@ Methods: `to_dict()`, `to_json()`, `from_dict()` and `from_json()` (rebuild an e
 result), `to_frame(backend="pandas" | "polars")` (one row per test: the main test first,
 then each pair), `check()`, `__str__` (APA sentence plus pairwise table). `to_json()` is
 strict ASCII JSON: inf as `"Inf"`, -inf as `"-Inf"`, NaN as null. Its first key is
-`schema_version` (2; JSON without it is version 1, the field set before
-`undefined_resamples`, `dropped_subject_rows` and `n_tied`); `from_json()` refuses any
+`schema_version` (3; JSON without it is version 1, the field set before
+`undefined_resamples`, `dropped_subject_rows` and `n_tied`, which version 2 added;
+version 3 added `point_labels`, `label_var` and `settings.test_value`, made `y`
+optional and added the designs "one-sample" and "correlation"); `from_json()` refuses any
 other version with a `ValueError` naming both versions and saying to compute the
 result again (D67). `to_frame()` columns:
 test, label, group1, group2, statistic_name, statistic, df, df_error, p_value,
@@ -686,7 +699,7 @@ nullable `boolean` columns).
 
 `save()` sets `svg.fonttype="none"`, `pdf.fonttype=42` and a fixed `svg.hashsalt`
 inside an `rc_context`, drops the SVG date and PDF creation date (saving twice writes
-identical bytes), and embeds `result.to_json(include_values=False)` in file metadata:
+identical bytes), and embeds `result.to_json(include_values=False)` (without `values`, `subjects` and `point_labels`) in file metadata:
 the PNG text chunk "Description", the SVG Dublin Core description and the PDF Info
 "Subject". The embedded copy holds every number and text but not the analyzed
 observations or the subject labels, which can be large and are the user's data (D36,
@@ -832,8 +845,8 @@ no problems.
 
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
-| `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once) |
-| `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too |
+| `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once; histostats: fewer than 5 values; scatterstats: fewer than 5 complete pairs) |
+| `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too; one sample, values minus the distinct nonzero \|x - test_value\|; correlation (Spearman), the ties within x plus those within y, of 2n ranked values (D83) |
 | `rows_dropped` | result | info or warning | `n_dropped > 0` or subjects dropped; a warning, with the share, when more than half of the subjects (within) or of the rows (between) were left out (D80) |
 | `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |
 | `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |

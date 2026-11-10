@@ -277,6 +277,18 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   off at very large |t| (ToothGrowth against 100, t = -82: Hedges' g interval -0.30%
   and -0.55%, one-sample Bayes factor +6.1e-4); inferplot will report the accurate
   values (D81, owner to confirm)
+- [x] foundation: `read_one` and `read_pair` reproduce the analyzed values of all 140
+  fixtures on pandas, polars and pyarrow (bugs_long 367 of 372 rows; the point labels
+  of both label fixtures, 32 of 32 and 9 of 32); `ip.histostats` and `ip.scatterstats`
+  exist in three forms with every argument check and targeted messages for
+  ggstatsplot's, seaborn's and matplotlib's argument names; result schema 3 (designs
+  one-sample and correlation, `point_labels`, `label_var`, `settings.test_value`,
+  shapes checked on construction; D82 to D84); every type raises NotImplementedError
+  until its statistics land, and the renderers until they are built. Oracle cases
+  asked for: n = 2 and 3 (histostats), n = 3 and 4 (scatterstats), a missing label
+- [ ] statistics for both functions (`stats/one_sample.py`, `stats/correlation.py`,
+  histogram bins, OLS band); in progress
+- [ ] oracle for barstats (ggbarstats, ggpiestats); in progress
 - [ ] histostats, all types
 - [ ] scatterstats, all types (line, band, marginals)
 - [ ] barstats (independence, McNemar, goodness of fit, proportion tests)
