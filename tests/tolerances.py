@@ -228,7 +228,9 @@ TOLERANCES: Mapping[str, Tolerance] = MappingProxyType(
                 "(sleep, bugs_long, edge_within*) is within 9.3e-10 of "
                 "tools/reference (tests/test_reference_vs_oracle.py); BayesFactor "
                 "itself misses large |t| (probe-pairedbf: within 2.6e-6 up to "
-                "|t| 12, -0.78% at n 30 and t 50). Measure one-sample values when "
+                "|t| 12, -0.78% at n 30 and t 50); those misses are pinned in "
+                "tests/stats/test_bayes_paired.py and inferplot is within 1.1e-13 "
+                "of 40-digit references there (D61). Measure one-sample values when "
                 "their fixtures arrive; other Bayes factor families need their own "
                 "entry."
             ),

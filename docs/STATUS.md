@@ -168,12 +168,18 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   edge_large_n-bayes's posterior R-squared (v0.2 output, at most 8.1e-14). Each fixture
   records the complete subjects it analyzed (`within_data`); `read_within` gives the
   same subjects and values on all 159 cases and three backends. 14,105 tests pass
-- [ ] parametric: paired t, Hedges' g; repeated-measures ANOVA, partial omega squared,
-  paired t pairs
+- [x] parametric: paired t, Hedges' g of the differences (noncentral-t CI), paired JZS
+  caption; repeated-measures ANOVA with Greenhouse-Geisser, partial omega squared (CI
+  at the uncorrected df), paired t pairs. 44 of 44 fixtures on three backends and
+  probe-rmanova's 9 designs; worst disagreement with R 8e-12 relative (F on
+  edge_within_null), CI bounds 7.5e-8 absolute (D62)
 - [ ] nonparametric: Wilcoxon signed-rank, rank-biserial r; Friedman, Kendall's W,
   Durbin-Conover pairs
 - [ ] robust: Yuen for dependent samples, dep.effect; rmanova, average AKP, rmmcp pairs
-- [ ] bayes: paired JZS Bayes factor (two conditions; three or more is v0.2)
+- [x] bayes: paired JZS Bayes factor (two conditions); three or more conditions only
+  with `results_subtitle=False` (MAP estimates and a pair Bayes factor at prior 0.707;
+  the Bayesian RM ANOVA is v0.2). 34 of 34 fixtures (19 through the replay), worst
+  9.3e-10 relative; accurate where BayesFactor misses large |t| (D61, for the owner)
 - [x] renderer (D57): subject paths (`point_path`, two conditions, one LineCollection,
   one offset per subject) and the centrality path; labels kept off the paths;
   whole-subject subsampling; `path_hidden` and `paths_crowded` checks. 40 random within
@@ -277,7 +283,9 @@ held up; scripts in `reviewT/`). To fix:
   run: record R's sorted replicate values next to the bounds it returns for one case
   of each interval (AKP, xi, rank epsilon squared), so the percentile helpers are
   applied to R's own replicates and must give R's bound exactly.
-- [ ] T7: next oracle run, with T6: a case that decides D54 in R itself (three tiny
+- [ ] T7: next oracle run, with T6: a ggwithinstats parametric case with fewer
+  subjects than conditions (3 subjects, 4 conditions), to show afex's epsilon there
+  (D62); a case that decides D54 in R itself (three tiny
   groups sharing a value, more than 5% of resamples tied); tr 0.29 with n = 100 (T3);
   the n = 2 group of S2.
 - [ ] T8 (owner): `fixtures.yml` is the only guard against a fixture and the manifest
