@@ -222,7 +222,36 @@ def test_extra_positional_argument_hints_subject_id(two: pd.DataFrame) -> None:
         "Extra positional values: 'ID'. If 'ID' is the column that identifies each "
         "subject, write withinstats(..., subject_id='ID')."
     )
+    # Without subject_id= the subject column comes first, whatever the value: a
+    # column may be called 's' or 'np' (STATUS U9).
+    two = two.assign(s=two["ID"])
+    text = message(TypeError, lambda: analyze(two, "group", "extra", "s"))
+    assert text.endswith(
+        "Extra positional values: 's'. If 's' is the column that identifies each "
+        "subject, write withinstats(..., subject_id='s'); if it is "
+        "pairwise_display, write withinstats(..., pairwise_display='s')."
+    )
     text = message(TypeError, lambda: analyze(two, "group", "extra", "np"))
+    assert text.endswith(
+        "If 'np' is the column that identifies each subject, write "
+        "withinstats(..., subject_id='np'); if it is type, write "
+        "withinstats(..., type='np')."
+    )
+    text = message(TypeError, lambda: analyze(two, "group", "extra", two["ID"]))
+    assert text.endswith(
+        "Extra positional values: a pandas.Series. withinstats() takes the column "
+        "that identifies each subject by its name: write "
+        "withinstats(..., subject_id='ID')."
+    )
+    text = message(TypeError, lambda: analyze(two, "group", "extra", 3))
+    assert text.endswith(
+        "withinstats() takes the column that identifies each subject by its name: "
+        "write withinstats(..., subject_id='subject')."
+    )
+    # With subject_id= given, the other hints are as before.
+    text = message(
+        TypeError, lambda: analyze(two, "group", "extra", "np", subject_id="ID")
+    )
     assert text.endswith("For example withinstats(..., type='np').")
 
 

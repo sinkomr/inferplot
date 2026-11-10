@@ -39,6 +39,7 @@ subject column's order (see ``read_within``).
 from __future__ import annotations
 
 import contextlib
+import datetime
 import difflib
 import math
 import numbers
@@ -49,6 +50,7 @@ from typing import Any, Final, Literal, cast
 import narwhals.stable.v2 as nw
 import numpy as np
 import numpy.typing as npt
+from narwhals.exceptions import DuplicateError
 
 __all__ = [
     "BetweenData",
@@ -198,6 +200,9 @@ def to_frame(data: object) -> nw.DataFrame[Any]:
         return nw.from_native(data, eager_only=True)
     except TypeError:
         pass
+    except DuplicateError:
+        _raise_duplicate_columns(data)
+        raise
     if "Lazy" in name:
         hint = "collect it into an eager DataFrame first, for example with .collect()"
     elif name.endswith(("Series", "ChunkedArray", "Array")):
@@ -209,19 +214,64 @@ def to_frame(data: object) -> nw.DataFrame[Any]:
     ) from None
 
 
+def _raise_duplicate_columns(data: object) -> None:
+    """Raise ``ValueError`` naming the first label ``data`` uses for two columns
+    (pandas ``columns``, pyarrow ``column_names``); return if none is found."""
+    labels: object = getattr(data, "column_names", None)
+    if labels is None:
+        labels = getattr(data, "columns", None)
+    if not isinstance(labels, Iterable):
+        return
+    seen: set[object] = set()
+    for label in cast("Iterable[object]", labels):
+        if label in seen:
+            raise ValueError(
+                f"data has more than one column named {label!r}; rename the columns "
+                "so that each name is used once."
+            ) from None
+        seen.add(label)
+
+
 def _type_name(obj: object) -> str:
     cls = type(obj)
     module = cls.__module__.split(".")[0]
     return cls.__name__ if module == "builtins" else f"{module}.{cls.__name__}"
 
 
+# How many column labels a message about the labels shows.
+_MAX_LABELS_SHOWN: Final = 6
+
+
+def _non_string_labels(frame: nw.DataFrame[Any]) -> str | None:
+    """The way forward when the frame's column labels are not all strings, as
+    ``pandas.DataFrame(array)`` makes them; None when they are strings."""
+    labels: list[object] = list(frame.columns)
+    if all(isinstance(c, str) for c in labels):
+        return None
+    shown = ", ".join(repr(c) for c in labels[:_MAX_LABELS_SHOWN])
+    more = ", ..." if len(labels) > _MAX_LABELS_SHOWN else ""
+    return (
+        f"The column labels of data are not strings ({shown}{more}), as "
+        "pandas.DataFrame(array) makes them, and inferplot names columns by "
+        "strings: name the columns, for example pandas.DataFrame(array, "
+        "columns=['group', 'score']), or turn the labels into strings with "
+        "data.rename(columns=str)"
+    )
+
+
 def _column(frame: nw.DataFrame[Any], name: object, role: str) -> nw.Series[Any]:
     """The column called ``name``, or ``ColumnNotFoundError`` with the closest match."""
     if not isinstance(name, str):
-        raise TypeError(f"{role} must be a column name (a string), not {name!r}.")
+        raise _not_a_name(frame, name, role)
     columns = [str(c) for c in frame.columns]
     if name in frame.columns:
         return frame.get_column(name)
+    labels_fix = _non_string_labels(frame)
+    if labels_fix is not None and name in columns:
+        raise ColumnNotFoundError(
+            f"{role}={name!r} is not a column of data. {labels_fix} and keep "
+            f"{role}={name!r}."
+        )
     folded = [c for c in columns if c.casefold() == name.casefold()]
     close = folded or difflib.get_close_matches(
         name, columns, n=1, cutoff=_CLOSE_MATCH_CUTOFF
@@ -232,6 +282,28 @@ def _column(frame: nw.DataFrame[Any], name: object, role: str) -> nw.Series[Any]
         f"{role}={name!r} is not a column of data.{suggestion} "
         f"Available columns: {available}."
     )
+
+
+_EXAMPLE_COLUMN: Final = {"x": "group", "y": "score", "subject_id": "subject"}
+
+
+def _not_a_name(frame: nw.DataFrame[Any], name: object, role: str) -> TypeError:
+    """The error for a column argument that is not a string: a column itself (a
+    Series, array or list) is named by its type, never printed."""
+    start = f"{role} must be a column name (a string), not"
+    if isinstance(name, str | bytes | numbers.Number) or name is None:
+        message = f"{start} {name!r}."
+        labels_fix = _non_string_labels(frame)
+        if labels_fix is not None and name in list(frame.columns):
+            message += f" {labels_fix} and pass {role}={str(name)!r}."
+        return TypeError(message)
+    own = getattr(name, "name", None)
+    if isinstance(own, str) and own in frame.columns:
+        fix = f"pass the column's name, for example {role}={own!r}."
+    else:
+        example = _EXAMPLE_COLUMN.get(role, "name")
+        fix = f"pass the name of a column of data, for example {role}={example!r}."
+    return TypeError(f"{start} a {_type_name(name)}: {fix}")
 
 
 # --- labels -----------------------------------------------------------------------
@@ -417,6 +489,70 @@ def _dictionary_order(
     return tuple(ordered) if ordered != list(levels) else ()
 
 
+def _what_values(value: object) -> Literal["dates or times", "intervals"] | None:
+    """Whether ``value`` is a date, time or duration (Python, NumPy or pandas), or
+    a pandas Interval (``pandas.cut``, ``pandas.qcut``): values that are neither
+    text nor numbers, for which converting to text is the fix."""
+    if isinstance(
+        value,
+        datetime.date
+        | datetime.time
+        | datetime.timedelta
+        | np.datetime64
+        | np.timedelta64,
+    ):
+        return "dates or times"
+    cls = type(value)
+    if cls.__module__.split(".")[0] == "pandas":
+        if cls.__name__ == "Interval":
+            return "intervals"
+        if cls.__name__ == "Period":
+            return "dates or times"
+    return None
+
+
+def _first_value(series: nw.Series[Any]) -> object:
+    """The first value of ``series`` that is not missing, or None."""
+    try:
+        values = series.drop_nulls().head(1).to_list()
+    except Exception:  # an unusual column type narwhals cannot handle
+        return None
+    return values[0] if values else None
+
+
+def _unusable_values(
+    role: _Role, name: str, what: Literal["dates or times", "intervals"], shown: str
+) -> TypeError:
+    """The error for a grouping column of dates, times or intervals, also as a
+    categorical: converting to text is what makes them usable."""
+    if what == "intervals":
+        detail = f"intervals (bins made by pandas.cut or pandas.qcut, {shown})"
+        fix = (
+            f"example data[{name!r}].astype(str) in pandas; "
+            f"data[{name!r}].cat.rename_categories(str) does so and keeps the bins "
+            "in their order."
+        )
+    else:
+        detail = f"dates or times ({shown})"
+        fix = (
+            f"example data[{name!r}].astype(str) in pandas or "
+            f"pl.col({name!r}).cast(pl.String) in polars."
+        )
+    return TypeError(
+        f"{role.arg}={name!r} holds {detail}, which cannot {role.purpose} as they "
+        f"are. Convert them to text first, for {fix}"
+    )
+
+
+def _label_error(error: TypeError, value: object, name: str, role: _Role) -> TypeError:
+    """``level_label``'s error for ``value`` with the column named, or the message
+    for dates, times and intervals."""
+    what = _what_values(value)
+    if what is not None:
+        return _unusable_values(role, name, what, repr(value))
+    return TypeError(f"{role.arg}={name!r}: {error}")
+
+
 def _x_kind(series: nw.Series[Any], name: str, role: _Role = _X_ROLE) -> XKind:
     dtype = series.dtype
     if isinstance(dtype, nw.Enum):
@@ -431,9 +567,14 @@ def _x_kind(series: nw.Series[Any], name: str, role: _Role = _X_ROLE) -> XKind:
         return "integer"
     if dtype.is_float():
         return "float"
+    if isinstance(dtype, nw.Datetime | nw.Date | nw.Time | nw.Duration):
+        raise _unusable_values(role, name, "dates or times", str(dtype))
     if isinstance(dtype, nw.Boolean):
         hint = role.bool_hint
     else:
+        what = _what_values(_first_value(series))
+        if what is not None:
+            raise _unusable_values(role, name, what, str(dtype))
         hint = "convert it to text or to a categorical column first"
     raise TypeError(
         f"{role.arg}={name!r} must hold text, categories or whole numbers to "
@@ -467,7 +608,7 @@ def _labels_in_order(
         try:
             label = level_label(value)
         except TypeError as error:
-            raise TypeError(f"{role.arg}={name!r}: {error}") from None
+            raise _label_error(error, value, name, role) from None
         if label in seen:
             if origin[label] != value:
                 raise ValueError(
@@ -495,7 +636,7 @@ def _row_labels(raw: Sequence[object], name: str, role: _Role = _X_ROLE) -> list
             try:
                 label = level_label(value)
             except TypeError as error:
-                raise TypeError(f"{role.arg}={name!r}: {error}") from None
+                raise _label_error(error, value, name, role) from None
             cache[key] = label
         out.append(label)
     return out
@@ -717,19 +858,28 @@ def _check_order(
 # --- y ----------------------------------------------------------------------------
 
 
-def _check_y(series: nw.Series[Any], name: str) -> None:
-    """``y`` must be numeric; booleans are refused."""
+def _check_y(series: nw.Series[Any], name: str, x: nw.Series[Any], x_name: str) -> None:
+    """``y`` must be numeric; booleans are refused. A text ``y`` next to a numeric
+    ``x`` is named as a likely swap."""
     dtype = series.dtype
-    if isinstance(dtype, nw.Boolean) or not dtype.is_numeric():
-        raise TypeError(
-            f"y={name!r} must be numeric; its type is {dtype}. "
-            + (
-                "Booleans are not measurements; convert to 0/1 deliberately if "
-                "that is what you mean."
-                if isinstance(dtype, nw.Boolean)
-                else "Convert it with pandas.to_numeric() or .cast(float) first."
-            )
+    if isinstance(dtype, nw.Boolean):
+        hint = (
+            "Booleans are not measurements; convert to 0/1 deliberately if that is "
+            "what you mean."
         )
+    elif not dtype.is_numeric():
+        x_dtype = x.dtype
+        if x_dtype.is_numeric() and not isinstance(x_dtype, nw.Boolean):
+            hint = (
+                f"x={x_name!r} is numeric, so x and y may be swapped: x is the "
+                f"grouping column and y the measurement, as in x={name!r}, "
+                f"y={x_name!r}."
+            )
+        else:
+            hint = "Convert it with pandas.to_numeric() or .cast(float) first."
+    else:
+        return
+    raise TypeError(f"y={name!r} must be numeric; its type is {dtype}. {hint}")
 
 
 def _check_finite(name: str, values: FloatArray, rows: IntArray) -> None:
@@ -795,7 +945,7 @@ def read_between(
     if x == y:
         raise ValueError(f"x and y must be different columns; both are {x!r}.")
 
-    _check_y(y_col, y)
+    _check_y(y_col, y, x_col, x)
     group = _read_grouping(x_col, x, _X_ROLE)
     missing_x = group.missing
     missing_y = _missing(y_col)
@@ -986,7 +1136,7 @@ def read_within(
             f"subject_id must name the column that identifies each subject, a "
             f"column other than x and y; subject_id={subject_id!r} is also {role}."
         )
-    _check_y(y_col, y)
+    _check_y(y_col, y, x_col, x)
     x_group = _read_grouping(x_col, x, _X_ROLE)
     s_group = _read_grouping(s_col, subject_id, _SUBJECT_ROLE)
     for group in (x_group, s_group):

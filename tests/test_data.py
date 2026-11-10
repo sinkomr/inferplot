@@ -340,6 +340,205 @@ def test_x_datetime_rejected() -> None:
         read_between(frame, "g", "y")
 
 
+_TO_TEXT = (
+    "Convert them to text first, for example data['g'].astype(str) in pandas or "
+    "pl.col('g').cast(pl.String) in polars."
+)
+
+
+def _dates_and_times() -> list[tuple[str, Any]]:
+    import datetime
+
+    when = pd.to_datetime(["2024-01-01", "2024-02-01"] * 2)
+    return [
+        ("pandas datetime", pd.DataFrame({"g": when})),
+        ("pandas timedelta", pd.DataFrame({"g": pd.to_timedelta([1, 2] * 2, "D")})),
+        ("pandas period", pd.DataFrame({"g": when.to_period("M")})),
+        (
+            "pandas object dates",
+            pd.DataFrame(
+                {"g": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)] * 2}
+            ),
+        ),
+        ("pandas categorical", pd.DataFrame({"g": pd.Categorical(when)})),
+        (
+            "polars date",
+            pl.DataFrame(
+                {"g": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)] * 2}
+            ),
+        ),
+        ("polars time", pl.DataFrame({"g": [datetime.time(1), datetime.time(2)] * 2})),
+        (
+            "polars duration",
+            pl.DataFrame({"g": [datetime.timedelta(1), datetime.timedelta(2)] * 2}),
+        ),
+        ("pyarrow timestamp", pa.table({"g": pa.array(when)})),
+        (
+            "pyarrow date dictionary",
+            pa.table(
+                {
+                    "g": pa.array(
+                        [datetime.date(2024, 1, 1)] * 2
+                        + [datetime.date(2024, 2, 1)] * 2
+                    ).dictionary_encode()
+                }
+            ),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "frame"), _dates_and_times(), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_x_dates_and_times_are_told_to_become_text(kind: str, frame: Any) -> None:
+    # Converting to a categorical does not help (its categories are still dates);
+    # converting to text does, so the message says that, for a categorical too.
+    y = [1.0, 2.0, 3.0, 4.0]
+    frame = (
+        frame.assign(y=y)
+        if isinstance(frame, pd.DataFrame)
+        else frame.with_columns(pl.Series("y", y))
+        if isinstance(frame, pl.DataFrame)
+        else frame.append_column("y", pa.array(y))
+    )
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "y")
+    text = str(info.value)
+    assert text.startswith("x='g' holds dates or times"), text
+    assert text.endswith("which cannot define groups as they are. " + _TO_TEXT), text
+    assert "categorical" not in text
+
+
+@pytest.mark.parametrize("cut", [pd.cut, pd.qcut])
+def test_x_bins_are_told_to_become_text(cut: Any) -> None:
+    age = pd.Series([21, 35, 48, 62, 29, 55])
+    frame = pd.DataFrame({"g": cut(age, 2), "y": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "y")
+    text = str(info.value)
+    assert text.startswith("x='g' holds intervals (bins made by pandas.cut or ")
+    assert text.endswith(
+        "which cannot define groups as they are. Convert them to text first, for "
+        "example data['g'].astype(str) in pandas; "
+        "data['g'].cat.rename_categories(str) does so and keeps the bins in their "
+        "order."
+    )
+    # Both fixes work; the second keeps the bin order.
+    assert len(read_between(frame.assign(g=frame.g.astype(str)), "g", "y").levels) == 2
+    kept = read_between(frame.assign(g=frame.g.cat.rename_categories(str)), "g", "y")
+    assert kept.levels == tuple(str(c) for c in frame.g.cat.categories)
+    assert kept.level_source == "declared"
+
+
+def test_subject_dates_are_told_to_become_text() -> None:
+    from inferplot._data import read_within
+
+    when = pd.to_datetime(["2024-01-01", "2024-02-01"]).repeat(2)
+    frame = pd.DataFrame({"s": when, "g": ["a", "b"] * 2, "y": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(TypeError) as info:
+        read_within(frame, "g", "y", "s")
+    assert str(info.value).startswith("subject_id='s' holds dates or times")
+    assert "cannot identify subjects as they are. Convert them to text first" in str(
+        info.value
+    )
+
+
+def test_non_string_column_labels_get_a_way_forward() -> None:
+    frame = pd.DataFrame(np.c_[np.repeat([0, 1], 4), np.arange(8.0)])
+    fix = (
+        "The column labels of data are not strings (0, 1), as pandas.DataFrame(array) "
+        "makes them, and inferplot names columns by strings: name the columns, for "
+        "example pandas.DataFrame(array, columns=['group', 'score']), or turn the "
+        "labels into strings with data.rename(columns=str)"
+    )
+    with pytest.raises(ColumnNotFoundError) as info:
+        read_between(frame, "0", "1")
+    assert str(info.value) == f"x='0' is not a column of data. {fix} and keep x='0'."
+    with pytest.raises(TypeError) as info:
+        read_between(frame, 0, 1)  # type: ignore[arg-type]
+    assert str(info.value) == (
+        f"x must be a column name (a string), not 0. {fix} and pass x='0'."
+    )
+    out = read_between(frame.rename(columns=str), "0", "1")
+    assert out.levels == ("0", "1")
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        pd.Series(["a", "b"] * 30, name="g"),
+        np.array(["a", "b"] * 30),
+        ["a", "b"] * 30,
+        pl.Series("g", ["a", "b"] * 30),
+    ],
+    ids=["pandas Series", "NumPy array", "list", "polars Series"],
+)
+def test_a_column_passed_instead_of_its_name(given: Any) -> None:
+    frame = pd.DataFrame({"g": ["a", "b"] * 30, "y": np.arange(60.0)})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, given, "y")
+    text = str(info.value)
+    kind = {
+        "Series": "a pandas.Series"
+        if isinstance(given, pd.Series)
+        else "a polars.Series",
+        "ndarray": "a numpy.ndarray",
+        "list": "a list",
+    }[type(given).__name__]
+    assert text.startswith(f"x must be a column name (a string), not {kind}: ")
+    assert "\n" not in text
+    assert len(text) < 250
+    named = getattr(given, "name", None) == "g"
+    assert text.endswith(
+        "pass the column's name, for example x='g'."
+        if named
+        else "pass the name of a column of data, for example x='group'."
+    )
+    with pytest.raises(
+        TypeError, match=r"^y must be a column name \(a string\), not a"
+    ):
+        read_between(frame, "g", frame["y"])  # pyright: ignore[reportArgumentType]
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_swapped_x_and_y_are_named(backend: str) -> None:
+    frame = make(backend, {"g": ["a", "b", "a", "b"], "score": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "score", "g")
+    assert str(info.value).endswith(
+        "x='score' is numeric, so x and y may be swapped: x is the grouping column "
+        "and y the measurement, as in x='g', y='score'."
+    )
+    from inferplot._data import read_within
+
+    frame = make(
+        backend, {"s": [1, 1, 2, 2], "g": ["a", "b", "a", "b"], "score": [1.0, 2, 3, 4]}
+    )
+    with pytest.raises(TypeError, match="x and y may be swapped"):
+        read_within(frame, "score", "g", "s")
+    # Text x with text y: no such guess.
+    frame = make(backend, {"g": ["a", "b"], "t": ["1", "2"]})
+    with pytest.raises(TypeError) as info:
+        read_between(frame, "g", "t")
+    assert "swapped" not in str(info.value)
+
+
+@pytest.mark.parametrize("backend", ["pandas", "pyarrow"])
+def test_duplicate_column_names(backend: str) -> None:
+    if backend == "pandas":
+        frame: Any = pd.DataFrame([["a", 1.0, 2.0]], columns=["g", "y", "y"])
+    else:
+        frame = pa.table(
+            [pa.array(["a"]), pa.array([1.0]), pa.array([2.0])], names=["g", "y", "y"]
+        )
+    with pytest.raises(ValueError, match="more than one column") as info:
+        read_between(frame, "g", "y")
+    assert str(info.value) == (
+        "data has more than one column named 'y'; rename the columns so that each "
+        "name is used once."
+    )
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_x_float_whole_numbers(backend: str) -> None:
     # A pandas integer column with a missing value becomes float64.

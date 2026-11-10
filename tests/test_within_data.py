@@ -400,7 +400,8 @@ def test_subject_bool_float_and_datetime_rejected(backend: str) -> None:
     dates = pd.DataFrame(
         {**_paired([1, 2, 3]), "s": pd.to_datetime(["2020-01-01"] * 6)}
     )
-    with pytest.raises(TypeError, match="to identify subjects"):
+    # Dates are told to become text (STATUS U9), not a categorical.
+    with pytest.raises(TypeError, match="cannot identify subjects as they are"):
         read_within(dates, "g", "y", "s")
 
 

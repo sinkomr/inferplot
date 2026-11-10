@@ -537,23 +537,46 @@ def _keyword_problem(
 
 
 def _positional_problem(
-    fn: str, positional: Sequence[str], extra: Sequence[object], valid: frozenset[str]
+    fn: str,
+    positional: Sequence[str],
+    extra: Sequence[object],
+    valid: frozenset[str],
+    *,
+    subject_given: bool,
 ) -> TypeError:
     names = ", ".join(positional)
     given = len(positional) + len(extra)
     shown = ", ".join(_show(v) for v in extra)
     hint = ""
     first = extra[0]
+    other = None  # the keyword a string value is a valid value of
     if isinstance(first, str):
         if first in TYPES and "type" in valid:
-            hint = f" For example {fn}(..., type={first!r})."
+            other = "type"
         elif first in PAIRWISE_DISPLAYS and "pairwise_display" in valid:
-            hint = f" For example {fn}(..., pairwise_display={first!r})."
-        elif "subject_id" in valid:
+            other = "pairwise_display"
+    if "subject_id" in valid and not subject_given:
+        # The required subject column is missing, so it comes first whatever the
+        # value: a column may well be called 's' or 'np'.
+        if isinstance(first, str):
             hint = (
                 f" If {first!r} is the column that identifies each subject, write "
-                f"{fn}(..., subject_id={first!r})."
+                f"{fn}(..., subject_id={first!r})"
             )
+            hint += (
+                f"; if it is {other}, write {fn}(..., {other}={first!r})."
+                if other is not None
+                else "."
+            )
+        else:
+            own = getattr(first, "name", None)
+            column = own if isinstance(own, str) else "subject"
+            hint = (
+                f" {fn}() takes the column that identifies each subject by its "
+                f"name: write {fn}(..., subject_id={column!r})."
+            )
+    elif other is not None:
+        hint = f" For example {fn}(..., {other}={first!r})."
     plural = "argument" if len(positional) == 1 else "arguments"
     return TypeError(
         f"{fn}() takes {len(positional)} positional {plural} ({names}) but {given} "
@@ -642,7 +665,13 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
             if arg not in valid:
                 raise _keyword_problem(arg, value, name, valid, order, filled)
         if len(args) > len(positional):
-            raise _positional_problem(name, positional, args[len(positional) :], valid)
+            raise _positional_problem(
+                name,
+                positional,
+                args[len(positional) :],
+                valid,
+                subject_given="subject_id" in kwargs,
+            )
         if "subject_id" in required and "subject_id" not in kwargs:
             raise subject_id_required(name)
         return fn(*args, **kwargs)
