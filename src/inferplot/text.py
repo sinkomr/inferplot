@@ -44,6 +44,7 @@ import itertools
 import math
 import re
 import sys
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, TypeAlias
@@ -726,13 +727,29 @@ def centrality_expression(
     )
 
 
+def drawable(name: str) -> str:
+    """A level name as the figure draws it: a tab as a space, and any other
+    control character but the line break (which wraps the tick label) as U+FFFD,
+    the replacement character, so that every file format can hold it (XML, and
+    so SVG, cannot hold most control characters)."""
+    return "".join(
+        " "
+        if char == "\t"
+        else "\ufffd"
+        if char != "\n" and unicodedata.category(char) == "Cc"
+        else char
+        for char in name
+    )
+
+
 def tick_label(level: str, n: int) -> str:
     """x tick label ``"<level>\\n(n = <n>)"``: plain text, never mathtext.
 
     ggstatsplot passes these as character labels (no parse); draw them with
-    ``parse_math=False`` so a level such as "$5" or "a_b" shows literally.
+    ``parse_math=False`` so a level such as "$5" or "a_b" shows literally. A
+    control character in the name is drawn as :func:`drawable` says.
     """
-    return f"{level}\n(n = {format_n(n)})"
+    return f"{drawable(level)}\n(n = {format_n(n)})"
 
 
 def subtitle_expression(

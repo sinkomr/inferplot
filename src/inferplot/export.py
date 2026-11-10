@@ -25,7 +25,7 @@ import matplotlib
 
 from inferplot import _validate as v
 from inferplot.render import theme
-from inferplot.render.figure import root_figure
+from inferplot.render.figure import reported_glyphs, root_figure
 
 if TYPE_CHECKING:
     from inferplot.render.figure import StatsFigure
@@ -72,6 +72,7 @@ def _write(
     transparent: bool,
 ) -> None:
     with ExitStack() as stack:
+        stack.enter_context(reported_glyphs())
         if fig.own:
             stack.enter_context(theme.context())
         stack.enter_context(matplotlib.rc_context(cast("Any", SAVE_RC)))

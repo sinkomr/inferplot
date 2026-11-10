@@ -42,6 +42,7 @@ from numpy.typing import NDArray
 from inferplot.check import Issue
 from inferplot.render.figure import (
     describe_text,
+    drawn_before,
     plain_text,
     root_figure,
     shows_all,
@@ -186,12 +187,13 @@ def _other_extents(fig: StatsFigure) -> list[tuple[str, Bbox]]:
                 continue
             if not text.get_text().strip():
                 continue
-            role = roles.get(id(text), "text")
+            # A text another inferplot drawing made is named with its plain
+            # wording (a subtitle reads as text, not as squeezed mathtext).
+            described = drawn_before(text) or describe_text(
+                roles.get(id(text), "text"), plain_text(text)
+            )
             out.append(
-                (
-                    describe_text(role, plain_text(text)) + " of another panel",
-                    text.get_window_extent(renderer),
-                )
+                (f"{described} of another panel", text.get_window_extent(renderer))
             )
     suptitle = getattr(root, "_suptitle", None)
     for text in root.findobj(Text):

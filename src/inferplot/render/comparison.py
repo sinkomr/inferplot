@@ -64,6 +64,7 @@ from inferplot.render.figure import (
     figure_background,
     plain_text,
     remember,
+    reported_glyphs,
     root_figure,
     shows_all,
 )
@@ -326,7 +327,7 @@ def draw(
     """Resolve the palette, check the artist dicts and user texts, then draw."""
     colors, palette_warning = theme.resolve_palette(palette, len(result.levels))
     fallbacks = theme.user_fallbacks()  # before context() resets the rcParams
-    with theme.context(), theme.fallback_fonts(fallbacks):
+    with reported_glyphs(), theme.context(), theme.fallback_fonts(fallbacks):
         invisible = _check_artist_args(options)
         _check_mathtext(options)
         made = drawing(result, options, colors, palette_warning, ax)

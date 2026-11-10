@@ -44,6 +44,7 @@ import difflib
 import math
 import numbers
 import re
+import unicodedata
 from collections.abc import Hashable, Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from typing import Any, Final, Literal, cast
@@ -1406,6 +1407,24 @@ def data_notes(data: BetweenData | WithinData) -> list[str]:
             f"{'was' if one else 'were'} left out of the analysis: every row of "
             f"{'it' if one else 'them'} has a missing {needs}."
         )
+    for level in data.levels:
+        controls = sorted(
+            {c for c in level if c != "\n" and unicodedata.category(c) == "Cc"}
+        )
+        if controls:
+            codes = ", ".join(f"U+{ord(c):04X}" for c in controls)
+            drawn = (
+                "a tab as a space"
+                if controls == ["\t"]
+                else "a tab as a space and any other as \ufffd (U+FFFD)"
+                if "\t" in controls
+                else "each as \ufffd (U+FFFD)"
+            )
+            notes.append(
+                f"The level {level!r} of {x!r} holds control characters ({codes}), "
+                f"which the figure draws {drawn}; the result keeps the name as "
+                "given."
+            )
     for same in data.lookalike_levels:
         notes.append(
             f"The levels {_quoted(same)} of {x!r} differ only in spaces at their "
