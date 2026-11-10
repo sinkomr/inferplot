@@ -65,7 +65,7 @@ labels and the texts it draws; texts already in that Axes keep their font.
 | Function | Positional | Specific keywords (defaults) |
 | --- | --- | --- |
 | `betweenstats` | `data, x, y` | `pairwise_display="significant"`, `p_adjust_method="holm"`, `pairwise_alpha=0.05`, `centrality_plotting=True`, `layers=("violin", "box", "points")`, `order=None`, `point_args`, `boxplot_args`, `violin_args` (dicts applied with `Artist.set`; each needs its layer, `"points"`, `"box"` or `"violin"`, in `layers`, or the call raises `ValueError` naming the layer to add; an empty dict is accepted. Before anything is drawn, each is applied to a scratch artist made as the drawing makes it, which is drawn and written as SVG and PDF (matplotlib checks some values only then); a property name the artist does not have raises `TypeError` with the closest property name, and any value matplotlib rejects, when setting it or only when drawing, raises `ValueError` naming the argument, with or without `ax=`, leaving a given Axes unchanged; `violin_args` does not style the density outlines drawn instead of violins) |
-| `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=True` (join each subject's points with a line; drawn only with two conditions and the `"points"` layer, as ggwithinstats draws it only for two conditions), `centrality_path=True` (join the centrality points; drawn only with `centrality_plotting=True`, as in ggwithinstats). `point_path=False` where no subject paths are drawn and `centrality_path=False` with `centrality_plotting=False` have no effect and add a `warnings` entry each (D39); the defaults add nothing (D57) |
+| `withinstats` | `data, x, y` | as `betweenstats`, plus **required** `subject_id`, and `point_path=None` (join each subject's points with a line; None and True draw them with two conditions and the `"points"` layer, as ggwithinstats draws them only for two conditions; False leaves them out), `centrality_path=None` (join the centrality points; None and True draw it with `centrality_plotting=True`, as in ggwithinstats). An explicit `point_path` (True or False) where no subject paths can be drawn and an explicit `centrality_path` with `centrality_plotting=False` add a `warnings` entry each (D39, D72); the defaults add nothing (D57) |
 | `histostats` | `data, x` | `test_value=0.0`, `binwidth=None` (ggstatsplot default rule), `centrality_plotting=True` |
 | `scatterstats` | `data, x, y` | `marginal=True`, `smooth=True` (OLS line with `conf_level` band), `label_var=None` |
 | `barstats` | `data, x, y=None` | `counts=None`, `paired=False`, `ratio=None`, `label="percentage"` (`"counts"`, `"both"`), `proportion_test=True`, `p_adjust_method="holm"`, `digits_perc=0` |
@@ -80,7 +80,12 @@ pairwise comparisons, so a non-default `p_adjust_method`, `pairwise_display` or
 wherever no Bayes factor is computed (`bf_message=False`, `results_subtitle=False`, or
 three or more groups in v0.1). Defaults and their aliases add nothing. `tr` with a
 type that trims nothing and a one-sided `alternative` with three or more groups raise
-instead, because they would change what the reported numbers mean.
+instead, because they would change what the reported numbers mean. In withinstats,
+`bf_message=False` adds an entry where no Bayes caption can be drawn (types other than
+parametric, or `results_subtitle=False`); warnings name the value as the caller gave
+it (D72). The drawing functions answer `paired=` by naming themselves:
+`render.betweenstats()` draws independent groups and points to `withinstats`;
+`render.withinstats()` draws a result already paired by `subject_id`.
 
 ### API errors (exact behavior)
 
@@ -557,7 +562,7 @@ extension, case-insensitive: `.svg`, `.pdf` or `.png`; anything else raises),
 | `effect_size` | name, estimate, `conf_level`, CI bounds, CI method, sidedness, `bootstrap_resamples`, `bootstrap_seed`, `undefined_resamples` (resamples left out, D54) and `infinite_resamples` (resamples whose effect size is ±inf, kept) (`None` without resampling); a bootstrap interval records both counts (0 when there are none), so `bootstrap_resamples` - `undefined_resamples` is the number of values it comes from; `None` for type bayes (D45) |
 | `bayes` | `bf10`, `log_bf01`, prior name and scale; `None` when absent |
 | `pairwise` | per pair: groups, statistic name and value, df, p and adjusted p (`None` for Bayes pairs), adjust method ("none" for Bayes pairs), test name and label (ggstatsplot's `test` column: "Games-Howell", "Dunn", "Yuen's trimmed means", "Student's t"), significant (`None` for Bayes pairs), displayed, `estimate`, `conf_level`, `conf_low`, `conf_high` (lincon; else `None`) and `bayes` (a Bayes factor for Bayes pairs; else `None`) (D45, D46). Signs: Games-Howell q group2 minus group1; lincon's and rmmcp's t and estimate, the paired t and a Bayes pair's t group1 minus group2; Dunn's z and Durbin-Conover's t unsigned |
-| `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: analyzed values minus distinct analyzed values, every level pooled (`heavy_ties` reads it) |
+| `n_obs`, `n_dropped`, `dropped_subjects`, `dropped_subject_rows`, `n_tied` | `n_obs`: observations (betweenstats) or complete subjects (withinstats; ggstatsplot's `n.obs` and n_pairs on all 159 fixtures); `n_dropped`: rows with a missing value in a used column; `dropped_subjects`: subjects left out for lacking a level; `dropped_subject_rows`: the complete rows of those subjects (0 for betweenstats), so the rows read are `n_obs` x k + `n_dropped` + `dropped_subject_rows` (withinstats) or `n_obs` + `n_dropped`; `n_tied`: the ties among what the design's rank test ranks (`heavy_ties` reads it; D71): betweenstats, analyzed values pooled minus distinct values; withinstats with two conditions, subjects minus distinct nonzero \|a - b\| (zero differences and repeated sizes); with three or more, the sum over subjects of levels minus the subject's distinct values |
 | `warnings` | plain-English strings, no internal jargon |
 | `provenance` | inferplot, numpy, scipy, matplotlib and narwhals versions (read from package metadata, so matplotlib is not imported); seed; parity target `"ggstatsplot 1.1.4"`; method citations |
 | `settings` | the analysis arguments that shaped the numbers and texts, canonical values |
@@ -666,6 +671,12 @@ entry is validated, not only the first k.
   (one-sided: control greater than treatment): ...", names over 40 characters
   shortened with an ellipsis (U+2026) (D68); ASCII except level names, which are
   printed as given.
+  Within designs (D73): n counts pairs with two conditions and subjects with more:
+  "Paired t-test: t(9) = -4.06, p = .003, Hedges' g = -1.17, 95% CI [-1.94, -0.38],
+  n = 10 pairs."; "Friedman test: chi2(3) = 55.83, p < .001, Kendall's W = .21, 95% CI
+  [.16, 1.00], n = 88 subjects."; "Bayesian paired t-test (JZS prior, r = 0.707): ...,
+  n = 10 pairs.". The within subtitle prints n_pairs where the between one has n_obs,
+  as ggstatsplot does.
   The other types: "Mann-Whitney U test: W = 575.50, p = .064, rank-biserial r = .28,
   95% CI [-.01, .52], n = 60."; "Kruskal-Wallis test: chi2(2) = 7.99, p = .018, rank
   epsilon squared = .28, 95% CI [.10, 1.00], n = 30."; "Yuen's t-test (20% trimmed
@@ -698,7 +709,15 @@ entry is validated, not only the first k.
   `results_subtitle=False` the result sentence is "No test result is shown
   (results_subtitle=False), n = <n>." (two-group type bayes: "No test was computed
   ..."), and the pair sentence is left out with `pairwise_display="none"`; a
-  one-sided direction is named as in the APA sentence.
+  one-sided direction is named as in the APA sentence. Within designs (D73): "Plot
+  comparing <y> across the <k> conditions of <x>, measured on the same <n> subjects:
+  <level> (<centrality> <value>), ...; <paths>." where <paths> is "lines join each
+  subject's values and the means", "lines join each subject's values", "a line joins
+  the means" (the centrality's plural), "lines join the values of a random sample of
+  <m> of the <n> subjects ...", or nothing. The analysis describes `ip.withinstats`'
+  default figure; a figure drawn with other path, layer or centrality arguments, or a
+  subsample, returns a result whose alt text describes it, and `save()` embeds that.
+  Shortening drops the group description, then the path clause.
 
 ## 8. `check()`
 
@@ -709,7 +728,7 @@ no problems.
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once) |
-| `heavy_ties` | result | warning | type nonparametric where more than 25% of the analyzed values are ties: n minus the number of distinct values (D47; read from `result.n_tied`, so the copy embedded in a saved figure reports it too; within designs pool all values, which is not what the signed-rank and Friedman tests rank: open) |
+| `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too |
 | `rows_dropped` | result | info | `n_dropped > 0` or subjects dropped |
 | `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |
 | `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |
