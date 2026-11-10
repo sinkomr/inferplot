@@ -29,9 +29,12 @@ from inferplot.stats.robust import SMM_MAX_TABLED, winsorized_normal_variance
 from tests.oracle_fixtures import (
     SIMULATED_LINCON_CRITICAL_VALUES,
     OracleCase,
+    Row,
+    cases_for,
     check_simulated_lincon_pair,
     number,
     r_level_label,
+    require_cases,
     wrs2_akp_constant,
 )
 from tests.stats.fixture_data import (
@@ -48,6 +51,13 @@ from tests.tolerances import assert_close, assert_within_monte_carlo
 ROBUST = between_cases("robust")
 TWO = between_cases("robust", two_groups=True)
 MANY = between_cases("robust", two_groups=False)
+# Cases ggstatsplot fails on after it has computed the subtitle (edge_n2: lincon
+# stops below 2 df). The subtitle it made first is compared like any other.
+FAILED_WITH_SUBTITLE = [
+    case
+    for case in cases_for("ggbetweenstats", failed=True)
+    if case.type == "robust" and "subtitle" in case.partial_components
+]
 # lincon's intervals are 95% whatever conf.level says: ggstatsplot does not pass it
 # (PlantGrowth-cl90-robust; DECISIONS.md D53).
 LINCON_CONF_LEVEL = 0.95
@@ -139,23 +149,30 @@ def test_akp_effect(case: OracleCase) -> None:
     _check_bootstrap_bounds(case, result.conf_low, result.conf_high)
 
 
-def _check_bootstrap_bounds(case: OracleCase, low: float, high: float) -> None:
+def _check_bootstrap_bounds(
+    case: OracleCase, low: float, high: float, *, fixed_kind: str | None = None
+) -> None:
+    """The bounds against the 20,000-resample reference (SPEC.md section 10).
+
+    ``fixed_kind``: the tolerance kind for a bound that R's 50 replicate runs all
+    agree on (replicate SD 0). Such a bound does not depend on the resamples; it
+    is one value of the statistic, and differs from R's the way the estimate does
+    (edge_n2's upper bound of xi: the largest value three groups of two can give,
+    1 - 3.2404e-8 times inferplot's, WRS2's constant at tr 0.2).
+    """
     reference = case.bootstrap_reference
     assert reference is not None
     replicates = reference["replicates"]
     assert replicates["resamples"] == BOOTSTRAP_RESAMPLES
-    assert_within_monte_carlo(
-        low,
-        number(reference["conf_low"]),
-        number(replicates["conf_low_sd"]),
-        what=f"{case.name} lower bound",
-    )
-    assert_within_monte_carlo(
-        high,
-        number(reference["conf_high"]),
-        number(replicates["conf_high_sd"]),
-        what=f"{case.name} upper bound",
-    )
+    for bound, name in ((low, "conf_low"), (high, "conf_high")):
+        expected = number(reference[name])
+        mc_sd = number(replicates[f"{name}_sd"])
+        what = f"{case.name} {name}"
+        if fixed_kind is not None and mc_sd == 0:
+            assert number(replicates[f"{name}_mean"]) == expected, what
+            assert_close(fixed_kind, bound, expected, what=what)
+        else:
+            assert_within_monte_carlo(bound, expected, mc_sd, what=what)
 
 
 # ------------------------------------------------------------------ k >= 3
@@ -165,7 +182,10 @@ def _check_bootstrap_bounds(case: OracleCase, low: float, high: float) -> None:
     "case", params(MANY, "robust subtitles, k >= 3", where=_has_subtitle)
 )
 def test_trimmed_means_anova(case: OracleCase) -> None:
-    row = case.subtitle_data
+    _check_trimmed_means_anova(case, case.subtitle_data)
+
+
+def _check_trimmed_means_anova(case: OracleCase, row: Row) -> None:
     assert row["method"] == "A heteroscedastic one-way ANOVA for trimmed means"
     result = trimmed_means_anova(groups(case), tr=tr(case))
     assert_close("closed_form", result.f, value(row, "statistic"), what="F")
@@ -180,8 +200,11 @@ def test_trimmed_means_anova(case: OracleCase) -> None:
     "case", params(MANY, "robust effect sizes, k >= 3", where=_has_subtitle)
 )
 def test_explanatory_effect(case: OracleCase) -> None:
+    _check_explanatory_effect(case, case.subtitle_data)
+
+
+def _check_explanatory_effect(case: OracleCase, row: Row) -> None:
     level = conf_level(case)
-    row = case.subtitle_data
     assert row["effectsize"] == "Explanatory measure of effect size"
     reference = case.bootstrap_reference
     assert reference is not None
@@ -215,7 +238,24 @@ def test_explanatory_effect(case: OracleCase) -> None:
             number(replicates["estimate_sd"]),
             what=f"{case.name} xi",
         )
-    _check_bootstrap_bounds(case, result.conf_low, result.conf_high)
+    _check_bootstrap_bounds(
+        case,
+        result.conf_low,
+        result.conf_high,
+        fixed_kind="wrs2_xi_constant" if _equal_sizes(case) else None,
+    )
+
+
+def test_subtitles_of_cases_ggstatsplot_fails_on() -> None:
+    """ggstatsplot computed these subtitles before it failed at the pairwise step,
+    so the omnibus test and its effect size have R values although the case as a
+    whole has none (edge_n2: two values per group, Yuen df below 2)."""
+    cases = require_cases(FAILED_WITH_SUBTITLE, "failed robust cases with a subtitle")
+    for case in cases:
+        assert len(case.analysis_levels) > 2, case.name
+        (row,) = case.partial("subtitle")
+        _check_trimmed_means_anova(case, row)
+        _check_explanatory_effect(case, row)
 
 
 def _pairs_by_name(case: OracleCase) -> dict[tuple[str, str], LinconPair]:

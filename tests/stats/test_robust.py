@@ -84,6 +84,24 @@ def test_trimmed_mean_and_winsorized_variance_definitions(n: int, tr: float) -> 
     )
 
 
+def test_trim_count_is_the_floating_point_floor() -> None:
+    # 0.29 * 100 is 28.999999999999996 in floating point, so R's floor(tr * n)
+    # trims 28 values at each end, not 29. SciPy counts the same way
+    # (int(n * trim)), in separate code: Yuen's test on these two groups differs
+    # between 28 and 29 trimmed values in the second significant digit.
+    assert 0.29 * 100 < 29
+    x = np.arange(1.0, 101.0) ** 2
+    y = np.arange(1.0, 101.0) ** 1.5 + 300.0
+    kept = np.sort(x)[28:72]
+    assert trimmed_mean(x, tr=0.29) == pytest.approx(kept.mean(), rel=1e-14)
+    assert trimmed_mean(x, tr=0.29) != pytest.approx(np.sort(x)[29:71].mean())
+    ours = yuen_t(x, y, tr=0.29)
+    theirs = stats.ttest_ind(x, y, equal_var=False, trim=0.29)
+    assert_close("closed_form", ours.t, abs(float(theirs.statistic)), what="t")
+    assert_close("closed_form", ours.df, float(theirs.df), what="df")
+    assert_close("closed_form", ours.p_value, float(theirs.pvalue), what="p")
+
+
 def test_winsorized_normal_variance() -> None:
     for tr in (0.05, 0.1, 0.2, 0.3, 0.45):
         c = float(stats.norm.isf(tr))

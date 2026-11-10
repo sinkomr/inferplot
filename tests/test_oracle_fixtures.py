@@ -15,7 +15,9 @@ import pytest
 
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
+    ACCURATE_BAYES_FACTORS,
     PARITY_VERSION,
+    SIMULATED_LINCON_CRITICAL_VALUES,
     Backend,
     OracleCase,
     integrity_problems,
@@ -501,6 +503,38 @@ def test_between_fixture_contents(case: OracleCase) -> None:
     assert call.function == "betweenstats"
     assert call.args == (case.args["x"], case.args["y"])
     assert call.kwargs["type"] == case.type
+
+
+def test_r_ran_without_warnings_or_messages() -> None:
+    """No ggstatsplot call, hidden call or bootstrap reference run recorded an R
+    warning or message. A warning is R saying a number may be off, and no parity
+    test reads these fields, so a fixture that records one fails here until it has
+    been read and declared."""
+    noisy: list[str] = []
+    for case in load_cases():
+        raw = case.raw
+        if raw["r_warnings"] or raw["r_messages"]:
+            noisy.append(case.name)
+        for entry in raw["suppressed"] or []:
+            if entry["warnings"] or entry["messages"]:
+                noisy.append(f"{case.name} {entry['component']}")
+        reference = raw["bootstrap_reference"]
+        if reference is not None and reference["r_warnings"]:
+            noisy.append(f"{case.name} bootstrap reference")
+    assert noisy == []
+
+
+def test_pinned_exceptions_name_pairs_that_exist() -> None:
+    # An exception keyed by a case or pair that no longer exists would never be
+    # looked up, and so could never fail.
+    pairs = {
+        (case.name, str(row["group1"]), str(row["group2"]))
+        for case in load_cases()
+        if case.error is None
+        for row in case.pairwise
+    }
+    assert set(ACCURATE_BAYES_FACTORS) <= pairs
+    assert set(SIMULATED_LINCON_CRITICAL_VALUES) <= pairs
 
 
 def test_lookups_of_unknown_names_fail_loudly() -> None:

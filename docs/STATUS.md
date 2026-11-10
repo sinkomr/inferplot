@@ -233,6 +233,41 @@ scheme found; scripts in the session scratch folder `reviewS/`). To fix:
   the interval [±1, ±1] without a warning; a p below the smallest double is stored as
   0.0.
 
+Tests and oracle review (46 planted bugs: the parity tests caught 29, other tests 12,
+5 survived all 11,514 tests; every documented exception from R held up against the
+reviewer's own high-precision values; the oracle generator, manifest and references
+held up; scripts in `reviewT/`). To fix:
+
+- [x] T1: the unadjusted pairwise p (Dunn, lincon) and lincon's t and df in the result
+  were compared with nothing (3 planted bugs survived). Now compared on every fixture
+  with the normal tail of R's z and with SciPy's Yuen test (worst 2.8e-13 relative).
+- [x] T2: D54 (tied resamples left out, not counted as 0) was pinned by no test. Now
+  pinned on data where more than 5% of resamples are tied, so counting them as 0
+  gives a lower bound of exactly 0.
+- [x] T3: the trim count floor(tr n) had no case with tr n just below an integer
+  (0.29 x 100 = 28.999999999999996). Now checked against SciPy's separate count.
+- [x] T4: the test of the cases ggstatsplot fails on accepted any error mentioning
+  "x=", "conf_level" or "type=". Now each case names its refusal; R's partial subtitle
+  of edge_n2-robust is compared (F, df, p, xi and its interval), and edge_n2-bayes
+  without the subtitle is compared with R's estimates and the independent Bayes
+  factor reference.
+- [x] T5: the slow tests (simulations, random layouts: 161) ran in no workflow; CI job
+  `slow` runs them. R warnings recorded in fixtures and stale keys in the exception
+  lists now fail a test.
+- [ ] T6: the 4-SD bootstrap rule cannot tell the documented percentile rule from one
+  order statistic outward (passes 99 to 100%), or 2,000 resamples from 500 reported
+  as 2,000 (passes 89 to 95%). The order-statistic rules are pinned only by two unit
+  tests whose expected values came from an R replay no fixture records. Next oracle
+  run: record R's sorted replicate values next to the bounds it returns for one case
+  of each interval (AKP, xi, rank epsilon squared), so the percentile helpers are
+  applied to R's own replicates and must give R's bound exactly.
+- [ ] T7: next oracle run, with T6: a case that decides D54 in R itself (three tiny
+  groups sharing a value, more than 5% of resamples tied); tr 0.29 with n = 100 (T3);
+  the n = 2 group of S2.
+- [ ] T8 (owner): `fixtures.yml` is the only guard against a fixture and the manifest
+  edited together, and main is not protected, so it is advisory. Making it a required
+  check is a repository setting.
+
 - Decided (D31, D37): Games-Howell p is computed from an accurate studentized range
   tail (`inferplot.stats.srange_sf`), not R's ptukey, whose error grows as the df falls
   (probe-ptukey: up to 1.35e-3 absolute at df 2, 1.8e-7 at df 10, about 4.7e-10 in the

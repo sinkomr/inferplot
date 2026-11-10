@@ -28,6 +28,8 @@ from typing import Any
 
 import numpy as np
 import pytest
+from scipy import stats as scipy_stats
+from tools.reference import stats_reference as ref
 
 import inferplot as ip
 from inferplot import stats
@@ -489,6 +491,53 @@ def test_pairwise_rows(name: str, backend: Backend) -> None:
             )
 
 
+@pytest.mark.parametrize(("name", "backend"), _params(CASES))
+def test_pairwise_raw_p_and_df(name: str, backend: Backend) -> None:
+    """The pairwise fields ggstatsplot's rows do not carry, by independent routes.
+
+    ggstatsplot reports only the adjusted p of a pair, so ``p_value`` (unadjusted)
+    and lincon's ``statistic`` and ``df`` have no column to be compared with. Dunn:
+    the unadjusted p is the two-sided normal tail of R's own z. lincon: a pair is
+    Yuen's test on its two groups, which SciPy implements on its own
+    (``ttest_ind(trim=)``). Over the fixtures these agree to 3e-13 relative.
+    """
+    case, result = BY_NAME[name], analyze(name, backend)
+    if case.type == "bayes" or not result.pairwise:
+        return
+    groups = dict(zip(case.analysis_levels, _groups(case), strict=True))
+    r_rows = {(str(r["group1"]), str(r["group2"])): r for r in case.pairwise}
+    unadjusted = result.settings.p_adjust_method == "none"
+    for pair in result.pairwise:
+        what = f"{name} {pair.group1}-{pair.group2}"
+        assert pair.p_value is not None
+        assert pair.p_adjusted is not None
+        assert pair.p_value <= pair.p_adjusted
+        if unadjusted:
+            assert pair.p_value == pair.p_adjusted
+        if case.type == "nonparametric":
+            assert pair.df is None
+            if not r_rows:  # pairwise.display = "none": R computed no pairs
+                continue
+            z = number(r_rows[(pair.group1, pair.group2)]["statistic"])
+            expected = 2.0 * float(scipy_stats.norm.sf(abs(z)))
+            assert_close("closed_form", pair.p_value, expected, what=f"{what} raw p")
+        elif case.type == "robust":
+            yuen = scipy_stats.ttest_ind(
+                groups[pair.group1],
+                groups[pair.group2],
+                equal_var=False,
+                trim=result.settings.tr,
+            )
+            assert pair.df is not None
+            assert_close(
+                "closed_form", pair.statistic, float(yuen.statistic), what=f"{what} t"
+            )
+            assert_close("closed_form", pair.df, float(yuen.df), what=f"{what} df")
+            assert_close(
+                "closed_form", pair.p_value, float(yuen.pvalue), what=f"{what} raw p"
+            )
+
+
 def _check_simulated_interval(name: str, pair: Any, row: Mapping[str, Any]) -> None:
     """A pinned pair: R's and inferplot's critical values as pinned, each recovered
     from its own interval with the pair's Yuen SE (|estimate| / |t|)."""
@@ -798,36 +847,80 @@ def test_json_round_trip(name: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
+@dataclasses.dataclass(frozen=True)
+class _Failed:
+    """What inferplot does where ggstatsplot fails: the refusal (a fragment of its
+    message, which must give the reason and what to change) and, where another
+    call computes what ggstatsplot had made before it failed, that call's extra
+    keywords."""
+
+    message: str
+    replay: Mapping[str, Any] | None
+
+
+_FAILED_CASES: dict[str, _Failed] = {
+    # Two values per group: WRS2's lincon stops below 2 df, and so does inferplot.
+    # R's subtitle (made first) is compared in tests/stats/test_robust_parity.py.
+    "ggbetweenstats-edge_n2-robust": _Failed(
+        "has fewer than 2 degrees of freedom, where the critical values of WRS2's "
+        "lincon table stop",
+        None,
+    ),
+    # R fails while building the table of pairwise Bayes factors. inferplot
+    # refuses the Bayesian ANOVA subtitle (v0.2) like any type "bayes" call with
+    # three or more groups; without the subtitle it computes the estimates R made
+    # and the pairwise Bayes factors R could not.
+    "ggbetweenstats-edge_n2-bayes": _Failed(
+        "the subtitle ggstatsplot draws here is a Bayesian ANOVA, which arrives in "
+        "inferplot 0.2",
+        {"results_subtitle": False},
+    ),
+}
+
+
 def test_failed_cases() -> None:
-    """ggstatsplot fails on these (none yet among the Phase 0 cases); inferplot
-    either refuses with a plain error at the same component (pairwise comparisons)
-    or computes, and then its subtitle and centrality labels equal the partial
-    outputs ggstatsplot made first."""
+    """ggstatsplot fails on these. inferplot refuses each with its own reason
+    (listed per case, so a new failed fixture needs a decision here), and where a
+    replay computes, its centrality labels equal the partial outputs ggstatsplot
+    made first and its pairwise Bayes factors equal the independent reference."""
+    assert {case.name for case in FAILED} == set(_FAILED_CASES)
     for case in FAILED:
         _check_failed_case(case)
 
 
 def _check_failed_case(case: OracleCase) -> None:
+    expected = _FAILED_CASES[case.name]
     assert case.expected_error is not None
+    assert case.expected_error["component"] == "pairwise_comparisons"
+    assert len(case.analysis_levels) >= 3
     args, kwargs = call_arguments(case)
-    result: StatsResult | None = None
-    refused: str | None = None
-    try:
-        result = ip.analyze.betweenstats(read_dataset(case), *args, **kwargs)
-    except (ValueError, NotImplementedError) as error:
-        refused = str(error)
-    if refused is not None:
-        # Refused where ggstatsplot fails too, with a message naming what to change.
-        assert case.expected_error["component"] == "pairwise_comparisons"
-        assert len(case.analysis_levels) >= 3
-        assert any(word in refused for word in ("x=", "conf_level", "type="))
+    with pytest.raises(NotImplementedError) as refused:
+        ip.analyze.betweenstats(read_dataset(case), *args, **kwargs)
+    assert expected.message in str(refused.value)
+    if expected.replay is None:
         return
-    assert result is not None
-    rows = case.partial("subtitle")
-    if rows and result.type != "bayes":
-        (row,) = rows
-        assert _mixed_subtitle(case, result, row) == parse(str(row["expression"]))
+    result = ip.analyze.betweenstats(
+        read_dataset(case), *args, **{**kwargs, **expected.replay}
+    )
+    assert result.text.subtitle is None
     labels = _label_rows(case, case.partial("centrality_description"))
     for i, d in enumerate(result.descriptives):
         label = parse(str(labels[d.level]["expression"]))
         assert result.text.centrality_labels[i] == tx.to_plain(label)
+    assert case.type == "bayes"
+    groups = dict(zip(case.analysis_levels, _groups(case), strict=True))
+    k = len(case.analysis_levels)
+    assert len(result.pairwise) == k * (k - 1) // 2
+    for pair in result.pairwise:
+        a, b = groups[pair.group1], groups[pair.group2]
+        student = float(scipy_stats.ttest_ind(a, b, equal_var=True).statistic)
+        reference = ref.jzs_bf10_t(
+            student, a.size * b.size / (a.size + b.size), float(a.size + b.size - 2)
+        )
+        assert pair.bayes is not None
+        assert_close(
+            "ttest_bayes_factor",
+            pair.bayes.bf10,
+            reference,
+            what=f"{case.name} {pair.group1}-{pair.group2} BF10",
+        )

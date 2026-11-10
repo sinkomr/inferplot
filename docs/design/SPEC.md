@@ -707,8 +707,18 @@ in plain words, never mathtext source.
 - Python tests load the same CSV from `oracle/datasets/`, translate the fixture's R
   arguments to inferplot keywords with one mapping table (`tests/oracle_args.py`: dots to
   underscores, R `TRUE`/`FALSE`/`NULL` to Python), run the analysis, and compare every
-  number the fixture holds, using `tests/tolerances.py`. One parametrized test per
-  function collects all its fixtures, so a new fixture is tested without new code.
+  number inferplot reports that the fixture holds, using `tests/tolerances.py`. One
+  parametrized test per function collects all its fixtures, so a new fixture is tested
+  without new code. Fixture numbers no test compares, because v0.1 reports none of
+  them: the Bayesian ANOVA Bayes factors and posterior estimates (bayes subtitle and
+  parametric caption with three or more groups; v0.2), the IQR, CI, skewness and
+  kurtosis of ggstatsplot's centrality table, the bracket positions ggplot2 computed,
+  and ggstatsplot's own 100-resample bootstrap bounds (only its strings are compared;
+  section 10). Result fields R's tables do not carry are compared with independent
+  computations instead: the unadjusted pairwise p of Dunn's test with the normal tail
+  of R's z, and lincon's t, df and unadjusted p with SciPy's Yuen test
+  (`test_pairwise_raw_p_and_df`). `test_r_ran_without_warnings_or_messages` fails when
+  a fixture records an R warning or message, which no other test reads.
 
 **Fixture schema (version 2).** One JSON object per case, named `<name>.json`:
 
@@ -742,7 +752,11 @@ request `.github/workflows/fixtures.yml` verifies the manifest's attestation (si
 by the run it names), that this commit is in the branch's history, and that its
 generator files equal the committed ones. Together these catch a hand edit, even with
 a re-hashed manifest; fixtures from another run or an older generator; and a generator
-changed without a new oracle run. Attestations do not expire, unlike artifacts (90
+changed without a new oracle run. The loader alone does not catch a fixture and the
+manifest edited together (the bootstrap tolerances are read from the fixtures, so such
+an edit could also widen them); `fixtures.yml` is the guard against that, and it
+blocks a merge only if main is protected with it as a required check, which is a
+repository setting (not set as of 2026-11-10; until then its result has to be read). Attestations do not expire, unlike artifacts (90
 days). Because the oracle runs on the branch that changes the generator, that branch
 must land with a merge commit or a fast-forward: a squash or rebase merge drops the
 attested commit from main's history, and the check then fails until the oracle runs

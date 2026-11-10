@@ -345,6 +345,11 @@ def test_tied_resamples_are_left_out() -> None:
     again = rank_epsilon_squared(groups[::-1], seed=4)
     assert again == result
     assert 0.0 <= result.conf_low <= result.estimate
+    # More than 5% are tied, so counting a tied resample as 0 instead of leaving it
+    # out would put the 95% lower bound at exactly 0. The smallest epsilon a
+    # resample with two distinct values can have here is 1/90.
+    assert result.undefined_resamples > 0.05 * result.resamples
+    assert result.conf_low == pytest.approx(1 / 90, rel=1e-12)
     # Too few resamples left for the order statistic the level needs: 1,821 or
     # fewer defined values cannot give the 0.05% quantile.
     with pytest.raises(ValueError, match=r"every value tied, which leaves \d+"):
