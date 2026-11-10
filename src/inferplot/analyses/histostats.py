@@ -724,8 +724,7 @@ def _prepare(
 ) -> tuple[OneData, _Args, int]:
     """Every argument checked and the data read: the analyzed values, the
     validated arguments and ``digits``. The public function runs the type's
-    analysis on them; tests use it to build results before the statistics
-    exist."""
+    analysis on them; tests use it to check the data reading alone."""
     type_name = canonical_type(type)
     mu = check_finite_number(test_value, "test_value", example="0")
     level = check_conf_level(conf_level)

@@ -556,8 +556,7 @@ def _prepare(
 ) -> tuple[PairData, _Args, int]:
     """Every argument checked and the data read: the complete pairs, the
     validated arguments and ``digits``. The public function runs the type's
-    analysis on them; tests use it to build results before the statistics
-    exist."""
+    analysis on them; tests use it to check the data reading alone."""
     type_name = canonical_type(type)
     level = check_conf_level(conf_level)
     n_digits = check_digits(digits)
