@@ -208,6 +208,7 @@ class StatsFigure:
         "_point_labels",
         "_result",
         "_roles",
+        "_segments",
         "_subsample",
         "_view",
     )
@@ -233,6 +234,7 @@ class StatsFigure:
         point_labels: PointLabels | None = None,
         line_labels: tuple[LineLabel, ...] = (),
         cell_labels: tuple[CellLabel, ...] = (),
+        segments: tuple[tuple[int, Rectangle], ...] = (),
     ) -> None:
         self._figure = figure
         self._axes = MappingProxyType(dict(axes))
@@ -252,6 +254,7 @@ class StatsFigure:
         self._point_labels = point_labels
         self._line_labels = line_labels
         self._cell_labels = cell_labels
+        self._segments = segments
 
     @property
     def figure(self) -> Figure:
@@ -448,6 +451,12 @@ class StatsFigure:
         """barstats' cell labels (every non-zero cell); empty for the other
         figures."""
         return self._cell_labels
+
+    @property
+    def segments(self) -> tuple[tuple[int, Rectangle], ...]:
+        """barstats' bar segments, each with the index of its level of x (whose
+        colour it is drawn in); empty for the other figures."""
+        return self._segments
 
     @property
     def view(self) -> DrawnView | None:

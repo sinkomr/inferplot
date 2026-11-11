@@ -1,4 +1,5 @@
-"""barstats' figure check (SPEC section 8): ``cell_labels_hidden``.
+"""barstats' figure checks (SPEC section 8): ``cell_labels_hidden`` and
+``level_colors_alike`` (:func:`level_color_issue`).
 
 Every cell with observations has a label (its percentage, count or both). The
 drawing writes it on its segment, or beside its bar where the segment is too
@@ -17,8 +18,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, cast
 
+from matplotlib.colors import to_hex
+
 from inferplot.check import Issue
-from inferplot.render.figure import root_figure
+from inferplot.render import theme
+from inferplot.render.figure import axes_background, root_figure
 
 if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
@@ -27,7 +31,7 @@ if TYPE_CHECKING:
 
     from inferplot.render.figure import CellLabel, StatsFigure
 
-__all__ = ["cell_label_issue"]
+__all__ = ["COLOR_DIFFERENCE", "cell_label_issue", "level_color_issue"]
 
 # Pixels a label may reach beyond its segment, or into another one, before it
 # counts (anti-aliasing slack).
@@ -104,5 +108,62 @@ def cell_label_issue(
             "cells, wider for the labels beside the bars), or inferplot's own "
             "figure by leaving ax out, which makes room for every label. Every "
             "count and percentage is in fig.result.cells."
+        ),
+    )
+
+
+# CIE76 colour difference (Delta E*ab) below which two levels' colours count as
+# the same: about 2.3 is just noticeable between large patches side by side, and
+# the legend keys are small. Matplotlib's colormaps sampled at 20 levels come
+# near it ('Blues' 2.9, 'Greys' 2.1: twenty shades a legend cannot key); the
+# default Okabe-Ito colours differ by at least 26, tab20's by 17. A luminance
+# contrast cannot be used: Okabe-Ito's orange and sky blue have 1.02:1.
+COLOR_DIFFERENCE: Final = 3.0
+
+
+def level_color_issue(fig: StatsFigure) -> Issue | None:
+    """``level_colors_alike`` (barstats): two levels of x whose segments are
+    drawn, as measured on the figure (over the Axes background, with their
+    alpha), in colours that cannot be told apart; the colour is the only key to
+    the legend. None for the other figures."""
+    if not fig.segments:
+        return None
+    ax = fig.axes["main"]
+    background = axes_background(ax)
+    drawn: dict[int, tuple[float, float, float]] = {}
+    for i, segment in fig.segments:
+        if i in drawn or not segment.get_visible() or segment.axes is None:
+            continue
+        if not segment.get_fill():
+            continue
+        drawn[i] = theme.over(segment.get_facecolor(), background)
+    levels = fig.result.levels
+    found: list[str] = []
+    order = sorted(drawn)
+    for n, i in enumerate(order):
+        for j in order[n + 1 :]:
+            difference = theme.color_difference(drawn[i], drawn[j])
+            if difference < COLOR_DIFFERENCE:
+                found.append(
+                    f"{levels[i]!r} and {levels[j]!r} ({to_hex(drawn[i])} and "
+                    f"{to_hex(drawn[j])}, a colour difference of {difference:.1f})"
+                )
+    if not found:
+        return None
+    listed = "; ".join(found[:_MAX_LISTED])
+    if len(found) > _MAX_LISTED:
+        listed += f"; and {len(found) - _MAX_LISTED} more pairs"
+    return Issue(
+        code="level_colors_alike",
+        severity="warning",
+        message=(
+            f"Levels of {fig.result.x!r} are drawn in colours that cannot be told "
+            f"apart (CIELAB difference below {COLOR_DIFFERENCE:g}), and the colour "
+            f"is the only key to the legend: {listed}."
+        ),
+        fix=(
+            "Pass palette= with clearly different colours, one per level of x (the "
+            "default palette, or a qualitative colormap such as 'tab10' or "
+            "'Set2'), or merge levels so fewer colours are needed."
         ),
     )

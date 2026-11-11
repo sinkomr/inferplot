@@ -50,7 +50,7 @@ from matplotlib.transforms import Bbox, BboxBase, Transform
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
-from inferplot.render.bar_checks import cell_label_issue
+from inferplot.render.bar_checks import cell_label_issue, level_color_issue
 from inferplot.render.figure import (
     describe_text,
     drawn_before,
@@ -948,6 +948,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     if hidden is not None:
         issues.append(hidden)
     alike = level_label_issue(fig)
+    if alike is not None:
+        issues.append(alike)
+    alike = level_color_issue(fig)  # barstats
     if alike is not None:
         issues.append(alike)
     issues += _path_issues(fig, extents)

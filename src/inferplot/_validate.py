@@ -1278,8 +1278,10 @@ def _bar_targeted(
         )
     if key in _COLOUR_KEYS:
         return no(
-            f"colours are set with palette= (one per level of x) or bar_args=, "
-            f"{drawing}."
+            "colours are set with palette=, one per level of x in their order (for "
+            f"example palette=['#0072B2', '#E69F00']), {drawing}; the colour of "
+            "the segments is the only key to the legend, so bar_args= styles only "
+            "their edges, hatching and transparency."
         )
     if key == "alpha":
         return no(

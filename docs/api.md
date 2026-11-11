@@ -145,7 +145,7 @@ Drawing arguments (`ip.<name>`, `ip.render.<name>`):
 | `point_args` | B W S | matplotlib properties of the points (`Artist.set`); B, W: needs the points layer. |
 | `boxplot_args` | B W | Properties of the boxes; needs the box layer. |
 | `violin_args` | B W | Properties of the violins; needs the violin layer. |
-| `bar_args` | H C | Properties of every bar (`Rectangle`); properties that move the bars are refused. |
+| `bar_args` | H C | Properties of every bar (`Rectangle`); properties that move, rotate or reorder the bars are refused; C: also the fill colour (use `palette`), edges over 2 points, alpha under 0.4. |
 | `smooth_args` | S | Properties of the line (`Line2D`); the band takes its colour. Needs `smooth=True`. |
 | `marginal_args` | S | Properties of the marginal bars. Needs `marginal=True`. |
 | `ax` | all | Draw into this matplotlib Axes; nothing is resized, so run `check()`. B, W, C: its x axis may not be shared. S needs `marginal=False`. |
@@ -292,6 +292,7 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `figure_oversized` | warning | inferplot's own figure grew far beyond its panels (a very long text). |
 | `cell_labels_hidden` | warning | C: a cell label left out, or drawn where it does not read as its cell's. |
 | `level_labels_alike` | warning | B, W, C: two levels drawn with tick labels or legend entries that read alike. |
+| `level_colors_alike` | warning | C: two levels of x drawn in colours that cannot be told apart (the legend's only key). |
 | `line_label_ambiguous` | warning | H: a line's label is nearer the other line or crossed by it. |
 | `low_contrast` | warning | A text or a level colour can hardly be told from its background. |
 | `glyph_missing` | warning | Characters no available font can draw. |

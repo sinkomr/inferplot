@@ -94,6 +94,12 @@ LEAD_PT: Final = 7.0
 STACK_GAP_PT: Final = 1.5
 LEADER_WIDTH_PT: Final = 0.6
 SEGMENT_EDGE_PT: Final = 0.8
+# bar_args' bounds (B2): a wider edge covers small segments (1% of a 3 in bar is
+# about 2 points) and the legend keys; below this alpha the default palette's
+# yellow has under 1.1:1 contrast with white (low_contrast's floor for a level's
+# colour), and the Okabe-Ito colours keep a CIELAB difference of at least 10.
+MAX_SEGMENT_EDGE_PT: Final = 2.0
+MIN_SEGMENT_ALPHA: Final = 0.4
 # Level names in the tick labels and the legend (and its default title) wrap on
 # spaces into lines at most this wide; a slot widens for the tick labels' lines.
 TICK_LINE_IN: Final = 1.0
@@ -287,12 +293,56 @@ def _scratch_segment(ax: Axes) -> Artist:
     return _segment_artist(ax, -0.4, 0.0, 0.8, 4.0, (0.0, 0.0, 0.0, 1.0))
 
 
+def _refused_style(key: str, prop: str, value: object) -> str | None:
+    """Why ``bar_args`` may not set ``prop`` (given as ``key``) to ``value``, or
+    None: the colour of a segment is the only key to its level of x, so
+    ``bar_args`` may not colour every level alike or leave the fill out, cover
+    the segments and the legend keys with a wide edge, or fade the colours
+    toward the background (review of barstats, B2)."""
+    allowed = (
+        "bar_args may style the segments with edgecolor, hatch, linestyle, "
+        f"linewidth (at most {MAX_SEGMENT_EDGE_PT:g} points) and alpha (at least "
+        f"{MIN_SEGMENT_ALPHA:g})."
+    )
+    if prop in ("color", "facecolor", "fill"):
+        what = (
+            "would leave the segments unfilled"
+            if prop == "fill"
+            else "would paint the segments of every level of x alike"
+        )
+        return (
+            f"bar_args sets {key!r}, which {what}, and the colour of a segment is "
+            "the only key to the legend of the levels of x. Choose the colours with "
+            "palette=, one per level of x in their order (for example palette=["
+            "'#0072B2', '#E69F00', '#009E73'], or a colormap name such as 'Set2'). "
+            f"{allowed}"
+        )
+    number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    if prop == "linewidth" and number and float(value) > MAX_SEGMENT_EDGE_PT:  # pyright: ignore[reportArgumentType]
+        return (
+            f"bar_args sets {key}={value!r}, an edge wider than "
+            f"{MAX_SEGMENT_EDGE_PT:g} points, which would cover small segments "
+            "and the legend keys (a segment of 1% is about 2 points tall). Use "
+            f"{key}={MAX_SEGMENT_EDGE_PT:g} or less."
+        )
+    if prop == "alpha" and number and float(value) < MIN_SEGMENT_ALPHA:  # pyright: ignore[reportArgumentType]
+        return (
+            f"bar_args sets {key}={value!r}, which would fade the colours that "
+            "identify the levels of x toward the background (below "
+            f"{MIN_SEGMENT_ALPHA:g}, the default palette's yellow can hardly be "
+            f"told from a white background). Use {key}={MIN_SEGMENT_ALPHA:g} or "
+            "more, or choose lighter colours with palette=."
+        )
+    return None
+
+
 _BAR_ARGS: Final = LayerArgs(
     name="bar_args",
     layer="bars",
     noun="bar segments",
     make=_scratch_segment,
     advice=("Choose a visible style; the segments show each level's share of its bar."),
+    refuse=_refused_style,
 )
 
 
@@ -389,6 +439,9 @@ class _BarDrawing(base.BaseDrawing):
             colors=tuple(self.colors),
             data=self.drawn_data(),
             cell_labels=self.cell_records(),
+            segments=tuple(
+                (c.i, c.segment) for c in self.cells if c.segment is not None
+            ),
         )
 
     def draw_bars(self) -> None:

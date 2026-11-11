@@ -57,6 +57,7 @@ FIGURE_CODES = frozenset(
         "cell_labels_hidden",
         "figure_oversized",
         "level_labels_alike",
+        "level_colors_alike",
     }
 )
 draw: Any = ip.render.barstats  # for calls with wrong argument types
@@ -753,11 +754,13 @@ def test_given_axes_with_a_log_or_inverted_axis_is_refused() -> None:
     )
 
 
-def test_segments_the_colour_of_the_background_are_named() -> None:
-    fig = ip.render.barstats(mtcars(), bar_args={"facecolor": "white"})
-    (warning,) = [w for w in fig.result.warnings if "bar_args=" in w]
-    assert "makes the bar segments invisible" in warning
-    assert "cannot be told apart" in warning
+def test_segments_the_colour_of_the_background_are_refused() -> None:
+    # bar_args may not set the segments' colour, the only key to the legend
+    # (B2); palette= chooses the colours.
+    assert "palette=" in message(
+        ValueError,
+        lambda: ip.render.barstats(mtcars(), bar_args={"facecolor": "white"}),
+    )
 
 
 def test_unused_palette_colours_are_named() -> None:

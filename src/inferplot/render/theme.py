@@ -179,6 +179,34 @@ def contrast(a: object, b: object) -> float:
     return (lb + 0.05) / (la + 0.05)
 
 
+def lab(color: object) -> tuple[float, float, float]:
+    """CIELAB (D65 white) of an opaque sRGB colour (CIE 15:2004; the sRGB to XYZ
+    matrix of IEC 61966-2-1)."""
+    rgb = mcolors.to_rgb(color)  # pyright: ignore[reportArgumentType]
+
+    def linear(u: float) -> float:
+        return u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (linear(float(u)) for u in rgb)
+    x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047
+    y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883
+
+    def f(t: float) -> float:
+        d = 6.0 / 29.0
+        return t ** (1.0 / 3.0) if t > d**3 else t / (3 * d * d) + 4.0 / 29.0
+
+    fx, fy, fz = f(x), f(y), f(z)
+    return (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+
+def color_difference(a: object, b: object) -> float:
+    """CIE76 colour difference (Delta E*ab, the distance in CIELAB) of two opaque
+    colours: about 2.3 is just noticeable between large patches side by side."""
+    la, lb = lab(a), lab(b)
+    return sum((p - q) ** 2 for p, q in zip(la, lb, strict=True)) ** 0.5
+
+
 def over(color: object, background: object) -> tuple[float, float, float]:
     """``color`` (with its alpha) composited over an opaque ``background``."""
     r, g, b, a = mcolors.to_rgba(color)  # pyright: ignore[reportArgumentType]
