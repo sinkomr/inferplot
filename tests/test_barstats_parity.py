@@ -402,9 +402,18 @@ def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
 
 @pytest.mark.parametrize("name", NAMES)
 def test_results_do_not_depend_on_the_backend(name: str) -> None:
-    first = result_of(name, "pandas")
+    first = _unlibrary(result_of(name, "pandas"))
     for backend in ("polars", "pyarrow"):
-        assert result_of(name, backend).to_json() == first.to_json()
+        assert _unlibrary(result_of(name, backend)).to_json() == first.to_json()
+
+
+def _unlibrary(result: StatsResult) -> StatsResult:
+    """The result with its recipes cut: they are written in each frame's own
+    library (review B14)."""
+    warnings = tuple(
+        re.sub(r"(in their names), .*", r"\1, ...", w) for w in result.warnings
+    )
+    return dataclasses.replace(result, warnings=warnings)
 
 
 # --------------------------------------------------------------------------- #
