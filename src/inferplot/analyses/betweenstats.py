@@ -654,6 +654,9 @@ def _nonparametric(
 ) -> _Parts:
     """Mann-Whitney U with the rank-biserial r, or Kruskal-Wallis with rank
     epsilon squared (bootstrap CI) and Dunn's pairwise z (SPEC.md section 4)."""
+    # The rank tests rank the values as written (D126), so "every value is the
+    # same" is asked of those too.
+    values = [stats.as_written(v) for v in values]
     _check_ranks(args.x, values)
     side, level = args.alternative, args.conf_level
     pairwise: tuple[PairwiseComparison, ...] = ()
@@ -1727,7 +1730,7 @@ def betweenstats(
         n_dropped=between.n_dropped,
         dropped_subjects=0,
         dropped_subject_rows=0,
-        n_tied=tied_count(observations),
+        n_tied=tied_count(stats.as_written(arr).tolist() for arr in values),
         warnings=with_zero_p_note(warnings, parts.test, shown=subtitle_on),
         provenance=current_provenance(seed=rng_seed, citations=parts.citations),
         settings=settings,

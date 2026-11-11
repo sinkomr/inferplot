@@ -67,7 +67,7 @@ from inferplot.stats.within_nonparametric import (
     signed_rank,
 )
 from inferplot.stats.written import (
-    equal_as_written,
+    as_written,
     written_trim,
     written_value,
     written_values,
@@ -164,16 +164,20 @@ def _all_mu_error(n: int, mu: float) -> ValueError:
     )
 
 
-def _zeros_as_written(arr: FloatArray, mu: float) -> FloatArray:
-    """x with every value that equals mu as written replaced by mu itself, so its
-    difference is an exact 0 and the signed-rank test drops it (D74: 0.1 + 0.2
-    against 0.3, whose rounded difference 5.6e-17 R's ``wilcox.test`` would rank);
-    every other difference is R's rounded x - mu (D88). Raises when every value
-    equals mu as written."""
-    same = equal_as_written(arr, mu)
-    if bool(same.all()):
+def _as_written_against(arr: FloatArray, mu: float) -> tuple[FloatArray, float]:
+    """x and mu as written (``as_written``, DECISIONS.md D105, D126): every value
+    as the double nearest the decimal it stands for, so that a value equal to mu
+    as written has a difference of exactly 0, which the signed-rank test drops
+    (0.1 + 0.2 against 0.3, whose rounded difference 5.6e-17 R's ``wilcox.test``
+    would rank), and two values equal as written have one rank. The test and the
+    rank-biserial r both rank these, so r is always the r of the test's own V.
+    Every other difference is R's rounded x - mu of these values (D88). Raises
+    when every value equals mu as written."""
+    values = as_written(arr)
+    value = float(as_written(np.array([mu], dtype=np.float64))[0])
+    if bool((values == value).all()):
         raise _all_mu_error(arr.size, mu)
-    return np.where(same, mu, arr)
+    return values, value
 
 
 def _one_sample_t_value(arr: FloatArray, mu: float) -> float:
@@ -338,7 +342,7 @@ def one_sample_signed_rank(
 
     The differences are R's: x - mu rounded to the nearest double, as
     ``stats::wilcox.test(x, mu = mu)`` forms them; those that are 0 are dropped,
-    and so are values that equal mu as written (``equal_as_written``: 0.1 + 0.2
+    and so are values that equal mu as written (``as_written``: 0.1 + 0.2
     against 0.3, whose rounded difference 5.6e-17 R's exact comparison with 0
     would keep and rank; no fixture has such a value, D74), the others ranked
     by |x - mu| with mid-ranks, and V is the sum of the ranks of the positive
@@ -360,7 +364,7 @@ def one_sample_signed_rank(
             is unknown.
     """
     arr, value = _sample(x, mu, 1)
-    arr = _zeros_as_written(arr, value)
+    arr, value = _as_written_against(arr, value)
     return signed_rank(arr, np.full(arr.size, value), alternative=alternative)
 
 
@@ -395,7 +399,7 @@ def one_sample_rank_biserial(
     side = check_alternative(alternative)
     level = check_conf_level(conf_level)
     arr, value = _sample(x, mu, 1)
-    arr = _zeros_as_written(arr, value)
+    arr, value = _as_written_against(arr, value)
     ranks = _signed_ranks(arr, np.full(arr.size, value))
     r = float(Fraction(ranks.plus2 - ranks.minus2, ranks.plus2 + ranks.minus2))
     m = ranks.n_nonzero

@@ -588,7 +588,29 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     penalises the textbook two-way analysis; expected numbers reachable from the
     run directories. Being fixed on `fix/evals-review`; the evaluation must not be
     run before it is merged.
-  Statistics half (the lead's changes of 2026-11-11): in progress.
+  Statistics half done (2026-11-11; the lead's own changes; scripts in
+  `reviewP5B/`): Fisher's test exact on 3,615 enumerated tables (worst 8e-14); the
+  adjustment with uncomputed pairs never below the all-computed value (20,000 trials
+  per method); exact zeros on 110,192 tables, none missed, none false; R's rounding
+  on 385,602 values; 19 of 26 planted bugs caught. Findings:
+  - [x] H1 (high): the one-sample rank-biserial r ranked raw doubles and could
+    contradict its own V on a computed column (r .524 where .571 is right). Fixed:
+    the test and r read the same values (D126 amended).
+  - [x] M3: whole numbers from 2^51 were merged with round neighbours (5e15 + 1 read
+    as 5e15). Fixed: whole numbers below 2^64 are themselves.
+  - [x] M4: `n_tied` and `heavy_ties` counted raw doubles. Fixed: as written.
+  - [x] M5: reading a million decimals took 14 s; now 0.04 s (2 s for a million
+    many-digit values).
+  - [x] L1 and five planted bugs nothing caught (second sample, y of Spearman, the
+    two-unit window): tests added.
+  - [ ] M1: the Fisher budget leaves the 2 x 2 tests, the planning and the V intervals
+    uncounted (100 x 2 of 100,000 observations: 88 s; 3 x 2,000: 53 s). Being fixed
+    on `fix/fisher-cost-gaps`, with L2 (float32 `ratio`), L4 (wording with
+    `p_adjust_method="none"`) and a test of the p = 0 shortcut.
+  - [ ] M2: R may count near-tied tables differently beyond 2 x 2 (three 2 x 3 tables
+    where p would change by about 3%). Asked of R in oracle round 4, with R's
+    `round()` above 1e9 (L5; not reachable from percent labels).
+  - [ ] L6 = C7's open item (bounds for a chi-square between 1e7 and 1e9).
 - [ ] the owner runs the agent evaluation (each run needs their go-ahead)
 - [ ] the owner publishes: TestPyPI, then PyPI (`docs/RELEASING.md`)
 

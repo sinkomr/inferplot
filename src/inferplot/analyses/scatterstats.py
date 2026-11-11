@@ -533,7 +533,10 @@ def _assemble(
         n_dropped=data.n_dropped,
         dropped_subjects=0,
         dropped_subject_rows=0,
-        n_tied=correlation_tied_count(xs, ys),
+        n_tied=correlation_tied_count(
+            stats.as_written(data.x_values).tolist(),
+            stats.as_written(data.y_values).tolist(),
+        ),
         warnings=with_zero_p_note(
             (*data_notes(data), *parts.warnings, *warnings),
             parts.test,

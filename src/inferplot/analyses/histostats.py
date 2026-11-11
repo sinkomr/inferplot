@@ -693,7 +693,10 @@ def _assemble(data: OneData, args: _Args, parts: _Parts, *, digits: int) -> Stat
         n_dropped=data.n_dropped,
         dropped_subjects=0,
         dropped_subject_rows=0,
-        n_tied=one_sample_tied_count(observed, args.test_value),
+        n_tied=one_sample_tied_count(
+            stats.as_written(data.values).tolist(),
+            float(stats.as_written(np.array([args.test_value]))[0]),
+        ),
         warnings=with_zero_p_note(
             (*data_notes(data), *parts.warnings, *_warnings(args, parts)),
             parts.test,
