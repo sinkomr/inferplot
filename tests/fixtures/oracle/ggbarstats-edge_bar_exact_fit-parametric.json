@@ -1,0 +1,448 @@
+{
+  "schema_version": 2,
+  "name": "ggbarstats-edge_bar_exact_fit-parametric",
+  "function": "ggbarstats",
+  "call": "ggstatsplot::ggbarstats(data = data, x = x, type = \"parametric\", counts = n, ratio = c(0.32, 0.08, 0.28, 0.32))",
+  "dataset": {
+    "file": "edge_bar_exact_fit.csv",
+    "sha256": "93086b51e184ba372081d2116a0182d6eec3a4e8ab4f2ad325244c2082b77795",
+    "rows": 4,
+    "factor_levels": null
+  },
+  "args": {
+    "x": "x",
+    "type": "parametric",
+    "counts": "n",
+    "ratio": [0.32, 0.08, 0.28, 0.32]
+  },
+  "seed": 20261107,
+  "analysis_levels": [
+    "a",
+    "b",
+    "c",
+    "d"
+  ],
+  "n_per_level": {
+    "a": 8,
+    "b": 2,
+    "c": 7,
+    "d": 8
+  },
+  "contingency_data": {
+    "x": "x",
+    "y": null,
+    "counts": "n",
+    "rows": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "rows_dropped": 0,
+    "rule": "rows with x, y and counts present (tidyr::drop_na), each repeated counts times (tidyr::uncount), every column as.factor()",
+    "error": null,
+    "x_levels": [
+      "a",
+      "b",
+      "c",
+      "d"
+    ],
+    "y_levels": [],
+    "table": [
+      [
+        8
+      ],
+      [
+        2
+      ],
+      [
+        7
+      ],
+      [
+        8
+      ]
+    ],
+    "n": 25
+  },
+  "error": null,
+  "expected_error": null,
+  "partial": null,
+  "r_warnings": [],
+  "r_messages": [],
+  "suppressed": [
+    {
+      "component": "subtitle",
+      "error": null,
+      "warnings": [
+        "Chi-squared approximation may be incorrect"
+      ],
+      "messages": []
+    },
+    {
+      "component": "caption",
+      "error": null,
+      "warnings": [],
+      "messages": []
+    }
+  ],
+  "expected_hidden_errors": [],
+  "expected_na_values": [],
+  "expected_null_outputs": [],
+  "subtitle": "list(chi[\"gof\"]^2 * \"(\" * 3 * \")\" == \"1.13e-31\", italic(p) == \"1.00\", widehat(italic(\"C\"))[\"Pearson\"] == \"6.71e-17\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.00\" * \"]\", italic(\"n\")[\"obs\"] == \"25\")",
+  "caption": "list(log[e] * (BF[\"01\"]) == \"6.02\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")",
+  "stats": {
+    "subtitle_data": [
+      {
+        "statistic": 1.12694415031573e-31,
+        "df": 3,
+        "p.value": 1,
+        "method": "Chi-squared test for given probabilities",
+        "effectsize": "Pearson's C",
+        "estimate": 6.71399776680252e-17,
+        "conf.level": 0.95,
+        "conf.low": 0,
+        "conf.high": 0,
+        "conf.method": "ncp",
+        "conf.distribution": "chisq",
+        "n.obs": 25,
+        "expression": "list(chi[\"gof\"]^2 * \"(\" * 3 * \")\" == \"1.13e-31\", italic(p) == \"1.00\", widehat(italic(\"C\"))[\"Pearson\"] == \"6.71e-17\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.00\" * \"]\", italic(\"n\")[\"obs\"] == \"25\")"
+      }
+    ],
+    "caption_data": [
+      {
+        "bf10": 0.00241820004172086,
+        "prior.scale": 1,
+        "method": "Bayesian one-way contingency table analysis",
+        "expression": "list(log[e] * (BF[\"01\"]) == \"6.02\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")"
+      }
+    ],
+    "pairwise_comparisons_data": null,
+    "descriptive_data": [
+      {
+        "x": "a",
+        "counts": 8,
+        "perc": 32,
+        ".label": "32%"
+      },
+      {
+        "x": "b",
+        "counts": 2,
+        "perc": 8,
+        ".label": "8%"
+      },
+      {
+        "x": "c",
+        "counts": 7,
+        "perc": 28,
+        ".label": "28%"
+      },
+      {
+        "x": "d",
+        "counts": 8,
+        "perc": 32,
+        ".label": "32%"
+      }
+    ],
+    "one_sample_data": null,
+    "tidy_data": null,
+    "glance_data": null
+  },
+  "plot_layers": [
+    {
+      "name": "geom_col",
+      "geom": "GeomCol",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false,
+          "just": 0.5,
+          "lineend": "butt",
+          "linejoin": "mitre"
+        },
+        "aes": {
+          "colour": "black"
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": 1,
+          "fill": "#4285F4FF",
+          "PANEL": "1",
+          "group": 1,
+          "flipped_aes": false,
+          "ymin": 0.68,
+          "ymax": 1,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.68,
+          "fill": "#EA4335FF",
+          "PANEL": "1",
+          "group": 2,
+          "flipped_aes": false,
+          "ymin": 0.6,
+          "ymax": 0.68,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.6,
+          "fill": "#FBBC04FF",
+          "PANEL": "1",
+          "group": 3,
+          "flipped_aes": false,
+          "ymin": 0.32,
+          "ymax": 0.6,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        },
+        {
+          "x": 1,
+          "y": 0.32,
+          "fill": "#34A853FF",
+          "PANEL": "1",
+          "group": 4,
+          "flipped_aes": false,
+          "ymin": 0,
+          "ymax": 0.32,
+          "xmin": 0.55,
+          "xmax": 1.45,
+          "colour": "black",
+          "linewidth": 0.454545454545455,
+          "linetype": 1,
+          "alpha": null,
+          "width": 0.9
+        }
+      ]
+    },
+    {
+      "name": "geom_label",
+      "geom": "GeomLabel",
+      "data": null,
+      "params": {
+        "stat": {
+          "na.rm": true
+        },
+        "geom": {
+          "parse": false,
+          "label.padding": 0.25,
+          "label.r": 0.15,
+          "size.unit": "mm",
+          "border.colour": null,
+          "text.colour": null,
+          "na.rm": true
+        },
+        "aes": {
+          "alpha": 1,
+          "fill": "white"
+        }
+      },
+      "built": [
+        {
+          "label": "32%",
+          "group": 1,
+          "x": 1,
+          "y": 0.84,
+          "PANEL": "1",
+          "ymax": 1,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.68,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "8%",
+          "group": 2,
+          "x": 1,
+          "y": 0.64,
+          "PANEL": "1",
+          "ymax": 0.68,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.6,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "28%",
+          "group": 3,
+          "x": 1,
+          "y": 0.46,
+          "PANEL": "1",
+          "ymax": 0.6,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0.32,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        },
+        {
+          "label": "32%",
+          "group": 4,
+          "x": 1,
+          "y": 0.16,
+          "PANEL": "1",
+          "ymax": 0.32,
+          "xmin": 1,
+          "xmax": 1,
+          "ymin": 0,
+          "colour": "black",
+          "fill": "white",
+          "family": "",
+          "size": 3.51459803514598,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": 1,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "linewidth": 0.227272727272727,
+          "linetype": 1
+        }
+      ]
+    },
+    {
+      "name": "geom_text",
+      "geom": "GeomText",
+      "data": [
+        {
+          "x": "",
+          "y": -0.05
+        }
+      ],
+      "params": {
+        "stat": {
+          "na.rm": false
+        },
+        "geom": {
+          "na.rm": false
+        },
+        "aes": {
+          "label": "(n = 25)",
+          "size": 4
+        }
+      },
+      "built": [
+        {
+          "x": 1,
+          "y": -0.05,
+          "PANEL": "1",
+          "group": 1,
+          "colour": "black",
+          "family": "",
+          "size": 4,
+          "angle": 0,
+          "hjust": 0.5,
+          "vjust": 0.5,
+          "alpha": null,
+          "fontface": 1,
+          "lineheight": 1.2,
+          "label": "(n = 25)"
+        }
+      ]
+    }
+  ],
+  "plot_texts": {
+    "labels": {
+      "fill": "x",
+      "x.sec": null,
+      "x": null,
+      "y": null,
+      "y.sec": null,
+      "title": null,
+      "subtitle": "list(chi[\"gof\"]^2 * \"(\" * 3 * \")\" == \"1.13e-31\", italic(p) == \"1.00\", widehat(italic(\"C\"))[\"Pearson\"] == \"6.71e-17\", CI[\"95%\"] ~ \"[\" * \"0.00\", \"0.00\" * \"]\", italic(\"n\")[\"obs\"] == \"25\")",
+      "caption": "list(log[e] * (BF[\"01\"]) == \"6.02\", italic(\"a\")[\"Gunel-Dickey\"] == \"1.00\")",
+      "label": ".label",
+      "group": "x",
+      "alt": ""
+    },
+    "legend_title": "x"
+  },
+  "bootstrap_reference": null,
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}

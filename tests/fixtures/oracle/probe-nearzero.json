@@ -1,0 +1,452 @@
+{
+  "schema_version": 2,
+  "name": "probe-nearzero",
+  "kind": "probe",
+  "description": "wilcox.test, rank_biserial, gghistostats and ggwithinstats on differences that are 0 as written but 2^-54 in binary",
+  "datasets": [
+    {
+      "file": "edge_one_near_mu.csv",
+      "sha256": "727fcd359d0f94b3c273744f5443b63abaf2e9a9b33643419bffff8e7037d6bc"
+    },
+    {
+      "file": "edge_paired_near_zero.csv",
+      "sha256": "1e1541af87f0f3ae6731880d0305b53cdd62f60123b3036a87bcd13f662861f9"
+    }
+  ],
+  "mu_hex": "0x1.3333333333333p-2",
+  "one_sample": [
+    {
+      "column": "literal",
+      "x_hex": [
+        "0x1.3333333333333p-2",
+        "0x1.999999999999ap-4",
+        "0x1p-1",
+        "0x1.6666666666666p-1",
+        "0x1.999999999999ap-3",
+        "0x1.ccccccccccccdp-1",
+        "0x1.999999999999ap-2",
+        "0x1.3333333333333p-1",
+        "0x1.999999999999ap-1",
+        "0x1.199999999999ap+0"
+      ],
+      "mu_hex": "0x1.3333333333333p-2",
+      "differences_hex": [
+        "0x0p+0",
+        "-0x1.9999999999999p-3",
+        "0x1.999999999999ap-3",
+        "0x1.9999999999999p-2",
+        "-0x1.9999999999998p-4",
+        "0x1.3333333333334p-1",
+        "0x1.999999999999cp-4",
+        "0x1.3333333333333p-2",
+        "0x1p-1",
+        "0x1.999999999999ap-1"
+      ],
+      "exact_zeros": 1,
+      "wilcox": {
+        "statistic_hex": "0x1.48p+5",
+        "p_value_hex": "0x1.0e15cdc6d333p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "wilcox_digits7": {
+        "statistic_hex": "0x1.4p+5",
+        "p_value_hex": "0x1.658076180c341p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "rank_biserial": {
+        "estimate_hex": "0x1.a4fa4fa4fa4fap-1",
+        "ci": 0.95,
+        "ci_low_hex": "0x1.9da2d1f6fb4c4p-2",
+        "ci_high_hex": "0x1.e98be97668087p-1",
+        "error": null,
+        "warnings": []
+      },
+      "gghistostats": {
+        "statistic_hex": "0x1.48p+5",
+        "p_value_hex": "0x1.0e15cdc6d333p-5",
+        "estimate_hex": "0x1.a4fa4fa4fa4fap-1",
+        "conf_low_hex": "0x1.9da2d1f6fb4c4p-2",
+        "conf_high_hex": "0x1.e98be97668087p-1",
+        "n_obs": 10,
+        "effectsize": "r (rank biserial)",
+        "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"41.00\", italic(p) == \"0.03\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.82\", CI[\"95%\"] ~ \"[\" * \"0.40\", \"0.96\" * \"]\", italic(\"n\")[\"obs\"] == \"10\")",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "column": "sum",
+      "x_hex": [
+        "0x1.3333333333334p-2",
+        "0x1.999999999999ap-4",
+        "0x1p-1",
+        "0x1.6666666666666p-1",
+        "0x1.999999999999ap-3",
+        "0x1.ccccccccccccdp-1",
+        "0x1.999999999999ap-2",
+        "0x1.3333333333333p-1",
+        "0x1.999999999999ap-1",
+        "0x1.199999999999ap+0"
+      ],
+      "mu_hex": "0x1.3333333333333p-2",
+      "differences_hex": [
+        "0x1p-54",
+        "-0x1.9999999999999p-3",
+        "0x1.999999999999ap-3",
+        "0x1.9999999999999p-2",
+        "-0x1.9999999999998p-4",
+        "0x1.3333333333334p-1",
+        "0x1.999999999999cp-4",
+        "0x1.3333333333333p-2",
+        "0x1p-1",
+        "0x1.999999999999ap-1"
+      ],
+      "exact_zeros": 0,
+      "wilcox": {
+        "statistic_hex": "0x1.88p+5",
+        "p_value_hex": "0x1.08b51620e7b42p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "wilcox_digits7": {
+        "statistic_hex": "0x1.8p+5",
+        "p_value_hex": "0x1.51baef9cd307fp-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "rank_biserial": {
+        "estimate_hex": "0x1.904a7904a7904p-1",
+        "ci": 0.95,
+        "ci_low_hex": "0x1.592e778548d71p-2",
+        "ci_high_hex": "0x1.e1f0d4ba36892p-1",
+        "error": null,
+        "warnings": []
+      },
+      "gghistostats": {
+        "statistic_hex": "0x1.88p+5",
+        "p_value_hex": "0x1.08b51620e7b42p-5",
+        "estimate_hex": "0x1.904a7904a7904p-1",
+        "conf_low_hex": "0x1.592e778548d71p-2",
+        "conf_high_hex": "0x1.e1f0d4ba36892p-1",
+        "n_obs": 10,
+        "effectsize": "r (rank biserial)",
+        "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"49.00\", italic(p) == \"0.03\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.78\", CI[\"95%\"] ~ \"[\" * \"0.34\", \"0.94\" * \"]\", italic(\"n\")[\"obs\"] == \"10\")",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "column": "below",
+      "x_hex": [
+        "0x1.3333333333332p-2",
+        "0x1.999999999999ap-4",
+        "0x1p-1",
+        "0x1.6666666666666p-1",
+        "0x1.999999999999ap-3",
+        "0x1.ccccccccccccdp-1",
+        "0x1.999999999999ap-2",
+        "0x1.3333333333333p-1",
+        "0x1.999999999999ap-1",
+        "0x1.199999999999ap+0"
+      ],
+      "mu_hex": "0x1.3333333333333p-2",
+      "differences_hex": [
+        "-0x1p-54",
+        "-0x1.9999999999999p-3",
+        "0x1.999999999999ap-3",
+        "0x1.9999999999999p-2",
+        "-0x1.9999999999998p-4",
+        "0x1.3333333333334p-1",
+        "0x1.999999999999cp-4",
+        "0x1.3333333333333p-2",
+        "0x1p-1",
+        "0x1.999999999999ap-1"
+      ],
+      "exact_zeros": 0,
+      "wilcox": {
+        "statistic_hex": "0x1.8p+5",
+        "p_value_hex": "0x1.53e51decfc31p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "wilcox_digits7": {
+        "statistic_hex": "0x1.78p+5",
+        "p_value_hex": "0x1.ade97cca283a2p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "rank_biserial": {
+        "estimate_hex": "0x1.7dac37dac37dap-1",
+        "ci": 0.95,
+        "ci_low_hex": "0x1.07ac71be768b5p-2",
+        "ci_high_hex": "0x1.dc665ba3a79f6p-1",
+        "error": null,
+        "warnings": []
+      },
+      "gghistostats": {
+        "statistic_hex": "0x1.8p+5",
+        "p_value_hex": "0x1.53e51decfc31p-5",
+        "estimate_hex": "0x1.7dac37dac37dap-1",
+        "conf_low_hex": "0x1.07ac71be768b5p-2",
+        "conf_high_hex": "0x1.dc665ba3a79f6p-1",
+        "n_obs": 10,
+        "effectsize": "r (rank biserial)",
+        "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"48.00\", italic(p) == \"0.04\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.75\", CI[\"95%\"] ~ \"[\" * \"0.26\", \"0.93\" * \"]\", italic(\"n\")[\"obs\"] == \"10\")",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "column": "both",
+      "x_hex": [
+        "0x1.3333333333333p-2",
+        "0x1.3333333333334p-2",
+        "0x1.999999999999ap-4",
+        "0x1p-1",
+        "0x1.6666666666666p-1",
+        "0x1.999999999999ap-3",
+        "0x1.ccccccccccccdp-1",
+        "0x1.999999999999ap-2",
+        "0x1.3333333333333p-1",
+        "0x1.999999999999ap-1"
+      ],
+      "mu_hex": "0x1.3333333333333p-2",
+      "differences_hex": [
+        "0x0p+0",
+        "0x1p-54",
+        "-0x1.9999999999999p-3",
+        "0x1.999999999999ap-3",
+        "0x1.9999999999999p-2",
+        "-0x1.9999999999998p-4",
+        "0x1.3333333333334p-1",
+        "0x1.999999999999cp-4",
+        "0x1.3333333333333p-2",
+        "0x1p-1"
+      ],
+      "exact_zeros": 1,
+      "wilcox": {
+        "statistic_hex": "0x1.38p+5",
+        "p_value_hex": "0x1.db553081a5aa3p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "wilcox_digits7": {
+        "statistic_hex": "0x1.3p+5",
+        "p_value_hex": "0x1.33654160627d9p-4",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "rank_biserial": {
+        "estimate_hex": "0x1.7777777777778p-1",
+        "ci": 0.95,
+        "ci_low_hex": "0x1.956defa4f8eeep-3",
+        "ci_high_hex": "0x1.dd08f0e920261p-1",
+        "error": null,
+        "warnings": []
+      },
+      "gghistostats": {
+        "statistic_hex": "0x1.38p+5",
+        "p_value_hex": "0x1.db553081a5aa3p-5",
+        "estimate_hex": "0x1.7777777777778p-1",
+        "conf_low_hex": "0x1.956defa4f8eeep-3",
+        "conf_high_hex": "0x1.dd08f0e920261p-1",
+        "n_obs": 10,
+        "effectsize": "r (rank biserial)",
+        "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"39.00\", italic(p) == \"0.06\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.73\", CI[\"95%\"] ~ \"[\" * \"0.20\", \"0.93\" * \"]\", italic(\"n\")[\"obs\"] == \"10\")",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "column": "sum_ties",
+      "x_hex": [
+        "0x1.3333333333334p-2",
+        "0x1.3333333333334p-2",
+        "0x1p-1",
+        "0x1p-1",
+        "0x1.999999999999ap-1",
+        "0x1.999999999999ap-1",
+        "0x1.999999999999ap-3",
+        "0x1.ccccccccccccdp-1",
+        "0x1.199999999999ap+0",
+        "0x1.999999999999ap-4"
+      ],
+      "mu_hex": "0x1.3333333333333p-2",
+      "differences_hex": [
+        "0x1p-54",
+        "0x1p-54",
+        "0x1.999999999999ap-3",
+        "0x1.999999999999ap-3",
+        "0x1p-1",
+        "0x1p-1",
+        "-0x1.9999999999998p-4",
+        "0x1.3333333333334p-1",
+        "0x1.999999999999ap-1",
+        "-0x1.9999999999999p-3"
+      ],
+      "exact_zeros": 0,
+      "wilcox": {
+        "statistic_hex": "0x1.8p+5",
+        "p_value_hex": "0x1.50a62912ce7cap-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "wilcox_digits7": {
+        "statistic_hex": "0x1.78p+5",
+        "p_value_hex": "0x1.a8e1a88a54989p-5",
+        "method": "Wilcoxon signed rank test with continuity correction",
+        "error": null,
+        "warnings": []
+      },
+      "rank_biserial": {
+        "estimate_hex": "0x1.7dac37dac37dap-1",
+        "ci": 0.95,
+        "ci_low_hex": "0x1.07ac71be768b5p-2",
+        "ci_high_hex": "0x1.dc665ba3a79f6p-1",
+        "error": null,
+        "warnings": []
+      },
+      "gghistostats": {
+        "statistic_hex": "0x1.8p+5",
+        "p_value_hex": "0x1.50a62912ce7cap-5",
+        "estimate_hex": "0x1.7dac37dac37dap-1",
+        "conf_low_hex": "0x1.07ac71be768b5p-2",
+        "conf_high_hex": "0x1.dc665ba3a79f6p-1",
+        "n_obs": 10,
+        "effectsize": "r (rank biserial)",
+        "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"48.00\", italic(p) == \"0.04\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.75\", CI[\"95%\"] ~ \"[\" * \"0.26\", \"0.93\" * \"]\", italic(\"n\")[\"obs\"] == \"10\")",
+        "error": null,
+        "warnings": []
+      }
+    }
+  ],
+  "paired": {
+    "subjects": [
+      "s01",
+      "s02",
+      "s03",
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s09",
+      "s10"
+    ],
+    "a_hex": [
+      "0x1.3333333333334p-2",
+      "0x1.999999999999ap-2",
+      "0x1p-1",
+      "0x1.ccccccccccccdp-1",
+      "0x1.999999999999ap-3",
+      "0x1.6666666666666p-1",
+      "0x1p+0",
+      "0x1.3333333333333p-1",
+      "0x1.999999999999ap-1",
+      "0x1.3333333333333p-2"
+    ],
+    "b_hex": [
+      "0x1.3333333333333p-2",
+      "0x1.999999999999ap-2",
+      "0x1.3333333333333p-2",
+      "0x1.3333333333333p-1",
+      "0x1p-1",
+      "0x1.999999999999ap-3",
+      "0x1p-1",
+      "0x1.ccccccccccccdp-1",
+      "0x1.3333333333333p-2",
+      "0x1.999999999999ap-4"
+    ],
+    "differences_hex": [
+      "0x1p-54",
+      "0x0p+0",
+      "0x1.999999999999ap-3",
+      "0x1.3333333333334p-2",
+      "-0x1.3333333333333p-2",
+      "0x1.fffffffffffffp-2",
+      "0x1p-1",
+      "-0x1.3333333333334p-2",
+      "0x1p-1",
+      "0x1.9999999999999p-3"
+    ],
+    "exact_zeros": 1,
+    "wilcox": {
+      "statistic_hex": "0x1.1cp+5",
+      "p_value_hex": "0x1.1a845359348ebp-3",
+      "method": "Wilcoxon signed rank test with continuity correction",
+      "error": null,
+      "warnings": []
+    },
+    "wilcox_digits7": {
+      "statistic_hex": "0x1.18p+5",
+      "p_value_hex": "0x1.3701ecbf5b111p-3",
+      "method": "Wilcoxon signed rank test with continuity correction",
+      "error": null,
+      "warnings": []
+    },
+    "rank_biserial": {
+      "estimate_hex": "0x1.27d27d27d27d2p-1",
+      "ci": 0.95,
+      "ci_low_hex": "-0x1.48584b9024ce6p-5",
+      "ci_high_hex": "0x1.c0842996d6682p-1",
+      "error": null,
+      "warnings": []
+    },
+    "ggwithinstats": {
+      "statistic_hex": "0x1.1cp+5",
+      "p_value_hex": "0x1.1a845359348ebp-3",
+      "estimate_hex": "0x1.27d27d27d27d2p-1",
+      "conf_low_hex": "-0x1.48584b9024ce6p-5",
+      "conf_high_hex": "0x1.c0842996d6682p-1",
+      "n_obs": 10,
+      "effectsize": "r (rank biserial)",
+      "subtitle": "list(italic(\"V\")[\"Wilcoxon\"] == \"35.50\", italic(p) == \"0.14\", widehat(italic(\"r\"))[\"biserial\"]^\"rank\" == \"0.58\", CI[\"95%\"] ~ \"[\" * \"-0.04\", \"0.88\" * \"]\", italic(\"n\")[\"pairs\"] == \"10\")",
+      "error": null,
+      "warnings": []
+    }
+  },
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
