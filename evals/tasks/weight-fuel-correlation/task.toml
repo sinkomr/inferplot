@@ -3,12 +3,13 @@
 id = "weight-fuel-correlation"
 function = "scatterstats"
 trap = "none (baseline): two measurements on the same cars"
+trap_scoring = "none"
 request = """
 Is car weight (wt, in 1000 lb) related to fuel economy (mpg) in data.csv?
 Please plot it and report how strong the relationship is.
 """
 design = "two continuous measurements on 32 cars"
-correct_rule = "Pearson's or Spearman's correlation (the statistic may be given as t or S, or as r or rho)."
+correct_rule = "Pearson's, Spearman's (R's p or SciPy's) or Kendall's correlation (the statistic may be given as t or S, or as r, rho or tau)."
 rejected = []
 
 [data]
@@ -21,6 +22,9 @@ note = "R datasets::mtcars"
 args = ["wt", "mpg"]
 kwargs = { type = "parametric" }
 check_codes = []
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 32  # values the test used
 
 [[accepted]]
 family = "pearson"
@@ -47,3 +51,27 @@ estimate = { value = -0.886422033270298, key = "stats/subtitle_data/0/estimate" 
 conf_low = { value = -0.944661767634971, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = -0.774011803061892, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+label = "Spearman correlation, t-distribution p (SciPy)"
+source = "recipe"
+recipe = "spearman_t"
+recipe_args = { x = "wt", y = "mpg" }
+[accepted.numbers]
+statistic = { value = -0.8864220332702978, alt = [-10.48901471985398] }
+p_value = { value = 1.487594858127495e-11 }
+estimate = { value = -0.8864220332702978 }
+n = { value = 32.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, normal approximation"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "wt", y = "mpg", method = "asymptotic" }
+[accepted.numbers]
+statistic = { value = -0.7278321495284309, alt = [-5.798131894981731] }
+p_value = { value = 6.70577040559586e-09 }
+estimate = { value = -0.7278321495284309 }
+n = { value = 32.0 }

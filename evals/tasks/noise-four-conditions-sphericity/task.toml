@@ -3,13 +3,14 @@
 id = "noise-four-conditions-sphericity"
 function = "withinstats"
 trap = "sphericity badly violated (Greenhouse-Geisser epsilon near 1/3)"
+trap_scoring = "traps"
 request = """
 Twelve volunteers each did a memory task under four noise conditions (a, b,
 c and d). data.csv has one row per volunteer and condition (volunteer, noise,
 memory_score). Does memory performance differ between the noise conditions?
 """
 design = "four conditions on the same 12 subjects; very unequal variances of the differences"
-correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser correction, or the Friedman test. The uncorrected repeated-measures ANOVA is flagged as a trap."
+correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser or the Huynh-Feldt correction, or the Friedman test (n as 12 subjects or 48 observations). The uncorrected repeated-measures ANOVA is flagged as a trap."
 rejected = ["welch_anova", "oneway_anova", "kruskal_wallis"]
 
 [data]
@@ -23,7 +24,12 @@ args = ["noise", "memory_score"]
 kwargs = { subject_id = "volunteer", type = "parametric" }
 check_codes = ["pairs_hidden"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+subjects = 12  # subjects with every condition
+observations = 48  # values the test used
+
 [[accepted]]
+n_also = ["observations"]
 family = "rm_anova"
 source = "fixture"
 fixture = "ggwithinstats-edge_within_nonspherical-parametric"
@@ -38,7 +44,20 @@ conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "partial eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer", kind = "partial" }
+estimate = { value = 0.05942527521615893 }
+
+[[accepted.effects]]
+label = "generalized eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer", kind = "generalized" }
+estimate = { value = 0.00929530666740702 }
+
 [[accepted]]
+n_also = ["observations"]
 family = "friedman"
 source = "fixture"
 fixture = "ggwithinstats-edge_within_nonspherical-nonparametric"
@@ -49,6 +68,32 @@ df = { value = 3.0, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 0.0102094964331337, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.313888888888889, key = "stats/subtitle_data/0/estimate" }
 n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "rm_anova"
+label = "repeated-measures ANOVA with the Huynh-Feldt correction"
+source = "recipe"
+recipe = "rm_anova"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer", correction = "hf" }
+n_also = ["observations"]
+[accepted.numbers]
+statistic = { value = 0.6949772412053425 }
+df = { value = 1.0111082479049298 }
+df_error = { value = 11.122190726954228 }
+p_value = { value = 0.4235968702082029 }
+n = { value = 12.0 }
+
+[[accepted.effects]]
+label = "partial eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer", kind = "partial" }
+estimate = { value = 0.05942527521615893 }
+
+[[accepted.effects]]
+label = "generalized eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer", kind = "generalized" }
+estimate = { value = 0.00929530666740702 }
 
 [[traps]]
 family = "rm_anova"

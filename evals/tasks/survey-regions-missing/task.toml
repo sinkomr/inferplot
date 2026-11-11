@@ -3,6 +3,7 @@
 id = "survey-regions-missing"
 function = "barstats"
 trap = "missing categories in either column: 17 of 20 respondents are complete"
+trap_scoring = "n"
 request = """
 Survey answers (yes or no) from respondents in three regions (data.csv:
 respondent, region, answer; one row per respondent). Some respondents did not
@@ -10,7 +11,7 @@ give their region or their answer. Does the share of yes answers differ between
 the regions?
 """
 design = "two categorical variables with missing values; small expected counts"
-correct_rule = "Pearson's chi-square test of independence on the 17 complete respondents, or Fisher's exact test (not scored for numbers; no reference value)."
+correct_rule = "Pearson's chi-square test of independence on the 17 complete respondents, or Fisher's exact test (Freeman-Halton, for the 3 x 2 table), each scored with n = 17."
 rejected = []
 
 [data]
@@ -24,6 +25,9 @@ note = "inferplot oracle dataset edge_bar_missing (hand-made), without its weigh
 args = ["region", "answer"]
 kwargs = { type = "parametric" }
 check_codes = ["rows_dropped", "small_expected"]
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 17  # values the test used
 
 [[accepted]]
 family = "chi_square_independence"
@@ -39,6 +43,18 @@ conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.510185410199564, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 17.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cramér's V without the bias correction (phi for 2 x 2)"
+recipe = "cramers_v"
+recipe_args = { x = "region", y = "answer" }
+estimate = { value = 0.2183693778559283 }
+
 [[accepted]]
 family = "fisher"
-source = "none"
+label = "Fisher's exact test (Freeman-Halton)"
+source = "recipe"
+recipe = "fisher_exact"
+recipe_args = { x = "region", y = "answer" }
+[accepted.numbers]
+p_value = { value = 0.8354586589880688 }
+n = { value = 17.0 }

@@ -3,13 +3,14 @@
 id = "bag-weights-missing"
 function = "histostats"
 trap = "missing values: 10 of 12 bags were weighed"
+trap_scoring = "n"
 request = """
 Twelve bags of a product labelled "10 kg" were weighed (data.csv: bag,
 weight_kg); some weights were not recorded. Is the average bag weight different
 from the labelled 10 kg?
 """
 design = "one sample against the value 10, with missing values"
-correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 10 on the 10 recorded weights."
+correct_rule = "The one-sample t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test against 10, on the 10 recorded weights (n = 10)."
 rejected = []
 
 [data]
@@ -22,6 +23,10 @@ note = "inferplot oracle dataset edge_one_missing (hand-made); renamed"
 args = ["weight_kg"]
 kwargs = { test_value = 10, type = "parametric" }
 check_codes = ["rows_dropped"]
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 10  # values the test used
+nonzero_differences = 10  # differences that are not zero (rank and sign tests drop the others)
 
 [[accepted]]
 family = "one_sample_t"
@@ -37,7 +42,14 @@ conf_low = { value = -0.00917162900677974, key = "stats/subtitle_data/0/conf.low
 conf_high = { value = 1.26548314175028, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d"
+recipe = "cohen_dz"
+recipe_args = { column = "weight_kg", mu = 10.0 }
+estimate = { value = 0.7024559422190502 }
+
 [[accepted]]
+n_also = ["nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "gghistostats-edge_one_missing-nonparametric"
@@ -49,3 +61,39 @@ estimate = { value = 0.636363636363636, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.0527665456064871, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.895942092448953, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "weight_kg", mu = 10.0, method = "exact", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 10.0, alt = [45.0] }
+p_value = { value = 0.083984375 }
+n = { value = 10.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "weight_kg", mu = 10.0, method = "approx", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 10.0, alt = [45.0, -1.786086270779401] }
+p_value = { value = 0.0740852907571649 }
+n = { value = 10.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { column = "weight_kg", mu = 10.0 }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 7.0, alt = [3.0] }
+p_value = { value = 0.34375 }
+n = { value = 10.0 }

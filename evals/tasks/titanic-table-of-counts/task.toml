@@ -3,6 +3,7 @@
 id = "titanic-table-of-counts"
 function = "barstats"
 trap = "data given as a table of counts (a Freq column): n is 2,201 people, not 32 rows"
+trap_scoring = "traps"
 request = """
 data.csv is a table of counts of the people aboard the Titanic by class, sex,
 age group and survival: the column Freq says how many people each row stands for.
@@ -23,6 +24,9 @@ args = ["Class", "Survived"]
 kwargs = { counts = "Freq" }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 2201  # values the test used
+
 [[accepted]]
 family = "chi_square_independence"
 source = "fixture"
@@ -36,6 +40,12 @@ estimate = { value = 0.291859071455131, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.247991346689389, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.332479098301525, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 2201.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "Cramér's V without the bias correction (phi for 2 x 2)"
+recipe = "cramers_v"
+recipe_args = { x = "Class", y = "Survived", counts = "Freq" }
+estimate = { value = 0.29412010300512637 }
 
 [[traps]]
 family = "chi_square_independence"

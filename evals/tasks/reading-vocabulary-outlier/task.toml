@@ -3,6 +3,7 @@
 id = "reading-vocabulary-outlier"
 function = "scatterstats"
 trap = "one real extreme point reverses Pearson's r"
+trap_scoring = "traps"
 request = """
 For 15 children we have weekly hours of reading (reading_hours) and a
 vocabulary test score (vocabulary) in data.csv. One child's values are far from
@@ -10,7 +11,7 @@ the others; the school confirmed they are correct. Is reading time related to
 vocabulary?
 """
 design = "two measurements, one real extreme point"
-correct_rule = "A correlation that resists the extreme point: Spearman's rho or the winsorized correlation. Pearson's r (negative, driven by one child) is rejected and flagged as a trap."
+correct_rule = "A correlation that resists the extreme point: Spearman's rho (R's p or SciPy's), Kendall's tau or the winsorized correlation. Pearson's r (negative, driven by one child) is rejected and flagged as a trap."
 rejected = ["pearson"]
 
 [data]
@@ -23,6 +24,9 @@ note = "inferplot oracle dataset edge_corr_outlier (hand-made); renamed"
 args = ["reading_hours", "vocabulary"]
 kwargs = { type = "nonparametric" }
 check_codes = []
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 15  # values the test used
 
 [[accepted]]
 family = "spearman"
@@ -49,6 +53,42 @@ estimate = { value = 0.788358687052449, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.463129062008415, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.926469663608428, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 15.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+label = "Spearman correlation, t-distribution p (SciPy)"
+source = "recipe"
+recipe = "spearman_t"
+recipe_args = { x = "reading_hours", y = "vocabulary" }
+[accepted.numbers]
+statistic = { value = 0.6249999999999999, alt = [2.8867513459481278] }
+p_value = { value = 0.012727453511233678 }
+estimate = { value = 0.6249999999999999 }
+n = { value = 15.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, exact p"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "reading_hours", y = "vocabulary", method = "exact" }
+[accepted.numbers]
+statistic = { value = 0.7333333333333334, alt = [91.0] }
+p_value = { value = 3.702856397962218e-05 }
+estimate = { value = 0.7333333333333334 }
+n = { value = 15.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, normal approximation"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "reading_hours", y = "vocabulary", method = "asymptotic" }
+[accepted.numbers]
+statistic = { value = 0.7333333333333334, alt = [3.8105117766515306] }
+p_value = { value = 0.00013867940542948806 }
+estimate = { value = 0.7333333333333334 }
+n = { value = 15.0 }
 
 [[traps]]
 family = "pearson"

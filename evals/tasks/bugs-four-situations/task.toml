@@ -3,6 +3,7 @@
 id = "bugs-four-situations"
 function = "withinstats"
 trap = "four repeated conditions, incomplete subjects (88 of 93 complete), sphericity correction"
+trap_scoring = "traps"
 request = """
 Participants rated how much they wanted to kill a bug (0 to 10) in four
 situations: LDLF, LDHF, HDLF and HDHF (low or high disgust, low or high fright).
@@ -11,7 +12,7 @@ and situation, and a few participants skipped a situation. Does the desire to
 kill the bug differ across the four situations?
 """
 design = "four conditions on the same subjects; some subjects incomplete"
-correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser correction, or the Friedman test, on the 88 complete subjects. The uncorrected repeated-measures ANOVA (wrong df and p) is flagged as a trap."
+correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser or the Huynh-Feldt correction, or the Friedman test, on the 88 complete subjects (n as 88 subjects or 352 observations). The uncorrected repeated-measures ANOVA (wrong df and p) is flagged as a trap. The lower-bound correction is not listed: valid but needlessly conservative, and no default tool reports it alone."
 rejected = ["welch_anova", "oneway_anova", "kruskal_wallis"]
 
 [data]
@@ -25,7 +26,12 @@ args = ["situation", "desire"]
 kwargs = { subject_id = "subject", type = "parametric" }
 check_codes = ["pairs_hidden", "rows_dropped"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+subjects = 88  # subjects with every condition
+observations = 352  # values the test used
+
 [[accepted]]
+n_also = ["observations"]
 family = "rm_anova"
 source = "fixture"
 fixture = "ggwithinstats-bugs_long-parametric"
@@ -40,7 +46,20 @@ conf_low = { value = 0.0280343890103807, key = "stats/subtitle_data/0/conf.low" 
 conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 88.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "partial eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "situation", y = "desire", subject = "subject", kind = "partial" }
+estimate = { value = 0.1913549983657842 }
+
+[[accepted.effects]]
+label = "generalized eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "situation", y = "desire", subject = "subject", kind = "generalized" }
+estimate = { value = 0.0828150969704012 }
+
 [[accepted]]
+n_also = ["observations"]
 family = "friedman"
 source = "fixture"
 fixture = "ggwithinstats-bugs_long-nonparametric"
@@ -51,6 +70,32 @@ df = { value = 3.0, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 4.5584196371013e-12, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.211491633366633, key = "stats/subtitle_data/0/estimate" }
 n = { value = 88.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "rm_anova"
+label = "repeated-measures ANOVA with the Huynh-Feldt correction"
+source = "recipe"
+recipe = "rm_anova"
+recipe_args = { x = "situation", y = "desire", subject = "subject", correction = "hf" }
+n_also = ["observations"]
+[accepted.numbers]
+statistic = { value = 20.5873836160231 }
+df = { value = 2.7212337534797197 }
+df_error = { value = 236.74733655273562 }
+p_value = { value = 4.2312940518194556e-11 }
+n = { value = 88.0 }
+
+[[accepted.effects]]
+label = "partial eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "situation", y = "desire", subject = "subject", kind = "partial" }
+estimate = { value = 0.1913549983657842 }
+
+[[accepted.effects]]
+label = "generalized eta squared"
+recipe = "rm_eta_squared"
+recipe_args = { x = "situation", y = "desire", subject = "subject", kind = "generalized" }
+estimate = { value = 0.0828150969704012 }
 
 [[traps]]
 family = "rm_anova"

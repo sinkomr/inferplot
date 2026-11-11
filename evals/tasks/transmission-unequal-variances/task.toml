@@ -3,13 +3,14 @@
 id = "transmission-unequal-variances"
 function = "betweenstats"
 trap = "unequal variances and unequal group sizes (SD 3.8 with n 19 against SD 6.2 with n 13)"
+trap_scoring = "traps"
 request = """
 Here are fuel economy figures (mpg) for 32 car models, 19 with automatic and
 13 with manual transmissions (data.csv). Is fuel economy different between
 automatic and manual cars? I need the test result and a plot.
 """
 design = "two independent groups of unequal size and spread"
-correct_rule = "Welch's t-test (stated as Welch's or as not assuming equal variances) or the Mann-Whitney test. Student's pooled-variance t-test is rejected: the spreads differ by a factor of 1.6 and the smaller group has the larger spread."
+correct_rule = "Welch's t-test (stated as Welch's or as not assuming equal variances) or the Mann-Whitney test (with or without the continuity correction). Student's pooled-variance t-test is rejected: the spreads differ by a factor of 1.6 and the smaller group has the larger spread."
 rejected = ["student_t"]
 
 [data]
@@ -23,6 +24,9 @@ note = "R datasets::mtcars; am coded as automatic/manual"
 args = ["transmission", "mpg"]
 kwargs = { type = "parametric" }
 check_codes = []
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 32  # values the test used
 
 [[accepted]]
 family = "welch_t"
@@ -38,6 +42,24 @@ conf_low = { value = -2.16606402393414, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = -0.512015986926307, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d (pooled SD)"
+recipe = "cohen_d"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"] }
+estimate = { value = -1.477947095801588 }
+
+[[accepted.effects]]
+label = "Cohen's d with the average of the two variances (d_av)"
+recipe = "cohen_d"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"], sd = "average" }
+estimate = { value = -1.4110460105189937 }
+
+[[accepted.effects]]
+label = "Hedges' g (pooled SD)"
+recipe = "hedges_g"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"] }
+estimate = { value = -1.4406354024018537 }
+
 [[accepted]]
 family = "mann_whitney"
 source = "fixture"
@@ -50,6 +72,29 @@ estimate = { value = -0.659919028340081, key = "stats/subtitle_data/0/estimate" 
 conf_low = { value = -0.83556160214534, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = -0.361886931945902, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "probability of superiority (U / n1 n2)"
+recipe = "probability_of_superiority"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"] }
+estimate = { value = 0.1700404858299595, alt = [0.8299595141700404] }
+
+[[accepted]]
+family = "mann_whitney"
+label = "Mann-Whitney U test, normal approximation"
+source = "recipe"
+recipe = "mann_whitney"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"], method = "asymptotic", use_continuity = false }
+[accepted.numbers]
+statistic = { value = 42.0, alt = [205.0] }
+p_value = { value = 0.001753335110651265 }
+n = { value = 32.0 }
+
+[[accepted.effects]]
+label = "probability of superiority (U / n1 n2)"
+recipe = "probability_of_superiority"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"] }
+estimate = { value = 0.1700404858299595, alt = [0.8299595141700404] }
 
 [[traps]]
 family = "student_t"

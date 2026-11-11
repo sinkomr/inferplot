@@ -3,13 +3,14 @@
 id = "sleep-two-drugs"
 function = "withinstats"
 trap = "repeated measures in long format: each patient has two rows"
+trap_scoring = "traps"
 request = """
 Ten patients each took two sleep drugs on separate occasions. data.csv has
 one row per patient and drug (patient, drug, extra_sleep_h: hours of sleep gained
 compared with no drug). Does the extra sleep differ between the two drugs?
 """
 design = "two conditions measured on the same 10 patients (paired)"
-correct_rule = "A paired analysis: the paired t-test or the Wilcoxon signed-rank test. Independent-samples tests are rejected and flagged as traps."
+correct_rule = "A paired analysis: the paired t-test, the Wilcoxon signed-rank test (R's p, SciPy's exact p or its normal approximation) or the sign test; n as 10 pairs, 20 observations or, for the rank and sign tests, 9 nonzero differences. Independent-samples tests are rejected and flagged as traps."
 rejected = ["welch_t", "student_t", "mann_whitney"]
 
 [data]
@@ -24,7 +25,13 @@ args = ["drug", "extra_sleep_h"]
 kwargs = { subject_id = "patient", type = "parametric" }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+pairs = 10  # subjects with both conditions
+observations = 20  # values the test used
+nonzero_differences = 9  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["observations"]
 family = "paired_t"
 source = "fixture"
 fixture = "ggwithinstats-sleep-parametric"
@@ -38,7 +45,14 @@ conf_low = { value = -1.93560212783375, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = -0.378917883828817, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d_z"
+recipe = "cohen_dz"
+recipe_args = { x = "drug", y = "extra_sleep_h", subject = "patient", levels = ["drug_A", "drug_B"] }
+estimate = { value = -1.2845575625910546 }
+
 [[accepted]]
+n_also = ["observations", "nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "ggwithinstats-sleep-nonparametric"
@@ -50,6 +64,42 @@ estimate = { value = -1.0, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = -1.0, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = -1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "drug", y = "extra_sleep_h", subject = "patient", levels = ["drug_A", "drug_B"], method = "exact", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 0.0, alt = [45.0] }
+p_value = { value = 0.00390625 }
+n = { value = 10.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "drug", y = "extra_sleep_h", subject = "patient", levels = ["drug_A", "drug_B"], method = "approx", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 0.0, alt = [45.0, -2.6679112502793854] }
+p_value = { value = 0.007632441648205511 }
+n = { value = 10.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { x = "drug", y = "extra_sleep_h", subject = "patient", levels = ["drug_A", "drug_B"] }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 0.0, alt = [9.0] }
+p_value = { value = 0.00390625 }
+n = { value = 10.0 }
 
 [[traps]]
 family = "welch_t"

@@ -3,6 +3,7 @@
 id = "headaches-before-after-paired"
 function = "barstats"
 trap = "paired yes/no answers from the same patients: McNemar's test, not a test of independence"
+trap_scoring = "traps"
 request = """
 Forty patients were asked whether they had frequent headaches (yes or no)
 before, and again after, a month on a new medication. data.csv has one row per
@@ -10,7 +11,7 @@ patient (patient, headache_before, headache_after). Did the share of patients
 with headaches change?
 """
 design = "two categorical measurements of the same patients (paired 2 x 2)"
-correct_rule = "McNemar's test: R's default (no continuity correction, as ggstatsplot), with Yates' correction, or the exact binomial version, each scored against its own numbers. A chi-square or Fisher test of independence is rejected and flagged as a trap."
+correct_rule = "McNemar's test: R's default (no continuity correction, as ggstatsplot), with the continuity correction (statsmodels' exact=False), or the exact binomial version (statsmodels' default, whose statistic is the smaller discordant count), each scored against its own numbers; n as the 40 patients, their 80 answers or the 16 discordant pairs. A chi-square or Fisher test of independence is rejected and flagged as a trap."
 rejected = ["chi_square_independence", "fisher"]
 
 [data]
@@ -24,7 +25,13 @@ args = ["headache_before", "headache_after"]
 kwargs = { paired = true }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+subjects = 40  # subjects with every condition
+responses = 80  # both answers of every patient
+discordant_pairs = 16  # patients whose two answers differ (McNemar uses only these)
+
 [[accepted]]
+n_also = ["responses", "discordant_pairs"]
 family = "mcnemar"
 label = "McNemar's test without continuity correction"
 source = "fixture"
@@ -39,7 +46,14 @@ conf_low = { value = 0.00501683464491232, key = "stats/subtitle_data/0/conf.low"
 conf_high = { value = 0.39817932508787, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 40.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "odds ratio of the discordant pairs"
+recipe = "odds_ratio"
+recipe_args = { x = "headache_before", y = "headache_after", paired = true }
+estimate = { value = 0.3333333333333333, alt = [3.0] }
+
 [[accepted]]
+n_also = ["responses", "discordant_pairs"]
 family = "mcnemar"
 label = "McNemar's test with continuity correction"
 source = "recipe"
@@ -51,15 +65,29 @@ df = { value = 1.0 }
 p_value = { value = 0.08011831372763438 }
 n = { value = 40.0 }
 
+[[accepted.effects]]
+label = "odds ratio of the discordant pairs"
+recipe = "odds_ratio"
+recipe_args = { x = "headache_before", y = "headache_after", paired = true }
+estimate = { value = 0.3333333333333333, alt = [3.0] }
+
 [[accepted]]
 family = "mcnemar"
 label = "exact McNemar (binomial) test"
 source = "recipe"
 recipe = "mcnemar_exact"
 recipe_args = { x = "headache_before", y = "headache_after" }
+n_also = ["responses", "discordant_pairs"]
 [accepted.numbers]
+statistic = { value = 4.0, alt = [12.0] }
 p_value = { value = 0.076812744140625 }
 n = { value = 40.0 }
+
+[[accepted.effects]]
+label = "odds ratio of the discordant pairs"
+recipe = "odds_ratio"
+recipe_args = { x = "headache_before", y = "headache_after", paired = true }
+estimate = { value = 0.3333333333333333, alt = [3.0] }
 
 [[traps]]
 family = "chi_square_independence"

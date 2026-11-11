@@ -3,13 +3,14 @@
 id = "height-leaf-area-missing-pairs"
 function = "scatterstats"
 trap = "missing values in either column: 11 of 14 pairs are complete"
+trap_scoring = "n"
 request = """
 We measured the height and the leaf area of 14 seedlings (data.csv:
 seedling, height_cm, leaf_area_cm2), but some measurements are missing. How
 strongly are height and leaf area related?
 """
 design = "two measurements with missing values"
-correct_rule = "Pearson's or Spearman's correlation on the 11 complete pairs."
+correct_rule = "Pearson's, Spearman's (R's p or SciPy's t-distribution p) or Kendall's correlation on the 11 complete pairs."
 rejected = []
 
 [data]
@@ -22,6 +23,9 @@ note = "inferplot oracle dataset edge_corr_missing (hand-made); renamed"
 args = ["height_cm", "leaf_area_cm2"]
 kwargs = { type = "parametric" }
 check_codes = ["rows_dropped"]
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 11  # values the test used
 
 [[accepted]]
 family = "pearson"
@@ -48,3 +52,39 @@ estimate = { value = 0.972727272727273, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.89109236210694, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.993384411230704, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 11.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+label = "Spearman correlation, t-distribution p (SciPy)"
+source = "recipe"
+recipe = "spearman_t"
+recipe_args = { x = "height_cm", y = "leaf_area_cm2" }
+[accepted.numbers]
+statistic = { value = 0.9727272727272729, alt = [12.580981916797448] }
+p_value = { value = 5.142177049049182e-07 }
+estimate = { value = 0.9727272727272729 }
+n = { value = 11.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, exact p"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "height_cm", y = "leaf_area_cm2", method = "exact" }
+[accepted.numbers]
+statistic = { value = 0.8909090909090909, alt = [52.0] }
+p_value = { value = 1.3728555395222063e-05 }
+estimate = { value = 0.8909090909090909 }
+n = { value = 11.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, normal approximation"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "height_cm", y = "leaf_area_cm2", method = "asymptotic" }
+[accepted.numbers]
+statistic = { value = 0.8909090909090909, alt = [3.8146448263914623] }
+p_value = { value = 0.0001363789376650376 }
+estimate = { value = 0.8909090909090909 }
+n = { value = 11.0 }

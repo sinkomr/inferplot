@@ -3,6 +3,7 @@
 id = "supplement-registered-direction"
 function = "betweenstats"
 trap = "a one-sided hypothesis registered before the data were collected"
+trap_scoring = "traps"
 request = """
 Before running this experiment we predicted, and pre-registered, that guinea
 pigs given vitamin C as orange juice grow longer teeth than those given it as
@@ -10,7 +11,7 @@ ascorbic acid. data.csv has one row per animal (tooth_length, supplement).
 Test our registered prediction and make the figure.
 """
 design = "two independent groups, one-sided hypothesis stated in advance"
-correct_rule = "A one-sided test in the registered direction (orange juice greater): Welch's t-test or the Mann-Whitney test. A two-sided test is the right family but gives the wrong p and is flagged as a trap."
+correct_rule = "A one-sided test in the registered direction (orange juice greater): Welch's or Student's t-test or the Mann-Whitney test (with or without the continuity correction). A two-sided test is the right family but gives the wrong p and is flagged as a trap."
 rejected = []
 
 [data]
@@ -25,6 +26,9 @@ args = ["supplement", "tooth_length"]
 kwargs = { type = "parametric", alternative = "greater", order = ["orange_juice", "ascorbic_acid"] }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 60  # values the test used
+
 [[accepted]]
 family = "welch_t"
 source = "fixture"
@@ -38,6 +42,24 @@ estimate = { value = 0.487778845179192, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.05985175309001, key = "stats/subtitle_data/0/conf.low" }
 n = { value = 60.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d (pooled SD)"
+recipe = "cohen_d"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = -0.4945201405450862 }
+
+[[accepted.effects]]
+label = "Cohen's d with the average of the two variances (d_av)"
+recipe = "cohen_d"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"], sd = "average" }
+estimate = { value = -0.4945201405450862 }
+
+[[accepted.effects]]
+label = "Hedges' g (pooled SD)"
+recipe = "hedges_g"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = -0.4880931496084652 }
+
 [[accepted]]
 family = "mann_whitney"
 source = "fixture"
@@ -48,6 +70,59 @@ statistic = { value = 575.5, key = "stats/subtitle_data/0/statistic", alt = [324
 p_value = { value = 0.0322453360669178, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.278888888888889, key = "stats/subtitle_data/0/estimate" }
 n = { value = 60.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "probability of superiority (U / n1 n2)"
+recipe = "probability_of_superiority"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = 0.3605555555555556, alt = [0.6394444444444445] }
+
+[[accepted]]
+family = "mann_whitney"
+label = "Mann-Whitney U test, normal approximation, one-sided"
+source = "recipe"
+recipe = "mann_whitney"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["orange_juice", "ascorbic_acid"], method = "asymptotic", use_continuity = false, alternative = "greater" }
+[accepted.numbers]
+statistic = { value = 575.5, alt = [324.5] }
+p_value = { value = 0.031714838198444034 }
+n = { value = 60.0 }
+
+[[accepted.effects]]
+label = "probability of superiority (U / n1 n2)"
+recipe = "probability_of_superiority"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = 0.3605555555555556, alt = [0.6394444444444445] }
+
+[[accepted]]
+family = "student_t"
+label = "Student's t-test, one-sided"
+source = "recipe"
+recipe = "student_t"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["orange_juice", "ascorbic_acid"], alternative = "greater" }
+[accepted.numbers]
+statistic = { value = 1.91526826869527 }
+df = { value = 58.0 }
+p_value = { value = 0.030196685612064244 }
+n = { value = 60.0 }
+
+[[accepted.effects]]
+label = "Cohen's d (pooled SD)"
+recipe = "cohen_d"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = -0.4945201405450862 }
+
+[[accepted.effects]]
+label = "Cohen's d with the average of the two variances (d_av)"
+recipe = "cohen_d"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"], sd = "average" }
+estimate = { value = -0.4945201405450862 }
+
+[[accepted.effects]]
+label = "Hedges' g (pooled SD)"
+recipe = "hedges_g"
+recipe_args = { x = "supplement", y = "tooth_length", levels = ["ascorbic_acid", "orange_juice"] }
+estimate = { value = -0.4880931496084652 }
 
 [[traps]]
 family = "welch_t"

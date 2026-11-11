@@ -3,6 +3,7 @@
 id = "sensor-calibration-outlier"
 function = "histostats"
 trap = "one extreme reading that is real: the t-test is not significant only because of it"
+trap_scoring = "traps"
 request = """
 Twenty sensors were calibrated to read 10.0 units in a reference chamber;
 data.csv has their readings (sensor, reading). One sensor read 60, and the
@@ -11,7 +12,7 @@ part of what we want to know). Do the sensors typically read differently from
 10.0?
 """
 design = "one sample against 10 with one real extreme value"
-correct_rule = "A test that resists the extreme value: the Wilcoxon signed-rank test, or the bootstrap-t test of the trimmed mean (statistic and trimmed mean scored; its p is a bootstrap value). The one-sample t-test is rejected and flagged as a trap."
+correct_rule = "A test that resists the extreme value: the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction), the sign test, or the bootstrap-t test of the trimmed mean (statistic and trimmed mean scored; its p is a bootstrap value). The one-sample t-test is rejected and flagged as a trap."
 rejected = ["one_sample_t"]
 
 [data]
@@ -25,7 +26,12 @@ args = ["reading"]
 kwargs = { test_value = 10, type = "nonparametric" }
 check_codes = ["heavy_ties"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 20  # values the test used
+nonzero_differences = 19  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "gghistostats-edge_one_outlier-nonparametric"
@@ -47,6 +53,42 @@ kwargs = { test_value = 10, type = "robust" }
 statistic = { value = 2.11541895010673, key = "stats/subtitle_data/0/statistic" }
 estimate = { value = 10.3916666666667, key = "stats/subtitle_data/0/estimate" }
 n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "reading", mu = 10.0, method = "exact", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 38.5, alt = [151.5] }
+p_value = { value = 0.02298736572265625 }
+n = { value = 20.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "reading", mu = 10.0, method = "approx", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 38.5, alt = [151.5, -2.274834796990049] }
+p_value = { value = 0.022915841961124492 }
+n = { value = 20.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { column = "reading", mu = 10.0 }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 13.0, alt = [6.0] }
+p_value = { value = 0.1670684814453125 }
+n = { value = 20.0 }
 
 [[traps]]
 family = "one_sample_t"

@@ -3,6 +3,7 @@
 id = "grip-strength-missed-visits"
 function = "withinstats"
 trap = "paired data with missed visits: only the 12 patients with both visits can be paired"
+trap_scoring = "traps"
 request = """
 Grip strength (kg) of patients before and after a six-week rehabilitation
 programme (data.csv: patient, visit, grip_kg, one row per patient and visit).
@@ -10,7 +11,7 @@ A few patients missed one of the two visits or have an incomplete row. Did grip
 strength change?
 """
 design = "two time points on the same patients; incomplete patients"
-correct_rule = "A paired analysis of the 12 complete patients: the paired t-test or the Wilcoxon signed-rank test. An unpaired test on all rows is flagged as a trap."
+correct_rule = "A paired analysis of the 12 complete patients: the paired t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test (n as 12 pairs or 24 observations). An unpaired test on all rows is flagged as a trap."
 rejected = ["welch_t", "student_t", "mann_whitney"]
 
 [data]
@@ -25,7 +26,13 @@ args = ["visit", "grip_kg"]
 kwargs = { subject_id = "patient", type = "parametric" }
 check_codes = ["rows_dropped"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+pairs = 12  # subjects with both conditions
+observations = 24  # values the test used
+nonzero_differences = 12  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["observations"]
 family = "paired_t"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_missing-parametric"
@@ -39,7 +46,14 @@ conf_low = { value = 0.310164497512419, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 1.64258725687375, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d_z"
+recipe = "cohen_dz"
+recipe_args = { x = "visit", y = "grip_kg", subject = "patient", levels = ["after", "before"] }
+estimate = { value = 1.0647549380296657 }
+
 [[accepted]]
+n_also = ["observations", "nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_missing-nonparametric"
@@ -51,6 +65,42 @@ estimate = { value = 0.871794871794872, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.604289377706298, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.962670963089941, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "visit", y = "grip_kg", subject = "patient", levels = ["after", "before"], method = "exact", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 5.0, alt = [73.0] }
+p_value = { value = 0.0048828125 }
+n = { value = 12.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "visit", y = "grip_kg", subject = "patient", levels = ["after", "before"], method = "approx", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 5.0, alt = [73.0, -2.6682058683340313] }
+p_value = { value = 0.007625751605758413 }
+n = { value = 12.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { x = "visit", y = "grip_kg", subject = "patient", levels = ["after", "before"] }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 11.0, alt = [1.0] }
+p_value = { value = 0.00634765625 }
+n = { value = 12.0 }
 
 [[traps]]
 family = "welch_t"

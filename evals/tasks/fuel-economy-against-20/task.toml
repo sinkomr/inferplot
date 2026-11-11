@@ -3,13 +3,14 @@
 id = "fuel-economy-against-20"
 function = "histostats"
 trap = "a one-sample test against a stated value (20 mpg), not against 0"
+trap_scoring = "traps"
 request = """
 An agency claims that the average car in this sample of 32 models gets 20
 miles per gallon (data.csv: car, mpg). Does the sample's fuel economy differ from
 20 mpg? Please show the distribution in a figure.
 """
 design = "one sample against the value 20"
-correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 20. A test against 0 is flagged as a trap."
+correct_rule = "The one-sample t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test against 20. A test against 0 is flagged as a trap."
 rejected = []
 
 [data]
@@ -22,6 +23,10 @@ note = "R datasets::mtcars"
 args = ["mpg"]
 kwargs = { test_value = 20, type = "parametric" }
 check_codes = []
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 32  # values the test used
+nonzero_differences = 32  # differences that are not zero (rank and sign tests drop the others)
 
 [[accepted]]
 family = "one_sample_t"
@@ -37,7 +42,14 @@ conf_low = { value = -0.323481778310798, key = "stats/subtitle_data/0/conf.low" 
 conf_high = { value = 0.352584964653575, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d"
+recipe = "cohen_dz"
+recipe_args = { column = "mpg", mu = 20.0 }
+estimate = { value = 0.015036632009560237 }
+
 [[accepted]]
+n_also = ["nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "gghistostats-mtcars-tv20-nonparametric"
@@ -49,6 +61,42 @@ estimate = { value = -0.0568181818181818, key = "stats/subtitle_data/0/estimate"
 conf_low = { value = -0.425110152745393, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.32761494710514, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "mpg", mu = 20.0, method = "exact", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 249.0, alt = [279.0] }
+p_value = { value = 0.78912592260167 }
+n = { value = 32.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "mpg", mu = 20.0, method = "approx", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 249.0, alt = [279.0, -0.28052701307135774] }
+p_value = { value = 0.7790732036774985 }
+n = { value = 32.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { column = "mpg", mu = 20.0 }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 14.0, alt = [18.0] }
+p_value = { value = 0.5966148958541453 }
+n = { value = 32.0 }
 
 [[traps]]
 family = "one_sample_t"

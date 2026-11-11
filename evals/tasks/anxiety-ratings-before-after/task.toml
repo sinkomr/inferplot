@@ -3,13 +3,14 @@
 id = "anxiety-ratings-before-after"
 function = "withinstats"
 trap = "paired ordinal ratings (1 to 9) with many tied differences"
+trap_scoring = "test"
 request = """
 Sixteen children rated their anxiety on a 1-to-9 scale before and after a
 story-telling session (data.csv: child, session, anxiety; one row per child and
 session). Did their anxiety ratings change?
 """
 design = "two sessions on the same 16 children, ordinal ratings with ties"
-correct_rule = "The Wilcoxon signed-rank test (R's default normal approximation with continuity correction gives the expected p; other tie handling gives a different p and fails the numbers, not the test). The paired t-test is rejected for ordinal ratings."
+correct_rule = "The Wilcoxon signed-rank test (R's normal approximation with continuity correction, or SciPy's exact p or normal approximation without it, each scored against its own numbers) or the sign test, which suits ordinal ratings at least as well. The paired t-test is rejected for 1-to-9 ordinal ratings; independent-samples tests are rejected and the unpaired Welch's t-test is flagged as a trap."
 rejected = ["paired_t", "welch_t", "student_t", "mann_whitney"]
 
 [data]
@@ -24,7 +25,13 @@ args = ["session", "anxiety"]
 kwargs = { subject_id = "child", type = "nonparametric" }
 check_codes = ["heavy_ties"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+pairs = 16  # subjects with both conditions
+observations = 32  # values the test used
+nonzero_differences = 14  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["observations", "nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_ties-nonparametric"
@@ -36,6 +43,42 @@ estimate = { value = 0.476190476190476, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = -0.0393440015074896, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.791508032641745, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 16.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "session", y = "anxiety", subject = "child", levels = ["after", "before"], method = "exact", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 27.5, alt = [77.5] }
+p_value = { value = 0.13525390625 }
+n = { value = 16.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "session", y = "anxiety", subject = "child", levels = ["after", "before"], method = "approx", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 27.5, alt = [77.5, -1.588703178380234] }
+p_value = { value = 0.11212742103598847 }
+n = { value = 16.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { x = "session", y = "anxiety", subject = "child", levels = ["after", "before"] }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 10.0, alt = [4.0] }
+p_value = { value = 0.1795654296875 }
+n = { value = 16.0 }
 
 [[traps]]
 family = "welch_t"

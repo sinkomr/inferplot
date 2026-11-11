@@ -3,6 +3,7 @@
 id = "insect-sprays-six-groups"
 function = "betweenstats"
 trap = "six groups with very unequal variances; pairwise comparisons need a multiplicity adjustment"
+trap_scoring = "traps"
 request = """
 We tested six insecticide sprays (A to F), each on 12 plots, and counted the
 insects left on every plot (data.csv: spray, insects). Do the sprays differ, and
@@ -24,6 +25,9 @@ args = ["spray", "insects"]
 kwargs = { type = "parametric" }
 check_codes = ["pairs_hidden"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 72  # values the test used
+
 [[accepted]]
 family = "welch_anova"
 source = "fixture"
@@ -39,6 +43,18 @@ conf_low = { value = 0.719423351695877, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 72.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "eta squared"
+recipe = "eta_squared"
+recipe_args = { x = "spray", y = "insects" }
+estimate = { value = 0.7244390155627941 }
+
+[[accepted.effects]]
+label = "omega squared (from the sums of squares)"
+recipe = "omega_squared"
+recipe_args = { x = "spray", y = "insects" }
+estimate = { value = 0.7006379035533514 }
+
 [[accepted]]
 family = "kruskal_wallis"
 source = "fixture"
@@ -50,6 +66,12 @@ df = { value = 5.0, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 1.51084443941851e-10, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.770300628484105, key = "stats/subtitle_data/0/estimate" }
 n = { value = 72.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "eta squared H"
+recipe = "eta_squared_h"
+recipe_args = { x = "spray", y = "insects" }
+estimate = { value = 0.752899160945022 }
 
 [[traps]]
 family = "oneway_anova"

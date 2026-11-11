@@ -3,6 +3,7 @@
 id = "reaction-times-real-outliers"
 function = "betweenstats"
 trap = "two extreme values that are real observations and must stay in"
+trap_scoring = "test"
 request = """
 Reaction times (seconds) of 30 participants in three training conditions, A,
 B and C (data.csv: condition, reaction_time_s). Two participants in condition C
@@ -10,7 +11,7 @@ took far longer than everyone else; we checked, and these are real measurements,
 not errors, so they must stay in the analysis. Do the conditions differ?
 """
 design = "three independent groups, two real extreme values in one group"
-correct_rule = "A method that resists the two extreme values without removing them: the Kruskal-Wallis test or the trimmed-means ANOVA. Welch's and the classic ANOVA are rejected here (the two values inflate group C's variance; Welch's p is .054 against .0007 and .008)."
+correct_rule = "A method that keeps the two extreme values without letting them dominate: the Kruskal-Wallis test, the trimmed-means ANOVA, or Welch's ANOVA of the log reaction times (accepted when the name says log or the numbers are its own). Welch's and the classic ANOVA of the raw times are rejected (the two values inflate group C's variance; Welch's p is .054 against .0007 and .008); the classic ANOVA of the logs stays rejected because group C's spread is still about five times the others' on the log scale."
 rejected = ["welch_anova", "oneway_anova"]
 
 [data]
@@ -25,6 +26,9 @@ args = ["condition", "reaction_time_s"]
 kwargs = { type = "nonparametric" }
 check_codes = ["pairs_hidden"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 30  # values the test used
+
 [[accepted]]
 family = "kruskal_wallis"
 source = "fixture"
@@ -36,6 +40,12 @@ df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 0.000680349973140435, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.502958843159065, key = "stats/subtitle_data/0/estimate" }
 n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "eta squared H"
+recipe = "eta_squared_h"
+recipe_args = { x = "condition", y = "reaction_time_s" }
+estimate = { value = 0.4661409796893665 }
 
 [[accepted]]
 family = "trimmed_anova"
@@ -49,6 +59,20 @@ df_error = { value = 9.40888774295644, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 0.00833894255196832, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.930761596706897, key = "stats/subtitle_data/0/estimate" }
 n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "welch_anova"
+label = "Welch's ANOVA of the log reaction times"
+source = "recipe"
+recipe = "welch_anova"
+recipe_args = { x = "condition", y = "reaction_time_s", log = true }
+qualifier = ["log"]
+[accepted.numbers]
+statistic = { value = 4.567156643055246 }
+df = { value = 2.0 }
+df_error = { value = 16.210974470429303 }
+p_value = { value = 0.026719070543885115 }
+n = { value = 30.0 }
 
 [[traps]]
 family = "welch_anova"
