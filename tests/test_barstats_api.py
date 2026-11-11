@@ -131,14 +131,17 @@ def test_signatures() -> None:
         ("am", {"type": "nonparametric"}, "pearson_chi_square"),
     ],
 )
-def test_each_design_is_analyzed_and_the_drawing_is_not_implemented(
+def test_each_design_is_analyzed_and_drawn(
     mtcars: pd.DataFrame, y: str | None, kwargs: dict[str, Any], test_name: str
 ) -> None:
     result = analyze(mtcars, "cyl", y, **kwargs)
     assert result.test is not None
     assert result.test.name == test_name
-    text = message(NotImplementedError, lambda: top(mtcars, "cyl", y, **kwargs))
-    assert text.startswith("render.barstats(): drawing a barstats result is not")
+    # The one-call form analyzes and draws: the same numbers and texts, with the
+    # drawing's own warnings appended (none for these figures).
+    figure = top(mtcars, "cyl", y, **kwargs)
+    assert figure.result.to_json() == result.to_json()
+    assert set(figure.axes) == {"main"}
 
 
 def test_the_paired_design_is_analyzed() -> None:

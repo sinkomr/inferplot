@@ -164,8 +164,10 @@ def built_texts(case: OracleCase) -> tuple[dict[int, str], dict[int, str]]:
 
 
 def test_every_answerable_fixture_is_drawn() -> None:
-    assert len(bc.ANSWERED) == 68
-    assert len(BAR_CASES) == 65  # and 3 of the 5 ggpiestats cross-checks
+    # (edge_bar_paired_agree left the answerable set when the analysis joined:
+    # no changing pair, refused; D113.)
+    assert len(bc.ANSWERED) == 67
+    assert len(BAR_CASES) == 64  # and 3 of the 5 ggpiestats cross-checks
 
 
 @pytest.mark.parametrize("name", [pytest.param(c.name, id=c.name) for c in bc.ANSWERED])

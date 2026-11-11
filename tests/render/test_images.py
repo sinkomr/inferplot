@@ -261,3 +261,58 @@ def test_histostats_and_scatterstats_in_a_grid() -> Figure:
     )
     assert figure.get_size_inches().tolist() == [17.0, 5.5]
     return _clean(fig)
+
+
+def _table(counts: list[list[int]], xs: list[str], ys: list[str]) -> pd.DataFrame:
+    """A frame of one row per cell with its count in "n"."""
+    return pd.DataFrame(
+        [(x, y, counts[i][j]) for i, x in enumerate(xs) for j, y in enumerate(ys)],
+        columns=["answer", "group", "n"],
+    )
+
+
+@image
+def test_barstats_two_by_two() -> Figure:
+    """mtcars am by vs: two bars stacked to 100%, percentages on the segments,
+    each bar's proportion test above it, n under it, the legend of am."""
+    fig = ip.barstats(_read("mtcars"), "am", "vs")
+    return _clean(fig)
+
+
+@image
+def test_barstats_small_and_zero_cells() -> Figure:
+    """A 4 x 3 table with a zero cell and cells of 1 and 2: the zero cell has no
+    segment and no label; the small cells are labelled beside their bar, joined
+    to their segment by a short line."""
+    fig = ip.barstats(
+        _table(
+            [[120, 0, 40], [1, 30, 2], [60, 50, 1], [3, 0, 57]],
+            ["often", "sometimes", "rarely", "never"],
+            ["A", "B", "C"],
+        ),
+        "answer",
+        "group",
+        counts="n",
+    )
+    assert not [i for i in fig.check() if i.code == "cell_labels_hidden"]
+    return _clean(fig)
+
+
+@image
+def test_barstats_one_way() -> Figure:
+    """mtcars cyl without y: one bar, its n under it, no label above it."""
+    fig = ip.barstats(_read("mtcars"), "cyl")
+    return _clean(fig)
+
+
+@image
+def test_barstats_in_a_grid() -> Figure:
+    """Titanic class by survival and mtcars cyl by am drawn with ax= into a 1 x 2
+    grid: the subtitle and the legend inside each Axes, right of the bars."""
+    figure = Figure(figsize=(15.0, 6.2), dpi=100)
+    FigureCanvasAgg(figure)
+    left, right = figure.subplots(1, 2, gridspec_kw={"wspace": 0.25})
+    ip.barstats(_read("Titanic_full"), "Class", "Survived", ax=left)
+    fig = ip.barstats(_read("mtcars"), "cyl", "am", ax=right, label="both")
+    assert figure.get_size_inches().tolist() == [15.0, 6.2]
+    return _clean(fig)
