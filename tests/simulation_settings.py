@@ -2868,7 +2868,10 @@ _REFUSED = "how often barstats refuses such data (exact)"
 _V_NCP = (
     "noncentral chi-square interval put through the bias correction: the "
     "correction subtracts (r - 1)(c - 1) / (n - 1) from lambda / n although the "
-    "noncentrality already excludes the central part, so the interval sits low"
+    "noncentrality already excludes the central part, so the interval sits low "
+    "(its lower bound is too low at every V, its upper bound at a weak V); and "
+    "the noncentral chi-square is only an approximation to Pearson's statistic "
+    "under a fixed association"
 )
 _V_ZERO = (
     "V cannot be negative; the interval covers 0 whenever its lower bound is 0, "
@@ -3094,7 +3097,13 @@ BARSTATS: tuple[Setting, ...] = (
             ),
         ),
         reps=2_000,
-        seed=20261608,
+        # Seed 20261608 was used first: its 2,000 tables held 119 without a
+        # discordant pair where 84.8 are expected (upper tail 1.9e-4; its first
+        # 20,000 hold 4.45%, 200,000 tables from another seed 4.245%, the exact rate
+        # 0.9^30 = 4.239%; 300 seeds spread as the binomial does), so the refusal
+        # rate fell outside its band by chance alone. The next unused seed of the
+        # series replaces it; reported to the lead.
+        seed=20261621,
         exact={"p": EXACT_MC_FEW["p"], "refused": EXACT_MC_FEW["refused"]},
     ),
     Setting(
@@ -3103,7 +3112,7 @@ BARSTATS: tuple[Setting, ...] = (
         level="stats",
         params=f"paired 2 x 2, 200 pairs, cells {MC_LARGE}",
         draw=multinomial_tables(200, cells_flat(MC_LARGE)),
-        outcome=_paired_stats(2, 0.0, ("two",)),
+        outcome=_paired_stats(2, 0.0, ("two", "greater")),
         quantities=(
             Quantity(
                 "p",
@@ -3113,10 +3122,19 @@ BARSTATS: tuple[Setting, ...] = (
                 _CHI2_DISCRETE + " exactly, from the binomial",
             ),
             Quantity("g_two", "Cohen's g interval covers 0", 0.95, 2, _WILSON),
+            Quantity(
+                "g_greater",
+                "Cohen's g interval [low, 0.5] covers 0",
+                0.95,
+                2,
+                "g is folded to the more frequent side (P >= 1/2), so at g = 0 the "
+                "one-sided bound excludes 0 whenever |b - c| / sqrt(b + c) > z_0.95: "
+                "a two-sided score test at 10%, coverage about 90%; exact",
+            ),
         ),
         reps=2_000,
         seed=20261609,
-        exact={"p": EXACT_MC200["p"], "g_two": EXACT_MC200["g_two"]},
+        exact={key: EXACT_MC200[key] for key in ("p", "g_two", "g_greater")},
     ),
     *(
         Setting(
