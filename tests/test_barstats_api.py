@@ -9,6 +9,7 @@ The drawing raises ``NotImplementedError`` after checking its arguments.
 from __future__ import annotations
 
 import inspect
+import re
 import subprocess
 import sys
 import textwrap
@@ -620,7 +621,14 @@ def test_results_agree_across_backends(backend: Backend) -> None:
         assert other.counts == pandas.counts
         assert other.cells == pandas.cells
         assert other.bars == pandas.bars
-        assert other.warnings == pandas.warnings
+        # The recipes are written in each frame's own library (review B14).
+        assert [_unlibrary(w) for w in other.warnings] == [
+            _unlibrary(w) for w in pandas.warnings
+        ]
+
+
+def _unlibrary(warning: str) -> str:
+    return re.sub(r"(in their names), .*", r"\1, ...", warning)
 
 
 def test_cell_percentages_are_shares_of_their_bar() -> None:

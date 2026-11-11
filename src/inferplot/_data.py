@@ -2066,6 +2066,8 @@ class TableData:
     n_zero_rows: int
     """Rows with every column present whose count is 0: they add nothing
     (``tidyr::uncount``)."""
+    library: Library = "pandas"
+    """The library of the user's frame, for recipes written in it."""
 
     @property
     def n(self) -> int:
@@ -2211,8 +2213,46 @@ def _check_codes(
             "observations, so it looks like a measurement, not a column of "
             "categories (most categories would hold a single observation). "
             f"{advice} To count these values as categories anyway, convert them to "
-            f"text first, for example data[{name!r}].astype(str) in pandas."
+            f"text first: {_codes_to_text(_library(series), name)}."
         )
+
+
+def _codes_to_text(library: Library, name: str) -> str:
+    """A statement that writes whole-number codes as text, missing values kept
+    missing (a pandas float column of whole numbers included), in ``library``."""
+    pandas = f"data[{name!r}].astype('Int64').astype('string')"
+    polars = f"pl.col({name!r}).cast(pl.Int64).cast(pl.String)"
+    arrow = (
+        f"pyarrow.compute.cast(pyarrow.compute.cast(data[{name!r}], pyarrow.int64()), "
+        "pyarrow.string())"
+    )
+    return _replace_column(library, name, pandas, polars, arrow)
+
+
+def _counts_to_numbers(library: Library, name: str) -> str:
+    """A statement that reads counts stored as text as numbers, thousands
+    separators ("1,000") and surrounding spaces removed, entries that are not
+    numbers becoming missing (rows then left out and counted), in ``library``."""
+    col = f"data[{name!r}]"
+    pandas = (
+        f"pandas.to_numeric({col}.str.replace(',', '', regex=False).str.strip(), "
+        "errors='coerce')"
+    )
+    polars = (
+        f"pl.col({name!r}).cast(pl.String).str.replace_all(',', '', literal=True)"
+        ".str.strip_chars().cast(pl.Float64, strict=False)"
+    )
+    text = (
+        "pyarrow.compute.utf8_trim_whitespace(pyarrow.compute.replace_substring("
+        f"pyarrow.compute.cast({col}, pyarrow.string()), pattern=',', "
+        "replacement=''))"
+    )
+    arrow = (
+        "pyarrow.compute.cast(pyarrow.compute.if_else("
+        f"pyarrow.compute.match_substring_regex({text}, r'{_NUMBER_PATTERN}'), "
+        f"{text}, None), pyarrow.float64())"
+    )
+    return _replace_column(library, name, pandas, polars, arrow)
 
 
 def _bad_rows(rows: IntArray, bad: BoolArray) -> str:
@@ -2243,12 +2283,20 @@ def _table_weights(series: nw.Series[Any], name: str, rows: IntArray) -> Any:
         )
     if not dtype.is_numeric():
         first = _first_value(series)
-        hint = (
-            f" It holds numbers stored as text (for example {first!r}); convert it "
-            f"first, for example pandas.to_numeric(data[{name!r}])."
-            if _numbers_as_text(first)
-            else " Convert it with pandas.to_numeric() or .cast(int) first."
-        )
+        library = _library(series)
+        text = isinstance(first, str)
+        if text and _numbers_as_text(first.replace(",", "")):
+            hint = (
+                f" It holds numbers stored as text (for example {first!r}); convert "
+                f"it first: {_counts_to_numbers(library, name)}."
+            )
+        elif text:
+            hint = (
+                f" Its entries are not numbers (for example {first!r}): name the "
+                "column that holds the numbers of observations."
+            )
+        else:
+            hint = f" {_generic_numbers(library, name)}"
         raise TypeError(f"{what}; its type is {dtype}.{hint}")
     values: Any
     if dtype.is_integer() and _beyond_exact_integers(series):
@@ -2635,6 +2683,7 @@ def read_table(
         n_missing_y=int(missing_y.sum()),
         n_missing_counts=int(missing_counts.sum()),
         n_zero_rows=int(rows.size - used.size),
+        library=_library(x_raw),
     )
 
 
@@ -2708,7 +2757,7 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
             "with the categories in the order you want."
         )
     if column.natural_order:
-        notes.append(_table_natural_order_note(column))
+        notes.append(_table_natural_order_note(column, data.library))
     vanished = column.vanished
     if vanished:
         one = len(vanished) == 1
@@ -2738,23 +2787,48 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
     return notes
 
 
-def _table_natural_order_note(column: TableLevels) -> str:
+def _declare_order(library: Library, name: str, order: Sequence[str]) -> str:
+    """A statement that declares column ``name`` (text) on the categories
+    ``order``, in ``library``: a pandas Categorical, a polars Enum, an ordered
+    pyarrow dictionary."""
+    shown = list(order)
+    if library == "polars":
+        return (
+            f"data = data.with_columns(pl.col({name!r}).cast(pl.String)"
+            f".cast(pl.Enum({shown!r})))"
+        )
+    if library == "pyarrow":
+        arrow = (
+            "pyarrow.DictionaryArray.from_arrays(pyarrow.compute.index_in("
+            f"data[{name!r}].combine_chunks(), value_set=pyarrow.array({shown!r})), "
+            f"pyarrow.array({shown!r}), ordered=True)"
+        )
+        return _replace_column(library, name, "", "", arrow)
+    return f"data[{name!r}] = pd.Categorical(data[{name!r}], categories={shown!r})"
+
+
+def _table_natural_order_note(column: TableLevels, library: Library) -> str:
     """The natural-order note of a barstats column: barstats has no ``order=``,
-    so another order comes from a declared categorical."""
+    so another order comes from a declared categorical, written in the frame's
+    own library (review B14)."""
     levels, natural = column.present, column.natural_order
     first = next(
         n for n, (a, b) in enumerate(zip(levels, natural, strict=True)) if a != b
     )
-    example = f"categories={list(natural)!r}"
-    how = (
-        f"pd.Categorical(data[{column.name!r}], {example})"
-        if len(example) <= _MAX_EXAMPLE
-        else "with the categories in the order you want"
-    )
+    what = {
+        "pandas": "a pandas Categorical",
+        "polars": "a polars Enum",
+        "pyarrow": "an ordered pyarrow dictionary",
+    }[library]
+    if len(f"{list(natural)!r}") <= _MAX_EXAMPLE:
+        how = f"declare the column as {what} in that order: " + _declare_order(
+            library, column.name, natural
+        )
+    else:
+        how = f"declare the column as {what} with the categories in that order"
     return (
         f"The levels of {column.name!r} are text, sorted as text (as R sorts "
         f"them), so {levels[first]!r} comes before {natural[first]!r}: "
         f"{_listed(levels)}. The analysis and the figure use this order. To order "
-        f"them by the numbers in their names, pass the column as a pandas "
-        f"Categorical ({how}) or a polars Enum in that order."
+        f"them by the numbers in their names, {how}."
     )
