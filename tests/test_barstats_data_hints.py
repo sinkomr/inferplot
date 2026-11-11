@@ -183,3 +183,33 @@ def test_counts_that_sum_to_100_are_noted() -> None:
     result = ip.analyze.barstats(frame, "x", "y", counts="pct", bf_message=False)
     (note,) = [w for w in result.warnings if "sum to exactly 100" in w]
     assert "percentages" in note
+
+
+# -- B20: a pandas column of Python booleans with a missing value ----------------
+
+
+def test_object_booleans_are_booleans() -> None:
+    # pandas makes a column of booleans holding a None a column of objects.
+    values = [True, False, None, True, False, True, False, False, True, True]
+    frame = pd.DataFrame({"x": values, "y": list("uvuvuvuvuv")})
+    assert frame["x"].dtype == object
+    objects = ip.analyze.barstats(frame, "x", "y", bf_message=False)
+    nullable = ip.analyze.barstats(
+        frame.assign(x=frame["x"].astype("boolean")), "x", "y", bf_message=False
+    )
+    text = ip.analyze.barstats(
+        frame.assign(x=[None if v is None else str(v) for v in values]),
+        "x",
+        "y",
+        bf_message=False,
+    )
+    assert objects.levels == ("False", "True")
+    assert objects.n_dropped == 1
+    assert objects.to_json() == nullable.to_json() == text.to_json()
+    # Paired, against a text column on the same categories.
+    paired = pd.DataFrame(
+        {"x": values, "y": ["True", "False", "True", "True", "False"] * 2}
+    )
+    result = ip.analyze.barstats(paired, "x", "y", paired=True, bf_message=False)
+    assert result.levels == ("False", "True")
+    assert result.n_obs == 9

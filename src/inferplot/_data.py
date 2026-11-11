@@ -2135,7 +2135,7 @@ def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
     logical values; Python's names); a declared categorical of booleans keeps its
     declared order. Everything else is read as betweenstats reads ``x``.
     """
-    if isinstance(series.dtype, nw.Boolean):
+    if isinstance(series.dtype, nw.Boolean) or _object_booleans(series):
         missing = _missing(series)
         values: list[object] = series.to_list()
         raw: list[object] = [
