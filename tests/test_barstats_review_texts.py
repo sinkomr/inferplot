@@ -4,10 +4,12 @@ alt text and ``str(result)`` say where the earlier wording misled."""
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 import pandas as pd
 
 import inferplot as ip
+from inferplot.result import StatsResult
 from inferplot.text import contingency_tests_sentence
 
 
@@ -76,3 +78,30 @@ def test_no_pair_tested_says_so() -> None:
     assert sentence.endswith(
         "Fisher's exact tests between the levels of x: none of the 3 pairs has a test."
     )
+
+
+# -- B16: expected shares print by a stated rule ---------------------------------
+
+
+def _one_way(**kwargs: Any) -> StatsResult:
+    frame = pd.DataFrame({"g": list("aaabbbbccccc" * 10)})
+    return ip.analyze.barstats(frame, "g", bf_message=False, **kwargs)
+
+
+def test_equal_shares_read_equal_however_written() -> None:
+    result = _one_way(ratio=[1 / 3, 1 / 3, 1 / 3])
+    assert "(shares of g against equal shares)" in result.text.apa
+    assert "against equal shares" in result.text.alt_text
+    assert "333" not in result.text.apa + result.text.alt_text
+
+
+def test_other_shares_are_rounded_and_marked() -> None:
+    result = _one_way(ratio=[1 / 6, 1 / 3, 1 / 2])
+    assert "against expected shares of about 0.17, 0.33 and 0.5)" in result.text.apa
+    assert "666" not in result.text.alt_text
+    result = _one_way(ratio=[1 / 6, 1 / 3, 1 / 2], digits=3)
+    assert "expected shares of about 0.167, 0.333 and 0.5)" in result.text.apa
+    result = _one_way(ratio=[0.2, 0.3, 0.5])
+    assert "against expected shares 0.2, 0.3 and 0.5)" in result.text.apa
+    result = _one_way(ratio=[0.001, 0.499, 0.5])
+    assert "expected shares of about 0.001, 0.5 and 0.5)" in result.text.apa

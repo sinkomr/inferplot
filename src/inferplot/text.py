@@ -2910,13 +2910,31 @@ def _and_join(items: Sequence[str]) -> str:
     return f"{', '.join(items[:-1])} and {items[-1]}"
 
 
+def _share_text(share: float, digits: int) -> tuple[str, bool]:
+    """One expected share rounded to ``digits`` decimals (more where that would
+    print 0), and whether rounding changed it."""
+    places = digits
+    while round(share, places) == 0.0 and places < 15:
+        places += 1
+    rounded = round(share, places)
+    return r_number_text(rounded), abs(rounded - share) > 1e-12
+
+
 def _shares_text(settings: Settings) -> str:
     """What the goodness-of-fit tests compare against: "equal shares" or
     "expected shares 0.5, 0.25 and 0.25" (``ratio``, in the order of the
-    levels of x)."""
-    if settings.ratio is None:
+    levels of x).
+
+    Equal shares read "equal shares" however they were written (``ratio=[1/3,
+    1/3, 1/3]``); other shares are rounded to ``settings.digits`` decimals (more
+    where that would print 0), and "of about" marks a rounding that changed one
+    ("expected shares of about 0.17, 0.17, 0.17 and 0.5")."""
+    ratio = settings.ratio
+    if ratio is None or all(abs(r * len(ratio) - 1.0) <= 1e-9 for r in ratio):
         return "equal shares"
-    return "expected shares " + _and_join([r_number_text(r) for r in settings.ratio])
+    shown = [_share_text(r, settings.digits) for r in ratio]
+    about = "of about " if any(changed for _, changed in shown) else ""
+    return f"expected shares {about}" + _and_join([text for text, _ in shown])
 
 
 def _contingency_effect_text(effect_size: EffectSize) -> str:
