@@ -514,7 +514,9 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   `docs/RELEASING.md` (the owner's checklist), `tests/test_packaging.py`. Built and
   checked locally (wheel 0.47 MB, sdist 6.4 MB). Nothing published or tagged. Left for
   the release commit: version 0.1.0, the CHANGELOG date, the README's install
-  instructions, README image links that work on PyPI
+  instructions. The description PyPI shows is the README with its 18 relative links
+  (figures, examples, documents) made absolute at build time (`hatch_build.py`);
+  the release check refuses a package that still has a relative link
 - [x] agent evaluation prepared (D117): `evals/` with 32 tasks, two arms, a scorer
   and a dry run that recomputes every expected number (32 of 32 valid). Not run:
   a real run is 64 Claude sessions and needs the owner's go-ahead each time

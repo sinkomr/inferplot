@@ -4,9 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "inferplot"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "Statistical plots with the right test computed and its full results annotated, after ggstatsplot."
-readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "inferplot contributors" }]
@@ -60,6 +59,8 @@ dev = [
     "scipy-stubs>=1.15",
     # tests/test_packaging.py parses the release workflow.
     "pyyaml>=6.0.2",
+    # tests/test_packaging.py imports hatch_build.py, the build's README hook.
+    "hatchling>=1.27",
 ]
 
 # The version has one source: `__version__` in src/inferplot/__init__.py, which
@@ -68,6 +69,11 @@ dev = [
 # it (docs/RELEASING.md).
 [tool.hatch.version]
 path = "src/inferplot/__init__.py"
+
+# The long description PyPI shows is README.md with its relative links made
+# absolute (hatch_build.py); README.md stays as GitHub needs it.
+[tool.hatch.metadata.hooks.custom]
+path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inferplot"]
@@ -85,6 +91,7 @@ include = [
     "/tools/reference/*.py",
     # tests/test_packaging.py checks the release workflow, the CHANGELOG and the
     # release checks; tests/test_evals.py validates the evaluation tasks.
+    "/hatch_build.py",
     "/.github/workflows/release.yml",
     "/tools/release_check.py",
     "/CHANGELOG.md",

@@ -37,6 +37,7 @@ WHEEL_LICENSES = ("licenses/LICENSE", "licenses/NOTICE")
 # tests/test_packaging.py reads).
 SDIST_REQUIRED = (
     "pyproject.toml",
+    "hatch_build.py",
     "README.md",
     "LICENSE",
     "NOTICE",
@@ -80,6 +81,7 @@ FORBIDDEN_PARTS = frozenset(
 # Words that mark test data; none may appear in a wheel path.
 WHEEL_FORBIDDEN_WORDS = ("tests", "fixtures", "oracle", "evals", "conftest")
 
+LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
 CHANGELOG_ENTRY = re.compile(
     r"^## \[(?P<version>[^\]]+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}|Unreleased))?\s*$",
     re.MULTILINE,
@@ -154,6 +156,20 @@ def _metadata_problems(text: str, label: str) -> list[str]:
     body = meta.get_payload()
     if not isinstance(body, str) or "## Quick start" not in body:
         problems.append(f"{label} long description lacks the README's quick start")
+        return problems
+    # PyPI shows the description on its own: a relative link leads nowhere there
+    # (hatch_build.py makes them absolute at build time).
+    relative = sorted(
+        {
+            target
+            for target in LINK_TARGET.findall(body)
+            if not target.startswith(("http://", "https://", "mailto:", "#"))
+        }
+    )
+    if relative:
+        problems.append(
+            f"{label} long description has relative links: {', '.join(relative)}"
+        )
     return problems
 
 

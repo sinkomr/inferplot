@@ -61,7 +61,7 @@ def test_version_matches_built_metadata() -> None:
 
 def test_version_has_one_source() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert project["project"]["dynamic"] == ["version"]
+    assert "version" in project["project"]["dynamic"]
     assert "version" not in project["project"]
     assert project["tool"]["hatch"]["version"]["path"] == "src/inferplot/__init__.py"
 
@@ -241,6 +241,71 @@ def test_wheel_check_refuses_another_runtime_dependency(tmp_path: Path) -> None:
     wheel = _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=metadata)
     with pytest.raises(release_check.CheckError, match="runtime dependencies"):
         release_check.check_wheel(wheel)
+
+
+def test_wheel_check_refuses_relative_links_in_the_description(tmp_path: Path) -> None:
+    metadata = METADATA + "\n[the API](docs/api.md) and ![a figure](docs/img/x.png)\n"
+    wheel = _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=metadata)
+    with pytest.raises(release_check.CheckError, match=r"relative links: docs/api\.md"):
+        release_check.check_wheel(wheel)
+    absolute = METADATA + "\n[the API](https://example.org/api.md), [below](#usage)\n"
+    release_check.check_wheel(
+        _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=absolute)
+    )
+
+
+def _load_hatch_build() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        "hatch_build", ROOT / "hatch_build.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_readme_links_are_made_absolute_for_pypi() -> None:
+    # The build hook (hatch_build.py) hands hatchling the README with absolute
+    # links: figures from raw.githubusercontent.com, files from their GitHub page,
+    # at the version's tag, or at main for a version that has no tag.
+    hook = _load_hatch_build()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    relative = [
+        target
+        for target in release_check.LINK_TARGET.findall(readme)
+        if not target.startswith(("http", "#"))
+    ]
+    assert "docs/img/betweenstats.png" in relative
+    assert "docs/api.md" in relative
+    for target in relative:  # the README's own links lead to files of the repository
+        assert (ROOT / target).exists(), target
+
+    released = hook.absolute_links(readme, "0.1.0")
+    assert not [
+        target
+        for target in release_check.LINK_TARGET.findall(released)
+        if not target.startswith(("https://", "#"))
+    ]
+    base = "https://raw.githubusercontent.com/sinkomr/inferplot/v0.1.0/"
+    assert f"]({base}docs/img/betweenstats.png)" in released
+    assert "](https://github.com/sinkomr/inferplot/blob/v0.1.0/docs/api.md)" in released
+    assert "](#not-in-v01)" in released
+    # Only link targets change.
+    assert release_check.LINK_TARGET.sub("", released) == release_check.LINK_TARGET.sub(
+        "", readme
+    )
+    for version in ("0.1.0.dev0", "0.1.0rc1"):
+        assert "/blob/main/docs/api.md)" in hook.absolute_links(readme, version)
+
+
+def test_the_readme_hook_is_declared() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert sorted(project["project"]["dynamic"]) == ["readme", "version"]
+    assert "readme" not in project["project"]
+    assert project["tool"]["hatch"]["metadata"]["hooks"]["custom"] == {
+        "path": "hatch_build.py"
+    }
 
 
 def test_sdist_check_needs_the_test_data(tmp_path: Path) -> None:
