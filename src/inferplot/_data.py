@@ -2331,20 +2331,53 @@ def _declare_example(
     """The code that declares both ``columns`` on the same ``categories``, in the
     frame's own library."""
     x, y = columns
+    kinds = {name: _text_kind(frame[name].dtype) for name in columns}
     if frame.implementation.is_polars():
-        to_text = ".cast(pl.Int64).cast(pl.String)" if numeric else ".cast(pl.String)"
         enum = f"pl.Enum({list(categories)!r})"
+
+        def polars_text(name: str) -> str:
+            kind = kinds[name]
+            if kind == "number":
+                return ".cast(pl.Int64).cast(pl.String)"
+            if kind == "bool":  # polars writes true/false; the levels are True/False
+                return ".cast(pl.String).str.to_titlecase()"
+            return ".cast(pl.String)"
+
         return (
-            f"data = data.with_columns(pl.col({x!r}){to_text}.cast({enum}), "
-            f"pl.col({y!r}){to_text}.cast({enum}))"
+            f"data = data.with_columns(pl.col({x!r}){polars_text(x)}.cast({enum}), "
+            f"pl.col({y!r}){polars_text(y)}.cast({enum}))"
         )
     shown: list[object] = [int(c) for c in categories] if numeric else [*categories]
     start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+
+    def pandas_column(name: str) -> str:
+        # Text categories need text values: numbers (a whole float with missing
+        # values included) and booleans are written as their level labels first,
+        # or pd.Categorical would make every value missing.
+        if numeric or kinds[name] == "text":
+            return f"data[{name!r}]"
+        if kinds[name] == "number":
+            return f"data[{name!r}].astype('Int64').astype(str)"
+        return f"data[{name!r}].astype(str)"
+
     return (
         f"{start}categories = {shown!r}; "
-        f"data[{x!r}] = pd.Categorical(data[{x!r}], categories=categories); "
-        f"data[{y!r}] = pd.Categorical(data[{y!r}], categories=categories)"
+        f"data[{x!r}] = pd.Categorical({pandas_column(x)}, categories=categories); "
+        f"data[{y!r}] = pd.Categorical({pandas_column(y)}, categories=categories)"
     )
+
+
+def _text_kind(dtype: Any) -> Literal["number", "bool", "text", "other"]:
+    """What a column holds, for the recipes that turn it into text levels:
+    numbers, booleans, text, or other (categoricals: written as text by
+    ``astype(str)``)."""
+    if isinstance(dtype, nw.Boolean):
+        return "bool"
+    if dtype.is_numeric():
+        return "number"
+    if isinstance(dtype, nw.String):
+        return "text"
+    return "other"
 
 
 def _paired_categories(
