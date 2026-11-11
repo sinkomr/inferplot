@@ -357,7 +357,38 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   labels are moved beside their bar, never dropped in the own figure (D114); 120
   random tables clean in the own figure and in `ax=` at three dpi; the four existing
   figures byte-identical (492 of 492); four image baselines (18 in all)
-- [ ] end-of-phase review of barstats (two fresh reviewers; in progress)
+- [ ] end-of-phase review of barstats (two fresh reviewers). Visible half done
+  (2026-11-11; scripts and images in `reviewBB/`): 43 hand-built frames on three
+  backends and the same table written 14 ways (672 of 672 comparisons identical);
+  texts of 159 results re-derived; about 190 figures measured; saved files and the
+  three forms sound. Findings (2 high, 10 medium, 5 low), being fixed:
+  - [ ] B1 (high; reproduced by the lead): two long level names that differ only at
+    the end are shortened to the same legend entry and tick label; nothing reports
+    it (shared tick wrapping: betweenstats too).
+  - [ ] B2 (high; reproduced): `bar_args` properties silently wreck the chart
+    (`color` paints every level alike, as the error message for `color=` itself
+    suggests; `zorder` hides every cell label; `angle`; wide edges); identical
+    palette colours are not reported.
+  - [ ] B3 (reproduced: a 3 x 8 table of 377 observations takes 19 s and 3.2 GB; 8 x 8
+    of 682, 28 s; 10 x 10 does not finish in minutes): the pairwise Fisher tests,
+    which are never drawn. The limit is per pair, spent before the refusal, and the
+    search's arrays are not in the memory bound.
+  - [ ] B4: the APA sentence counts pairs that were never tested ("0 of 3 pairs").
+  - [ ] B5: Cramér's V printed outside its own interval on wide tables (2 x 20: 10 of
+    60), as the SPEC formula gives; the check's message speaks of a bootstrap; no
+    fixture covers large df (oracle probe wanted).
+  - [ ] B6 to B9: hints that do not lead to a working call (paired data in long
+    format; the "declare both columns" recipe empties an integer column; `tail=` and
+    `one_sided=`; `x_label=`).
+  - [ ] B10: an aggregated table given without `counts=` is analysed as one
+    observation per row, silently.
+  - [ ] B11: the figure grows without bound with the number of bars (100 bars: 81
+    in) and `figure_oversized` allows it.
+  - [ ] B12: no test ties a level's colour to its legend entry.
+  - [ ] B13 to B17 (low): moved labels carry no colour key; pandas-only hints on
+    polars and pyarrow frames; "p = 2.23e-308" for an underflowed p (D108; owner's
+    call); fifteen-digit `ratio` in texts; small items.
+  Statistics half: in progress.
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
