@@ -2113,6 +2113,21 @@ def _boolean_label(value: object) -> str:
     return "True" if value else "False"
 
 
+def _object_booleans(series: nw.Series[Any]) -> bool:
+    """A column of Python objects whose values present are all booleans: what
+    pandas makes of a boolean column holding a None (review B20). Read as
+    booleans, missing values staying missing."""
+    if not isinstance(series.dtype, nw.Object):
+        return False
+    try:
+        values = series.to_list()
+    except Exception:  # an unusual column narwhals cannot list: not booleans
+        return False
+    missing = _missing(series).tolist()
+    present = [v for v, gone in zip(values, missing, strict=True) if not gone]
+    return bool(present) and all(isinstance(v, bool | np.bool_) for v in present)
+
+
 def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
     """A column of categories: text, categoricals, booleans or numbers.
 
@@ -2609,6 +2624,8 @@ def _check_wide(
             continue
         if not _whole_counts(series[used.tolist()]):
             continue
+        if other_group.kind == "float":
+            continue  # measurements get their own message (_check_codes)
         labels = _grouping_labels(other_group, other, used)
         if len(set(labels)) != len(labels):
             continue
