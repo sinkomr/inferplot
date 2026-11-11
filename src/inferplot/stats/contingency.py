@@ -758,6 +758,11 @@ _UNIT_CALL: Final = 20_000.0  # one pass of Python over a chunk
 _FISHER_WORK_LIMIT: Final = 1.0e9
 # ... and the pairwise tests of one table this much in all (about two seconds).
 _PAIRWISE_WORK_LIMIT: Final = 1.6e9
+# A pairwise test whose work estimate without pruning (an upper bound) is above
+# this is not attempted: pruning cuts the work by up to about 2e4 times in the
+# tables measured, never by 1e4 times the limit of a test, so the attempt would
+# only spend the budget the other pairs need.
+_PAIRWISE_ESTIMATE_LIMIT: Final = 1e4 * _FISHER_WORK_LIMIT
 # Memory: the arrays of one test, counted in bytes before any is allocated, stay
 # below this (every array the search allocates, temporaries included).
 _FISHER_MEMORY_LIMIT: Final = 160 * 2**20
@@ -779,6 +784,10 @@ _BYTES_LIST: Final = 16
 # rows average at least this many of them.
 _SHORT_ROW: Final = 32
 _QUERIES_PER_ROW: Final = 16
+# Lists with at most this many rows (totals), and rows of at least this length on
+# average, keep each row as its own array.
+_ROWWISE_ROWS: Final = 4096
+_ROW_LENGTH: Final = 64
 # Pruning margin of the network side, relative to 1 + |log threshold| (the log
 # probabilities are accurate to about 1e-13 relative): a partial table is summed
 # whole or dropped only when its bound clears the threshold by this much; the
@@ -1208,8 +1217,13 @@ def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
     the memory limit by its size alone is not looked at further (its longest row
     is then given as its size)."""
     size = math.prod(sizes)
-    before = size // sizes[-1] if len(sizes) > 1 else 0
-    nbytes = size * _BYTES_LIST + before * 48.0 + (1 << 18) * 40.0
+    rows = sum(sizes) - len(sizes) + 1
+    if _rowwise(size, rows):
+        # row by row: the values and running sums, an array object per row
+        nbytes = size * _BYTES_LIST + rows * 4 * 256.0
+    else:
+        before = size // min(sizes) if len(sizes) > 1 else 0
+        nbytes = size * _BYTES_LIST + before * 48.0 + (1 << 18) * 40.0
     if nbytes > _FISHER_MEMORY_LIMIT:
         return size, size, float(nbytes + size * 64.0)
     if sum(sizes) <= 1 << 16:
@@ -1284,33 +1298,54 @@ def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
             certain=certain,
             memory=memory,
         )
-        if best is None or plan.estimate < best.estimate:
+        # The lowest estimate among the plans whose certain work fits a test.
+        fits = plan.certain <= _FISHER_WORK_LIMIT
+        if (
+            best is None
+            or (fits and best.certain > _FISHER_WORK_LIMIT)
+            or (
+                (fits == (best.certain <= _FISHER_WORK_LIMIT))
+                and plan.estimate < best.estimate
+            )
+        ):
             best = plan
     assert best is not None
     return best
 
 
 class _CompletionList:
-    """The list side of the search: every first row of the last columns, in one
-    flat array grouped by its total t (row t from ``off[t]`` to ``off[t + 1]``)
-    and sorted by log probability within each row; ``cum`` holds, within each
-    row, the running sums of exp(value - the row's largest, ``best``).
+    """The list side of the search: every first row of the last columns, grouped
+    by its total t (a row of the list per total) and sorted by log probability
+    within each row, with the running sums of exp(value - the row's largest,
+    ``best``) along each row.
 
-    Built a column at a time: the rows of the columns so far are sorted, each
-    value x of the next column shifts every row t to row t + x, and the block of
-    old row t lands in new row t' at sum_{u = t + 1}^{t'} count(u) (the blocks of
-    a new row come in decreasing old row), so each new row is a run of sorted
-    blocks that a merging sort finishes."""
+    Built a column at a time, widest first: each value x of the next column
+    shifts every row t to row t + x, so a new row is a run of sorted blocks that
+    a merging sort finishes (the narrowest column, placed last, leaves the
+    fewest runs). Up to ``_ROWWISE_ROWS`` rows, each row is its own array (no
+    array longer than the longest row, so the memory a test touches is the
+    memory it holds; one large array per list and test would leave the
+    allocator's caches of freed blocks to grow); with more rows (a wide column
+    on the list side, short rows), one flat array with the offsets ``off``."""
 
     def __init__(self, logs: list[FloatArray], budget: _Budget) -> None:
         sizes = [v.size for v in logs]
         size, longest, nbytes = _list_memory(sizes)
         budget.request(nbytes)
-        rows = sum(sizes) - len(sizes) + 1
-        budget.charge(_list_work(sizes, size, longest, rows))
-        # Widest column first: the last placement then leaves the fewest sorted
-        # runs in each row for the merging sort.
+        count = sum(sizes) - len(sizes) + 1
+        budget.charge(_list_work(sizes, size, longest, count))
         logs = sorted(logs, key=lambda v: -v.size)
+        self.longest = longest
+        self.rowwise = _rowwise(size, count)
+        if self.rowwise:
+            rows = _build_rows(logs)
+            self.rows = rows
+            self.cums = [_prefix_rows(np.exp(r - r[-1])[None, :])[0, 1:] for r in rows]
+            self.best = np.array([float(r[-1]) for r in rows])
+            self.worst = np.array([float(r[0]) for r in rows])
+            totals = np.array([float(c[-1]) for c in self.cums])
+            self.mass = self.best + np.log(totals)
+            return
         values = logs[0].copy()
         counts = np.ones(values.size, dtype=np.int64)
         for v in logs[1:]:
@@ -1323,7 +1358,28 @@ class _CompletionList:
         self.worst = values[off[:-1]].copy()
         self.cum = _row_sums(values, counts, self.best)
         self.mass = self.best + np.log(self.cum[off[1:] - 1])
-        self.longest = longest
+
+
+def _rowwise(size: int, rows: int) -> bool:
+    """Whether a list of ``size`` completions over ``rows`` totals is kept row by
+    row: few rows, long on average (short rows make a small flat array)."""
+    return rows <= _ROWWISE_ROWS and size >= _ROW_LENGTH * rows
+
+
+def _build_rows(logs: list[FloatArray]) -> list[FloatArray]:
+    """The list's rows (one sorted array per total), a column at a time."""
+    rows = [np.array([v]) for v in logs[0].tolist()]
+    for column in logs[1:]:
+        values = column.tolist()
+        new: list[FloatArray] = []
+        for t in range(len(rows) + len(values) - 1):
+            lo = max(0, t - len(rows) + 1)
+            hi = min(len(values) - 1, t)
+            row = np.concatenate([rows[t - x] + values[x] for x in range(lo, hi + 1)])
+            row.sort(kind="stable")
+            new.append(row)
+        rows = new
+    return rows
 
 
 def _add_column(
@@ -1398,17 +1454,25 @@ def _row_sums(values: FloatArray, counts: IntArray, best: FloatArray) -> FloatAr
 
 def _list_work(sizes: list[int], size: int, longest: int, rows: int) -> float:
     """Work units of building the list: the placements of every column after the
-    first, the sorts, the running sums, and a pass of Python per long row."""
+    first (widest first) with the merging sorts, the running sums, and a pass of
+    Python per block of a row (row by row) or per long row (flat)."""
+    del longest
+    order = sorted(sizes, reverse=True)
     placements = 0.0
-    built = float(sizes[0])
-    for s in sizes[1:]:
+    built = float(order[0])
+    blocks = 0.0
+    totals = order[0]
+    for s in order[1:]:
         built *= s
         placements += built * _bits(s)
-    return (
-        placements * _UNIT_LIST
-        + size * _UNIT_LIST
-        + min(rows, size / _SHORT_ROW + 1.0) * len(sizes) * _UNIT_CALL
+        blocks += (totals + s - 1) * s
+        totals += s - 1
+    python = (
+        blocks * _UNIT_CALL / 4.0 + rows * _UNIT_CALL / 4.0
+        if _rowwise(size, rows)
+        else min(rows, size / _SHORT_ROW + 1.0) * len(sizes) * _UNIT_CALL
     )
+    return (placements + size) * _UNIT_LIST + python
 
 
 class _Network:
@@ -1584,6 +1648,9 @@ class _Network:
         vals = vals[order]
         first = np.flatnonzero(np.concatenate(([True], rem[1:] != rem[:-1])))
         rows = rem[first]
+        if lst.rowwise:
+            self._final_rows(rem, vals, first, rows)
+            return
         lo = lst.off[rem]
         if rows.size * _QUERIES_PER_ROW > size:
             limit = self.threshold - vals
@@ -1614,6 +1681,33 @@ class _Network:
             start = int(lo[i])
             pieces = lst.values[start : start + int(count[i])]
             counted[i] = float(vals[i]) + _log_sum(pieces)
+        self.parts.append(_log_sum(counted))
+
+    def _final_rows(
+        self, rem: IntArray, vals: FloatArray, first: IntArray, rows: IntArray
+    ) -> None:
+        """_final with the list kept row by row: the partial tables of each row
+        (``rem`` sorted, ``first`` where each row's run starts)."""
+        lst = self.list
+        size = rem.size
+        self.budget.charge(
+            size * (_UNIT_QUERY + 4.0 * _bits(lst.longest)) + rows.size * _UNIT_CALL
+        )
+        counted = np.empty(size)
+        bounds = np.concatenate((first, [size])).tolist()
+        for t, a, b in zip(rows.tolist(), bounds[:-1], bounds[1:], strict=True):
+            # Within a row only the sum matters: by decreasing value, the limits
+            # come in increasing order, and a sorted search reuses its last place.
+            v = np.sort(vals[a:b])[::-1]
+            row = lst.rows[t]
+            count = np.searchsorted(row, self.threshold - v, "right")
+            cum = lst.cums[t]
+            tail = np.where(count > 0, cum[np.maximum(count - 1, 0)], 0.0)
+            with np.errstate(divide="ignore"):
+                part = v + float(lst.best[t]) + np.log(tail)
+            for i in np.flatnonzero((tail < _TINY) & (count > 0)).tolist():
+                part[i] = float(v[i]) + _log_sum(row[: int(count[i])])
+            counted[a:b] = part
         self.parts.append(_log_sum(counted))
 
 
@@ -1906,9 +2000,9 @@ def _pairwise(
             tests[key] = (estimate, certain, sub, used)
     results: dict[tuple[object, ...], float | None] = {}
     for key in sorted(tests, key=lambda k: (tests[k][0], repr(k))):
-        _, certain, sub, used = tests[key]
+        estimate, certain, sub, used = tests[key]
         remaining = budget.limit - budget.spent
-        if certain > remaining:
+        if certain > remaining or estimate > _PAIRWISE_ESTIMATE_LIMIT:
             results[key] = None
             continue
         one = _Budget(min(_FISHER_WORK_LIMIT, remaining))
