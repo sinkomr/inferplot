@@ -745,8 +745,8 @@ def column_percentages(table: CountTable) -> tuple[tuple[float | None, ...], ...
 # computation processes, each weighted by the passes made over it (the weights
 # below), so that a unit is about a nanosecond on the build machine (an Apple
 # M-series laptop) and the count does not depend on the machine or its load.
-_UNIT_GRID: Final = 50.0  # one child of one node in a column's grid
-_UNIT_STEP: Final = 18.0  # one bisection step of one partial table
+_UNIT_GRID: Final = 35.0  # one child of one node in a column's grid
+_UNIT_STEP: Final = 12.0  # one bisection step of one partial table
 _UNIT_CHILD: Final = 40.0  # one partial table carried to the next column
 _UNIT_LIST: Final = 6.0  # one placement of one completion of the list
 _UNIT_BOUND: Final = 10.0  # one element of a column's bound arrays
@@ -1610,7 +1610,6 @@ class _Network:
         sorted by remaining total."""
         here = self.logs[j]
         width = here.size - 1
-        _, worst, _ = self.bounds[j]
         last = j + 1 == self.m
         nodes, node_of = np.unique(rem, return_inverse=True)
         node_of = node_of.reshape(-1)
@@ -1626,6 +1625,12 @@ class _Network:
         per_chunk = max(1, _FISHER_GRID_CHUNK // int(window.max()))
         cut = self.threshold - self.margin
         keep_below = self.threshold + self.margin
+        # With one list column the bound of the last network column is each
+        # child's own table: exact.
+        exact = last and self.list.longest == 1
+        seg_path: list[IntArray] = []
+        seg_start: list[IntArray] = []
+        seg_len: list[IntArray] = []
         for first in range(0, nodes.size, per_chunk):
             stop = min(nodes.size, first + per_chunk)
             lo_path, hi_path = (int(v) for v in np.searchsorted(node_of, [first, stop]))
@@ -1634,7 +1639,7 @@ class _Network:
             chunk_len = length[first:stop]
             row = node_of[lo_path:hi_path] - first
             v = vals[lo_path:hi_path]
-            x1, x2, closed, counted = self._grid_tails(
+            x1, x2, bands, counted = self._grid_tails(
                 j,
                 chunk_nodes,
                 chunk_lo,
@@ -1642,32 +1647,93 @@ class _Network:
                 (start[first:stop], window[first:stop], wide),
                 row,
                 v,
-                cut - v,
+                (cut - v, keep_below - v if exact else None),
             )
             self.parts.append(_log_sum(counted))
             # The children between the two counted ends are carried on (those
-            # whose every completion is more probable are dropped).
-            spans = np.where(closed, 0, x2 - x1 + 1)
-            total = int(spans.sum())
+            # whose every completion is more probable are dropped): x1..x2, or
+            # with one list column the two bands x1..y1 - 1 and y2 + 1..x2 within
+            # the margin of the threshold (``bands``: y1, y2; the children
+            # between are exactly more probable).
+            y1, y2 = bands
+            paths = np.arange(lo_path, hi_path)
+            seg_path.append(np.concatenate((paths, paths)))
+            seg_start.append(np.concatenate((x1, y2 + 1)))
+            seg_len.append(np.maximum(np.concatenate((y1 - x1, x2 - y2)), 0))
+        self._carry(
+            j,
+            rem,
+            vals,
+            a_lo[node_of],
+            (
+                np.concatenate(seg_path),
+                np.concatenate(seg_start),
+                np.concatenate(seg_len),
+            ),
+        )
+
+    def _carry(
+        self,
+        j: int,
+        rem: IntArray,
+        vals: FloatArray,
+        low: IntArray,
+        segments: tuple[IntArray, IntArray, IntArray],
+    ) -> None:
+        """The children of column j's partial tables (``segments``: for each run
+        of children, its partial table, first child and length; ``low`` the
+        first child's choice per partial table), handed to the next column (or
+        the list) in bands of remaining total of at most about
+        ``_path_chunk()`` children, each band sorted by remaining total, so that
+        a node of the next column is processed once (one band) per call."""
+        here = self.logs[j]
+        _, worst, _ = self.bounds[j]
+        last = j + 1 == self.m
+        keep_below = self.threshold + self.margin
+        seg_path, seg_start, seg_len = segments
+        live = seg_len > 0
+        seg_path, seg_start, seg_len = seg_path[live], seg_start[live], seg_len[live]
+        if seg_path.size == 0:
+            return
+        base = rem[seg_path] - low[seg_path]  # remaining total after child 0
+        top_rem = base - seg_start  # the largest remaining total of the run
+        bottom_rem = top_rem - seg_len + 1
+        span = self.rest[j + 1] + 1
+        self.budget.charge((seg_path.size * 4.0 + span) * _UNIT_STEP + _UNIT_CALL)
+        diff = np.zeros(span + 1, dtype=np.int64)
+        np.add.at(diff, bottom_rem, 1)
+        np.add.at(diff, top_rem + 1, -1)
+        counts = np.cumsum(diff[:-1])
+        before = np.cumsum(counts) - counts
+        band_of = before // self._path_chunk()
+        edges = np.flatnonzero(np.diff(band_of)) + 1
+        lows = np.concatenate(([0], edges))
+        highs = np.concatenate((edges, [span])) - 1
+        for r_lo, r_hi in zip(lows.tolist(), highs.tolist(), strict=True):
+            # Within the band: child x of a run has remaining total base - x.
+            x_lo = np.maximum(seg_start, base - r_hi)
+            x_hi = np.minimum(seg_start + seg_len - 1, base - r_lo)
+            size = np.maximum(x_hi - x_lo + 1, 0)
+            total = int(size.sum())
             if total == 0:
                 continue
-            ends = np.cumsum(spans)
-            starts = ends - spans
+            ends = np.cumsum(size)
+            starts = ends - size
             piece = self._path_chunk()
             for c0 in range(0, total, piece):
                 c1 = min(total, c0 + piece)
                 self.budget.request((c1 - c0) * _BYTES_PATH)
                 self.budget.charge((c1 - c0) * _UNIT_CHILD + _UNIT_CALL)
                 index = np.arange(c0, c1, dtype=np.int64)
-                parent = np.searchsorted(ends, index, side="right")
-                x = x1[parent] + (index - starts[parent])
-                choice = chunk_lo[row[parent]] + x
-                child_rem = chunk_nodes[row[parent]] - choice
-                child_val = v[parent] + here[choice]
+                seg = np.searchsorted(ends, index, side="right")
+                parent = seg_path[seg]
+                choice = low[parent] + x_lo[seg] + (index - starts[seg])
+                child_rem = rem[parent] - choice
+                child_val = vals[parent] + here[choice]
                 keep = child_val + worst[child_rem] <= keep_below
                 child_rem = child_rem[keep]
                 child_val = child_val[keep]
-                del index, parent, x, choice, keep
+                del index, seg, parent, choice, keep
                 if child_rem.size == 0:
                     continue
                 if last:
@@ -1710,8 +1776,8 @@ class _Network:
         windows: tuple[IntArray, IntArray, bool],
         row: IntArray,
         v: FloatArray,
-        limit: FloatArray,
-    ) -> tuple[IntArray, IntArray, NDArray[np.bool_], FloatArray]:
+        limits: tuple[FloatArray, FloatArray | None],
+    ) -> tuple[IntArray, IntArray, tuple[IntArray, IntArray], FloatArray]:
         """For the partial tables (node ``row``, log mass ``v``) at a chunk of
         nodes of column j: the children x1..x2 still open, whether none is
         (``closed``), and ``v`` plus the log mass counted at once (the children
@@ -1719,7 +1785,12 @@ class _Network:
         bisection). The masses of each node's children are summed along a row of
         a grid, over the node's window (``windows``: its first child and length,
         and whether the column is wide; see _windows); in a wide column the bound
-        is read at the children the bisections need."""
+        is read at the children the bisections need. ``limits``: the bound at or
+        below which every completion counts, and, where the bound is exact (one
+        list column), the bound above which none does; ``bands`` (y1, y2) cut the
+        open children x1..x2 to those at or below the second (y1 = x2 + 1, y2 =
+        x2 without it, or when none is above it)."""
+        limit, keep = limits
         here = self.logs[j]
         best, _, mass = self.bounds[j]
         paths = row.size
@@ -1752,15 +1823,34 @@ class _Network:
         size = chunk_len[row]
         if bound is None:
             peak = _concave_peak(bound_at, row, size)
-            zeros = np.zeros_like(peak)
-            x1 = _first_where(bound_at, row, zeros, peak + 1, limit, above=True)
-            x2 = _first_where(bound_at, row, peak, size, limit, above=False) - 1
+
+            def first(
+                lo: IntArray, hi: IntArray, at: FloatArray, above: bool
+            ) -> IntArray:
+                return _first_where(bound_at, row, lo, hi, at, above=above)
+
         else:
             peak = np.argmax(bound, axis=1)[row]
-            zeros = np.zeros_like(peak)
-            x1 = _bsearch(bound, row, zeros, peak + 1, limit, above=True)
-            x2 = _bsearch(bound, row, peak, size, limit, above=False) - 1
+            grid = bound
+
+            def first(
+                lo: IntArray, hi: IntArray, at: FloatArray, above: bool
+            ) -> IntArray:
+                return _bsearch(grid, row, lo, hi, at, above=above)
+
+        zeros = np.zeros_like(peak)
+        x1 = first(zeros, peak + 1, limit, True)
+        x2 = first(peak, size, limit, False) - 1
         closed = x1 > peak
+        y1 = np.where(closed, x1, x2 + 1)
+        y2 = x2.copy()
+        if keep is not None:
+            self.budget.charge(paths * 2.0 * _bits(longest) * _UNIT_STEP)
+            above = first(np.minimum(x1, peak + 1), peak + 1, keep, True)
+            below = first(peak, np.maximum(x2 + 1, peak), keep, False) - 1
+            split = ~closed & (above <= peak)
+            y1 = np.where(split, above, y1)
+            y2 = np.where(split, below, y2)
         # The counted ends in the window's coordinates.
         lo = start[row]
         room = width[row]
@@ -1780,7 +1870,7 @@ class _Network:
                 (w[: int(left_end[i])], w[int(right_from[i]) : int(room[i])])
             )
             counted[i] = float(v[i]) + _log_sum(pieces)
-        return x1, x2, closed, counted
+        return x1, x2, (y1, y2), counted
 
     def _final(self, rem: IntArray, vals: FloatArray) -> None:
         """The exact comparison: for each partial table, the completions in the
