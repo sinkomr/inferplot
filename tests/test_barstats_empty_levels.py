@@ -86,6 +86,74 @@ def test_an_unused_category_in_the_bars_tests_is_explained(backend: str) -> None
     assert min(tested) > max(before)
 
 
+# -- B19: a paired table with a category unused in both measurements -------------
+
+PAIRED_X = ["a"] * 6 + ["b"] * 9
+PAIRED_Y = ["a"] * 4 + ["b"] * 2 + ["a"] * 5 + ["b"] * 4
+
+
+def _paired(backend: str) -> Any:
+    lv3 = ["a", "b", "c"]
+    if backend == "pandas":
+        return pd.DataFrame(
+            {
+                "x": pd.Categorical(PAIRED_X, categories=lv3),
+                "y": pd.Categorical(PAIRED_Y, categories=lv3),
+            }
+        )
+    if backend == "polars":
+        return pl.DataFrame(
+            {
+                "x": pl.Series(PAIRED_X, dtype=pl.Enum(lv3)),
+                "y": pl.Series(PAIRED_Y, dtype=pl.Enum(lv3)),
+            }
+        )
+
+    def ordered(values: list[str]) -> Any:
+        codes = pyarrow.array([lv3.index(v) for v in values], pyarrow.int32())
+        return pyarrow.DictionaryArray.from_arrays(
+            codes, pyarrow.array(lv3), ordered=True
+        )
+
+    return pyarrow.table({"x": ordered(PAIRED_X), "y": ordered(PAIRED_Y)})
+
+
+@pytest.mark.parametrize("backend", ["pandas", "polars", "pyarrow"])
+def test_a_category_unused_in_both_measurements_is_named(backend: str) -> None:
+    frame = _paired(backend)
+    with pytest.raises(ValueError, match="no observations in either") as caught:
+        ip.analyze.barstats(frame, "x", "y", paired=True)
+    text = str(caught.value)
+    assert "The declared level 'c' has no observations in either measurement" in text
+    assert "Merge levels" not in text
+    found = re.search(r"runs on the other levels: (.*)\.$", text)
+    assert found is not None, text
+    space: dict[str, Any] = {"data": frame, "pd": pd, "pl": pl, "pyarrow": pyarrow}
+    if isinstance(frame, pd.DataFrame):
+        space["data"] = frame.copy()
+    exec(found.group(1), space)
+    result = ip.analyze.barstats(space["data"], "x", "y", paired=True)
+    plain = ip.analyze.barstats(
+        pd.DataFrame({"x": PAIRED_X, "y": PAIRED_Y}), "x", "y", paired=True
+    )
+    assert result.test is not None
+    assert plain.test is not None
+    assert result.test.p_value == plain.test.p_value
+    assert result.levels == ("a", "b")
+
+
+def test_without_a_test_mcnemar_is_not_named() -> None:
+    result = ip.analyze.barstats(
+        _paired("pandas"), "x", "y", paired=True, results_subtitle=False
+    )
+    notes = [w for w in result.warnings if "'c'" in w]
+    assert len(notes) == 2
+    assert all("McNemar" not in w for w in notes)
+    assert all(
+        "stays a level of both measurements, with a count of 0" in w for w in notes
+    )
+
+
 def test_without_drawn_bar_tests_there_is_no_check() -> None:
     frame = _frame("pandas")
     result = ip.analyze.barstats(

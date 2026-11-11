@@ -432,6 +432,13 @@ def _check_discordant(table: TableData, args: _Args) -> None:
             "silently). Report the agreement as it is, or pass "
             "results_subtitle=False to draw the bars without a test."
         )
+    unused = [
+        level
+        for i, level in enumerate(levels)
+        if sum(counts[i]) == 0 and sum(row[i] for row in counts) == 0
+    ]
+    if quiet and all(a in unused or b in unused for a, b in quiet):
+        _refuse_unused(table, args, unused, quiet)
     if quiet:
         between = [f"between {a!r} and {b!r}" for a, b in quiet]
         listed = (
@@ -451,6 +458,41 @@ def _check_discordant(table: TableData, args: _Args) -> None:
             "(keep the units whose both measurements are among those two: a 2 x 2 "
             "McNemar test)."
         )
+
+
+def _refuse_unused(
+    table: TableData,
+    args: _Args,
+    unused: Sequence[str],
+    quiet: Sequence[tuple[str, str]],
+) -> None:
+    """Bowker's test fails only for levels without observations in either
+    measurement (review B19): say so, and give the call that leaves them out
+    of both columns, in the frame's own library."""
+    one = len(unused) == 1
+    names = _levels_text(unused)
+    kept = [level for level in table.x_levels.levels if level not in unused]
+    names_ = [name for name in (args.x, args.y) if name is not None]
+    if table.library == "pandas":  # declared, so both are categoricals
+        calls = "; ".join(
+            f"data[{name!r}] = data[{name!r}].cat.remove_categories({list(unused)!r})"
+            for name in names_
+        )
+    else:
+        calls = "; ".join(declare_order(table.library, name, kept) for name in names_)
+    test = "McNemar's test" if len(kept) == 2 else "Bowker's test"
+    terms = ", ".join(f"{a!r} and {b!r}" for a, b in quiet)
+    raise ValueError(
+        f"The declared {'level' if one else 'levels'} {names} "
+        f"{'has' if one else 'have'} no observations in either measurement "
+        f"({args.x!r} or {args.y!r}), so "
+        f"Bowker's test of symmetry has a term of 0/0 for every pair with "
+        f"{'it' if one else 'them'} ({terms}) and is not defined (R's statistic "
+        "is NaN, and ggstatsplot leaves out its subtitle silently). If "
+        f"{'it is' if one else 'they are'} not a possible answer, leave "
+        f"{'it' if one else 'them'} out of both columns, and {test} runs on the "
+        f"other levels: {calls}."
+    )
 
 
 def _one_way(table: TableData, args: _Args) -> _Parts:
@@ -706,9 +748,11 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
                 f"{'it' if one else 'them'}."
             )
         elif args.design == "paired":
+            # Review B19: McNemar's test is named only where it is computed.
+            where = " in McNemar's test" if args.results_subtitle else ""
             rest = (
                 f"; {'it stays a level' if one else 'they stay levels'} of both "
-                "measurements in McNemar's test, with a count of 0."
+                f"measurements{where}, with a count of 0."
                 + (_empty_in_bar_tests(table, args, column) if role == "x" else "")
             )
         elif role == "x":
@@ -742,7 +786,7 @@ def _empty_in_bar_tests(table: TableData, args: _Args, column: TableLevels) -> s
     B18): each bar's goodness-of-fit test counts them as categories expected
     to hold their share of the bar, so a bar's p can be small although its
     drawn shares are close; and how to leave them out."""
-    if table.y_levels is None:
+    if table.y_levels is None or not args.proportion_test:
         return ""
     k = len(column.levels)
     one = len(column.empty) == 1
