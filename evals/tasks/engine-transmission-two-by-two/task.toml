@@ -1,0 +1,61 @@
+# Evaluation task engine-transmission-two-by-two (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "engine-transmission-two-by-two"
+function = "barstats"
+trap = "a 2 x 2 table: R's default chi-square has no continuity correction, SciPy's does"
+request = """
+Is the engine shape (V-shaped or straight) associated with the transmission
+type (automatic or manual) among the 32 car models in data.csv (car,
+transmission, engine)?
+"""
+design = "two binary variables (2 x 2 table)"
+correct_rule = "A test of independence on the 2 x 2 table: Pearson's chi-square without correction (R's and ggstatsplot's default), with Yates' correction (SciPy's default), or Fisher's exact test, each scored against its own numbers."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", am = "transmission", vs = "engine" }
+levels = { transmission = { 0 = "automatic", 1 = "manual" }, engine = { 0 = "V-shaped", 1 = "straight" } }
+note = "R datasets::mtcars; am and vs coded with their meanings"
+
+[reference]
+args = ["transmission", "engine"]
+kwargs = { type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "chi_square_independence"
+label = "Pearson's chi-square without continuity correction"
+source = "fixture"
+fixture = "ggbarstats-mtcars-am-vs-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 0.906882591093117, key = "stats/subtitle_data/0/statistic" }
+df = { value = 1.0, key = "stats/subtitle_data/0/df" }
+p_value = { value = 0.340942914274381, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.0, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.490267825105949, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "chi_square_independence"
+label = "chi-square with Yates' correction"
+source = "recipe"
+recipe = "chi2_yates"
+recipe_args = { x = "transmission", y = "engine" }
+[accepted.numbers]
+statistic = { value = 0.34753550543024225 }
+df = { value = 1.0 }
+p_value = { value = 0.5555115470131495 }
+n = { value = 32.0 }
+
+[[accepted]]
+family = "fisher"
+source = "recipe"
+recipe = "fisher_2x2"
+recipe_args = { x = "transmission", y = "engine" }
+[accepted.numbers]
+p_value = { value = 0.47269744160177996 }
+n = { value = 32.0 }

@@ -1,0 +1,51 @@
+# Evaluation task bag-weights-missing (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "bag-weights-missing"
+function = "histostats"
+trap = "missing values: 10 of 12 bags were weighed"
+request = """
+Twelve bags of a product labelled "10 kg" were weighed (data.csv: bag,
+weight_kg); some weights were not recorded. Is the average bag weight different
+from the labelled 10 kg?
+"""
+design = "one sample against the value 10, with missing values"
+correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 10 on the 10 recorded weights."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_one_missing.csv"
+columns = { id = "bag", value = "weight_kg" }
+note = "inferplot oracle dataset edge_one_missing (hand-made); renamed"
+
+[reference]
+args = ["weight_kg"]
+kwargs = { test_value = 10, type = "parametric" }
+check_codes = ["rows_dropped"]
+
+[[accepted]]
+family = "one_sample_t"
+source = "fixture"
+fixture = "gghistostats-edge_one_missing-parametric"
+kwargs = { test_value = 10, type = "parametric" }
+[accepted.numbers]
+statistic = { value = 2.22136073333183, key = "stats/subtitle_data/0/statistic" }
+df = { value = 9.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0534452218122075, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.64195684818447, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.00917162900677974, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.26548314175028, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "gghistostats-edge_one_missing-nonparametric"
+kwargs = { test_value = 10, type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 45.0, key = "stats/subtitle_data/0/statistic", alt = [10.0] }
+p_value = { value = 0.0827310223151024, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.636363636363636, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0527665456064871, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.895942092448953, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }

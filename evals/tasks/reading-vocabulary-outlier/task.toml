@@ -1,0 +1,61 @@
+# Evaluation task reading-vocabulary-outlier (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "reading-vocabulary-outlier"
+function = "scatterstats"
+trap = "one real extreme point reverses Pearson's r"
+request = """
+For 15 children we have weekly hours of reading (reading_hours) and a
+vocabulary test score (vocabulary) in data.csv. One child's values are far from
+the others; the school confirmed they are correct. Is reading time related to
+vocabulary?
+"""
+design = "two measurements, one real extreme point"
+correct_rule = "A correlation that resists the extreme point: Spearman's rho or the winsorized correlation. Pearson's r (negative, driven by one child) is rejected and flagged as a trap."
+rejected = ["pearson"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_corr_outlier.csv"
+columns = { id = "child", x = "reading_hours", y = "vocabulary" }
+note = "inferplot oracle dataset edge_corr_outlier (hand-made); renamed"
+
+[reference]
+args = ["reading_hours", "vocabulary"]
+kwargs = { type = "nonparametric" }
+check_codes = []
+
+[[accepted]]
+family = "spearman"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_outlier-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 210.0, key = "stats/subtitle_data/0/statistic", alt = [0.625] }
+p_value = { value = 0.0127274535112337, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.625, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.14951970805907, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.865707566147596, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 15.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "winsorized"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_outlier-robust"
+kwargs = { type = "robust" }
+[accepted.numbers]
+statistic = { value = 4.62027681051484, key = "stats/subtitle_data/0/statistic", alt = [0.788358687052449] }
+p_value = { value = 0.000479696244941759, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.788358687052449, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.463129062008415, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.926469663608428, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 15.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "pearson"
+label = "Pearson's r driven by the extreme point"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_outlier-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = -4.47365152688888, key = "stats/subtitle_data/0/statistic", alt = [-0.778602844077153] }
+p_value = { value = 0.000626823213780319, key = "stats/subtitle_data/0/p.value" }

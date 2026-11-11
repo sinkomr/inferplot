@@ -1,0 +1,64 @@
+# Evaluation task noise-four-conditions-sphericity (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "noise-four-conditions-sphericity"
+function = "withinstats"
+trap = "sphericity badly violated (Greenhouse-Geisser epsilon near 1/3)"
+request = """
+Twelve volunteers each did a memory task under four noise conditions (a, b,
+c and d). data.csv has one row per volunteer and condition (volunteer, noise,
+memory_score). Does memory performance differ between the noise conditions?
+"""
+design = "four conditions on the same 12 subjects; very unequal variances of the differences"
+correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser correction, or the Friedman test. The uncorrected repeated-measures ANOVA is flagged as a trap."
+rejected = ["welch_anova", "oneway_anova", "kruskal_wallis"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_within_nonspherical.csv"
+columns = { subject = "volunteer", condition = "noise", value = "memory_score" }
+note = "inferplot oracle dataset edge_within_nonspherical (hand-made); renamed"
+
+[reference]
+args = ["noise", "memory_score"]
+kwargs = { subject_id = "volunteer", type = "parametric" }
+check_codes = ["pairs_hidden"]
+
+[[accepted]]
+family = "rm_anova"
+source = "fixture"
+fixture = "ggwithinstats-edge_within_nonspherical-parametric"
+kwargs = { subject_id = "volunteer", type = "parametric" }
+[accepted.numbers]
+statistic = { value = 0.69497724120534, key = "stats/subtitle_data/0/statistic" }
+df = { value = 1.00853751094317, key = "stats/subtitle_data/0/df" }
+df_error = { value = 11.0939126203749, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.423277265120188, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.0, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "friedman"
+source = "fixture"
+fixture = "ggwithinstats-edge_within_nonspherical-nonparametric"
+kwargs = { subject_id = "volunteer", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 11.3, key = "stats/subtitle_data/0/statistic" }
+df = { value = 3.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0102094964331337, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.313888888888889, key = "stats/subtitle_data/0/estimate" }
+n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "rm_anova"
+label = "repeated-measures ANOVA without the sphericity correction"
+source = "recipe"
+recipe = "rm_anova_uncorrected"
+recipe_args = { x = "noise", y = "memory_score", subject = "volunteer" }
+[traps.numbers]
+statistic = { value = 0.6949772412053425 }
+df = { value = 3.0 }
+df_error = { value = 33.0 }
+p_value = { value = 0.5617227000378342 }
+n = { value = 12.0 }

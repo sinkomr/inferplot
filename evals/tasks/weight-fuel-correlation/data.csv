@@ -1,0 +1,33 @@
+car,wt,mpg
+Mazda RX4,2.62,21
+Mazda RX4 Wag,2.875,21
+Datsun 710,2.32,22.8
+Hornet 4 Drive,3.215,21.4
+Hornet Sportabout,3.44,18.7
+Valiant,3.46,18.1
+Duster 360,3.57,14.3
+Merc 240D,3.19,24.4
+Merc 230,3.15,22.8
+Merc 280,3.44,19.2
+Merc 280C,3.44,17.8
+Merc 450SE,4.07,16.4
+Merc 450SL,3.73,17.3
+Merc 450SLC,3.78,15.2
+Cadillac Fleetwood,5.25,10.4
+Lincoln Continental,5.424,10.4
+Chrysler Imperial,5.345,14.7
+Fiat 128,2.2,32.4
+Honda Civic,1.615,30.4
+Toyota Corolla,1.835,33.9
+Toyota Corona,2.465,21.5
+Dodge Challenger,3.52,15.5
+AMC Javelin,3.435,15.2
+Camaro Z28,3.84,13.3
+Pontiac Firebird,3.845,19.2
+Fiat X1-9,1.935,27.3
+Porsche 914-2,2.14,26
+Lotus Europa,1.513,30.4
+Ford Pantera L,3.17,15.8
+Ferrari Dino,2.77,19.7
+Maserati Bora,3.57,15
+Volvo 142E,2.78,21.4

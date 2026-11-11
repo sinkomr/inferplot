@@ -1,0 +1,64 @@
+# Evaluation task strains-unbalanced-small-group (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "strains-unbalanced-small-group"
+function = "betweenstats"
+trap = "a group of 4 next to groups of 12 and 25"
+request = """
+We measured the growth (mm per week) of three plant strains, but only 4
+plants of strain_1 survived, against 12 of strain_2 and 25 of strain_3
+(data.csv: strain, growth). Does growth differ between the strains?
+"""
+design = "three independent groups of very unequal size, one very small"
+correct_rule = "Welch's ANOVA, the classic one-way ANOVA or the Kruskal-Wallis test; the small group should be reported (inferplot's small_n check)."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_unbalanced.csv"
+columns = { group = "strain", value = "growth" }
+levels = { strain = { a = "strain_1", b = "strain_2", c = "strain_3" } }
+note = "inferplot oracle dataset edge_unbalanced (hand-made); renamed"
+
+[reference]
+args = ["strain", "growth"]
+kwargs = { type = "parametric" }
+check_codes = ["pairs_hidden", "small_n"]
+
+[[accepted]]
+family = "welch_anova"
+source = "fixture"
+fixture = "ggbetweenstats-edge_unbalanced-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 6.46481622707925, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+df_error = { value = 13.225869425978, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0110066022037888, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.402483169060971, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0267532333934209, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 41.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-edge_unbalanced-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 8.67131242740999, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.013093279263988, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.21678281068525, key = "stats/subtitle_data/0/estimate" }
+n = { value = 41.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "oneway_anova"
+source = "recipe"
+recipe = "oneway_anova"
+recipe_args = { x = "strain", y = "growth" }
+[accepted.numbers]
+statistic = { value = 4.5835267592583335 }
+df = { value = 2.0 }
+df_error = { value = 38.0 }
+p_value = { value = 0.016472220240256644 }
+n = { value = 41.0 }

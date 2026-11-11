@@ -1,0 +1,65 @@
+# Evaluation task grip-strength-missed-visits (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "grip-strength-missed-visits"
+function = "withinstats"
+trap = "paired data with missed visits: only the 12 patients with both visits can be paired"
+request = """
+Grip strength (kg) of patients before and after a six-week rehabilitation
+programme (data.csv: patient, visit, grip_kg, one row per patient and visit).
+A few patients missed one of the two visits or have an incomplete row. Did grip
+strength change?
+"""
+design = "two time points on the same patients; incomplete patients"
+correct_rule = "A paired analysis of the 12 complete patients: the paired t-test or the Wilcoxon signed-rank test. An unpaired test on all rows is flagged as a trap."
+rejected = ["welch_t", "student_t", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_within2_missing.csv"
+columns = { subject = "patient", condition = "visit", value = "grip_kg" }
+levels = { visit = { pre = "before", post = "after" } }
+note = "inferplot oracle dataset edge_within2_missing (hand-made); renamed"
+
+[reference]
+args = ["visit", "grip_kg"]
+kwargs = { subject_id = "patient", type = "parametric" }
+check_codes = ["rows_dropped"]
+
+[[accepted]]
+family = "paired_t"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_missing-parametric"
+kwargs = { subject_id = "patient", type = "parametric" }
+[accepted.numbers]
+statistic = { value = 3.68841930055446, key = "stats/subtitle_data/0/statistic" }
+df = { value = 11.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0035729869435804, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.99017929984084, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.310164497512419, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.64258725687375, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_missing-nonparametric"
+kwargs = { subject_id = "patient", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 73.0, key = "stats/subtitle_data/0/statistic", alt = [5.0] }
+p_value = { value = 0.0085644533768971, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.871794871794872, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.604289377706298, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.962670963089941, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 12.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_t"
+label = "unpaired Welch's t-test on all rows"
+source = "recipe"
+recipe = "welch_t"
+recipe_args = { x = "visit", y = "grip_kg", levels = ["after", "before"] }
+[traps.numbers]
+statistic = { value = 2.3506740248039013 }
+df = { value = 24.56297906342052 }
+p_value = { value = 0.02708592200127261 }
+n = { value = 27.0 }

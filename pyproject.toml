@@ -13,7 +13,7 @@ authors = [{ name = "inferplot contributors" }]
 requires-python = ">=3.11"
 keywords = ["statistics", "plotting", "matplotlib", "ggstatsplot", "effect size", "hypothesis test"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -43,7 +43,10 @@ pyarrow = ["pyarrow>=14.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/sinkomr/inferplot"
+Documentation = "https://github.com/sinkomr/inferplot/blob/main/docs/api.md"
+Source = "https://github.com/sinkomr/inferplot"
 Issues = "https://github.com/sinkomr/inferplot/issues"
+Changelog = "https://github.com/sinkomr/inferplot/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 # Every entry has a lower bound so the lowest-direct CI job resolves to versions
@@ -55,8 +58,14 @@ dev = [
     "ruff>=0.9",
     "pyright>=1.1.390",
     "scipy-stubs>=1.15",
+    # tests/test_packaging.py parses the release workflow.
+    "pyyaml>=6.0.2",
 ]
 
+# The version has one source: `__version__` in src/inferplot/__init__.py, which
+# hatchling reads at build time. A release commit sets it (for example "0.1.0") and
+# dates the CHANGELOG entry; the release workflow refuses a tag that differs from
+# it (docs/RELEASING.md).
 [tool.hatch.version]
 path = "src/inferplot/__init__.py"
 
@@ -74,9 +83,16 @@ include = [
     "/oracle/export_datasets.R",
     "/.github/workflows/oracle.yml",
     "/tools/reference/*.py",
+    # tests/test_packaging.py checks the release workflow, the CHANGELOG and the
+    # release checks; tests/test_evals.py validates the evaluation tasks.
+    "/.github/workflows/release.yml",
+    "/tools/release_check.py",
+    "/CHANGELOG.md",
+    "/evals",
     # The documentation tests run every example and code block in these.
     "/docs/api.md",
     "/docs/intervals.md",
+    "/docs/RELEASING.md",
     "/docs/examples/*.py",
     "/docs/img/*.png",
     "/skills/inferplot/SKILL.md",
@@ -134,7 +150,7 @@ banned-module-level-imports = ["pandas", "polars", "pyarrow"]
 # --- pyright ----------------------------------------------------------------
 
 [tool.pyright]
-include = ["src", "tests", "tools"]
+include = ["src", "tests", "tools", "evals"]
 strict = ["src"]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"

@@ -1,0 +1,64 @@
+# Evaluation task transmission-unequal-variances (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "transmission-unequal-variances"
+function = "betweenstats"
+trap = "unequal variances and unequal group sizes (SD 3.8 with n 19 against SD 6.2 with n 13)"
+request = """
+Here are fuel economy figures (mpg) for 32 car models, 19 with automatic and
+13 with manual transmissions (data.csv). Is fuel economy different between
+automatic and manual cars? I need the test result and a plot.
+"""
+design = "two independent groups of unequal size and spread"
+correct_rule = "Welch's t-test (stated as Welch's or as not assuming equal variances) or the Mann-Whitney test. Student's pooled-variance t-test is rejected: the spreads differ by a factor of 1.6 and the smaller group has the larger spread."
+rejected = ["student_t"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", mpg = "mpg", am = "transmission" }
+levels = { transmission = { 0 = "automatic", 1 = "manual" } }
+note = "R datasets::mtcars; am coded as automatic/manual"
+
+[reference]
+args = ["transmission", "mpg"]
+kwargs = { type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "welch_t"
+source = "fixture"
+fixture = "ggbetweenstats-mtcars-am-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = -3.76712314514493, key = "stats/subtitle_data/0/statistic" }
+df = { value = 18.3322516384005, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.00137363833307103, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -1.35238383525963, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -2.16606402393414, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -0.512015986926307, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "mann_whitney"
+source = "fixture"
+fixture = "ggbetweenstats-mtcars-am-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 42.0, key = "stats/subtitle_data/0/statistic", alt = [205.0] }
+p_value = { value = 0.00187139133317856, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -0.659919028340081, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.83556160214534, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -0.361886931945902, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "student_t"
+label = "Student's t-test assuming equal variances"
+source = "recipe"
+recipe = "student_t"
+recipe_args = { x = "transmission", y = "mpg", levels = ["automatic", "manual"] }
+[traps.numbers]
+statistic = { value = -4.106126983100689 }
+df = { value = 30.0 }
+p_value = { value = 0.0002850207439350685 }
+n = { value = 32.0 }

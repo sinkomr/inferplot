@@ -1,0 +1,66 @@
+# Evaluation task bugs-four-situations (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "bugs-four-situations"
+function = "withinstats"
+trap = "four repeated conditions, incomplete subjects (88 of 93 complete), sphericity correction"
+request = """
+Participants rated how much they wanted to kill a bug (0 to 10) in four
+situations: LDLF, LDHF, HDLF and HDHF (low or high disgust, low or high fright).
+Each participant was asked about all four; data.csv has one row per participant
+and situation, and a few participants skipped a situation. Does the desire to
+kill the bug differ across the four situations?
+"""
+design = "four conditions on the same subjects; some subjects incomplete"
+correct_rule = "The repeated-measures ANOVA with the Greenhouse-Geisser correction, or the Friedman test, on the 88 complete subjects. The uncorrected repeated-measures ANOVA (wrong df and p) is flagged as a trap."
+rejected = ["welch_anova", "oneway_anova", "kruskal_wallis"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/bugs_long.csv"
+columns = { subject = "subject", condition = "situation", desire = "desire" }
+note = "ggstatsplot's bugs_long dataset (Ryan, Wilde & Crist, 2013), as exported by the oracle"
+
+[reference]
+args = ["situation", "desire"]
+kwargs = { subject_id = "subject", type = "parametric" }
+check_codes = ["pairs_hidden", "rows_dropped"]
+
+[[accepted]]
+family = "rm_anova"
+source = "fixture"
+fixture = "ggwithinstats-bugs_long-parametric"
+kwargs = { subject_id = "subject", type = "parametric" }
+[accepted.numbers]
+statistic = { value = 20.587383616023, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.63165883746128, key = "stats/subtitle_data/0/df" }
+df_error = { value = 228.954318859131, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 8.2702235026494e-11, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.0782821039378391, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0280343890103807, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 88.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "friedman"
+source = "fixture"
+fixture = "ggwithinstats-bugs_long-nonparametric"
+kwargs = { subject_id = "subject", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 55.8337912087912, key = "stats/subtitle_data/0/statistic" }
+df = { value = 3.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 4.5584196371013e-12, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.211491633366633, key = "stats/subtitle_data/0/estimate" }
+n = { value = 88.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "rm_anova"
+label = "repeated-measures ANOVA without the sphericity correction"
+source = "recipe"
+recipe = "rm_anova_uncorrected"
+recipe_args = { x = "situation", y = "desire", subject = "subject" }
+[traps.numbers]
+statistic = { value = 20.5873836160231 }
+df = { value = 3.0 }
+df_error = { value = 261.0 }
+p_value = { value = 5.268049974050208e-12 }
+n = { value = 88.0 }

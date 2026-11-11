@@ -1,0 +1,44 @@
+# Evaluation task survey-regions-missing (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "survey-regions-missing"
+function = "barstats"
+trap = "missing categories in either column: 17 of 20 respondents are complete"
+request = """
+Survey answers (yes or no) from respondents in three regions (data.csv:
+respondent, region, answer; one row per respondent). Some respondents did not
+give their region or their answer. Does the share of yes answers differ between
+the regions?
+"""
+design = "two categorical variables with missing values; small expected counts"
+correct_rule = "Pearson's chi-square test of independence on the 17 complete respondents, or Fisher's exact test (not scored for numbers; no reference value)."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_bar_missing.csv"
+columns = { id = "respondent", x = "region", y = "answer" }
+levels = { region = { a = "east", b = "north", c = "west" }, answer = { p = "no", q = "yes" } }
+note = "inferplot oracle dataset edge_bar_missing (hand-made), without its weight column; renamed"
+
+[reference]
+args = ["region", "answer"]
+kwargs = { type = "parametric" }
+check_codes = ["rows_dropped", "small_expected"]
+
+[[accepted]]
+family = "chi_square_independence"
+source = "fixture"
+fixture = "ggbarstats-edge_bar_missing-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 0.810648148148148, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+p_value = { value = 0.666760695986572, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.0, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.510185410199564, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 17.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "fisher"
+source = "none"
