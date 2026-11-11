@@ -266,13 +266,13 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
     """The proportion test of each bar (the levels of y that hold observations,
     in order): the goodness-of-fit test of x within the bar against ``ratio``,
     every level of x kept, two-sided at 95% and unadjusted (ggstatsplot's
-    ``onesample_data()``), with Pearson's C. A bar without a test keeps its
-    entry with the reason, and ``warnings`` says so (R prints NA there)."""
+    ``onesample_data()``), with Pearson's C. A bar's test fails only when x has
+    a single level, which ``_check_two_way`` refuses first (D101, review B21):
+    that branch keeps the entry with the reason (R prints NA there) but is not
+    reached through the API, so it adds no warning."""
     if table.y_levels is None:
         return (), []
-    levels = table.y_levels.levels
     out: list[_BarTest] = []
-    untested: list[str] = []
     for bar in stats.proportion_tests(table.table(), args.ratio):
         if bar.test is None or bar.effect is None:
             reason = (
@@ -280,7 +280,6 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
                 "compares two or more (ggstatsplot prints NA)"
             )
             out.append(_BarTest(test=None, effect_size=None, no_test_reason=reason))
-            untested.append(levels[bar.column])
             continue
         out.append(
             _BarTest(
@@ -290,17 +289,7 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
                 ),
             )
         )
-    warnings: list[str] = []
-    if untested:
-        warnings.append(
-            f"The {'bar' if len(untested) == 1 else 'bars'} "
-            f"{_levels_text(untested)} of {args.y!r} "
-            f"{'has' if len(untested) == 1 else 'have'} no proportion test: x="
-            f"{args.x!r} has a single level, and a goodness-of-fit test compares two "
-            "or more. The bars are drawn without a p-value label (ggstatsplot "
-            "prints NA)."
-        )
-    return tuple(out), warnings
+    return tuple(out), []
 
 
 def _two_way(table: TableData, args: _Args) -> _Parts:
@@ -658,8 +647,8 @@ def _one_pair(
             p_value=None,
             effect=None,
             reason=(
-                f"both levels occur only in {column!r} of y, so their table has a "
-                "single column and no test; R's fisher.test stops there"
+                f"both levels occur only in {column!r} of {args.y!r}, so their "
+                "table has a single column and no test; R's fisher.test stops there"
             ),
             warning=(
                 f"The pair {name} of {args.x!r} has no Fisher test: both levels "

@@ -512,8 +512,8 @@ def test_single_x_keeps_the_pairs_r_loses(backend: Backend) -> None:
         None,
     )
     assert ab.no_test_reason == (
-        "both levels occur only in 'p' of y, so their table has a single column "
-        "and no test; R's fisher.test stops there"
+        "both levels occur only in 'p' of 'y2', so their table has a single "
+        "column and no test; R's fisher.test stops there"
     )
     assert (ab.estimate, ab.conf_low, ab.conf_high) == (None, None, None)
     p_ac = float(scipy_stats.fisher_exact([[3, 0], [0, 5]])[1])
@@ -537,8 +537,8 @@ def test_single_x_keeps_the_pairs_r_loses(backend: Backend) -> None:
     assert issue.severity == "info"
     assert issue.message == (
         "1 of the 3 pairwise comparisons of 'x3' has no p-value: 'a' and 'b' (both "
-        "levels occur only in 'p' of y, so their table has a single column and no "
-        "test; R's fisher.test stops there). The other 2 are adjusted among "
+        "levels occur only in 'p' of 'y2', so their table has a single column and "
+        "no test; R's fisher.test stops there). The other 2 are adjusted among "
         "themselves."
     )
     # The pair stays in the table and the frame, without numbers.
