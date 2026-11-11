@@ -1224,28 +1224,6 @@ ROUND3_CASES <- c(
     "edge_one_near_mu", x = "literal", label = "edge_one_near_mu-literal",
     types = "nonparametric", extra_args = list(test.value = 0.3)
   ),
-  # Ratings 1 to 5 against the test value in two writings (review Z1). edge_one_ratings:
-  # `whole` is 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 3, 2, 4, 3, 3 (trimmed mean 3) and
-  # `tenths` the same in tenths (0.1 to 0.5), against 2.5 and 0.25; `centred_whole`
-  # is 1, 2, 3, 3, 4, 5, 2, 4, 3, 3, 1, 5, 3, 2, 4 and `centred_tenths` the same in
-  # tenths, against their trimmed mean as written, 3 and 0.3 (probe-trimcibt records
-  # the resamples behind each).
-  histo_cases(
-    "edge_one_ratings", x = "whole", label = "edge_one_ratings-whole", types = "robust",
-    extra_args = list(test.value = 2.5)
-  ),
-  histo_cases(
-    "edge_one_ratings", x = "tenths", label = "edge_one_ratings-tenths", types = "robust",
-    extra_args = list(test.value = 0.25)
-  ),
-  histo_cases(
-    "edge_one_ratings", x = "centred_whole", label = "edge_one_ratings-centred_whole",
-    types = "robust", extra_args = list(test.value = 3)
-  ),
-  histo_cases(
-    "edge_one_ratings", x = "centred_tenths", label = "edge_one_ratings-centred_tenths",
-    types = "robust", extra_args = list(test.value = 0.3)
-  ),
   # Cramer's V and its interval at 19 to 60 df (review B5), x a and b by y01 ... yc
   # through counts n: edge_bar_wide20 a 1 + (2j mod 7), b 1 + ((5j + 3) mod 9), j =
   # 1..20 (n 187); edge_bar_wide40 and edge_bar_wide61 a 1 + (j mod 7), b 1 + ((2j +
@@ -1256,16 +1234,16 @@ ROUND3_CASES <- c(
   edge_bar("edge_bar_wide40", extra_args = list(counts = "n")),
   edge_bar("edge_bar_wide61", extra_args = list(counts = "n")),
   edge_bar("edge_bar_wide61r", extra_args = list(counts = "n")),
-  # Exact zeros (review C3): a (p 0, q 1), b (p 5, q 4), whose adjusted Cramer's V is
-  # exactly 0 (chi-squared 10/9 = df n / (n - 1)); counts 8, 2, 7, 8 against ratio
-  # 0.32, 0.08, 0.28, 0.32, an exact fit (chi-squared 0); 49 levels of 2 each against
-  # equal shares (chi-squared 0).
-  edge_bar("edge_bar_zero_v", extra_args = list(counts = "n")),
+  # Exact zeros (review C3): counts 8, 2, 7, 8 against ratio 0.32, 0.08, 0.28, 0.32,
+  # an exact fit: chi-squared is 0, R's doubles give 1.13e-31 (Pearson's C 6.71e-17),
+  # and ggstatsplot prints that (probe-bartables). edge_bar_zero_v is in
+  # HELD_OUT_CASES; 49 levels of 2 each (edge_bar_equal49, chi-squared 1.21e-30) only
+  # in probe-bartables: ggbarstats stops on 49 levels ("`n` must be a whole number
+  # between 1 and 24, not the number 49.") after computing its subtitle.
   bar_cases(
     "edge_bar_exact_fit", x = "x", label = "edge_bar_exact_fit",
     extra_args = list(counts = "n", ratio = c(0.32, 0.08, 0.28, 0.32))
   ),
-  bar_cases("edge_bar_equal49", x = "x", label = "edge_bar_equal49", extra_args = list(counts = "n")),
   # Percent labels at rounding ties (D108): x a and b, one bar per (n, k) with a k and
   # b n - k, bar n2000k001 and so on: n 2000 with k 1, 3, 10, 21, 30, 39, 89, 91, 109;
   # n 1000 with k 5, 15; n 200 with k 1, 3; n 40 with k 1. (k / n) x 100 is a tie at
@@ -1328,6 +1306,37 @@ HELD_OUT_CASES <- c(
       types = "nonparametric", extra_args = list(test.value = 0.3)
     )
   }), recursive = FALSE),
+  # Review round 3 (Z1; D65, D105): ratings 1 to 5 against the test value in two
+  # writings. edge_one_ratings: `whole` is 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 3, 2, 4, 3, 3
+  # (trimmed mean 3) and `tenths` the same in tenths (0.1 to 0.5), against 2.5 and
+  # 0.25; `centred_whole` is 1, 2, 3, 3, 4, 5, 2, 4, 3, 3, 1, 5, 3, 2, 4 and
+  # `centred_tenths` the same in tenths, against their trimmed mean, 3 and 0.3.
+  # trimcibt gives the same in both writings (probe-trimcibt): about 11% of its T*
+  # are 0/0 (whole, tenths; 2.5% centred), which sort() drops while p still divides
+  # by all B and the bound takes the round(0.95 B)-th, so the interval is NA (whole,
+  # tenths) and p at t = 0 is 0.975 (centred). inferplot leaves 0/0 resamples out of
+  # both (D65): p 0.117 with [2.35, 3.65], and p 1 at t = 0.
+  histo_cases(
+    "edge_one_ratings", x = "whole", label = "edge_one_ratings-whole", types = "robust",
+    extra_args = list(test.value = 2.5), expect_na_values = list(robust = "subtitle")
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "tenths", label = "edge_one_ratings-tenths", types = "robust",
+    extra_args = list(test.value = 0.25), expect_na_values = list(robust = "subtitle")
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "centred_whole", label = "edge_one_ratings-centred_whole",
+    types = "robust", extra_args = list(test.value = 3)
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "centred_tenths", label = "edge_one_ratings-centred_tenths",
+    types = "robust", extra_args = list(test.value = 0.3)
+  ),
+  # Review round 3 (C3; D107): a (p 0, q 1), b (p 5, q 4), whose adjusted Cramer's V is
+  # exactly 0 (chi-squared 10/9 = df n / (n - 1)). R's doubles leave chi-squared / n -
+  # 1 / 9 = 2^-56, and ggstatsplot prints V = 5.59e-09 (probe-bartables); inferplot's
+  # own rounding prints 3.95e-09.
+  edge_bar("edge_bar_zero_v", extra_args = list(counts = "n")),
   # Review round 3 (D108): R's round() at one digit picks between the two candidates
   # rounded to that digit, the nearer one to the double and the even one on a tie of
   # their distances, so (1 / 2000) x 100 prints 0%; Python's round() of the same
@@ -5835,13 +5844,52 @@ bartables_probe <- function() {
       ))
     )
   })
+  # What ggbarstats prints: statsExpressions::contingency_table() as ggbarstats calls
+  # it (its defaults are ggbarstats': two-sided, 95%, two digits), which also gives the
+  # subtitle of edge_bar_equal49, where ggbarstats itself stops while drawing 49 levels
+  # ("`n` must be a whole number between 1 and 24, not the number 49.").
+  expression_row <- function(make) {
+    attempt_fields(make(), function(r) {
+      list(
+        statistic_hex = hex(r$statistic), p_value_hex = hex(r$p.value),
+        estimate_hex = hex(r$estimate), conf_low_hex = hex(r$conf.low),
+        conf_high_hex = hex(r$conf.high), n_obs = r$n.obs, effectsize = r$effectsize,
+        expression = deparse_text(r$expression[[1L]])
+      )
+    })
+  }
+  ratio <- c(0.32, 0.08, 0.28, 0.32)
   zeros <- c(
-    list(two_way("edge_bar_zero_v", as_matrix(zero_v$data))),
-    list(one_way(
-      "edge_bar_exact_fit", as.numeric(exact_fit$data$n), c(0.32, 0.08, 0.28, 0.32)
+    list(c(
+      two_way("edge_bar_zero_v", as_matrix(zero_v$data)),
+      list(contingency_table = expression_row(function() {
+        statsExpressions::contingency_table(data = zero_v$data, x = x, y = y, counts = n)
+      }))
     )),
-    list(one_way(
-      "edge_bar_equal49", as.numeric(equal49$data$n), rep(1 / 49, 49L)
+    list(c(
+      one_way("edge_bar_exact_fit", as.numeric(exact_fit$data$n), ratio),
+      list(contingency_table = expression_row(function() {
+        statsExpressions::contingency_table(
+          data = exact_fit$data, x = x, counts = n, ratio = ratio
+        )
+      }))
+    )),
+    list(c(
+      one_way("edge_bar_equal49", as.numeric(equal49$data$n), rep(1 / 49, 49L)),
+      list(
+        contingency_table = expression_row(function() {
+          statsExpressions::contingency_table(data = equal49$data, x = x, counts = n)
+        }),
+        ggbarstats = local({
+          HIDDEN$log <- list()
+          HIDDEN$values <- list()
+          set.seed(CASE_SEED)
+          attempt_fields(
+            ggstatsplot::ggbarstats(data = equal49$data, x = x, counts = n, type = "parametric"),
+            subtitle_hex
+          )
+        })
+      )
     )),
     big
   )
