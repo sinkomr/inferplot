@@ -507,12 +507,8 @@ def _table_2xc(n: int, cols: int, tilt: float) -> IntArray:
     return np.vstack([first, per - first])
 
 
-# The tables the brief asks to be timed, near independence and far from it. Best of
-# three on the build machine (Apple M-series): 2 x 2 n = 1e6 0.017 s; 2 x 3 n =
-# 2,000 0.004 s (p 0.18) and 0.015 s (p 3e-27); n = 10,000 0.033 s (p 0.05) and
-# 0.29 s (p 9e-133); 2 x 5 n = 500 0.003 s (p 0.68) and 0.043 s (p 5e-13); n =
-# 2,000 0.010 s (p 0.65) and 0.094 s (p 1.6e-4). The bound is the documented two
-# seconds.
+# Tables near independence and far from it that are answered within the limits
+# (the work and memory behind them: tests/stats/test_fisher_cost.py).
 TIMED: Final = [
     (np.array([[500_000, 500_000], [499_000, 501_000]]), "2 x 2, n = 1e6, p 0.16"),
     (_table_2xc(2_000, 3, 0.05), "2 x 3, n = 2,000, p 0.18"),
@@ -537,16 +533,17 @@ def test_fisher_cost(table: IntArray, what: str) -> None:
 
 
 def test_fisher_refuses_what_would_take_too_long() -> None:
-    # 2 x 5, n = 2,000, far from independence (p ~ 1e-55): the search would need
-    # about 1.2e8 array elements (3.2 s); it stops before the stage that would
-    # pass 6e7 and says so. The stages before it are spent (measured 1.7 s), so
-    # the refusal itself takes up to about the budget.
+    # 2 x 5, n = 2,000, far from independence: the search would pass the work
+    # limit (1e9 units, about a second) and says so, having spent at most the
+    # limit; 2 x 3 with 1.3 million per cell needs more memory than one test may
+    # take, known from the margins and refused before anything is allocated
+    # (tests/stats/test_fisher_cost.py asserts the counts behind both).
     # No wall clock is asserted: the refusal depends on the work, not the machine.
     table = _table_2xc(2_000, 5, 1.0)
-    with pytest.raises(ValueError, match="more than about two seconds"):
+    with pytest.raises(ValueError, match="more work than inferplot allows one test"):
         fisher_exact(table)
-    with pytest.raises(ValueError, match="merge sparse levels"):
-        fisher_exact(np.array([[2_000_000, 2_000_000, 2_000_000], [1, 1, 1]]))
+    with pytest.raises(ValueError, match="the chi-square test of the table answers"):
+        fisher_exact(np.full((2, 3), 1_300_000))
 
 
 @pytest.mark.parametrize(

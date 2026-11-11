@@ -45,7 +45,6 @@ from dataclasses import dataclass, field
 from typing import Final, Literal, cast
 
 import numpy as np
-from numpy.typing import NDArray
 
 from inferplot import stats
 from inferplot._data import TableData, TableLevels, read_table, table_notes
@@ -478,17 +477,7 @@ def _one_way(table: TableData, args: _Args) -> _Parts:
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _Pair:
-    """One pair of levels of x before adjustment: Fisher's p (None with the
-    reason) and Cramér's V (None where it is not defined)."""
-
-    first: int
-    second: int
-    p_value: float | None
-    effect: stats.EffectSizeCI | None
-    reason: str | None
-    warning: str | None
+_SHOWN_PAIRS: Final = 6
 
 
 def _fisher_pairs(
@@ -497,144 +486,132 @@ def _fisher_pairs(
     """Fisher's exact test between every two levels of x that hold observations
     (level order), each on its own 2 x c table (the levels of y either holds),
     with Cramér's V; the p-values adjusted by ``p_adjust_method`` over the pairs
-    that have a test. A pair without a test (one column; an exact test beyond
-    the cost limit) stays with p None and the reason, and ``warnings`` names it
-    (ggstatsplot loses the whole table where fisher.test stops)."""
-    full = table.table()
-    present = [i for i, row in enumerate(table.counts) if sum(row) > 0]
-    raw = [
-        _one_pair(table, args, full, i, j)
-        for index, i in enumerate(present)
-        for j in present[index + 1 :]
-    ]
-    tested = [pair.p_value for pair in raw if pair.p_value is not None]
-    method = cast("stats.PAdjustMethod", args.p_adjust_method)
-    adjusted = iter(stats.p_adjust(tested, method) if tested else ())
+    that have a test (``stats.pairwise_fisher``, which holds the tests of one
+    table to a shared work budget, cheapest first). A pair without a test (one
+    column; an exact test beyond the budget) stays with p None and the reason,
+    and ``warnings`` names it (ggstatsplot loses the whole table where
+    fisher.test stops)."""
+    assert table.y_levels is not None
     levels = table.x_levels.levels
+    y_levels = table.y_levels.levels
+    method = cast("stats.PAdjustMethod", args.p_adjust_method)
+    found = stats.pairwise_fisher(
+        table.table(),
+        p_adjust_method=method,
+        conf_level=args.conf_level,
+        alternative=args.alternative,
+    )
     out: list[PairwiseComparison] = []
     warnings: list[str] = []
-    for pair in raw:
-        p_adjusted = None if pair.p_value is None else next(adjusted)
+    single = 0
+    costly: list[stats.PairComparison] = []
+    for pair in found:
+        name = f"{levels[pair.row1]!r} and {levels[pair.row2]!r}"
+        reason = None
+        if pair.p_value is None and len(pair.columns) == 1:
+            single += 1
+            column = y_levels[pair.columns[0]]
+            reason = (
+                f"both levels occur only in {column!r} of y, so their table has a "
+                "single column and no test; R's fisher.test stops there"
+            )
+            warnings.append(
+                f"The pair {name} of {args.x!r} has no Fisher test: both levels "
+                f"occur only in {column!r} of {args.y!r}, so their table has a "
+                "single column, and their shares cannot differ across the levels of "
+                f"{args.y!r}. Nothing needs fixing unless you need that comparison."
+            )
+        elif pair.p_value is None:
+            costly.append(pair)
+            reason = (
+                f"its exact test (a 2 x {len(pair.columns)} table of {pair.n:,} "
+                "observations) is too large to compute within inferplot's limits, "
+                "and inferplot does not approximate it"
+            )
+        elif pair.effect is None:
+            warnings.append(
+                f"The pair {name} of {args.x!r} has no Cramér's V: its 2 x "
+                f"{len(pair.columns)} table holds {pair.n} observations, and the "
+                "bias-corrected V needs more than the number of its columns (R gives "
+                "NaN). Its Fisher test is reported."
+            )
         effect = pair.effect
         out.append(
             PairwiseComparison(
-                group1=levels[pair.first],
-                group2=levels[pair.second],
+                group1=levels[pair.row1],
+                group2=levels[pair.row2],
                 statistic_name="",
                 statistic=None,
                 df=None,
                 p_value=pair.p_value,
-                p_adjusted=p_adjusted,
+                p_adjusted=pair.p_adjusted,
                 adjust_method=args.p_adjust_method,
                 test=_FISHER_NAME,
                 test_label=_FISHER_LABEL,
-                significant=None if p_adjusted is None else p_adjusted < _PAIR_ALPHA,
+                significant=None
+                if pair.p_adjusted is None
+                else pair.p_adjusted < _PAIR_ALPHA,
                 displayed=False,
                 estimate=None if effect is None else effect.estimate,
                 conf_level=None if effect is None else effect.conf_level,
                 conf_low=None if effect is None else effect.conf_low,
                 conf_high=None if effect is None else effect.conf_high,
-                no_test_reason=pair.reason,
+                no_test_reason=reason,
             )
         )
-        if pair.warning is not None:
-            warnings.append(pair.warning)
-    missing = sum(pair.p_value is None for pair in raw)
+    if costly:
+        warnings.append(_costly_pairs_warning(costly, len(found), levels, args))
+    missing = single + len(costly)
     if missing:
-        rest = len(raw) - missing
+        rest = len(found) - missing
+        lost = (
+            " ggstatsplot loses the whole pairwise table here, silently."
+            if single
+            else ""
+        )
         warnings.append(
-            f"{missing} of the {len(raw)} pairwise Fisher tests "
+            f"{missing} of the {len(found)} pairwise Fisher tests "
             f"{'has' if missing == 1 else 'have'} no p-value (above); "
             f"{'it stays' if missing == 1 else 'they stay'} in result.pairwise "
             f"without one, and p_adjust_method={args.p_adjust_method!r} adjusts the "
-            f"other {rest} among themselves. ggstatsplot loses the whole pairwise "
-            "table here, silently."
+            f"other {rest} among themselves.{lost}"
             if rest
-            else f"None of the {len(raw)} pairwise Fisher tests has a p-value "
-            "(above); the pairs stay in result.pairwise without one. ggstatsplot "
-            "loses the whole pairwise table here, silently."
+            else f"None of the {len(found)} pairwise Fisher tests has a p-value "
+            f"(above); the pairs stay in result.pairwise without one.{lost}"
         )
     return tuple(out), warnings
 
 
-def _one_pair(
-    table: TableData, args: _Args, full: NDArray[np.int64], i: int, j: int
-) -> _Pair:
-    """Rows i and j of the table: Fisher's p and V (``pairwise_fisher`` on the
-    two rows), or the reason there is no test."""
-    levels = table.x_levels.levels
-    assert table.y_levels is not None
-    y_levels = table.y_levels.levels
-    sub = full[[i, j]]
-    held = [k for k in range(sub.shape[1]) if int(sub[:, k].sum()) > 0]
-    name = f"{levels[i]!r} and {levels[j]!r}"
-    try:
-        (pair,) = stats.pairwise_fisher(
-            sub,
-            p_adjust_method="none",
-            conf_level=args.conf_level,
-            alternative=args.alternative,
-        )
-    except ValueError as error:
-        # The arguments and counts were validated: the exact test is beyond the
-        # cost limit (fisher_exact says so). V is cheap and still defined.
-        kept = sub[:, held]
-        n = int(kept.sum())
-        effect = (
-            stats.cramers_v(
-                kept, conf_level=args.conf_level, alternative=args.alternative
-            )
-            if n > max(kept.shape)
-            else None
-        )
-        return _Pair(
-            first=i,
-            second=j,
-            p_value=None,
-            effect=effect,
-            reason=(
-                f"the exact test of this 2 x {len(held)} table (n = {n:,}) would "
-                "take more than about two seconds, and inferplot does not "
-                "approximate it"
-            ),
-            warning=(
-                f"The pair {name} of {args.x!r} has no Fisher test: {error}. Its "
-                "Cramér's V is reported."
-            ),
-        )
-    if pair.p_value is None:
-        column = y_levels[held[0]]
-        return _Pair(
-            first=i,
-            second=j,
-            p_value=None,
-            effect=None,
-            reason=(
-                f"both levels occur only in {column!r} of y, so their table has a "
-                "single column and no test; R's fisher.test stops there"
-            ),
-            warning=(
-                f"The pair {name} of {args.x!r} has no Fisher test: both levels "
-                f"occur only in {column!r} of {args.y!r}, so their table has a "
-                "single column, and their shares cannot differ across the levels of "
-                f"{args.y!r}. Nothing needs fixing unless you need that comparison."
-            ),
-        )
-    warning = None
-    if pair.effect is None:
-        warning = (
-            f"The pair {name} of {args.x!r} has no Cramér's V: its 2 x "
-            f"{len(pair.columns)} table holds {pair.n} observations, and the "
-            "bias-corrected V needs more than the number of its columns (R gives "
-            "NaN). Its Fisher test is reported."
-        )
-    return _Pair(
-        first=i,
-        second=j,
-        p_value=pair.p_value,
-        effect=pair.effect,
-        reason=None,
-        warning=warning,
+def _costly_pairs_warning(
+    costly: list[stats.PairComparison],
+    total: int,
+    levels: tuple[str, ...],
+    args: _Args,
+) -> str:
+    """The pairs whose exact test was too large to compute: how many, which, why,
+    and what would give them a test."""
+    names = [f"{levels[p.row1]!r} and {levels[p.row2]!r}" for p in costly]
+    shown = "; ".join(names[:_SHOWN_PAIRS])
+    if len(names) > _SHOWN_PAIRS:
+        shown += f"; and {len(names) - _SHOWN_PAIRS} more"
+    tested = total - len(costly)
+    dense = all(p.n >= 50 * len(p.columns) ** 2 for p in costly)
+    advice = (
+        f"with this many observations the chi-square test answers the same "
+        f"question: compare two levels of {args.x!r} in a call of their own, whose "
+        "main test is the chi-square test of their table"
+        if dense
+        else f"merge sparse levels of {args.y!r} (levels with few observations), or "
+        f"compare two levels of {args.x!r} in a call of their own"
+    )
+    return (
+        f"Fisher's exact test was computed for {tested} of the {total} pairs of "
+        f"levels of {args.x!r}; the other {len(costly)} ({shown}) "
+        f"{'is' if len(costly) == 1 else 'are'} too large to compute exactly within "
+        "inferplot's limits (about a second of work for one test and two seconds "
+        "for all the pairs of one table, the cheapest computed first), and "
+        "inferplot does not approximate them. Their Cramér's V is reported. To "
+        f"test them, {advice}."
     )
 
 
