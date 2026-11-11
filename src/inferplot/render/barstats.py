@@ -100,6 +100,18 @@ SEGMENT_EDGE_PT: Final = 0.8
 # colour), and the Okabe-Ito colours keep a CIELAB difference of at least 10.
 MAX_SEGMENT_EDGE_PT: Final = 2.0
 MIN_SEGMENT_ALPHA: Final = 0.4
+# The bound of inferplot's own figure (review B11): its plotting area is at most
+# MAX_PLOT_IN wide and tall, so with the y axis, the legend and the margins the
+# figure stays within figure_oversized's 30 in (a long title or caption, which
+# figure_oversized reports, aside). Up to MAX_PLOT_IN / MIN_SPACING_IN bars keep
+# a slot of MIN_SPACING_IN; more share MAX_PLOT_IN down to MIN_SLOT_IN a bar
+# (the bar narrows with its slot, and level names wrap to the slot; 0.7 in
+# holds an n label such as "(n = 123)" with its gaps); beyond
+# MAX_BARS bars, or where the labels need wider slots or a taller legend than
+# the bound allows, the call is refused before a figure is returned.
+MAX_PLOT_IN: Final = 26.0
+MIN_SLOT_IN: Final = 0.7
+MAX_BARS: Final = int(MAX_PLOT_IN // MIN_SLOT_IN)
 # Level names in the tick labels and the legend (and its default title) wrap on
 # spaces into lines at most this wide; a slot widens for the tick labels' lines.
 TICK_LINE_IN: Final = 1.0
@@ -215,6 +227,17 @@ def barstats(
     _check_legend_title(options.legend_title)
     check_axes(ax)
     _check_contents(result)
+    if ax is None and len(result.bars) > MAX_BARS:
+        y = result.y
+        raise ValueError(
+            f"{len(result.bars)} bars do not fit inferplot's own figure, whose "
+            f"plotting area is at most {MAX_PLOT_IN:g} in wide with at least "
+            f"{MIN_SLOT_IN:g} in a bar: at most {MAX_BARS} bars fit. Draw fewer "
+            f"levels of {y!r} (filter the data or merge levels), or draw into an "
+            "Axes of a figure of your own size with ax=, for example "
+            "ax=Figure(figsize=(40, 6)).add_subplot() (from matplotlib.figure "
+            "import Figure); fig.check() then reports what does not fit."
+        )
     return base.draw(
         lambda colors, warning: _BarDrawing(result, options, colors, warning, ax),
         palette=palette,
@@ -721,7 +744,11 @@ class _BarDrawing(base.BaseDrawing):
         labelled = self.labelled()
         pad = 2 * px(CELL_PAD_PT, dpi)
         widest = max((self.label_size(c)[0] for c in labelled), default=0.0)
-        self.bar_px = max(BAR_WIDTH_IN * dpi, widest + pad)
+        # Many bars share MAX_PLOT_IN, down to MIN_SLOT_IN each (B11).
+        floor = MIN_SPACING_IN * dpi
+        if self.n_bars * MIN_SPACING_IN > MAX_PLOT_IN:
+            floor = max(MIN_SLOT_IN, MAX_PLOT_IN / self.n_bars) * dpi
+        self.bar_px = max(min(BAR_WIDTH_IN * dpi, BAR_SHARE * floor), widest + pad)
         # 0% to 100% at least as tall as the legend, which hangs from 100%.
         bars_px = max(BARS_HEIGHT_IN * dpi, self.legend_height())
         moved: list[_Cell] = []
@@ -741,23 +768,57 @@ class _BarDrawing(base.BaseDrawing):
         self.bars_px = bars_px
         column = max((self.label_size(c)[0] for c in moved), default=0.0)
         self.column_px = column
-        slot = max(MIN_SPACING_IN * dpi, self.bar_px / BAR_SHARE)
+        slot = max(floor, self.bar_px / BAR_SHARE)
         if moved:
             slot = max(slot, self.bar_px + px(LEAD_PT, dpi) + column + gap)
         slot = max(
             [slot]
             + [self.extent(t).width + gap for t in self.bar_labels if t is not None]
         )
-        self.wrap_ticks(TICK_LINE_IN * dpi)
+        self.wrap_ticks(min(TICK_LINE_IN * dpi, floor - 2 * gap))
         slot = max(slot, self.widest_tick() + 2 * gap)
         self.slot_px = slot
         strip = self.strip_px()
         left, right = self.x_limits(slot, column if moved else 0.0)
+        self.check_bound(slot * (right - left), bars_px + strip)
         ppu = bars_px / 100.0
         self.set_view(left, right, 0.0, 100.0 + strip / ppu)
         self.place_cells(moved, ppu)
         self.place_legend_outside()
         self.fit_figure(slot * (right - left), bars_px + strip)
+
+    def check_bound(self, plot_w: float, plot_h: float) -> None:
+        """Refuse a plotting area beyond MAX_PLOT_IN (B11): the bars' labels need
+        wider slots, or the legend is taller, than the bound allows."""
+        dpi = self.dpi
+        width, height = plot_w / dpi, plot_h / dpi
+        if width <= MAX_PLOT_IN + 1e-9 and height <= MAX_PLOT_IN + 1e-9:
+            return
+        y = self.result.y
+        if width > MAX_PLOT_IN:
+            fit = max(1, int(MAX_PLOT_IN // (self.slot_px / dpi)))
+            why = (
+                f"its {self.n_bars} bars need {self.slot_px / dpi:.2f} in each for "
+                f"their labels, so about {fit} fit"
+            )
+            fewer = f"fewer levels of {y!r} (filter the data or merge levels)"
+        else:
+            per = self.legend_height() / dpi / max(len(self.result.levels), 1)
+            fit = max(1, int(MAX_PLOT_IN // max(per, 1e-9)))
+            why = (
+                f"the legend of the {len(self.result.levels)} levels of "
+                f"{self.result.x!r} is {self.legend_height() / dpi:.1f} in tall, so "
+                f"about {fit} levels fit"
+            )
+            fewer = f"fewer levels of {self.result.x!r} (merge levels)"
+        raise ValueError(
+            f"barstats' figure does not fit inferplot's own figure, whose plotting "
+            f"area is at most {MAX_PLOT_IN:g} in wide and tall: {why}. Draw "
+            f"{fewer}, or draw into an Axes of a figure of your own size with ax=, "
+            "for example ax=Figure(figsize=(40, 6)).add_subplot() (from "
+            "matplotlib.figure import Figure); fig.check() then reports what does "
+            "not fit."
+        )
 
     def widest_tick(self) -> float:
         probe = [

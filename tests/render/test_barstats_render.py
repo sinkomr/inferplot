@@ -12,6 +12,7 @@ ggstatsplot gives it; and ``fig.check()`` reports nothing about the figure.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import io
 import re
@@ -769,12 +770,31 @@ def test_unused_palette_colours_are_named() -> None:
 
 
 def test_forty_bars_widen_the_figure_within_its_bounds() -> None:
-    """40 bars: a slot of at least 0.8 in each, and no figure_oversized."""
+    """Many bars share the bounded plotting area (review B11: at most 26 in, at
+    least 0.7 in a bar, where 0.8 in each would need 32 in for 40): 40 bars are
+    refused before drawing (it drew a 37 in figure before the review); 34 bars
+    fit, with no figure_oversized, unless each bar's test label above it needs a
+    wider slot than fits, when the call is refused with how many do."""
     counts = [
         [(j * 7) % 13 + 1 for j in range(40)],
         [(j * 5) % 11 + 2 for j in range(40)],
     ]
-    fig = ip.render.barstats(table_result(counts, ["a", "b"]))
+    text = message(
+        ValueError, lambda: ip.render.barstats(table_result(counts, ["a", "b"]))
+    )
+    assert "40 bars do not fit" in text
+    assert "at most 37 bars fit" in text
+    counts = [row[:34] for row in counts]
+    result = table_result(counts, ["a", "b"])
+    assert result.settings.proportion_test
+    text = message(ValueError, lambda: ip.render.barstats(result))
+    assert "its 34 bars need" in text
+    assert "about 28 fit" in text
+    unlabelled = dataclasses.replace(
+        result,
+        settings=dataclasses.replace(result.settings, proportion_test=False),
+    )
+    fig = ip.render.barstats(unlabelled)
     width, _height = fig.figure.get_size_inches()
-    assert 40 * 0.8 <= width <= 4.0 + 1.25 * 40
+    assert 34 * 0.7 <= width <= 30.0
     assert figure_codes(fig) == []
