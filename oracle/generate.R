@@ -1248,29 +1248,23 @@ ROUND3_CASES <- c(
   # b n - k, bar n2000k001 and so on: n 2000 with k 1, 3, 10, 21, 30, 39, 89, 91, 109;
   # n 1000 with k 5, 15; n 200 with k 1, 3; n 40 with k 1. (k / n) x 100 is a tie at
   # one digit for odd k of 2000, at none for the rest; digits.perc 1 is in
-  # HELD_OUT_CASES.
+  # HELD_OUT_CASES. The per-bar tests against ratio 0.05, 0.95 (against equal shares
+  # their p underflows to 0, which statsExpressions stores as 2.2e-308).
   edge_bar(
     "edge_bar_ties", label = "edge_bar_ties-digitsperc0",
-    extra_args = list(counts = "n", digits.perc = 0L)
+    extra_args = list(counts = "n", digits.perc = 0L, ratio = c(0.05, 0.95))
   ),
   edge_bar(
     "edge_bar_ties", label = "edge_bar_ties-digitsperc2",
-    extra_args = list(counts = "n", digits.perc = 2L)
+    extra_args = list(counts = "n", digits.perc = 2L, ratio = c(0.05, 0.95))
   ),
   # One-sided Fisher pairs on reduced tables: x a (p 6, q 1, r 0), b (2, 7, 0), c (5,
   # 0, 2), d (1, 0, 6), so the pairs a-b (p, q) and c-d (p, r) are 2 x 2 tables and the
-  # other four 2 x 3; in text order and with x declared d, b, c, a.
+  # other four 2 x 3. With x declared d, b, c, a they are in HELD_OUT_CASES.
   unlist(lapply(c("two.sided", "greater", "less"), function(alternative) {
-    c(
-      edge_bar(
-        "edge_bar_reduced", label = paste0("edge_bar_reduced-", alternative),
-        extra_args = list(counts = "n", alternative = alternative)
-      ),
-      edge_bar(
-        "edge_bar_reduced", label = paste0("edge_bar_reduced-declared-", alternative),
-        extra_args = list(counts = "n", alternative = alternative),
-        factor_levels = list(x = c("d", "b", "c", "a"))
-      )
+    edge_bar(
+      "edge_bar_reduced", label = paste0("edge_bar_reduced-", alternative),
+      extra_args = list(counts = "n", alternative = alternative)
     )
   }), recursive = FALSE)
 )
@@ -1343,8 +1337,20 @@ HELD_OUT_CASES <- c(
   # double gives 0.1 (probe-round).
   edge_bar(
     "edge_bar_ties", label = "edge_bar_ties-digitsperc1",
-    extra_args = list(counts = "n", digits.perc = 1L)
-  )
+    extra_args = list(counts = "n", digits.perc = 1L, ratio = c(0.05, 0.95))
+  ),
+  # Review round 3 (one-sided Fisher pairs; SPEC section 4): edge_bar_reduced with x
+  # declared d, b, c, a. Every pair's p, adjusted p and V equal inferplot's, and a pair
+  # of 2 x 2 has the earlier declared level as group1 and first row (b-a, d-c); but R
+  # lists the pairs sorted as text (b-a, b-c, c-a, d-a, d-b, d-c), inferplot in level
+  # order (d-b, d-c, d-a, b-c, b-a, c-a).
+  unlist(lapply(c("two.sided", "greater", "less"), function(alternative) {
+    edge_bar(
+      "edge_bar_reduced", label = paste0("edge_bar_reduced-declared-", alternative),
+      extra_args = list(counts = "n", alternative = alternative),
+      factor_levels = list(x = c("d", "b", "c", "a"))
+    )
+  }), recursive = FALSE)
 )
 
 case_names <- vapply(CASES, function(case) case$name, character(1L))
