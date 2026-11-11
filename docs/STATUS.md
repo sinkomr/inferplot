@@ -430,7 +430,22 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
 
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
-- [ ] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples
+- [x] README, `docs/api.md` (size test), `llms.txt`, `skills/inferplot/SKILL.md`, examples:
+  the README's quick start (30 lines) runs as written and its printed output is
+  compared; one figure per function in `docs/img` from `docs/examples/readme_images.py`;
+  `docs/api.md` is 23,072 of 32,768 bytes and complete against the code (signatures,
+  every keyword, all 25 `check()` codes, every result field: a test fails when the code
+  and the document drift apart); `llms.txt`; the skill; 9 example scripts; a runnable
+  docstring example on all 21 public callables. Kept true by `tests/test_docs.py`,
+  `tests/test_examples.py` and `tests/test_docstring_examples.py` (61 tests) on the
+  newest and oldest supported versions. `docs/intervals.md` extended (average AKP,
+  condition order, bootstrap intervals and `seed`). To revisit after the barstats
+  review: messages quoted in the documents
+- [ ] release preparation: `release.yml` (tag-triggered, trusted publishing, TestPyPI
+  first), version, changelog; the PyPI projects and publishers are the owner's to
+  create
+- [ ] agent evaluation (`evals/`, about 30 tasks, two arms): prepare; running it needs
+  the owner's go-ahead each time
 - [x] simulation tests (`slow`): 57 settings and 89 rates over every test, pairwise
   family and interval of the four implemented functions (kind-2 rates established at
   10,000 to 20,000 replications by `tools/reference/simulation_rates.py`). No inferplot
@@ -667,7 +682,7 @@ V7; with `ax=` it is not sufficient (V1, V4, V5). To fix:
 - [x] V10 (fixed, D63): inverting an axis on a returned figure strikes each bracket label through
   with its own line (y) or puts labels on their own points (x); `fig.check()` is
   empty.
-- [ ] V11 (docs, Phase 5; the `save()` docstring and SPEC §6 say it): `plt.savefig()` after `ip.betweenstats(...)` writes a blank
+- [x] V11 (documented in README and docs/api.md; pinned by `test_save_advice_holds`): `plt.savefig()` after `ip.betweenstats(...)` writes a blank
   image (the figure is not pyplot's); `fig.figure.savefig()` writes text as paths
   and no embedded result.
 - [x] V12 (fixed, D63): with `ax=` under constrained layout the wide subtitle collapses the Axes;
