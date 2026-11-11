@@ -15,10 +15,16 @@ name: Fixture provenance
 #    a squash or rebase merge drops the oracle's commit from main's history.
 # tests/oracle_fixtures.py then ties every fixture, every dataset a fixture read and
 # every generator file to the SHA-256 values in the manifest, on every CI run.
-# Attestations do not expire, so this check runs on every push to any branch.
+# Attestations do not expire, so this check can run at any time. It runs on every push
+# to main and on every pull request. It does not run on pushes to other branches: a
+# branch that is changing the generator fails it by design on every push until the
+# new oracle run's fixtures are committed, and each failure emails the owner. Before
+# such a branch is merged, run it there by hand
+# (`gh workflow run fixtures.yml --ref <branch>`); main is checked again on the merge.
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

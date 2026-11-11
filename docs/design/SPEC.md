@@ -1260,8 +1260,10 @@ every fixture and of the generator files (`generator_files`: `oracle/generate.R`
 (`probes`), the GitHub Actions run that produced them (`run`: repository, run id, attempt, commit), R's version and RNG kind,
 and every installed R package with its version (`r_library`). On every test run the
 loader (`tests/oracle_fixtures.py`) refuses fixtures whose own hash, whose dataset's
-hash or whose generator files' hashes differ from the manifest. On every push and pull
-request `.github/workflows/fixtures.yml` verifies the manifest's attestation (signed by
+hash or whose generator files' hashes differ from the manifest. On every push to main
+and every pull request (and by hand on a fixtures branch before it is merged; a
+branch that is still changing the generator fails by design, so pushes to other
+branches do not start it) `.github/workflows/fixtures.yml` verifies the manifest's attestation (signed by
 `oracle.yml` in this repository as that file stood at the commit the manifest names,
 by the run it names), that this commit is in the branch's history, and that its
 generator files equal the committed ones. Together these catch a hand edit, even with
