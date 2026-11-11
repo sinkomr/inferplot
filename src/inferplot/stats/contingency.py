@@ -695,7 +695,23 @@ def _goodness_of_fit(
         total * share == int(v)
         for v, share in zip(counts.tolist(), shares, strict=True)
     )
-    statistic = 0.0 if exact_fit else _chisq_sum((x - expected) ** 2 / expected)
+    statistic = 0.0
+    if not exact_fit:
+        with np.errstate(over="ignore"):
+            terms = (x - expected) ** 2 / expected
+        try:
+            statistic = _chisq_sum(terms)
+        except OverflowError:  # finite terms whose sum exceeds the doubles
+            statistic = math.inf
+        if math.isinf(statistic):
+            i = int(np.argmax(terms))  # the largest term (the first infinite one)
+            raise ValueError(
+                f"ratio gives category {i} a share of {float(p[i])!r}, so small next "
+                f"to its {int(counts[i])} observations (of {total}) that the "
+                "goodness-of-fit statistic exceeds the largest floating-point number "
+                "(R reports Inf). A share this small says the category cannot "
+                "occur; if so, leave it out of the data and of ratio."
+            )
     df = counts.size - 1
     return GoodnessOfFit(
         statistic=statistic,
@@ -725,8 +741,11 @@ def goodness_of_fit(
     R's order of operations can leave a rounding remainder.
 
     Raises:
-        ValueError: fewer than 2 categories, no counts at all, an invalid ratio, or
-            an invalid count.
+        ValueError: fewer than 2 categories, no counts at all, an invalid ratio,
+            an invalid count, or a share of ratio so small next to its count that
+            the statistic exceeds the largest double (a share below about 1e-307;
+            R reports Inf). Every finite statistic is computed, with its interval
+            (``chi2_ncp_bound``).
     """
     x = _as_counts(counts, ndim=1)
     p = _check_ratio(ratio, x.size)
@@ -797,7 +816,8 @@ def proportion_tests(
     every entry then has ``test`` and ``effect`` None and a ``reason``.
 
     Raises:
-        ValueError: an invalid count, or (with 2 or more rows) an invalid ratio.
+        ValueError: an invalid count, or (with 2 or more rows) an invalid ratio,
+            or a bar's statistic beyond the doubles (``goodness_of_fit``).
     """
     counts = _as_counts(table)
     k, c = counts.shape

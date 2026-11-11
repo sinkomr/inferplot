@@ -338,6 +338,57 @@ def test_ratio_validation() -> None:
         goodness_of_fit([[1, 2], [3, 4]])  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("tiny", [1e-6, 1e-12, 1e-30, 1e-100, 1e-200, 1e-305])
+def test_tiny_shares_are_computed_at_once(tiny: float) -> None:
+    # Review C7: from a share of about 1e-30 on, the interval's search ran for
+    # about 5 seconds and raised ArithmeticError. chi^2 = sum x^2 / (n p) - n.
+    ratio = [tiny, 1.0 - tiny]
+    start = time.perf_counter()
+    test = goodness_of_fit([5, 5], ratio)
+    c = pearsons_c([5, 5], ratio)
+    (bar,) = proportion_tests(np.array([[5], [5]]), ratio)
+    assert time.perf_counter() - start < 1.0
+    exact = sum(
+        (Fraction(25) / (10 * Fraction(p)) for p in ratio), Fraction(0)
+    ) - Fraction(10)
+    assert test.statistic == pytest.approx(float(exact), rel=1e-13)
+    assert test.p_value == 0.0
+    low, high = chi2_ncp_interval(
+        test.statistic, 1, conf_level=0.95, alternative="two-sided"
+    )
+    # From about 1e32 on, x -/+ 2 z sqrt(x) rounds to x itself.
+    assert 0.0 < low <= test.statistic <= high < math.inf
+    assert low < high or test.statistic > 1e32
+    assert c.conf_low == pytest.approx(math.sqrt(low / (low + 10)), rel=1e-15)
+    assert c.estimate == pytest.approx(
+        math.sqrt(test.statistic / (test.statistic + 10)), rel=1e-15
+    )
+    assert c.conf_low <= c.estimate <= c.conf_high <= 1.0
+    assert bar.test == test
+    assert bar.effect == c
+
+
+@pytest.mark.parametrize(
+    ("counts", "ratio"),
+    [
+        ([5, 5], [1e-310, 1.0 - 1e-310]),
+        ([5, 5], [5e-324, 1.0]),
+        # each term finite (1.4e308), their sum beyond the largest double
+        ([5, 5, 5], [1.2e-308, 1.2e-308, 1.0 - 2.4e-308]),
+    ],
+)
+def test_a_statistic_beyond_the_doubles_names_ratio(
+    counts: list[int], ratio: list[float]
+) -> None:
+    # Review C7: "x must be finite; got inf" from the interval, naming no argument.
+    start = time.perf_counter()
+    with pytest.raises(ValueError, match=r"^ratio gives category 0 a share of "):
+        goodness_of_fit(counts, ratio)
+    with pytest.raises(ValueError, match=r"^ratio gives category 0 a share of "):
+        proportion_tests(np.array([counts]).T, ratio)
+    assert time.perf_counter() - start < 1.0
+
+
 def test_pearsons_c_definition() -> None:
     x = [11, 7, 14]
     test = goodness_of_fit(x)

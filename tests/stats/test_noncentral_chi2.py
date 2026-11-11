@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 import math
+import time
+from decimal import Decimal
+from fractions import Fraction
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -154,13 +157,73 @@ def test_bounds_are_monotone_in_x_and_level() -> None:
 def test_huge_chi_square_follows_the_normal_limit(x: float) -> None:
     # Counts of 1e9 per cell give chi-squares this large. For large lambda, X' is
     # close to N(df + lambda, 2 (df + 2 lambda)): the bounds lie within a few
-    # standard deviations of x - df, and each solves its equation.
+    # standard deviations of x - df, and each solves its equation, checked with
+    # the exact df = 3 distribution P(X'_3 <= x) = P(X'_1 <= x) - 2 f_3(x)
+    # (Johnson, Kotz & Balakrishnan 1995, ch. 29), which needs no Poisson sum.
+    # Below 1e9 the bounds come from a search on noncentral_chi2_logcdf and solve
+    # its equation too; from 1e9 on they are the Cornish-Fisher roots
+    # (tools/reference/ncx2_large_mpmath.py), and the Poisson sum's lower tail is
+    # off there (2.3e-6 at x = 1e12), so it is not their check.
     df = 3.0
     low, high = chi2_ncp_interval(x, df, conf_level=0.95, alternative="two-sided")
     sd = math.sqrt(2.0 * (df + 2.0 * x))
     assert x - df - 2.5 * sd < low < x - df - 1.5 * sd
     assert x - df + 1.5 * sd < high < x - df + 2.5 * sd
-    upper = math.exp(noncentral_chi2_logcdf(x, df, low, upper=True))
-    lower = math.exp(noncentral_chi2_logcdf(x, df, high))
-    assert upper == pytest.approx(0.025, rel=1e-6)
-    assert lower == pytest.approx(0.025, rel=1e-6)
+    assert _exact_upper_df3(x, low) == pytest.approx(0.025, rel=1e-6)
+    assert 1.0 - _exact_upper_df3(x, high) == pytest.approx(0.025, rel=1e-6)
+    if x < 1e9:
+        upper = math.exp(noncentral_chi2_logcdf(x, df, low, upper=True))
+        lower = math.exp(noncentral_chi2_logcdf(x, df, high))
+        assert upper == pytest.approx(0.025, rel=1e-6)
+        assert lower == pytest.approx(0.025, rel=1e-6)
+
+
+def _exact_upper_df3(x: float, ncp: float) -> float:
+    """P(X' > x) for X' ~ chi'^2(3, ncp): Q_1 + (phi(a - b) - phi(a + b)) / b with
+    a = sqrt(x), b = sqrt(ncp) and Q_1 = Phi(b - a) + Phi(-a - b), the df = 1 tail
+    of (Z + b)^2. a - b is off by about ulp(a), 1e-10 relative at x = 1e12."""
+    a, b = math.sqrt(x), math.sqrt(ncp)
+    q1 = float(special.ndtr(b - a) + special.ndtr(-a - b))
+    density = (math.exp(-0.5 * (a - b) ** 2) - math.exp(-0.5 * (a + b) ** 2)) / (
+        math.sqrt(2.0 * math.pi) * b
+    )
+    return q1 + density
+
+
+LARGE_REFERENCE = (
+    Path(__file__).resolve().parents[1] / "data" / "ncx2_large_reference.json"
+)
+
+
+def test_roots_of_huge_chi_squares_match_mpmath() -> None:
+    # 176 roots at x = 1e9 to 1.7e308, df = 1 and 3, prob = 1e-100 to 1 - 1e-12,
+    # from exact representations at 50 digits beyond sqrt(x)
+    # (tools/reference/ncx2_large_mpmath.py). The Cornish-Fisher solution is the
+    # root to the rounding of x (measured: at most 0.71 units in the last place, at
+    # x = 1e9 and prob 1e-100; 0.50 from 1e12 on); one unit allows for the rounding
+    # of x minus its offset. Review C7: from x of about 1e31 the search took 5 s
+    # and raised ArithmeticError; from 1e7 to 1e12 it was off by up to 5e-6.
+    rows = json.loads(LARGE_REFERENCE.read_text(encoding="utf-8"))["roots"]
+    assert len(rows) == 176
+    start = time.perf_counter()
+    for row in rows:
+        x, prob = float.fromhex(row["x"]), float.fromhex(row["prob"])
+        ours = chi2_ncp_bound(x, row["df"], prob=prob)
+        expected = Fraction(Decimal(row["ncp"]))
+        assert abs(Fraction(ours) - expected) <= Fraction(math.ulp(ours)), row
+    assert time.perf_counter() - start < 1.0
+
+
+@pytest.mark.parametrize("x", [2.5e31, 2.5e100, 1e300, 1.7976931348623157e308])
+def test_huge_chi_square_interval_is_immediate(x: float) -> None:
+    start = time.perf_counter()
+    low, high = chi2_ncp_interval(x, 1.0, conf_level=0.95, alternative="two-sided")
+    greater = chi2_ncp_interval(x, 3.0, conf_level=0.99, alternative="greater")
+    assert time.perf_counter() - start < 0.5
+    root = math.sqrt(x)
+    z = float(stats.norm.isf(0.025))
+    assert low == pytest.approx((root - z) ** 2, rel=2**-52)
+    assert high == pytest.approx((root + z) ** 2, rel=2**-52)
+    assert high <= 1.7976931348623157e308
+    assert greater[1] == math.inf
+    assert greater[0] <= x
