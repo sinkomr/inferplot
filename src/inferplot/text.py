@@ -3012,6 +3012,8 @@ def contingency_tests_sentence(
     the levels of cyl (Holm adjusted): adjusted p < .05 in 1 of 3 pairs." The
     bars' tests are never adjusted (ggstatsplot's ``onesample_data()``); the
     pairs follow ``p_adjust_method`` ("unadjusted: p < .05 in ..." for "none").
+    Only the pairs with a test are counted; the others are named ("in 2 of the
+    2 tested pairs; 1 pair has no test", or "none of the 3 pairs has a test").
     """
     parts: list[str] = []
     tested = [bar for bar in bars if bar.test is not None]
@@ -3031,11 +3033,24 @@ def contingency_tests_sentence(
             how, p = "unadjusted", "p"
         else:
             how, p = f"{_ADJUST_NAMES.get(method, method)} adjusted", "adjusted p"
-        below = sum(1 for pair in pairwise if pair.significant)
-        parts.append(
-            f"Fisher's exact tests between the levels of {sx} ({how}): {p} < .05 in "
-            f"{below} of {_plural(len(pairwise), 'pair')}"
-        )
+        tested = [pair for pair in pairwise if pair.p_value is not None]
+        untested = len(pairwise) - len(tested)
+        below = sum(1 for pair in tested if pair.significant)
+        head = f"Fisher's exact tests between the levels of {sx}"
+        if not tested:
+            parts.append(f"{head}: none of the {_plural(untested, 'pair')} has a test")
+        elif not untested:
+            parts.append(
+                f"{head} ({how}): {p} < .05 in {below} of "
+                f"{_plural(len(tested), 'pair')}"
+            )
+        else:
+            verb = "has" if untested == 1 else "have"
+            parts.append(
+                f"{head} ({how}): {p} < .05 in {below} of the "
+                f"{_plural(len(tested), 'tested pair')}; "
+                f"{_plural(untested, 'pair')} {verb} no test"
+            )
     if not parts:
         return None
     return "; ".join(parts) + "."

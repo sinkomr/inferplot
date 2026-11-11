@@ -734,9 +734,20 @@ def test_apa_sentence_and_alt_text_form(name: str) -> None:
         below = sum(1 for b in tested if b.test is not None and b.test.p_value < 0.05)
         assert f": p < .05 in {below} of {len(tested)} bar" in apa
     if result.pairwise:
-        below = sum(1 for pair in result.pairwise if pair.significant)
-        pairs = tx._plural(len(result.pairwise), "pair")  # pyright: ignore[reportPrivateUsage]
-        assert f"p < .05 in {below} of {pairs}." in apa
+        # Only the tested pairs are counted (review B4); the others are named.
+        tested_pairs = [p for p in result.pairwise if p.p_value is not None]
+        below = sum(1 for pair in tested_pairs if pair.significant)
+        untested = len(result.pairwise) - len(tested_pairs)
+        plural = tx._plural  # pyright: ignore[reportPrivateUsage]
+        if not tested_pairs:
+            assert f"none of the {plural(untested, 'pair')} has a test." in apa
+        elif untested:
+            assert (
+                f"p < .05 in {below} of the {plural(len(tested_pairs), 'tested pair')}"
+                f"; {plural(untested, 'pair')}"
+            ) in apa
+        else:
+            assert f"p < .05 in {below} of {plural(len(tested_pairs), 'pair')}." in apa
         assert "Fisher's exact tests between the levels of " in apa
     assert str(result).startswith(apa)
     # the alt text: 2 or 3 sentences, at most 400 characters, the chart first,
