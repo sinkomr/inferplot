@@ -1209,6 +1209,96 @@ CASES <- c(
   )
 )
 
+# Review round 3: cases that settle what R does where the reviews of Phases 3 and 4
+# could only reason about it (W9, Z1, B5, C3, D108 and the one-sided Fisher pairs).
+# They are assigned to shards after the cases above, so that adding them moves no
+# earlier case to another shard (assign_shards()). Each dataset is hand-written; its
+# values or table are in the comment. Cases whose R result differs from inferplot's
+# are in HELD_OUT_CASES below.
+ROUND3_CASES <- c(
+  # Values equal to the test value 0.3 only as written. edge_one_near_mu, ten values
+  # per column: `literal` is 0.3, 0.1, 0.5, 0.7, 0.2, 0.9, 0.4, 0.6, 0.8, 1.1 (the
+  # literal 0.3, an exact zero of x - 0.3); `sum`, `below`, `both` and `sum_ties` are
+  # in HELD_OUT_CASES.
+  histo_cases(
+    "edge_one_near_mu", x = "literal", label = "edge_one_near_mu-literal",
+    types = "nonparametric", extra_args = list(test.value = 0.3)
+  ),
+  # Ratings 1 to 5 against the test value in two writings (review Z1). edge_one_ratings:
+  # `whole` is 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 3, 2, 4, 3, 3 (trimmed mean 3) and
+  # `tenths` the same in tenths (0.1 to 0.5), against 2.5 and 0.25; `centred_whole`
+  # is 1, 2, 3, 3, 4, 5, 2, 4, 3, 3, 1, 5, 3, 2, 4 and `centred_tenths` the same in
+  # tenths, against their trimmed mean as written, 3 and 0.3 (probe-trimcibt records
+  # the resamples behind each).
+  histo_cases(
+    "edge_one_ratings", x = "whole", label = "edge_one_ratings-whole", types = "robust",
+    extra_args = list(test.value = 2.5)
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "tenths", label = "edge_one_ratings-tenths", types = "robust",
+    extra_args = list(test.value = 0.25)
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "centred_whole", label = "edge_one_ratings-centred_whole",
+    types = "robust", extra_args = list(test.value = 3)
+  ),
+  histo_cases(
+    "edge_one_ratings", x = "centred_tenths", label = "edge_one_ratings-centred_tenths",
+    types = "robust", extra_args = list(test.value = 0.3)
+  ),
+  # Cramer's V and its interval at 19 to 60 df (review B5), x a and b by y01 ... yc
+  # through counts n: edge_bar_wide20 a 1 + (2j mod 7), b 1 + ((5j + 3) mod 9), j =
+  # 1..20 (n 187); edge_bar_wide40 and edge_bar_wide61 a 1 + (j mod 7), b 1 + ((2j +
+  # 3) mod 9), j = 1..40 (n 358) and 1..61 (n 553); edge_bar_wide61r the reviewer's
+  # 2 x 61 table (n 585, chi-squared 122.4, p 3.6e-06; reviewBB c02_outside.py,
+  # numpy default_rng(7), trial 9).
+  edge_bar("edge_bar_wide20", extra_args = list(counts = "n")),
+  edge_bar("edge_bar_wide40", extra_args = list(counts = "n")),
+  edge_bar("edge_bar_wide61", extra_args = list(counts = "n")),
+  edge_bar("edge_bar_wide61r", extra_args = list(counts = "n")),
+  # Exact zeros (review C3): a (p 0, q 1), b (p 5, q 4), whose adjusted Cramer's V is
+  # exactly 0 (chi-squared 10/9 = df n / (n - 1)); counts 8, 2, 7, 8 against ratio
+  # 0.32, 0.08, 0.28, 0.32, an exact fit (chi-squared 0); 49 levels of 2 each against
+  # equal shares (chi-squared 0).
+  edge_bar("edge_bar_zero_v", extra_args = list(counts = "n")),
+  bar_cases(
+    "edge_bar_exact_fit", x = "x", label = "edge_bar_exact_fit",
+    extra_args = list(counts = "n", ratio = c(0.32, 0.08, 0.28, 0.32))
+  ),
+  bar_cases("edge_bar_equal49", x = "x", label = "edge_bar_equal49", extra_args = list(counts = "n")),
+  # Percent labels at rounding ties (D108): x a and b, one bar per (n, k) with a k and
+  # b n - k, bar n2000k001 and so on: n 2000 with k 1, 3, 10, 21, 30, 39, 89, 91, 109;
+  # n 1000 with k 5, 15; n 200 with k 1, 3; n 40 with k 1. (k / n) x 100 is a tie at
+  # one digit for odd k of 2000, at none for the rest; digits.perc 1 is in
+  # HELD_OUT_CASES.
+  edge_bar(
+    "edge_bar_ties", label = "edge_bar_ties-digitsperc0",
+    extra_args = list(counts = "n", digits.perc = 0L)
+  ),
+  edge_bar(
+    "edge_bar_ties", label = "edge_bar_ties-digitsperc2",
+    extra_args = list(counts = "n", digits.perc = 2L)
+  ),
+  # One-sided Fisher pairs on reduced tables: x a (p 6, q 1, r 0), b (2, 7, 0), c (5,
+  # 0, 2), d (1, 0, 6), so the pairs a-b (p, q) and c-d (p, r) are 2 x 2 tables and the
+  # other four 2 x 3; in text order and with x declared d, b, c, a.
+  unlist(lapply(c("two.sided", "greater", "less"), function(alternative) {
+    c(
+      edge_bar(
+        "edge_bar_reduced", label = paste0("edge_bar_reduced-", alternative),
+        extra_args = list(counts = "n", alternative = alternative)
+      ),
+      edge_bar(
+        "edge_bar_reduced", label = paste0("edge_bar_reduced-declared-", alternative),
+        extra_args = list(counts = "n", alternative = alternative),
+        factor_levels = list(x = c("d", "b", "c", "a"))
+      )
+    )
+  }), recursive = FALSE)
+)
+ROUND3_CASE_NAMES <- vapply(ROUND3_CASES, function(case) case$name, character(1L))
+CASES <- c(CASES, ROUND3_CASES)
+
 # Cases run like the others but written into probe-heldout instead of a fixture of
 # their own: R's result differs from what inferplot computes today by a rule the
 # lead has yet to decide, so they must not enter the parity tests (which collect
@@ -1224,7 +1314,28 @@ HELD_OUT_CASES <- c(
   # ("corresponding non-sphericity tests and corrections not available") and
   # ggstatsplot prints the uncorrected F(3, 6); inferplot applies the
   # Greenhouse-Geisser epsilon of the singular matrix (D62).
-  edge_within("edge_rm_n3k4", types = "parametric")
+  edge_within("edge_rm_n3k4", types = "parametric"),
+  # Review round 3 (W9, D88, D105): a value equal to the test value 0.3 as written but
+  # not in binary. edge_one_near_mu: `sum` is `literal` with 0.1 + 0.2
+  # (0.30000000000000004) for its 0.3, `below` with 0.7 - 0.4 (0.29999999999999993);
+  # `both` is 0.3, 0.1 + 0.2, 0.1, 0.5, 0.7, 0.2, 0.9, 0.4, 0.6, 0.8; `sum_ties` is
+  # 0.1 + 0.2 twice, 0.5, 0.5, 0.8, 0.8, 0.2, 0.9, 1.1, 0.1. wilcox.test ranks
+  # x - 0.3 = +-2^-54 as the smallest nonzero difference (probe-nearzero); inferplot
+  # counts such a value as a zero (D105).
+  unlist(lapply(c("sum", "below", "both", "sum_ties"), function(column) {
+    histo_cases(
+      "edge_one_near_mu", x = column, label = paste0("edge_one_near_mu-", column),
+      types = "nonparametric", extra_args = list(test.value = 0.3)
+    )
+  }), recursive = FALSE),
+  # Review round 3 (D108): R's round() at one digit picks between the two candidates
+  # rounded to that digit, the nearer one to the double and the even one on a tie of
+  # their distances, so (1 / 2000) x 100 prints 0%; Python's round() of the same
+  # double gives 0.1 (probe-round).
+  edge_bar(
+    "edge_bar_ties", label = "edge_bar_ties-digitsperc1",
+    extra_args = list(counts = "n", digits.perc = 1L)
+  )
 )
 
 case_names <- vapply(CASES, function(case) case$name, character(1L))
@@ -5427,6 +5538,393 @@ contingency_probe <- function() {
   )
 }
 
+# Probes of review round 3 ----------------------------------------------------------
+#
+# What R does where the reviews could only reason about it: a difference that is 0 as
+# written but not in binary in the signed-rank test (probe-nearzero), the bootstrap-t
+# test on the same ratings in two writings (probe-trimcibt), Cramer's V at large df and
+# exact zeros in the contingency tests (probe-bartables), and R's round() on the
+# percent labels at decimal ties (probe-round). Doubles are hex text as above.
+
+# A row of `fields(value)` from probe_attempt(), with its error and warnings.
+attempt_fields <- function(expr, fields) {
+  out <- probe_attempt(expr)
+  c(if (!is.null(out$value)) fields(out$value), list(error = out$error, warnings = out$warnings))
+}
+
+# The subtitle row of a ggstatsplot plot in hex, and the subtitle as text.
+subtitle_hex <- function(plot) {
+  row <- ggstatsplot::extract_stats(plot)$subtitle_data
+  list(
+    statistic_hex = hex(row$statistic), p_value_hex = hex(row$p.value),
+    estimate_hex = hex(row$estimate), conf_low_hex = hex(row$conf.low),
+    conf_high_hex = hex(row$conf.high), n_obs = row$n.obs, effectsize = row$effectsize,
+    subtitle = deparse_text(ggstatsplot::extract_subtitle(plot))
+  )
+}
+
+# probe-nearzero (review W9; D88, D105): stats::wilcox.test (exact = FALSE, as
+# statsExpressions calls it; and with digits.rank = 7), effectsize::rank_biserial and
+# ggstatsplot on data holding a value equal to the test value 0.3 as written but not in
+# binary, with R's own differences x - mu. One sample: each column of
+# edge_one_near_mu against 0.3, through gghistostats too. Paired: edge_paired_near_zero
+# (subjects s01 to s10 in conditions a and b; a - b is 0.1 + 0.2 - 0.3 = 2^-54 for s01,
+# exactly 0 for s02), through ggwithinstats too.
+nearzero_probe <- function() {
+  one <- probe_dataset("edge_one_near_mu")
+  paired <- probe_dataset("edge_paired_near_zero")
+  mu <- 0.3
+  wilcox_fields <- function(r) {
+    list(
+      statistic_hex = hex(unname(r$statistic)), p_value_hex = hex(r$p.value), method = r$method
+    )
+  }
+  biserial_fields <- function(r) {
+    list(
+      estimate_hex = hex(r[[1L]]), ci = r$CI, ci_low_hex = hex(r$CI_low),
+      ci_high_hex = hex(r$CI_high)
+    )
+  }
+  ggstatsplot_row <- function(make) {
+    HIDDEN$log <- list()
+    HIDDEN$values <- list()
+    set.seed(CASE_SEED)
+    attempt_fields(make(), subtitle_hex)
+  }
+  one_sample <- lapply(names(one$data), function(column) {
+    x <- as.numeric(one$data[[column]])
+    frame <- data.frame(value = x)
+    list(
+      column = column, x_hex = hex_list(x), mu_hex = hex(mu),
+      differences_hex = hex_list(x - mu), exact_zeros = sum(x - mu == 0),
+      wilcox = attempt_fields(stats::wilcox.test(x, mu = mu, exact = FALSE), wilcox_fields),
+      wilcox_digits7 = attempt_fields(
+        stats::wilcox.test(x, mu = mu, exact = FALSE, digits.rank = 7), wilcox_fields
+      ),
+      rank_biserial = attempt_fields(
+        effectsize::rank_biserial(x, mu = mu, ci = 0.95), biserial_fields
+      ),
+      gghistostats = ggstatsplot_row(function() {
+        ggstatsplot::gghistostats(
+          data = frame, x = value, test.value = mu, type = "nonparametric"
+        )
+      })
+    )
+  })
+  data <- paired$data
+  a <- as.numeric(data$value[data$condition == "a"])
+  b <- as.numeric(data$value[data$condition == "b"])
+  subjects <- data$subject[data$condition == "a"]
+  if (!identical(subjects, data$subject[data$condition == "b"])) {
+    stop("edge_paired_near_zero: the subjects of a and b are not in the same order")
+  }
+  paired_row <- list(
+    subjects = as.list(subjects), a_hex = hex_list(a), b_hex = hex_list(b),
+    differences_hex = hex_list(a - b), exact_zeros = sum(a - b == 0),
+    wilcox = attempt_fields(
+      stats::wilcox.test(a, b, paired = TRUE, exact = FALSE), wilcox_fields
+    ),
+    wilcox_digits7 = attempt_fields(
+      stats::wilcox.test(a, b, paired = TRUE, exact = FALSE, digits.rank = 7), wilcox_fields
+    ),
+    rank_biserial = attempt_fields(
+      effectsize::rank_biserial(a, b, paired = TRUE, ci = 0.95), biserial_fields
+    ),
+    ggwithinstats = ggstatsplot_row(function() {
+      ggstatsplot::ggwithinstats(
+        data = data, x = condition, y = value, subject.id = subject, type = "nonparametric"
+      )
+    })
+  )
+  probe_file(
+    "probe-nearzero",
+    paste(
+      "wilcox.test, rank_biserial, gghistostats and ggwithinstats on differences that are",
+      "0 as written but 2^-54 in binary"
+    ),
+    list(mu_hex = hex(mu), one_sample = one_sample, paired = paired_row),
+    datasets = list(one$entry, paired$entry)
+  )
+}
+
+# probe-trimcibt (review Z1; D105): WRS2::trimcibt (tr 0.2, alpha = 1 - 0.95, as
+# statsExpressions calls it) on edge_one_ratings in three writings of the same numbers:
+# whole numbers against 2.5 (and 3), the CSV's tenths against 0.25 (and 0.3), and the
+# whole numbers times 0.1 against 2.5 x 0.1 (and 3 x 0.1), at 200 (ggstatsplot's
+# nboot), 2,000 and 20,000 resamples and three seeds. The bootstrap T* values R sorted
+# are traced (as in probe-bootrules): how many are NaN (sort() drops them), infinite,
+# finite, and, up to 2,000 resamples, all of them in the order R computed them.
+TRIMCIBT_B <- c(200L, 2000L, 20000L)
+trimcibt_probe <- function() {
+  ratings <- probe_dataset("edge_one_ratings")
+  d <- ratings$data
+  sets <- list(
+    ratings = list(
+      whole = list(x = as.numeric(d$whole), nv = 2.5),
+      tenths = list(x = as.numeric(d$tenths), nv = 0.25),
+      times_tenth = list(x = as.numeric(d$whole) * 0.1, nv = 2.5 * 0.1)
+    ),
+    centred = list(
+      whole = list(x = as.numeric(d$centred_whole), nv = 3),
+      tenths = list(x = as.numeric(d$centred_tenths), nv = 0.3),
+      times_tenth = list(x = as.numeric(d$centred_whole) * 0.1, nv = 3 * 0.1)
+    )
+  )
+  rows <- list()
+  for (set in names(sets)) {
+    for (writing in names(sets[[set]])) {
+      x <- sets[[set]][[writing]]$x
+      nv <- sets[[set]][[writing]]$nv
+      for (B in TRIMCIBT_B) {
+        for (seed in c(CASE_SEED, 1L, 2L)) {
+          set.seed(seed)
+          traced <- traced_run(function() {
+            r <- WRS2::trimcibt(x = x, nv = nv, tr = 0.2, alpha = 1.0 - 0.95, nboot = B)
+            c(r$estimate, as.numeric(r$ci)[1:2], r$p.value, r$test.stat)
+          }, lengths = B)
+          # TRACE$calls still holds the traced vectors as doubles.
+          sorts <- Filter(function(call) call$name == "sort.int", TRACE$calls)
+          t_star <- if (length(sorts) > 0L) sorts[[1L]]$input
+          values <- traced$result$value
+          rows[[length(rows) + 1L]] <- list(
+            set = set, writing = writing, B = B, seed = seed,
+            x_hex = hex_list(x), nv_hex = hex(nv),
+            values_hex = if (is.null(values)) NULL else hex_list(values),
+            error = traced$result$error, warnings = traced$result$warnings,
+            sorted_calls = length(sorts),
+            nan = if (!is.null(t_star)) sum(is.nan(t_star)),
+            infinite = if (!is.null(t_star)) sum(is.infinite(t_star)),
+            finite = if (!is.null(t_star)) sum(is.finite(t_star)),
+            t_star_hex = if (!is.null(t_star) && B <= 2000L) hex_list(t_star),
+            unbalanced_traces = traced$unbalanced
+          )
+        }
+      }
+    }
+  }
+  probe_file(
+    "probe-trimcibt",
+    paste(
+      "WRS2::trimcibt on the same ratings in three writings at 200, 2000 and 20000",
+      "resamples: p, interval and the NaN and infinite T* it sorted"
+    ),
+    list(rows = rows),
+    datasets = list(ratings$entry)
+  )
+}
+
+# probe-bartables (reviews B5 and C3): stats::chisq.test (correct = FALSE) and
+# effectsize::cramers_v (adjust TRUE and FALSE) or pearsons_c at 95%, two-sided as
+# ggbarstats asks, with R's own noncentral chi-square probability at each bound in
+# (0, 1): on the wide tables of the round-3 cases (2 x 20, 2 x 40 and two 2 x 61), on
+# the exact zeros of those cases (a (0, 1), b (5, 4); 8, 2, 7, 8 against 0.32, 0.08,
+# 0.28, 0.32; 49 counts of 2), and on two exactly independent tables of about 1e10 per
+# cell given through counts, which ggbarstats is also asked to draw: a (1e10, 2e10), b
+# (2e10, 4e10), and 1e9 r_i c_j with r = 3, 7, 11 and c = 2, 5, 11.
+bartables_probe <- function() {
+  as_matrix <- function(frame) {
+    m <- stats::xtabs(n ~ x + y, data = frame)
+    matrix(as.numeric(m), nrow = nrow(m), dimnames = dimnames(m))
+  }
+  rows_of <- function(m) lapply(seq_len(nrow(m)), function(i) as.list(unname(m[i, ])))
+  test_fields <- function(r) {
+    list(
+      statistic_hex = hex(unname(r$statistic)), parameter = encode_doubles(unname(r$parameter)),
+      p_value_hex = hex(r$p.value), expected_hex = hex_list(r$expected)
+    )
+  }
+  es_fields <- function(r) {
+    list(
+      name = names(r)[[1L]], estimate_hex = hex(r[[1L]]), ci = r$CI,
+      ci_low_hex = hex(r$CI_low), ci_high_hex = hex(r$CI_high)
+    )
+  }
+  tails <- function(es, chisq, df, to_ncp) {
+    lapply(list(low = es$CI_low, high = es$CI_high), function(bound) {
+      if (!is.finite(bound) || bound <= 0 || bound >= 1) {
+        return(NULL)
+      }
+      ncp <- to_ncp(bound)
+      list(ncp_hex = hex(ncp), cdf_hex = hex(stats::pchisq(chisq, df, ncp = ncp)))
+    })
+  }
+  two_way <- function(name, m) {
+    n <- sum(m)
+    test <- probe_call(name, stats::chisq.test(m, correct = FALSE))$value
+    chisq <- unname(test$statistic)
+    df <- unname(test$parameter)
+    r <- nrow(m)
+    k <- ncol(m)
+    cramers <- lapply(c(TRUE, FALSE), function(adjust) {
+      # V back to chi-square, as probe-contingency does.
+      to_ncp <- function(v) {
+        if (!adjust) {
+          return(n * v^2 * (min(r, k) - 1))
+        }
+        shrunk <- min(r - (r - 1)^2 / (n - 1), k - (k - 1)^2 / (n - 1)) - 1
+        n * (v^2 * shrunk + (r - 1) * (k - 1) / (n - 1))
+      }
+      out <- probe_attempt(effectsize::cramers_v(
+        m, adjust = adjust, ci = 0.95, alternative = "two.sided"
+      ))
+      c(
+        list(adjust = adjust),
+        if (!is.null(out$value)) es_fields(out$value),
+        list(
+          error = out$error, warnings = out$warnings,
+          tails_at_bounds = if (!is.null(out$value)) tails(out$value, chisq, df, to_ncp)
+        )
+      )
+    })
+    list(
+      name = name, x_levels = as.list(rownames(m)), y_levels = as.list(colnames(m)),
+      table = rows_of(m), n_hex = hex(n),
+      chisq = attempt_fields(stats::chisq.test(m, correct = FALSE), test_fields),
+      # Bergsma's correction as R's doubles give it: chisq / n - df / (n - 1).
+      phi2_corrected_hex = hex(chisq / n - (r - 1) * (k - 1) / (n - 1)),
+      cramers_v = cramers
+    )
+  }
+  one_way <- function(name, x, p) {
+    n <- sum(x)
+    test <- probe_call(name, stats::chisq.test(x, p = p, correct = FALSE))$value
+    chisq <- unname(test$statistic)
+    df <- unname(test$parameter)
+    out <- probe_attempt(effectsize::pearsons_c(x, p = p, ci = 0.95, alternative = "two.sided"))
+    list(
+      name = name, x = as.list(x), p_hex = hex_list(p), n_hex = hex(n),
+      chisq = attempt_fields(stats::chisq.test(x, p = p, correct = FALSE), test_fields),
+      pearsons_c = c(
+        if (!is.null(out$value)) es_fields(out$value),
+        list(
+          error = out$error, warnings = out$warnings,
+          tails_at_bounds = if (!is.null(out$value)) {
+            tails(out$value, chisq, df, function(c) n * c^2 / (1 - c^2))
+          }
+        )
+      )
+    )
+  }
+  wide_sets <- lapply(
+    c("edge_bar_wide20", "edge_bar_wide40", "edge_bar_wide61", "edge_bar_wide61r"), probe_dataset
+  )
+  names(wide_sets) <- c("edge_bar_wide20", "edge_bar_wide40", "edge_bar_wide61", "edge_bar_wide61r")
+  wide <- lapply(names(wide_sets), function(name) two_way(name, as_matrix(wide_sets[[name]]$data)))
+  zero_v <- probe_dataset("edge_bar_zero_v")
+  exact_fit <- probe_dataset("edge_bar_exact_fit")
+  equal49 <- probe_dataset("edge_bar_equal49")
+  big_frames <- list(
+    big_2x2 = data.frame(
+      x = c("a", "a", "b", "b"), y = c("p", "q", "p", "q"), n = c(1e10, 2e10, 2e10, 4e10)
+    ),
+    big_3x3 = data.frame(
+      x = rep(c("r1", "r2", "r3"), each = 3L), y = rep(c("c1", "c2", "c3"), times = 3L),
+      n = as.vector(t(outer(c(3, 7, 11), c(2, 5, 11)))) * 1e9
+    )
+  )
+  big <- lapply(names(big_frames), function(name) {
+    frame <- big_frames[[name]]
+    HIDDEN$log <- list()
+    HIDDEN$values <- list()
+    set.seed(CASE_SEED)
+    c(
+      two_way(name, as_matrix(frame)),
+      list(ggbarstats = attempt_fields(
+        ggstatsplot::ggbarstats(data = frame, x = x, y = y, counts = n, type = "parametric"),
+        subtitle_hex
+      ))
+    )
+  })
+  zeros <- c(
+    list(two_way("edge_bar_zero_v", as_matrix(zero_v$data))),
+    list(one_way(
+      "edge_bar_exact_fit", as.numeric(exact_fit$data$n), c(0.32, 0.08, 0.28, 0.32)
+    )),
+    list(one_way(
+      "edge_bar_equal49", as.numeric(equal49$data$n), rep(1 / 49, 49L)
+    )),
+    big
+  )
+  probe_file(
+    "probe-bartables",
+    paste(
+      "chisq.test with cramers_v or pearsons_c and the tail at each bound: 2 x 20 to 2 x",
+      "61 tables, and tables whose statistic or corrected effect size is exactly 0"
+    ),
+    list(wide = wide, zeros = zeros),
+    datasets = c(
+      unname(lapply(wide_sets, function(set) set$entry)),
+      list(zero_v$entry, exact_fit$entry, equal49$entry)
+    )
+  )
+}
+
+# probe-round (D108): R's round(perc, d) at d = 0, 1 and 2 and the label
+# paste0(round(perc, d), "%") for perc = (k / n) x 100, n = 40, 200, 1000 and 2000, at
+# every k whose perc lies within 1e-9 of a rounding tie at one of those digits; then
+# ggbarstats' own cell labels (extract_stats()'s descriptive_data, perc and .label) at
+# digits.perc 0, 1 and 2 for one bar per such k <= n / 2 (a k, b n - k, through counts).
+ROUND_N <- c(40L, 200L, 1000L, 2000L)
+round_probe <- function() {
+  near_tie <- function(perc, d) {
+    scaled <- perc * 10^d
+    abs((scaled - floor(scaled)) - 0.5) <= 1e-9
+  }
+  grid <- list()
+  label_path <- list()
+  for (n in ROUND_N) {
+    k <- seq_len(n - 1L)
+    perc <- (k / n) * 100
+    ties <- lapply(0:2, function(d) near_tie(perc, d))
+    keep <- which(Reduce(`|`, ties))
+    for (i in keep) {
+      grid[[length(grid) + 1L]] <- list(
+        n = n, k = k[[i]], perc_hex = hex(perc[[i]]),
+        tie_digits = as.list((0:2)[vapply(ties, function(t) t[[i]], logical(1L))]),
+        rounded_hex = lapply(0:2, function(d) hex(round(perc[[i]], d))),
+        labels = lapply(0:2, function(d) paste0(round(perc[[i]], d), "%"))
+      )
+    }
+    bars <- k[keep][k[keep] <= n - k[keep]]
+    frame <- data.frame(
+      x = rep(c("a", "b"), times = length(bars)),
+      y = rep(sprintf("n%04dk%04d", n, bars), each = 2L),
+      n = as.vector(rbind(bars, n - bars))
+    )
+    for (d in 0:2) {
+      HIDDEN$log <- list()
+      HIDDEN$values <- list()
+      set.seed(CASE_SEED)
+      out <- probe_attempt(ggstatsplot::ggbarstats(
+        data = frame, x = x, y = y, counts = n, type = "parametric", digits.perc = d,
+        results.subtitle = FALSE, proportion.test = FALSE, bf.message = FALSE
+      ))
+      described <- if (!is.null(out$value)) ggstatsplot::extract_stats(out$value)$descriptive_data
+      label_path[[length(label_path) + 1L]] <- list(
+        n = n, digits_perc = d, bars = length(bars),
+        error = out$error, warnings = out$warnings,
+        cells = if (!is.null(described)) {
+          lapply(seq_len(nrow(described)), function(j) {
+            list(
+              y = as.character(described$y[[j]]), x = as.character(described$x[[j]]),
+              counts = as.integer(described$counts[[j]]), perc_hex = hex(described$perc[[j]]),
+              label = described$.label[[j]]
+            )
+          })
+        }
+      )
+    }
+  }
+  probe_file(
+    "probe-round",
+    paste(
+      "round(perc, d) and paste0(round(perc, d), '%') at decimal ties of (k / n) x 100,",
+      "and ggbarstats' own cell labels for the same k / n"
+    ),
+    list(grid = grid, label_path = label_path)
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -5458,7 +5956,12 @@ PROBE_BUILDERS <- list(
   "probe-corr" = corr_probe,
   "probe-onesamplebf" = onesamplebf_probe,
   "probe-heldout" = heldout_probe,
-  "probe-contingency" = contingency_probe
+  "probe-contingency" = contingency_probe,
+  # Review round 3, last so that the probes above keep their shards.
+  "probe-nearzero" = nearzero_probe,
+  "probe-trimcibt" = trimcibt_probe,
+  "probe-bartables" = bartables_probe,
+  "probe-round" = round_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the
@@ -5507,6 +6010,10 @@ case_bootstraps <- function(case) {
   nlevels(ANALYSES[[case$fun]](read_dataset(case)$data, case)$x) > 2L
 }
 
+# The cases of review round 3 (ROUND3_CASES) are placed after all the others, on the
+# loads those leave, so that adding them moves no earlier case to another shard (the
+# shard decides which case first loads a package and records its start-up message). A
+# later case whose group already has a shard joins it.
 assign_shards <- function(cases, n) {
   keys <- vapply(cases, function(case) {
     paste(
@@ -5516,14 +6023,18 @@ assign_shards <- function(cases, n) {
     )
   }, character(1L))
   boots <- vapply(cases, case_bootstraps, logical(1L))
-  groups <- split(seq_along(cases), keys)
-  weights <- vapply(groups, function(ix) length(ix) + 30 * any(boots[ix]), numeric(1L))
+  later <- vapply(cases, function(case) case$name %in% ROUND3_CASE_NAMES, logical(1L))
   load <- numeric(n)
   out <- integer(length(cases))
-  for (g in names(groups)[order(-weights, names(groups))]) {
-    shard <- which.min(load)
-    out[groups[[g]]] <- shard
-    load[[shard]] <- load[[shard]] + weights[[g]]
+  for (part in list(which(!later), which(later))) {
+    groups <- split(part, keys[part])
+    weights <- vapply(groups, function(ix) length(ix) + 30 * any(boots[ix]), numeric(1L))
+    for (g in names(groups)[order(-weights, names(groups))]) {
+      placed <- out[keys == g & out > 0L]
+      shard <- if (length(placed) > 0L) placed[[1L]] else which.min(load)
+      out[groups[[g]]] <- shard
+      load[[shard]] <- load[[shard]] + weights[[g]]
+    }
   }
   out
 }
