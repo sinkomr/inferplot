@@ -235,6 +235,15 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   - [ ] W9 (owner's call): the signed-rank test ranks R's rounded differences (D64), so
     differences equal as written but different in binary (0.1 stored two ways) get
     different ranks, as in R. D74's rule would tie them and differ from R.
+  - [ ] W10 (found with oracle round 3; lead to decide with W9): a value that equals
+    another only as written (0.1 + 0.2 against 0.3) is a zero in the one-sample
+    signed-rank test (D105) but a nonzero difference in the paired test (V 43 against
+    35 on the lead's ten pairs), and is not tied in the Mann-Whitney, Kruskal-Wallis
+    and Friedman tests; R treats the two doubles as different everywhere (probe:
+    one-sample V 49 against inferplot's 41; paired V 35.5, equal). One rule is wanted.
+    Candidate: read every stored value as the decimal it stands for (D105's reading)
+    once, where the data are read, so that all methods see the same number; values
+    parsed from text are already that decimal, so no fixture would move.
   - Leads: what WRS2 does with 0/0 resamples within subjects and with two subjects;
     seeded intervals depend on NumPy's `Generator.integers` stream across versions.
   Second half (data, arguments, texts, checks, drawing; 2026-11-10; scripts and images
