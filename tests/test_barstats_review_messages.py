@@ -39,6 +39,30 @@ def test_direction_keywords_get_barstats_wording(keyword: str, function: Any) ->
     assert "first level of x is greater" not in text
 
 
+@pytest.mark.parametrize(
+    ("keyword", "target"),
+    [
+        ("x_label", "xlab"),
+        ("y_label", "ylab"),
+        ("legend_label", "legend_title"),
+        ("fill_label", "legend_title"),
+    ],
+)
+def test_label_names_point_to_the_drawing_arguments(keyword: str, target: str) -> None:
+    text = _message(TypeError, lambda: anything(FRAME, "x", "y", **{keyword: "A"}))
+    assert f"Write {target}='A'." in text
+    assert "label=" not in text.replace(f"{keyword}=", "")
+    # The call it advises works.
+    anything(FRAME, "x", "y", bf_message=False, **{target: "A"})
+    text = _message(TypeError, lambda: analysis(FRAME, "x", "y", **{keyword: "A"}))
+    assert f"{target}=" in text
+    assert "a drawing option of ip.barstats(...)" in text
+    render: Any = ip.render.barstats
+    result = ip.analyze.barstats(FRAME, "x", "y", bf_message=False)
+    text = _message(TypeError, lambda: render(result, **{keyword: "A"}))
+    assert f"Write {target}='A'." in text
+
+
 @pytest.mark.parametrize("value", ["one-sided", "one.sided", "one-tailed", "onesided"])
 def test_one_sided_values_get_barstats_wording(value: str) -> None:
     text = _message(ValueError, lambda: ip.barstats(FRAME, "x", "y", alternative=value))

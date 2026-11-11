@@ -1073,6 +1073,14 @@ _OTHER_LAYERS: Final = frozenset(
 )
 
 
+# Other names of the axis labels and of the legend title (review B9).
+_AXIS_LABEL_NAMES: Final = frozenset(
+    {"x_label", "y_label", "x_title", "y_title", "xtitle", "ytitle", "x_lab", "y_lab"}
+)
+_LEGEND_TITLE_NAMES: Final = frozenset(
+    {"legend_label", "fill_label", "legend_name", "fill_title", "fill_name"}
+)
+
 # What a direction means in barstats (review B8): its tests have no direction.
 CONTINGENCY_DIRECTION: Final = (
     "barstats' tests have no direction: the chi-square and McNemar tests compare "
@@ -1236,6 +1244,17 @@ def _bar_targeted(
         return no(
             f"it is matplotlib's name for the {axis} axis label, which inferplot "
             f"calls {axis}lab=. {where}"
+        )
+    if key in _AXIS_LABEL_NAMES:
+        # Without this, label= (a few edits away) would be the did-you-mean.
+        axis, text = key[0], shown or "'...'"
+        where = f"Write {axis}lab={text}." if "ax" in valid else f"It is {drawing}."
+        return no(f"the {axis} axis label is {axis}lab=. {where}")
+    if key in _LEGEND_TITLE_NAMES:
+        text = shown or "'...'"
+        where = f"Write legend_title={text}." if "ax" in valid else f"It is {drawing}."
+        return no(
+            f"the title of the legend of the levels of x is legend_title=. {where}"
         )
     if key in {"order", "x_order", "level_order", "levels", "categories"}:
         return no(
