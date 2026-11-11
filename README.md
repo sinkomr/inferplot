@@ -181,7 +181,8 @@ counts.
   one file.
 - [docs/intervals.md](docs/intervals.md): how far to trust each interval and test.
 - [skills/inferplot/SKILL.md](skills/inferplot/SKILL.md): a Claude Code skill for
-  projects that use inferplot.
+  projects that use inferplot. Copy the `skills/inferplot` folder into the
+  project's `.claude/skills/` folder.
 - [llms.txt](llms.txt): an index for language models.
 
 ## License and credits
