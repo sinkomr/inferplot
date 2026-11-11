@@ -788,31 +788,53 @@ def test_random_tables_match_scipy() -> None:
 
 
 def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
-    # a and b together are 2,001,000 observations over 4 levels of y: an exact
-    # test of their 2 x 4 table would need arrays beyond the limit, so it is
-    # refused at once; a-c (2 x 2) and b-c (2 x 3) are tested.
-    table = [[1_000_000, 1_000_000, 0, 0], [0, 0, 500, 500], [50, 0, 0, 0]]
+    # x0 and x1 are 840 observations over 20 levels of y, far apart: the exact
+    # test of their 2 x 20 table is beyond the work limit (DECISIONS.md D107) and
+    # is not computed; x0-x2 and x1-x2 (2 x 20 tables whose second row holds 5
+    # observations) are cheap and tested.
+    table = [
+        [2 * j + 2 for j in range(20)],
+        [40 - 2 * j for j in range(20)],
+        [3, 2] + [0] * 18,
+    ]
     result = ip.analyze.barstats(_frame(table), "x", "y", counts="n")
     ab, ac, bc_ = result.pairwise
     assert (ab.p_value, ab.p_adjusted, ab.significant) == (None, None, None)
     assert ab.no_test_reason == (
-        "the exact test of this 2 x 4 table (n = 2,001,000) would take more than "
-        "about two seconds, and inferplot does not approximate it"
+        "too large to compute exactly within inferplot's limits (a 2 x 20 table of "
+        "840), not approximated"
     )
     assert ab.estimate is not None  # Cramér's V is still reported
-    assert ab.estimate > 0.999
-    p_ac = float(scipy_stats.fisher_exact([[1_000_000, 1_000_000], [50, 0]])[1])
-    assert_close("closed_form", ac.p_value, p_ac, what="a-c")
     assert ac.p_value is not None
     assert bc_.p_value is not None
+    for pair, rows in ((ac, [0, 2]), (bc_, [1, 2])):
+        sub = np.array(table)[rows]
+        expected = stats.fisher_exact(sub[:, sub.sum(axis=0) > 0]).p_value
+        assert pair.p_value == expected
     holm = stats.p_adjust([ac.p_value, bc_.p_value], "holm")
     assert (ac.p_adjusted, bc_.p_adjusted) == tuple(holm)
-    assert result.warnings[0].startswith(
-        "The pair 'x0' and 'x1' of 'x' has no Fisher test: Fisher's exact test of "
-        "this 2 x 4 table (n = 2001000) would take more than about two seconds"
+    first = next(
+        i for i, w in enumerate(result.warnings) if w.startswith("Fisher's exact")
     )
-    assert result.warnings[1].startswith("1 of the 3 pairwise Fisher tests has no")
-    assert [i.code for i in result.check()].count("pairs_without_test") == 1
+    assert result.warnings[first] == (
+        "Fisher's exact test was computed for 2 of the 3 pairs of levels of 'x'; "
+        "the other 1 ('x0' and 'x1') is too large to compute exactly within "
+        "inferplot's limits (about a second of work for one test and two seconds "
+        "for all the pairs of one table, the cheapest computed first), and "
+        "inferplot does not approximate them. Their Cramér's V is reported. To "
+        "test them, merge sparse levels of 'y' (levels with few observations), or "
+        "compare two levels of 'x' in a call of their own."
+    )
+    assert result.warnings[first + 1] == (
+        "1 of the 3 pairwise Fisher tests has no p-value (above); it stays in "
+        "result.pairwise without one, and p_adjust_method='holm' adjusts the other "
+        "2 among themselves."
+    )
+    (issue,) = [i for i in result.check() if i.code == "pairs_without_test"]
+    assert issue.message.startswith(
+        "1 of the 3 pairwise comparisons of 'x' has no p-value: 'x0' and 'x1' (too "
+        "large to compute exactly"
+    )
 
 
 def test_bowker_with_two_levels_that_never_exchange_pairs() -> None:

@@ -122,27 +122,6 @@ _BAR_CONF_LEVEL: Final = 0.95
 _RELATIVE_TIE: Final = 1e-7
 _LOG_TIE: Final = math.log1p(_RELATIVE_TIE)
 _LOG_2PI: Final = math.log(2.0 * math.pi)
-# Fisher's test of a 2 x c table (c >= 3): the largest number of array elements the
-# search may touch (node grids, expanded tables, binary-search steps) before it
-# gives up. Measured on an Apple M-series laptop: about 3e7 elements per second,
-# so this is about two seconds (see fisher_exact).
-_FISHER_WORK_LIMIT: Final = 6.0e7
-# ... and the largest n (c - 2) for which the per-column arrays are built: the
-# bounds and masses of every suffix of columns take about 24 n (c - 2) bytes, so
-# about 100 MB here (2 x 3 up to n = 4e6; 2 x 5 up to n = 1.3e6).
-_FISHER_SIZE_LIMIT: Final = 4_000_000
-# The search builds its per-node grids in chunks of at most this many elements.
-_FISHER_CHUNK: Final = 1 << 18
-# Pruning margin of the search, relative to 1 + |log threshold| (the log
-# probabilities are accurate to about 1e-14 relative).
-_FISHER_MARGIN: Final = 1e-9
-# Vertex enumeration of the lower bounds runs over 2^(m - 1) m vertices; from this
-# many suffix columns on a constant bound is used instead.
-_MAX_VERTEX_COLUMNS: Final = 10
-# Tail sums of the 2 x 2 test: stop when the geometric bound of the rest is below
-# this share of the sum.
-_TAIL_EPS: Final = 1e-17
-_TAIL_BLOCK: Final = 256
 
 
 # --------------------------------------------------------------------------- #
@@ -891,48 +870,175 @@ def column_percentages(table: CountTable) -> tuple[tuple[float | None, ...], ...
 # Fisher's exact test of a 2 x c table
 # --------------------------------------------------------------------------- #
 
+# The cost of an exact test is counted in work units: elements of the arrays the
+# computation processes, each weighted by the passes made over it (the weights
+# below), so that a unit is about a nanosecond on the build machine (an Apple
+# M-series laptop) and the count does not depend on the machine or its load.
+_UNIT_GRID: Final = 35.0  # one child of one node in a column's grid
+_UNIT_STEP: Final = 12.0  # one bisection step of one partial table
+_UNIT_CHILD: Final = 40.0  # one partial table carried to the next column
+_UNIT_LIST: Final = 6.0  # one placement of one completion of the list
+_UNIT_BOUND: Final = 10.0  # one element of a column's bound arrays
+_UNIT_VERTEX: Final = 3_000.0  # one vertex of the box (smallest completion)
+_UNIT_PMF: Final = 40.0  # one hypergeometric log probability (2 x 2)
+_UNIT_QUERY: Final = 40.0  # one partial table joined with the list
+_UNIT_PIECE: Final = 800.0  # one block of a row of the list (a pass of Python)
+_UNIT_CALL: Final = 20_000.0  # one pass of Python over a chunk
+# One test may spend this much (about a second here) ...
+_FISHER_WORK_LIMIT: Final = 1.0e9
+# ... and the pairwise tests of one table this much in all (about two seconds).
+_PAIRWISE_WORK_LIMIT: Final = 1.6e9
+# A pairwise test whose smaller work estimate (_fisher_work) is above this is not
+# attempted: the estimate exceeds the work spent by at most 1.1e4 times (largest
+# answered estimate 2.5e12) on the tables of tests/data and the grids measured,
+# so the attempt would only spend the budget the other pairs need.
+_PAIRWISE_ESTIMATE_LIMIT: Final = 1e5 * _FISHER_WORK_LIMIT
+_SPAN_SD: Final = 8.0
+# Memory: the arrays of one test, counted in bytes before any is allocated, stay
+# below this (every array the search allocates, temporaries included).
+_FISHER_MEMORY_LIMIT: Final = 160 * 2**20
+# The list side of the search may take this many bytes of it.
+_FISHER_LIST_MEMORY: Final = 112 * 2**20
+# The grids of the network side are built in chunks of at most this many cells
+# (a node's row is never split, so a chunk holds at least one row).
+_FISHER_GRID_CHUNK: Final = 1 << 16
+# A column whose children per node outnumber this is searched without a grid.
+_WIDE_ROW: Final = 4096
+# ... whose rows keep the children with masses within 2^-1100 of the largest.
+_WINDOW_DROP: Final = 1100.0 * math.log(2.0)
+# The partial tables carried from one column to the next are handed on in chunks
+# whose total over the columns of the search is at most this many.
+_FISHER_PATH_TOTAL: Final = 1 << 17
+# Bytes per grid cell (the grid's integer and float arrays and the row sums,
+# temporaries included), per carried partial table and per list completion.
+_BYTES_GRID: Final = 120
+_BYTES_PATH: Final = 200
+_BYTES_LIST: Final = 16
+# Rows of the list up to this length are sorted and summed together (padded);
+# longer ones one at a time. A join groups its partial tables by row when the
+# rows average at least this many of them.
+_SHORT_ROW: Final = 32
+_QUERIES_PER_ROW: Final = 16
+# Lists with at most this many rows (totals), and rows of at least this length on
+# average, keep each row as its own array.
+_ROWWISE_ROWS: Final = 4096
+_ROW_LENGTH: Final = 64
+# Pruning margin of the network side, relative to 1 + |log threshold| (the log
+# probabilities are accurate to about 1e-13 relative): a partial table is summed
+# whole or dropped only when its bound clears the threshold by this much; the
+# others are carried to the exact comparison at the end.
+_FISHER_MARGIN: Final = 1e-9
+# Vertex enumeration of the lower bounds runs over 2^(m - 1) m vertices; from this
+# many suffix columns on a constant bound is used instead.
+_MAX_VERTEX_COLUMNS: Final = 10
+# A row sum (in units of the row's largest term) below this may have lost terms
+# to underflow and is summed again in log space.
+_TINY: Final = 2.0**-900
+# Tail sums of the 2 x 2 test: stop when the geometric bound of the rest is below
+# this share of the sum; blocks grow from the first size to the second.
+_TAIL_EPS: Final = 1e-17
+_TAIL_BLOCK: Final = 256
+_TAIL_BLOCK_MAX: Final = 1 << 15
+# ... and their terms are computed in Loader's form every this many terms, by the
+# exact ratio of consecutive terms in between.
+_ANCHOR: Final = 256
 
-def _log_dbinom(x: FloatArray, size: int, p: float, q: float) -> FloatArray:
-    """log P(X = x) for X ~ Binomial(size, p), q = 1 - p given separately, in
+
+class _TooLarge(Exception):
+    """The exact computation would pass its work or memory limit."""
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(kind)
+        self.kind = kind  # "work" or "memory"
+
+
+class _Budget:
+    """Work units one computation may spend, what it has spent, and the largest
+    single memory request (bytes) it has made. ``charge`` is called before the
+    step it pays for, so a step that would pass the limit is never started."""
+
+    __slots__ = ("largest", "limit", "spent")
+
+    def __init__(self, limit: float) -> None:
+        self.limit = limit
+        self.spent = 0.0
+        self.largest = 0
+
+    def charge(self, units: float) -> None:
+        if self.spent + units > self.limit:
+            raise _TooLarge("work")
+        self.spent += units
+
+    def request(self, nbytes: float) -> None:
+        if nbytes > _FISHER_MEMORY_LIMIT:
+            raise _TooLarge("memory")
+        self.largest = max(self.largest, int(nbytes))
+
+
+def _log_ratio(num: int, den: int) -> float:
+    """log(num / den) for 0 < num < den, accurate to a few units of 2^-53 relative
+    (through log1p when num / den is near 1)."""
+    if 2 * num >= den:
+        return math.log1p(-(den - num) / den)
+    return math.log(num / den)
+
+
+def _split_mean(size: int, num: int, den: int) -> tuple[float, float]:
+    """size * num / den as the nearest double and the rest (exact value minus the
+    double), from exact rationals."""
+    exact = Fraction(size * num, den)
+    hi = float(exact)
+    return hi, float(exact - Fraction(hi))
+
+
+def _log_dbinom(x: FloatArray, size: int, num: int, den: int) -> FloatArray:
+    """log P(X = x) for X ~ Binomial(size, p), p = num / den (0 < num < den), in
     Loader's (2000, "Fast and accurate computation of binomial probabilities")
     saddle-point form: stirlerr(n) - stirlerr(x) - stirlerr(n - x) - bd0(x, n p) -
     bd0(n - x, n q) - log(2 pi x (1 - x / n)) / 2, whose absolute error stays near
     the rounding of its largest term whatever the size (no difference of large
-    log-factorials)."""
+    log-factorials). The means n p and n q are taken as exact rationals: bd0(x, m +
+    d) = bd0(x, m) + d (m - x) / m to first order, with m the nearest double and d
+    the rest; without it the rounding of n p alone gives an error of order 2^-53
+    |x - n p|, which grows with the square root of n (1e-12 relative at n = 1e9)."""
     out = np.empty(x.shape, dtype=np.float64)
     n = float(size)
     zero = x == 0.0
     full = x == n
-    out[zero] = n * math.log(q)
-    out[full] = n * math.log(p)
+    if bool(zero.any()):
+        out[zero] = n * _log_ratio(den - num, den)
+    if bool(full.any()):
+        out[full] = n * _log_ratio(num, den)
     mid = ~(zero | full)
     if bool(mid.any()):
         xm = x[mid]
         rest = n - xm
-        nn = np.full(xm.shape, n)
+        m1, d1 = _split_mean(size, num, den)
+        m2, d2 = _split_mean(size, den - num, den)
         lc = (
-            _stirlerr(nn)
+            _stirlerr(np.full(xm.shape, n))
             - _stirlerr(xm)
             - _stirlerr(rest)
-            - _bd0(xm, np.full(xm.shape, n * p))
-            - _bd0(rest, np.full(xm.shape, n * q))
+            - (_bd0(xm, np.full(xm.shape, m1)) + d1 * ((m1 - xm) / m1))
+            - (_bd0(rest, np.full(xm.shape, m2)) + d2 * ((m2 - rest) / m2))
         )
         lf = _LOG_2PI + np.log(xm) + np.log1p(-xm / n)
         out[mid] = lc - 0.5 * lf
     return out
 
 
-class _TooLarge(Exception):
-    """The exact search would exceed its work limit."""
+# --- 2 x 2 ------------------------------------------------------------------ #
 
 
-def _tail_log_sum(f: _LogPmf, start: int, stop: int) -> float:
+def _tail_log_sum(f: _LogPmf, start: int, stop: int, budget: _Budget) -> float:
     """log of sum exp(f(a)) for a from ``start`` to ``stop`` inclusive (either
     direction), where the terms fall away from ``start`` (a tail of a log-concave
-    sequence beyond its mode). Summed in blocks of growing size; the rest after a
-    block is at most last term x r / (1 - r), r the ratio of the last two terms
-    (the ratios fall away from the mode), and the sum stops once that is below
-    1e-17 of the sum."""
+    sequence beyond its mode). Summed in blocks of growing size (at most
+    ``_TAIL_BLOCK_MAX`` terms, so memory stays small); the rest after a block is at
+    most last term x r / (1 - r), r the ratio of the last two terms (the ratios
+    fall away from the mode), and the sum stops once that is below 1e-17 of the
+    sum. Each block is charged to ``budget`` before it is computed (the terms of
+    a block come from _LogPmf.run)."""
     step = 1 if stop >= start else -1
     ref = float(f(np.array([float(start)]))[0])
     total = 0.0
@@ -942,19 +1048,20 @@ def _tail_log_sum(f: _LogPmf, start: int, stop: int) -> float:
         end = pos + step * (block - 1)
         if (end - stop) * step > 0:
             end = stop
-        idx = np.arange(pos, end + step, step, dtype=np.float64)
-        values = f(idx) - ref
+        size = abs(end - pos) + 1
+        budget.charge(size * _UNIT_PMF + _UNIT_CALL / 20.0)
+        values = f.run(pos, size, step) - ref
         total += float(np.sum(np.exp(values)))
         if end == stop:
             break
-        if idx.size >= 2:
+        if values.size >= 2:
             ratio = math.exp(float(values[-1] - values[-2]))
             if ratio < 1.0:
                 rest = math.exp(float(values[-1])) * ratio / (1.0 - ratio)
                 if rest <= _TAIL_EPS * total:
                     break
         pos = end + step
-        block *= 2
+        block = min(2 * block, _TAIL_BLOCK_MAX)
     return ref + math.log(total)
 
 
@@ -965,16 +1072,48 @@ class _LogPmf:
 
     def __init__(self, r1: int, c0: int, c1: int) -> None:
         n = c0 + c1
-        self.r1, self.c0, self.c1 = r1, c0, c1
-        self.p, self.q = r1 / n, (n - r1) / n
-        self.log_total = float(_log_dbinom(np.array([float(r1)]), n, self.p, self.q)[0])
+        self.r1, self.c0, self.c1, self.n = r1, c0, c1, n
+        self.log_total = float(_log_dbinom(np.array([float(r1)]), n, r1, n)[0])
 
     def __call__(self, a: FloatArray) -> FloatArray:
         return (
-            _log_dbinom(a, self.c0, self.p, self.q)
-            + _log_dbinom(float(self.r1) - a, self.c1, self.p, self.q)
+            _log_dbinom(a, self.c0, self.r1, self.n)
+            + _log_dbinom(float(self.r1) - a, self.c1, self.r1, self.n)
             - self.log_total
         )
+
+    def run(self, start: int, count: int, step: int) -> FloatArray:
+        """log P(A = a) at a = start, start + step, ... (``count`` terms, step 1
+        or -1): Loader's form at every ``_ANCHOR``-th term, and from each such
+        anchor on the exact ratio of consecutive terms, P(a + 1) / P(a) = (c0 -
+        a)(r1 - a) / ((a + 1)(c1 - r1 + a + 1)), whose factors are integers below
+        2^53: each log ratio is within 3 + |log ratio| units of 2^-53 of the true
+        one, so a term is within about 256 x 4 x 2^-53 (2e-13) of its log."""
+        a = start + step * np.arange(count, dtype=np.float64)
+        out = np.empty(count)
+        out[::_ANCHOR] = self(a[::_ANCHOR])
+        if count == 1:
+            return out
+        c0, c1, r1 = float(self.c0), float(self.c1), float(self.r1)
+        here = a[:-1]
+        if step > 0:
+            ratio = ((c0 - here) * (r1 - here)) / (
+                (here + 1.0) * (c1 - r1 + here + 1.0)
+            )
+        else:
+            ratio = (here * (c1 - r1 + here)) / ((c0 - here + 1.0) * (r1 - here + 1.0))
+        steps = np.log(ratio)
+        segments = -(-count // _ANCHOR)
+        grid = np.zeros(segments * _ANCHOR)
+        # grid[s * A + i] (i >= 1) holds the step into term s * A + i.
+        grid[1:count] = steps
+        grid = grid.reshape(segments, _ANCHOR)
+        grid[:, 0] = 0.0
+        np.cumsum(grid, axis=1, out=grid)
+        rest = np.arange(count) % _ANCHOR != 0
+        anchors = np.repeat(out[::_ANCHOR], _ANCHOR)[:count]
+        out[rest] = anchors[rest] + grid.reshape(-1)[:count][rest]
+        return out
 
 
 def _first_true(lo: int, hi: int, pred: Callable[[int], bool]) -> int:
@@ -989,7 +1128,9 @@ def _first_true(lo: int, hi: int, pred: Callable[[int], bool]) -> int:
     return lo
 
 
-def _fisher_2x2(a: int, r1: int, c0: int, c1: int, side: Alternative) -> float:
+def _fisher_2x2(
+    a: int, r1: int, c0: int, c1: int, side: Alternative, budget: _Budget
+) -> float:
     """Fisher's exact p of a 2 x 2 table with first cell a, first row total r1 and
     column totals c0, c1 (all > 0 except possibly a)."""
     n = c0 + c1
@@ -1004,16 +1145,16 @@ def _fisher_2x2(a: int, r1: int, c0: int, c1: int, side: Alternative) -> float:
     mode = min(max((r1 + 1) * (c0 + 1) // (n + 2), lo), hi)
     if side == "greater":  # P(A >= a)
         if a > mode:
-            return min(1.0, math.exp(_tail_log_sum(f, a, hi)))
+            return min(1.0, math.exp(_tail_log_sum(f, a, hi, budget)))
         if a == lo:
             return 1.0
-        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a - 1, lo))))
+        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a - 1, lo, budget))))
     if side == "less":  # P(A <= a)
         if a < mode:
-            return min(1.0, math.exp(_tail_log_sum(f, a, lo)))
+            return min(1.0, math.exp(_tail_log_sum(f, a, lo, budget)))
         if a == hi:
             return 1.0
-        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a + 1, hi))))
+        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a + 1, hi, budget))))
     threshold = at(a) + _LOG_TIE
 
     # f rises on [lo, mode] and falls on [mode + 1, hi]: the tables at most as
@@ -1028,10 +1169,52 @@ def _fisher_2x2(a: int, r1: int, c0: int, c1: int, side: Alternative) -> float:
         return 1.0
     parts: list[float] = []
     if left >= lo:
-        parts.append(_tail_log_sum(f, left, lo))
+        parts.append(_tail_log_sum(f, left, lo, budget))
     if right <= hi:
-        parts.append(_tail_log_sum(f, right, hi))
+        parts.append(_tail_log_sum(f, right, hi, budget))
     return min(1.0, math.fsum(math.exp(v) for v in parts))
+
+
+def _sd_2x2(r1: int, c0: int, c1: int) -> float:
+    """The standard deviation of the first cell of a 2 x 2 table with these margins
+    (hypergeometric)."""
+    n = c0 + c1
+    if n < 2:
+        return 0.0
+    return math.sqrt(r1 * (n - r1) * c0 * c1 / (n * n * (n - 1.0)))
+
+
+def _estimate_2x2(r1: int, c0: int, c1: int) -> float:
+    """Work units a 2 x 2 test takes at most when its tails stop where the terms
+    have fallen below 1e-17 of their sum: about 40 standard deviations of terms,
+    and the blocks' doubling at most doubles that."""
+    terms = 2.0 * (40.0 * _sd_2x2(r1, c0, c1) + 4.0 * _TAIL_BLOCK)
+    return min(terms, float(min(r1, c0) + 1) * 2.0) * _UNIT_PMF
+
+
+# --- 2 x c ------------------------------------------------------------------ #
+
+
+def _prefix_rows(e: FloatArray) -> FloatArray:
+    """Row-wise sums of the first i entries, i = 0..width (a leading column of
+    zeros), of a non-negative array, in blocks of about sqrt(width) entries: the
+    relative error of every sum is at most (2 sqrt(width) + 3) 2^-53 (Higham 2002,
+    section 4.2, for the blocks and for the sums of their totals)."""
+    rows, width = e.shape
+    out = np.zeros((rows, width + 1))
+    if width == 0:
+        return out
+    size = max(8, math.isqrt(width) + 1)
+    blocks = -(-width // size)
+    pad = np.zeros((rows, blocks * size))
+    pad[:, :width] = e
+    cube = pad.reshape(rows, blocks, size)
+    np.cumsum(cube, axis=2, out=cube)
+    if blocks > 1:
+        carry = np.cumsum(cube[:, :, -1], axis=1)
+        cube[:, 1:, :] += carry[:, :-1, None]
+    out[:, 1:] = pad[:, :width]
+    return out
 
 
 def _suffix_max(logs: list[FloatArray]) -> FloatArray:
@@ -1104,160 +1287,930 @@ def _bsearch(
     return lo
 
 
-def _fisher_2xc(first: list[int], cols: list[int]) -> float:
-    """Two-sided Fisher exact p of a 2 x c table, c >= 3, every column non-empty,
-    both rows non-empty (fisher_exact describes the search)."""
-    order = sorted(range(len(cols)), key=lambda j: cols[j])
-    cols = [cols[j] for j in order]
-    first = [first[j] for j in order]
-    k = len(cols)
-    n = sum(cols)
-    r1 = sum(first)
-    p, q = r1 / n, (n - r1) / n
-    logs = [_log_dbinom(np.arange(c + 1, dtype=np.float64), c, p, q) for c in cols]
-    log_total = float(_log_dbinom(np.array([float(r1)]), n, p, q)[0])
-    threshold = math.fsum(float(logs[j][first[j]]) for j in range(k)) + _LOG_TIE
-    if threshold >= float(_suffix_max(logs)[r1]):
-        # The most probable table counts, so every table does: p is 1 exactly.
-        return 1.0
-    margin = _FISHER_MARGIN * (1.0 + abs(threshold))
-    # Suffix j + 1 .. k - 1: the largest and smallest log mass of a completion and
-    # the log mass of all completions (a sum of binomials with one p is binomial),
-    # as functions of the count still to place in the first row.
-    remaining = [sum(cols[j:]) for j in range(k + 1)]
-    best: list[FloatArray] = [np.zeros(0)] * k
-    worst: list[FloatArray] = [np.zeros(0)] * k
-    mass: list[FloatArray] = [np.zeros(0)] * k
-    for j in range(1, k):
-        if j == k - 1:
-            best[j] = worst[j] = mass[j] = logs[k - 1]
-        else:
-            best[j] = _suffix_max(logs[j:])
-            worst[j] = _suffix_min(logs[j:])
-            mass[j] = _log_dbinom(
-                np.arange(remaining[j] + 1, dtype=np.float64), remaining[j], p, q
-            )
+def _order_of(keys: IntArray) -> IntArray:
+    """The stable sorting order of small non-negative integers (a radix sort when
+    they fit 16 bits)."""
+    if keys.size and int(keys.max()) < 2**15:
+        return np.argsort(keys.astype(np.int16), kind="stable")
+    return np.argsort(keys, kind="stable")
+
+
+def _log_sum(values: FloatArray) -> float:
+    """log sum exp(values) of the finite entries (-inf if none)."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return -math.inf
+    top = float(finite.max())
+    return top + math.log(float(np.sum(np.exp(finite - top))))
+
+
+def _bits(size: float) -> float:
+    """Bisection steps over ``size`` entries."""
+    return math.ceil(math.log2(size + 1.0))
+
+
+def _bound_work(sizes: list[int], m: int) -> float:
+    """Work units of the bounds of network columns 0..m - 2 (column m - 1 reads
+    its bounds off the list): the greedy maximum and the masses over the later
+    columns' totals, and the vertices of the smallest."""
     work = 0.0
-    sums = np.zeros(1, dtype=np.int64)
-    values = np.zeros(1)
-    counted: list[FloatArray] = []
-    for j in range(k - 1):
-        final = j == k - 2
-        rem = r1 - sums
+    for j in range(m - 1):
+        later = sizes[j + 1 :]
+        rest = float(sum(s - 1 for s in later) + 1)
+        work += (len(later) + 2) * rest * _UNIT_BOUND
+        if len(later) <= _MAX_VERTEX_COLUMNS:
+            vertices = len(later) * 2.0 ** (len(later) - 1)
+            work += vertices * (_UNIT_VERTEX + max(later) * _UNIT_BOUND)
+    return work
+
+
+@dataclass(frozen=True, slots=True)
+class _Plan:
+    """How the search of a 2 x c table is laid out, from its margins alone.
+
+    ``order`` lists the columns (indices into the reduced table) as the search
+    takes them: the network side first, then the ``list_columns`` of the list
+    side. ``estimate`` is the work the search would take if nothing were pruned
+    (an upper bound, used to order the pairwise tests), ``certain`` the work it
+    takes whatever is pruned (the list and the bounds), ``memory`` the bytes of
+    every array it may allocate at once (a bound, temporaries included)."""
+
+    order: tuple[int, ...]
+    list_columns: int
+    list_size: int
+    list_longest: int
+    estimate: float
+    certain: float
+    memory: float
+
+
+def _fits(plan: _Plan) -> bool:
+    """Whether a plan's certain work and memory fit the limits of one test."""
+    return plan.certain <= _FISHER_WORK_LIMIT and plan.memory <= _FISHER_MEMORY_LIMIT
+
+
+def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
+    """The list of the completions over columns with these numbers of values: its
+    size, its longest row (one row per total), and the bytes it takes at most
+    while it is built (the list, its running sums, the last column's placements,
+    and the temporaries of sorting and summing the longest row). A list beyond
+    the memory limit by its size alone is not looked at further (its longest row
+    is then given as its size)."""
+    size = math.prod(sizes)
+    rows = sum(sizes) - len(sizes) + 1
+    if _rowwise(sizes):
+        # row by row: the values and running sums, an array object per row
+        nbytes = size * _BYTES_LIST + rows * 4 * 256.0
+    else:
+        before = size // min(sizes) if len(sizes) > 1 else 0
+        nbytes = size * _BYTES_LIST + before * 48.0 + (1 << 18) * 40.0
+    if nbytes > _FISHER_MEMORY_LIMIT:
+        return size, size, float(nbytes + size * 64.0)
+    if sum(sizes) <= 1 << 16:
+        counts = np.ones(1)
+        for s in sizes:
+            counts = np.convolve(counts, np.ones(s))  # exact: counts below 2^53
+        longest = int(counts.max())
+    else:
+        # A row holds at most one first row per choice of the other columns.
+        longest = size // max(sizes)
+    return size, longest, float(nbytes + longest * 64.0)
+
+
+def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
+    """The layout of the search over first rows b_j in [0, widths[j]] (see
+    _fisher_2xc): the columns sorted by width (narrowest first); the list side
+    takes the narrowest columns, as many as keep the work estimate lowest within
+    the list's memory; the network side takes the others, narrowest first.
+    ``list_columns`` forces the number of list columns."""
+    k = len(widths)
+    order = sorted(range(k), key=lambda j: widths[j])
+    sizes = [widths[j] + 1 for j in order]
+    best: _Plan | None = None
+    choices = range(1, k + 1) if list_columns is None else [list_columns]
+    for q in choices:
+        list_sizes = sizes[:q]
+        list_size, longest, list_bytes = _list_memory(list_sizes)
+        if list_columns is None and q > 1 and list_bytes > _FISHER_LIST_MEMORY:
+            break
+        net = sizes[q:]
+        m = len(net)
+        total = float(sum(s - 1 for s in sizes))
+        # Bounds of every network column's completions: three arrays over the
+        # totals of the later columns (the greedy maximum passes over each of
+        # those columns once).
+        bound_cells = 0.0
+        remaining = total
+        for j in range(m):
+            remaining -= net[j] - 1
+            bound_cells += remaining + 1.0
+        rows = sum(list_sizes) - q + 1
+        list_work = _list_work(list_sizes, list_size, longest, rows)
+        certain = list_work + _bound_work(net + list_sizes, m) + 2 * _UNIT_CALL
+        if m:
+            certain += net[0] * _UNIT_GRID
+        work = certain
+        paths = 1.0
+        remaining = total
+        for j in range(m):
+            nodes = min(paths, remaining + 1.0)
+            work += nodes * net[j] * _UNIT_GRID
+            work += paths * 2.0 * _bits(net[j]) * _UNIT_STEP + _UNIT_CALL
+            remaining -= net[j] - 1
+            paths *= net[j]
+            work += paths * _UNIT_CHILD
+        if m:
+            work += paths * (_UNIT_QUERY + 4.0 * _bits(longest) + _UNIT_CHILD)
+        memory = (
+            list_bytes
+            + 8.0 * sum(sizes)  # the columns' log probabilities
+            + 24.0 * bound_cells  # the bounds
+            + 64.0 * (total + 1.0)  # the greedy maximum's temporaries
+            + 4 * max(_FISHER_GRID_CHUNK, max(net, default=1)) * _BYTES_GRID
+            + float(_FISHER_PATH_TOTAL * _BYTES_PATH)
+        )
+        plan = _Plan(
+            order=tuple(order[q:] + order[:q]),
+            list_columns=q,
+            list_size=list_size,
+            list_longest=longest,
+            estimate=work,
+            certain=certain,
+            memory=memory,
+        )
+        # The lowest estimate among the plans whose certain work and memory fit
+        # a test (if none fits, the lowest estimate: it is refused).
+        if best is None or (_fits(plan), -plan.estimate) > (
+            _fits(best),
+            -best.estimate,
+        ):
+            best = plan
+    assert best is not None
+    return best
+
+
+class _CompletionList:
+    """The list side of the search: every first row of the last columns, grouped
+    by its total t (a row of the list per total) and sorted by log probability
+    within each row, with the running sums of exp(value - the row's largest,
+    ``best``) along each row.
+
+    Built a column at a time, widest first: each value x of the next column
+    shifts every row t to row t + x, so a new row is a run of sorted blocks that
+    a merging sort finishes (the narrowest column, placed last, leaves the
+    fewest runs). Up to ``_ROWWISE_ROWS`` rows, each row is its own array (no
+    array longer than the longest row, so the memory a test touches is the
+    memory it holds; one large array per list and test would leave the
+    allocator's caches of freed blocks to grow); with more rows (a wide column
+    on the list side, short rows), one flat array with the offsets ``off``."""
+
+    def __init__(self, logs: list[FloatArray], budget: _Budget) -> None:
+        sizes = [v.size for v in logs]
+        size, longest, nbytes = _list_memory(sizes)
+        budget.request(nbytes)
+        count = sum(sizes) - len(sizes) + 1
+        budget.charge(_list_work(sizes, size, longest, count))
+        logs = sorted(logs, key=lambda v: -v.size)
+        self.longest = longest
+        self.rowwise = _rowwise(sizes)
+        if self.rowwise:
+            rows = _build_rows(logs)
+            self.rows: list[FloatArray] = rows
+            self.cums: list[FloatArray] = [
+                _prefix_rows(np.exp(r - r[-1])[None, :])[0, 1:] for r in rows
+            ]
+            self.best = np.array([float(r[-1]) for r in rows])
+            self.worst = np.array([float(r[0]) for r in rows])
+            totals = np.array([float(c[-1]) for c in self.cums])
+            self.mass = self.best + np.log(totals)
+            return
+        values = logs[0].copy()
+        counts = np.ones(values.size, dtype=np.int64)
+        for v in logs[1:]:
+            values, counts = _add_column(values, counts, v)
+            _sort_rows(values, counts)
+        off = np.concatenate(([0], np.cumsum(counts)))
+        self.values = values
+        self.off = off
+        self.best = values[off[1:] - 1]
+        self.worst = values[off[:-1]].copy()
+        self.cum = _row_sums(values, counts, self.best)
+        self.mass = self.best + np.log(self.cum[off[1:] - 1])
+
+
+def _blocks(sizes: list[int]) -> float:
+    """The blocks the list of columns with these numbers of values is built from
+    row by row (widest column first): one per row and value of each next column."""
+    order = sorted(sizes, reverse=True)
+    blocks = 0.0
+    totals = order[0]
+    for s in order[1:]:
+        blocks += (totals + s - 1) * s
+        totals += s - 1
+    return blocks
+
+
+def _rowwise(sizes: list[int]) -> bool:
+    """Whether the list of the columns with these numbers of values is kept row by
+    row: few rows, long on average, built from long blocks (short rows make a
+    small flat array, and short blocks cost a pass of Python each)."""
+    size = math.prod(sizes)
+    rows = sum(sizes) - len(sizes) + 1
+    return (
+        rows <= _ROWWISE_ROWS
+        and size >= _ROW_LENGTH * rows
+        and size >= _ROW_LENGTH * _blocks(sizes)
+    )
+
+
+def _build_rows(logs: list[FloatArray]) -> list[FloatArray]:
+    """The list's rows (one sorted array per total), a column at a time."""
+    rows = [np.array([v]) for v in logs[0].tolist()]
+    for column in logs[1:]:
+        values = column.tolist()
+        new: list[FloatArray] = []
+        for t in range(len(rows) + len(values) - 1):
+            lo = max(0, t - len(rows) + 1)
+            hi = min(len(values) - 1, t)
+            row = np.concatenate([rows[t - x] + values[x] for x in range(lo, hi + 1)])
+            row.sort(kind="stable")
+            new.append(row)
+        rows = new
+    return rows
+
+
+def _add_column(
+    values: FloatArray, counts: IntArray, column: FloatArray
+) -> tuple[FloatArray, IntArray]:
+    """The list of the columns so far (rows by total, each sorted) extended by
+    one more column with log probabilities ``column``: for each value x, old row
+    t goes to new row t + x, after the blocks of old rows t + x, ..., t + 1."""
+    rows = counts.size
+    new_counts = np.convolve(counts, np.ones(column.size, dtype=np.int64))
+    new_off = np.concatenate(([0], np.cumsum(new_counts)))
+    old_off = np.concatenate(([0], np.cumsum(counts)))
+    # inclusive running count of the old rows, flat beyond the last
+    running = np.cumsum(np.concatenate((counts, np.zeros(column.size, dtype=np.int64))))
+    row_of = np.repeat(np.arange(rows, dtype=np.int64), counts)
+    base = np.arange(values.size, dtype=np.int64) - old_off[row_of]
+    base -= running[row_of]
+    out = np.empty(int(new_off[-1]))
+    for x, value in enumerate(column.tolist()):
+        target = row_of + x
+        dest = new_off[target] + running[target] + base
+        out[dest] = values + value
+    return out, new_counts
+
+
+def _short_row_batches(counts: IntArray) -> list[IntArray]:
+    """The rows of at most ``_SHORT_ROW`` entries, in batches small enough that a
+    padded block of them stays below 2^18 cells."""
+    short = np.flatnonzero(counts <= _SHORT_ROW)
+    step = max(1, (1 << 18) // _SHORT_ROW)
+    return [short[i : i + step] for i in range(0, short.size, step)]
+
+
+def _sort_rows(values: FloatArray, counts: IntArray) -> None:
+    """Sort each row of the flat list in place: short rows together in padded
+    blocks, long rows one at a time (a merging sort, which finishes sorted runs
+    in about n log(runs) comparisons)."""
+    off = np.concatenate(([0], np.cumsum(counts)))
+    for batch in _short_row_batches(counts):
+        width = int(counts[batch].max())
+        if width < 2:
+            continue
+        index = off[batch][:, None] + np.arange(width)[None, :]
+        valid = np.arange(width)[None, :] < counts[batch][:, None]
+        index = np.where(valid, index, off[batch][:, None])
+        block = np.where(valid, values[index], math.inf)
+        block.sort(axis=1)
+        values[index[valid]] = block[valid]
+    for t in np.flatnonzero(counts > _SHORT_ROW).tolist():
+        values[off[t] : off[t + 1]].sort(kind="stable")
+
+
+def _row_sums(values: FloatArray, counts: IntArray, best: FloatArray) -> FloatArray:
+    """Within each row, the running sums of exp(value - the row's largest), each
+    with relative error at most (2 sqrt(row length) + 3) 2^-53 (_prefix_rows)."""
+    off = np.concatenate(([0], np.cumsum(counts)))
+    cum = np.empty(values.size)
+    for batch in _short_row_batches(counts):
+        width = int(counts[batch].max())
+        index = off[batch][:, None] + np.arange(width)[None, :]
+        valid = np.arange(width)[None, :] < counts[batch][:, None]
+        index = np.where(valid, index, off[batch][:, None])
+        e = np.where(valid, np.exp(values[index] - best[batch][:, None]), 0.0)
+        sums = np.cumsum(e, axis=1)
+        cum[index[valid]] = sums[valid]
+    for t in np.flatnonzero(counts > _SHORT_ROW).tolist():
+        row = values[off[t] : off[t + 1]]
+        e = np.exp(row - best[t])
+        cum[off[t] : off[t + 1]] = _prefix_rows(e[None, :])[0, 1:]
+    return cum
+
+
+def _list_work(sizes: list[int], size: int, longest: int, rows: int) -> float:
+    """Work units of building the list: the placements of every column after the
+    first (widest first) with the merging sorts, the running sums, and a pass of
+    Python per block of a row (row by row) or per long row (flat)."""
+    del longest
+    order = sorted(sizes, reverse=True)
+    placements = 0.0
+    built = float(order[0])
+    for s in order[1:]:
+        built *= s
+        placements += built * _bits(s)
+    blocks = _blocks(sizes)
+    python = (
+        blocks * _UNIT_PIECE + rows * _UNIT_CALL / 4.0
+        if _rowwise(sizes)
+        else min(rows, size / _SHORT_ROW + 1.0) * len(sizes) * _UNIT_CALL
+    )
+    return (placements + size) * _UNIT_LIST + python
+
+
+def _concave_peak(
+    at: Callable[[IntArray, IntArray], FloatArray], ids: IntArray, length: IntArray
+) -> IntArray:
+    """Per id, the first x in [0, length) where the concave sequence at(id, .)
+    stops rising (at(x + 1) <= at(x)), length - 1 if it never does; by
+    bisection on the sign of the differences."""
+    lo = np.zeros_like(length)
+    hi = length - 1
+    active = lo < hi
+    while bool(active.any()):
+        mid = (lo + hi) // 2
+        hit = at(ids, mid + 1) <= at(ids, mid)
+        hi = np.where(active & hit, mid, hi)
+        lo = np.where(active & ~hit, mid + 1, lo)
+        active = lo < hi
+    return lo
+
+
+def _first_where(
+    at: Callable[[IntArray, IntArray], FloatArray],
+    ids: IntArray,
+    lo: IntArray,
+    hi: IntArray,
+    threshold: FloatArray,
+    *,
+    above: bool,
+) -> IntArray:
+    """_bsearch with the values read by ``at`` instead of from a grid."""
+    lo = lo.copy()
+    hi = hi.copy()
+    active = lo < hi
+    while bool(active.any()):
+        mid = (lo + hi) // 2
+        values = at(ids, mid)
+        hit = values > threshold if above else values <= threshold
+        hi = np.where(active & hit, mid, hi)
+        lo = np.where(active & ~hit, mid + 1, lo)
+        active = lo < hi
+    return lo
+
+
+class _Network:
+    """The search of a 2 x c table (see _fisher_2xc). Columns 0..m - 1 of ``logs``
+    form the network side, taken one at a time; the rest the list side."""
+
+    def __init__(
+        self,
+        logs: list[FloatArray],
+        lows: list[int],
+        cols: list[int],
+        num: int,
+        den: int,
+        threshold: float,
+        list_columns: int,
+        budget: _Budget,
+    ) -> None:
+        k = len(logs)
+        m = k - list_columns
+        self.logs = logs
+        self.m = m
+        self.threshold = threshold
+        # Per column: the low ends of the ranges and the totals of the columns
+        # from it on (the closed-form mass of the completions from column j).
+        self.lows = [sum(lows[j:]) for j in range(k)]
+        self.cols = [sum(cols[j:]) for j in range(k)]
+        self.num = num
+        self.den = den
+        self.margin = _FISHER_MARGIN * (1.0 + abs(threshold))
+        self.budget = budget
+        widths = [v.size - 1 for v in logs]
+        self.rest = [sum(widths[j:]) for j in range(k + 1)]
+        self.parts: list[float] = []
+        budget.charge(_bound_work([v.size for v in logs], m))
+        self.list = _CompletionList(logs[m:], budget)
+        # Per network column j: the largest and smallest log mass of one
+        # completion over the later columns, and the log mass of all of them
+        # (a sum of binomials with one p is binomial), by the total still to place.
+        self.bounds: list[tuple[FloatArray, FloatArray, FloatArray]] = []
+        for j in range(m):
+            if j + 1 == m:
+                self.bounds.append((self.list.best, self.list.worst, self.list.mass))
+                continue
+            later = logs[j + 1 :]
+            total = self.rest[j + 1]
+            low = sum(lows[j + 1 :])
+            mass = _log_dbinom(
+                np.arange(total + 1, dtype=np.float64) + low,
+                sum(cols[j + 1 :]),
+                num,
+                den,
+            )
+            self.bounds.append((_suffix_max(later), _suffix_min(later), mass))
+
+    def run(self, start: int) -> float:
+        rem = np.array([start], dtype=np.int64)
+        vals = np.zeros(1)
+        if self.m == 0:
+            self._final(rem, vals)
+        else:
+            self._descend(0, rem, vals)
+        return _log_sum(np.array(self.parts))
+
+    def _path_chunk(self) -> int:
+        return max(1024, _FISHER_PATH_TOTAL // max(1, self.m))
+
+    def _descend(self, j: int, rem: IntArray, vals: FloatArray) -> None:
+        """Column j for the partial tables (remaining total, log mass so far),
+        sorted by remaining total."""
+        here = self.logs[j]
+        width = here.size - 1
+        last = j + 1 == self.m
         nodes, node_of = np.unique(rem, return_inverse=True)
         node_of = node_of.reshape(-1)
-        a_lo = np.maximum(0, nodes - remaining[j + 1])
-        a_hi = np.minimum(cols[j], nodes)
-        width = int((a_hi - a_lo).max()) + 1
-        work += float(nodes.size) * width + float(sums.size) * math.log2(width + 1)
-        if work > _FISHER_WORK_LIMIT:
-            raise _TooLarge
-        # The tables so far grouped by node, the nodes in chunks of at most
-        # _FISHER_CHUNK grid elements, so that memory stays bounded.
-        order = np.argsort(node_of, kind="stable")
-        sums, values, node_of = sums[order], values[order], node_of[order]
-        per_chunk = max(1, _FISHER_CHUNK // width)
-        next_sums: list[IntArray] = []
-        next_values: list[FloatArray] = []
-        for first_node in range(0, nodes.size, per_chunk):
-            last_node = min(nodes.size, first_node + per_chunk)
-            lo_state, hi_state = np.searchsorted(node_of, [first_node, last_node])
-            tails, children = _fisher_stage(
-                logs[j],
-                best[j + 1],
-                mass[j + 1],
-                nodes[first_node:last_node],
-                a_lo[first_node:last_node],
-                a_hi[first_node:last_node],
-                node_of[lo_state:hi_state] - first_node,
-                values[lo_state:hi_state],
-                threshold if final else threshold - margin,
-                expand=not final,
+        a_lo = np.maximum(0, nodes - self.rest[j + 1])
+        a_hi = np.minimum(width, nodes)
+        length = a_hi - a_lo + 1
+        longest = int(length.max())
+        wide = longest > _WIDE_ROW
+        if wide:
+            start, window = self._windows(j, nodes, a_lo, length)
+        else:
+            start, window = np.zeros_like(length), length
+        per_chunk = max(1, _FISHER_GRID_CHUNK // int(window.max()))
+        cut = self.threshold - self.margin
+        keep_below = self.threshold + self.margin
+        # With one list column the bound of the last network column is each
+        # child's own table: exact.
+        exact = last and self.list.longest == 1
+        seg_path: list[IntArray] = []
+        seg_start: list[IntArray] = []
+        seg_len: list[IntArray] = []
+        for first in range(0, nodes.size, per_chunk):
+            stop = min(nodes.size, first + per_chunk)
+            lo_path, hi_path = (int(v) for v in np.searchsorted(node_of, [first, stop]))
+            chunk_nodes = nodes[first:stop]
+            chunk_lo = a_lo[first:stop]
+            chunk_len = length[first:stop]
+            row = node_of[lo_path:hi_path] - first
+            v = vals[lo_path:hi_path]
+            x1, x2, bands, counted = self._grid_tails(
+                j,
+                chunk_nodes,
+                chunk_lo,
+                chunk_len,
+                (start[first:stop], window[first:stop], wide),
+                row,
+                v,
+                (cut - v, keep_below - v if exact else None),
             )
-            counted.append(values[lo_state:hi_state] + tails)
-            if children is None:
+            self.parts.append(_log_sum(counted))
+            # The children between the two counted ends are carried on (those
+            # whose every completion is more probable are dropped): x1..x2, or
+            # with one list column the two bands x1..y1 - 1 and y2 + 1..x2 within
+            # the margin of the threshold (``bands``: y1, y2; the children
+            # between are exactly more probable).
+            y1, y2 = bands
+            paths = np.arange(lo_path, hi_path)
+            seg_path.append(np.concatenate((paths, paths)))
+            seg_start.append(np.concatenate((x1, y2 + 1)))
+            seg_len.append(np.maximum(np.concatenate((y1 - x1, x2 - y2)), 0))
+        self._carry(
+            j,
+            rem,
+            vals,
+            a_lo[node_of],
+            (
+                np.concatenate(seg_path),
+                np.concatenate(seg_start),
+                np.concatenate(seg_len),
+            ),
+        )
+
+    def _carry(
+        self,
+        j: int,
+        rem: IntArray,
+        vals: FloatArray,
+        low: IntArray,
+        segments: tuple[IntArray, IntArray, IntArray],
+    ) -> None:
+        """The children of column j's partial tables (``segments``: for each run
+        of children, its partial table, first child and length; ``low`` the
+        first child's choice per partial table), handed to the next column (or
+        the list) in bands of remaining total of at most about
+        ``_path_chunk()`` children, each band sorted by remaining total, so that
+        a node of the next column is processed once (one band) per call."""
+        here = self.logs[j]
+        _, worst, _ = self.bounds[j]
+        last = j + 1 == self.m
+        keep_below = self.threshold + self.margin
+        seg_path, seg_start, seg_len = segments
+        live = seg_len > 0
+        seg_path, seg_start, seg_len = seg_path[live], seg_start[live], seg_len[live]
+        if seg_path.size == 0:
+            return
+        base = rem[seg_path] - low[seg_path]  # remaining total after child 0
+        top_rem = base - seg_start  # the largest remaining total of the run
+        bottom_rem = top_rem - seg_len + 1
+        span = self.rest[j + 1] + 1
+        self.budget.charge((seg_path.size * 4.0 + span) * _UNIT_STEP + _UNIT_CALL)
+        diff = np.zeros(span + 1, dtype=np.int64)
+        np.add.at(diff, bottom_rem, 1)
+        np.add.at(diff, top_rem + 1, -1)
+        counts = np.cumsum(diff[:-1])
+        before = np.cumsum(counts) - counts
+        band_of = before // self._path_chunk()
+        edges = np.flatnonzero(np.diff(band_of)) + 1
+        lows = np.concatenate(([0], edges))
+        highs = np.concatenate((edges, [span])) - 1
+        for r_lo, r_hi in zip(lows.tolist(), highs.tolist(), strict=True):
+            # Within the band: child x of a run has remaining total base - x.
+            x_lo = np.maximum(seg_start, base - r_hi)
+            x_hi = np.minimum(seg_start + seg_len - 1, base - r_lo)
+            size = np.maximum(x_hi - x_lo + 1, 0)
+            total = int(size.sum())
+            if total == 0:
                 continue
-            parent, child_a = children
-            work += float(child_a.size)
-            if work > _FISHER_WORK_LIMIT:
-                raise _TooLarge
-            child_sums = sums[lo_state:hi_state][parent] + child_a
-            child_values = values[lo_state:hi_state][parent] + logs[j][child_a]
-            keep = child_values + worst[j + 1][r1 - child_sums] <= threshold + margin
-            next_sums.append(child_sums[keep])
-            next_values.append(child_values[keep])
-        if final:
-            break
-        sums = np.concatenate(next_sums)
-        values = np.concatenate(next_values)
-        if sums.size == 0:
-            break
-    every = np.concatenate(counted)
-    finite = every[np.isfinite(every)]
-    if finite.size == 0:  # pragma: no cover - the observed table always counts
+            ends = np.cumsum(size)
+            starts = ends - size
+            piece = self._path_chunk()
+            for c0 in range(0, total, piece):
+                c1 = min(total, c0 + piece)
+                self.budget.request((c1 - c0) * _BYTES_PATH)
+                self.budget.charge((c1 - c0) * _UNIT_CHILD + _UNIT_CALL)
+                index = np.arange(c0, c1, dtype=np.int64)
+                seg = np.searchsorted(ends, index, side="right")
+                parent = seg_path[seg]
+                choice = low[parent] + x_lo[seg] + (index - starts[seg])
+                child_rem = rem[parent] - choice
+                child_val = vals[parent] + here[choice]
+                keep = child_val + worst[child_rem] <= keep_below
+                child_rem = child_rem[keep]
+                child_val = child_val[keep]
+                del index, seg, parent, choice, keep
+                if child_rem.size == 0:
+                    continue
+                if last:
+                    self._final(child_rem, child_val)
+                else:
+                    order = _order_of(child_rem)
+                    self._descend(j + 1, child_rem[order], child_val[order])
+
+    def _windows(
+        self, j: int, nodes: IntArray, a_lo: IntArray, length: IntArray
+    ) -> tuple[IntArray, IntArray]:
+        """In a wide column (more than ``_WIDE_ROW`` children per node), each
+        node's window: the children whose mass (log-concave in the child) is
+        within 2^-1100 of the node's largest, found by bisection (its first child
+        and its length). The mass left out is below 2^-1100 of the node's, so
+        under 1e-320 of the total in all."""
+        here = self.logs[j]
+        _, _, mass = self.bounds[j]
+        self.budget.charge(nodes.size * 8.0 * _bits(float(length.max())) * _UNIT_STEP)
+
+        def weight_at(ids: IntArray, x: IntArray) -> FloatArray:
+            a = a_lo[ids] + np.minimum(np.maximum(x, 0), length[ids] - 1)
+            return here[a] + mass[nodes[ids] - a]
+
+        every = np.arange(nodes.size)
+        mode = _concave_peak(weight_at, every, length)
+        low = weight_at(every, mode) - _WINDOW_DROP
+        start = _first_where(
+            weight_at, every, np.zeros_like(mode), mode, low, above=True
+        )
+        stop = _first_where(weight_at, every, mode, length, low, above=False)
+        return start, stop - start
+
+    def _grid_tails(
+        self,
+        j: int,
+        chunk_nodes: IntArray,
+        chunk_lo: IntArray,
+        chunk_len: IntArray,
+        windows: tuple[IntArray, IntArray, bool],
+        row: IntArray,
+        v: FloatArray,
+        limits: tuple[FloatArray, FloatArray | None],
+    ) -> tuple[IntArray, IntArray, tuple[IntArray, IntArray], FloatArray]:
+        """For the partial tables (node ``row``, log mass ``v``) at a chunk of
+        nodes of column j: the children x1..x2 still open, whether none is
+        (``closed``), and ``v`` plus the log mass counted at once (the children
+        whose every completion counts: both ends of the concave bound, found by
+        bisection). The masses of each node's children are summed along a row of
+        a grid, over the node's window (``windows``: its first child and length,
+        and whether the column is wide; see _windows); in a wide column the bound
+        is read at the children the bisections need. ``limits``: the bound at or
+        below which every completion counts, and, where the bound is exact (one
+        list column), the bound above which none does; ``bands`` (y1, y2) cut the
+        open children x1..x2 to those at or below the second (y1 = x2 + 1, y2 =
+        x2 without it, or when none is above it)."""
+        limit, keep = limits
+        here = self.logs[j]
+        best, _, mass = self.bounds[j]
+        paths = row.size
+        longest = int(chunk_len.max())
+        start, width, wide = windows
+
+        def bound_at(ids: IntArray, x: IntArray) -> FloatArray:
+            a = chunk_lo[ids] + np.minimum(np.maximum(x, 0), chunk_len[ids] - 1)
+            return here[a] + best[chunk_nodes[ids] - a]
+
+        span = int(width.max())
+        self.budget.request(chunk_nodes.size * span * _BYTES_GRID)
+        self.budget.charge(
+            chunk_nodes.size * span * _UNIT_GRID
+            + paths * 2.0 * _bits(longest) * _UNIT_STEP
+            + _UNIT_CALL
+        )
+        offsets = np.arange(span)
+        valid = offsets[None, :] < width[:, None]
+        a = chunk_lo[:, None] + start[:, None] + np.where(valid, offsets[None, :], 0)
+        rest = chunk_nodes[:, None] - a
+        weight = np.where(valid, here[a] + mass[rest], -math.inf)
+        bound = None if wide else np.where(valid, here[a] + best[rest], -math.inf)
+        del rest, a, valid, offsets
+        top = weight.max(axis=1)
+        e = np.exp(weight - top[:, None])
+        prefix = _prefix_rows(e)
+        suffix = _prefix_rows(e[:, ::-1])
+        del e
+        size = chunk_len[row]
+        if bound is None:
+            peak = _concave_peak(bound_at, row, size)
+
+            def first(
+                lo: IntArray, hi: IntArray, at: FloatArray, above: bool
+            ) -> IntArray:
+                return _first_where(bound_at, row, lo, hi, at, above=above)
+
+        else:
+            peak = np.argmax(bound, axis=1)[row]
+            grid = bound
+
+            def first(
+                lo: IntArray, hi: IntArray, at: FloatArray, above: bool
+            ) -> IntArray:
+                return _bsearch(grid, row, lo, hi, at, above=above)
+
+        zeros = np.zeros_like(peak)
+        x1 = first(zeros, peak + 1, limit, True)
+        x2 = first(peak, size, limit, False) - 1
+        closed = x1 > peak
+        y1 = np.where(closed, x1, x2 + 1)
+        y2 = x2.copy()
+        if keep is not None:
+            self.budget.charge(paths * 2.0 * _bits(longest) * _UNIT_STEP)
+            above = first(np.minimum(x1, peak + 1), peak + 1, keep, True)
+            below = first(peak, np.maximum(x2 + 1, peak), keep, False) - 1
+            split = ~closed & (above <= peak)
+            y1 = np.where(split, above, y1)
+            y2 = np.where(split, below, y2)
+        # The counted ends in the window's coordinates.
+        lo = start[row]
+        room = width[row]
+        left_end = np.where(closed, room, np.clip(x1 - lo, 0, room))
+        right_from = np.where(closed, room, np.clip(x2 + 1 - lo, 0, room))
+        left = prefix[row, left_end]
+        right = suffix[row, np.clip(span - right_from, 0, span)]
+        right = np.where(right_from < room, right, 0.0)
+        tail = left + right
+        with np.errstate(divide="ignore"):
+            counted = v + top[row] + np.log(tail)
+        some = (left_end > 0) | (right_from < room)
+        for i in np.flatnonzero((tail < _TINY) & some).tolist():
+            # The terms of this tail may have underflowed: sum it in log space.
+            w = weight[int(row[i])]
+            pieces = np.concatenate(
+                (w[: int(left_end[i])], w[int(right_from[i]) : int(room[i])])
+            )
+            counted[i] = float(v[i]) + _log_sum(pieces)
+        return x1, x2, (y1, y2), counted
+
+    def _final(self, rem: IntArray, vals: FloatArray) -> None:
+        """The exact comparison: for each partial table, the completions in the
+        list whose log mass is at most threshold - its own (a prefix of the
+        sorted row of its remaining total, found by bisection), and their mass
+        from the row's running sums."""
+        lst = self.list
+        size = rem.size
+        order = _order_of(rem)
+        rem = rem[order]
+        vals = vals[order]
+        first = np.flatnonzero(np.concatenate(([True], rem[1:] != rem[:-1])))
+        rows = rem[first]
+        if lst.rowwise:
+            self._final_rows(rem, vals, first, rows)
+            return
+        lo = lst.off[rem]
+        if rows.size * _QUERIES_PER_ROW > size:
+            limit = self.threshold - vals
+            self.budget.charge(
+                size * (_bits(lst.longest) * _UNIT_STEP + _UNIT_QUERY) + _UNIT_CALL
+            )
+            hi = lst.off[rem + 1]
+            grid = lst.values[None, :]
+            index = _bsearch(grid, np.zeros_like(rem), lo, hi, limit, above=True)
+            count = index - lo
+        else:
+            self.budget.charge(
+                size * (_UNIT_QUERY + 4.0 * _bits(lst.longest))
+                + rows.size * _UNIT_CALL / 4.0
+            )
+            count = np.empty(size, dtype=np.int64)
+            bounds = np.concatenate((first, [size])).tolist()
+            for t, a, b in zip(rows.tolist(), bounds[:-1], bounds[1:], strict=True):
+                # Within a row only the sum matters: by decreasing value, the
+                # limits come in increasing order, and a sorted search reuses
+                # its last place.
+                vals[a:b] = np.sort(vals[a:b])[::-1]
+                row = lst.values[lst.off[t] : lst.off[t + 1]]
+                count[a:b] = np.searchsorted(row, self.threshold - vals[a:b], "right")
+        tail = np.where(count > 0, lst.cum[np.maximum(lo + count - 1, 0)], 0.0)
+        with np.errstate(divide="ignore"):
+            counted = vals + lst.best[rem] + np.log(tail)
+        for i in np.flatnonzero((tail < _TINY) & (count > 0)).tolist():
+            start = int(lo[i])
+            pieces = lst.values[start : start + int(count[i])]
+            counted[i] = float(vals[i]) + _log_sum(pieces)
+        self.parts.append(_log_sum(counted))
+
+    def _final_rows(
+        self, rem: IntArray, vals: FloatArray, first: IntArray, rows: IntArray
+    ) -> None:
+        """_final with the list kept row by row: the partial tables of each row
+        (``rem`` sorted, ``first`` where each row's run starts)."""
+        lst = self.list
+        size = rem.size
+        self.budget.charge(
+            size * (_UNIT_QUERY + 4.0 * _bits(lst.longest))
+            + rows.size * _UNIT_CALL / 4.0
+        )
+        counted = np.empty(size)
+        bounds = np.concatenate((first, [size])).tolist()
+        for t, a, b in zip(rows.tolist(), bounds[:-1], bounds[1:], strict=True):
+            # Within a row only the sum matters: by decreasing value, the limits
+            # come in increasing order, and a sorted search reuses its last place.
+            v = np.sort(vals[a:b])[::-1]
+            row: FloatArray = lst.rows[int(t)]
+            count = np.searchsorted(row, self.threshold - v, "right")
+            cum: FloatArray = lst.cums[int(t)]
+            tail = np.where(count > 0, cum[np.maximum(count - 1, 0)], 0.0)
+            with np.errstate(divide="ignore"):
+                part = v + float(lst.best[t]) + np.log(tail)
+            for i in np.flatnonzero((tail < _TINY) & (count > 0)).tolist():
+                part[i] = float(v[i]) + _log_sum(row[: int(count[i])])
+            counted[a:b] = part
+        self.parts.append(_log_sum(counted))
+
+
+def _fisher_2xc(
+    first: list[int], cols: list[int], budget: _Budget, list_columns: int | None = None
+) -> float:
+    """Two-sided Fisher exact p of a 2 x c table, c >= 3, every column non-empty,
+    both rows non-empty (fisher_exact describes the search). ``list_columns``
+    overrides the plan's split (tests check that every split gives the same p)."""
+    n = sum(cols)
+    r1 = sum(first)
+    r2 = n - r1
+    lows = [max(0, c - r2) for c in cols]
+    widths = [min(c, r1) - lo for c, lo in zip(cols, lows, strict=True)]
+    plan = _fisher_plan(widths, list_columns)
+    budget.request(plan.memory)
+    if plan.certain > budget.limit - budget.spent:
+        raise _TooLarge("work")
+    order = list(plan.order)
+    logs = [
+        _log_dbinom(
+            np.arange(widths[j] + 1, dtype=np.float64) + lows[j], cols[j], r1, n
+        )
+        for j in order
+    ]
+    obs = [first[j] - lows[j] for j in order]
+    log_total = float(_log_dbinom(np.array([float(r1)]), n, r1, n)[0])
+    threshold = math.fsum(float(v[b]) for v, b in zip(logs, obs, strict=True))
+    threshold += _LOG_TIE
+    start = r1 - sum(lows)
+    if threshold >= float(_suffix_max(logs)[start]):
+        # The most probable table counts, so every table does: p is 1 exactly.
+        return 1.0
+    log_tables = sum(math.log(w + 1.0) for w in widths)
+    if log_tables + threshold - log_total < -746.0:
+        # p <= (number of tables) P_obs (1 + 1e-7) < 2^-1075: it rounds to 0.
         return 0.0
-    top = float(finite.max())
-    log_p = top + math.log(float(np.sum(np.exp(finite - top)))) - log_total
+    search = _Network(
+        logs,
+        [lows[j] for j in order],
+        [cols[j] for j in order],
+        r1,
+        n,
+        threshold,
+        plan.list_columns,
+        budget,
+    )
+    log_p = search.run(start) - log_total
     return min(1.0, math.exp(log_p))
 
 
-def _fisher_stage(
-    here_logs: FloatArray,
-    best: FloatArray,
-    mass: FloatArray,
-    nodes: IntArray,
-    a_lo: IntArray,
-    a_hi: IntArray,
-    node_of: IntArray,
-    values: FloatArray,
-    cut: float,
-    *,
-    expand: bool,
-) -> tuple[FloatArray, tuple[IntArray, IntArray] | None]:
-    """One column of the search for a chunk of nodes (counts still to place in the
-    first row) and the partial tables at them (``node_of``, ``values``).
+# --- the test ---------------------------------------------------------------- #
 
-    Per table, the children a of this column with values + here_logs[a] +
-    best[rest] <= ``cut`` have every completion counted: they form both ends of
-    the concave bound, found by bisection, and their mass (``mass``: all
-    completions) is summed from cumulative sums along the node's row. Returns the
-    log of that counted mass per table and, with ``expand``, the children in
-    between (parent index, a) for the next column.
-    """
-    width = int((a_hi - a_lo).max()) + 1
-    a_grid = a_lo[:, None] + np.arange(width)[None, :]
-    valid = a_grid <= a_hi[:, None]
-    a_safe = np.where(valid, a_grid, a_lo[:, None])
-    rest = nodes[:, None] - a_safe
-    here = here_logs[a_safe]
-    bound = np.where(valid, here + best[rest], -math.inf)
-    weight = np.where(valid, here + mass[rest], -math.inf)
-    with np.errstate(invalid="ignore"):
-        prefix = np.logaddexp.accumulate(weight, axis=1)
-        suffix = np.logaddexp.accumulate(weight[:, ::-1], axis=1)[:, ::-1]
-    peak = np.argmax(bound, axis=1)[node_of]
-    length = (a_hi - a_lo + 1)[node_of]
-    limit = cut - values
-    x1 = _bsearch(bound, node_of, np.zeros_like(peak), peak + 1, limit, above=True)
-    x2 = _bsearch(bound, node_of, peak, length, limit, above=False) - 1
-    none_open = x1 > peak
-    open_ = ~none_open
-    tails = np.where(none_open, prefix[node_of, length - 1], -math.inf)
-    left = np.where(open_ & (x1 > 0), prefix[node_of, np.maximum(x1 - 1, 0)], -math.inf)
-    right = np.where(
-        open_ & (x2 + 1 < length),
-        suffix[node_of, np.minimum(x2 + 1, length - 1)],
-        -math.inf,
+
+def _canonical(first: list[int], second: list[int]) -> tuple[list[int], list[int]]:
+    """The table with its columns sorted and its rows in a fixed order (the
+    two-sided p does not depend on either), so that a table and its permutations
+    give the same p to the last bit and the same work."""
+    one = sorted(zip(first, second, strict=True))
+    two = sorted(zip(second, first, strict=True))
+    chosen = min(one, two)
+    return [a for a, _ in chosen], [b for _, b in chosen]
+
+
+def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float, float]:
+    """Work units of fisher_exact on a 2 x c table, from the margins and the
+    observed table: two estimates of the work after pruning, the plan's estimate
+    with each column's range cut to 8 + sqrt(X^2) standard deviations either side
+    of its mean (X^2 Pearson's statistic: where the tables the search cannot
+    settle in bulk lie; for the order of the pairwise tests) and to 8 standard
+    deviations (smaller; for the cutoff), and the work spent whatever is pruned."""
+    rows = table.tolist()
+    first = [int(v) for v in rows[0]]
+    cols = [int(a) + int(b) for a, b in zip(rows[0], rows[1], strict=True)]
+    kept = [j for j, c in enumerate(cols) if c > 0]
+    n = sum(cols)
+    r1 = sum(first)
+    if len(kept) < 2 or r1 in (0, n):
+        return 0.0, 0.0, 0.0
+    if len(kept) == 2:
+        estimate = _estimate_2x2(r1, cols[kept[0]], cols[kept[1]])
+        return estimate, estimate, 0.0
+    r2 = n - r1
+    widths = [min(cols[j], r1) - max(0, cols[j] - r2) for j in kept]
+    chi2 = sum(
+        (first[j] - cols[j] * r1 / n) ** 2 / (cols[j] * r1 * r2 / n**2) for j in kept
     )
-    tails = np.where(open_, np.logaddexp(left, right), tails)
-    if not expand:
-        return tails, None
-    span = np.where(open_, x2 - x1 + 1, 0)
-    total = int(span.sum())
-    parent = np.repeat(np.arange(values.size), span)
-    offset = np.arange(total) - np.repeat(np.cumsum(span) - span, span)
-    child_a = a_lo[node_of[parent]] + x1[parent] + offset
-    return tails, (parent, child_a)
+    estimates: list[float] = []
+    for reach in (_SPAN_SD + math.sqrt(chi2), _SPAN_SD):
+        spans: list[int] = []
+        for j, w in zip(kept, widths, strict=True):
+            c = cols[j]
+            sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
+            spans.append(min(w, 2 * math.ceil(reach * sd)))
+        estimates.append(_fisher_plan(spans).estimate)
+    return estimates[0], estimates[1], _fisher_plan(widths).certain
+
+
+def _fisher(table: IntArray, side: Alternative, budget: _Budget) -> FisherExact:
+    """fisher_exact on a validated 2 x c table, within ``budget`` (raises
+    _TooLarge)."""
+    rows = table.tolist()
+    first = [int(v) for v in rows[0]]
+    second = [int(v) for v in rows[1]]
+    cols = [a + b for a, b in zip(first, second, strict=True)]
+    n = sum(cols)
+    kept = [j for j, c in enumerate(cols) if c > 0]
+    r1 = sum(first)
+    if len(kept) < 2 or r1 == 0 or r1 == n:
+        return FisherExact(p_value=1.0, alternative=side, n=n, columns=len(kept))
+    first = [first[j] for j in kept]
+    second = [second[j] for j in kept]
+    if side == "two-sided":
+        first, second = _canonical(first, second)
+    cols = [a + b for a, b in zip(first, second, strict=True)]
+    r1 = sum(first)
+    if len(kept) == 2:
+        # A 2 x 2 table (as given, or with empty columns left out: then two-sided).
+        p_value = _fisher_2x2(first[0], r1, cols[0], cols[1], side, budget)
+        return FisherExact(p_value=p_value, alternative=side, n=n, columns=2)
+    p_value = _fisher_2xc(first, cols, budget)
+    return FisherExact(p_value=p_value, alternative=side, n=n, columns=len(kept))
+
+
+def _check_fisher_table(counts: IntArray, side: Alternative) -> None:
+    if counts.shape[0] != 2 or counts.shape[1] < 2:
+        raise ValueError(
+            f"Fisher's exact test here takes a 2 x c table with c >= 2; the table "
+            f"is {counts.shape[0]} x {counts.shape[1]}"
+        )
+    if side != "two-sided" and counts.shape != (2, 2):
+        raise ValueError(
+            "a one-sided Fisher test is defined for a 2 x 2 table only; this table "
+            f"is 2 x {counts.shape[1]} (R ignores alternative there): use "
+            "alternative='two-sided'"
+        )
 
 
 def fisher_exact(
@@ -1273,39 +2226,75 @@ def fisher_exact(
     that tie with the observed one (mirror images) always count. For a 2 x 2 table
     ``alternative`` "greater" gives P(A >= a), "less" P(A <= a) for the first cell
     a; a larger table takes only "two-sided" (R ignores ``alternative`` there).
+    The two-sided p does not depend on the order of the rows or the columns, and
+    the table is put in one fixed order first, so permuted tables give the same p
+    to the last bit.
 
-    Probabilities are compared in log space: each log P is a sum of Loader's
-    (2000) saddle-point log binomial probabilities, accurate to about 1e-15 times
-    the largest term, so a table is classified differently from the exact rational
-    comparison only if its probability lies within about 1e-14 relative of P_obs
-    (1 + 1e-7); no table of the fixtures or the probe comes near that (R's own
-    double-precision sums are no closer).
+    Accuracy. Probabilities are compared in log space: each log P is a sum of
+    Loader's (2000) saddle-point log binomial probabilities (with the binomial
+    means as exact rationals), accurate to a few units of 2^-53 times the largest
+    term, so a table is classified differently from the exact rational comparison
+    only if its probability lies within about 1e-13 relative of P_obs (1 + 1e-7),
+    far inside R's own allowance of 1e-7. The masses are summed with a relative
+    error of at most about 2 sqrt(m) 2^-53 for a sum of m terms (blocked sums of
+    terms scaled by their largest; terms that would underflow are summed in log
+    space), so the p-value's relative error is of order 1e-13 (measured against
+    exact rational enumeration: a few units of 1e-15 on small tables; against
+    40-digit sums of the 2 x 2 tails, see tests/stats/test_fisher_cost.py).
 
     2 x 2: the probabilities are hypergeometric and log-concave in a, so the
     tables at most as probable form both ends of the range; their bounds are found
     by bisection and each end is summed outward in blocks until a geometric bound
-    of the rest falls below 1e-17 of the sum (n = 1e6: about 1 ms; any total below
-    2^53).
+    of the rest falls below 1e-17 of the sum: about 10 to 40 standard deviations of
+    terms, each from the exact ratio of consecutive terms between Loader anchors
+    every 256 terms (_LogPmf.run). With balanced margins the two-sided test is
+    answered up to about n = 1e13 within the work limit below (n = 1e12: 0.2 s;
+    1e13: 0.5 s), a one-sided one up to about 1e14; unbalanced margins go
+    further. Beyond, the test is refused having spent at most the limit (about
+    0.9 s at n = 1e15). Accuracy against 40-digit sums: 9e-15 relative or better
+    from n = 10 to 1e10, two-sided and one-sided.
 
-    2 x c, c >= 3: a search over the columns in the manner of Mehta & Patel's
-    (1983, Journal of the American Statistical Association 78: 427-434) network
-    algorithm. Columns are taken smallest first; for each partial first row the
-    largest and smallest probability of any completion are known (the largest by
-    the greedy choice of increments, the log probabilities being concave in each
-    count; the smallest at a vertex of the box), so a partial row whose every
-    completion is counted is summed at once (the mass of all completions is
-    binomial) and one whose every completion is more probable is dropped; only the
-    others are extended. The last two columns are summed from cumulative sums along
-    the second-to-last column. The work grows with n, with c and with how far the
-    observed table lies from independence; measured (tests/stats/test_contingency.py
-    times them): 2 x 3 at n = 2,000 0.004 s (p 0.18) to 0.015 s (p 3e-27), at
-    n = 10,000 0.03 s (p 0.05) to 0.29 s (p 9e-133); 2 x 5 at n = 500 0.003 s to
-    0.04 s (p 5e-13), at n = 2,000 0.01 s (p 0.65) to 0.09 s (p 1.6e-4), while 2 x 5
-    at n = 2,000 with p near 1e-55 would need about 1.2e8 array elements (3.2 s).
-    When the search would need more than about two seconds (6e7 array elements,
-    about 3e7 per second), or its arrays more than about 100 MB (n (c - 2) above
-    4e6), it raises instead of approximating; the refusal comes before the stage
-    that would cross the limit, after at most about two seconds.
+    2 x c, c >= 3: a table is its first row b (each b_j in the range its column
+    allows, with a fixed total), and its log probability is a sum over the columns
+    of concave functions of b_j. The columns are split in two sides, as the work
+    estimate from the margins is lowest within the limits. The list side (the
+    narrowest columns) lists every first row of its columns, grouped by total and
+    sorted by log probability, with running sums of the masses. The network side
+    takes the other columns one at a time in the manner of Mehta & Patel's (1983,
+    Journal of the American Statistical Association 78: 427-434) network
+    algorithm: for each partial first row the largest and smallest log
+    probability of any completion are known (the largest by the greedy choice of
+    increments, the log probabilities being concave in each count; the smallest
+    at a vertex of the box, or read off the list), so the children of a partial
+    row whose every completion counts are summed at once (the mass of all
+    completions is binomial; such children form both ends of a concave sequence,
+    found by bisection), children whose every completion is more probable are
+    dropped, and only the others are carried on. A column with more than 4096
+    children per node keeps, per node, the children whose mass is within 2^-1100
+    of the largest (the rest is below 1e-320 of the total). After the last
+    network column every partial row left is joined with the list (meet in the
+    middle, Horowitz & Sahni 1974): the completions that count are a prefix of
+    the sorted row of its remaining total, found by bisection, and their mass is
+    that prefix's running sum. Only this last comparison decides a table that
+    lies near the threshold, and it compares the table's own log probability.
+    Two shortcuts are exact: p is 1 when the most probable table counts, and 0
+    when the number of tables times P_obs (1 + 1e-7) is below 2^-1075.
+
+    Cost. The work is counted in units of about a nanosecond on the build machine
+    (array elements times the passes over them; machine-independent), and the
+    memory in bytes of every array the search may hold at once, both before the
+    step that spends them. A test may take 1e9 units (about a second) and 160 MB.
+    The bytes, and the work that does not depend on pruning (the list and the
+    bounds), follow from the margins and are checked before anything is
+    allocated; the rest is counted as the search goes, so a test that would pass
+    the limit raises ValueError having spent at most the limit. No array of the
+    list is longer than its longest row when it is kept row by row (one large
+    array per test would leave the allocator's caches of freed blocks to grow).
+    The work grows with the number of columns, with n and with how far the table
+    lies from independence: 2 x 8 at n = 300 takes about 0.1 s, 2 x 10 at n = 200
+    0.1 to 0.4 s, 2 x 4 at n = 100,000 0.1 s; 2 x 10 at n = 1,000, 2 x 6 at n =
+    10,000 far from independence and 2 x 5 at n = 100,000 are refused
+    (tests/stats/test_fisher_cost.py).
 
     Columns without counts do not change the test and are left out; a table with
     one non-empty column or one empty row has a single table with its margins, p 1
@@ -1314,48 +2303,37 @@ def fisher_exact(
     Raises:
         ValueError: the table is not 2 x c with c >= 2, a count is invalid,
             ``alternative`` is one-sided for a table that is not 2 x 2, or the
-            exact computation is too large.
+            exact computation is beyond the limits above.
     """
     counts = _as_counts(table)
     side = check_alternative(alternative)
-    if counts.shape[0] != 2 or counts.shape[1] < 2:
-        raise ValueError(
-            f"Fisher's exact test here takes a 2 x c table with c >= 2; the table "
-            f"is {counts.shape[0]} x {counts.shape[1]}"
-        )
-    if side != "two-sided" and counts.shape != (2, 2):
-        raise ValueError(
-            "a one-sided Fisher test is defined for a 2 x 2 table only; this table "
-            f"is 2 x {counts.shape[1]} (R ignores alternative there): use "
-            "alternative='two-sided'"
-        )
-    rows = counts.tolist()
-    first = [int(v) for v in rows[0]]
-    cols = [int(a) + int(b) for a, b in zip(rows[0], rows[1], strict=True)]
-    n = sum(cols)
-    kept = [j for j, c in enumerate(cols) if c > 0]
-    r1 = sum(first)
-    if len(kept) < 2 or r1 == 0 or r1 == n:
-        return FisherExact(p_value=1.0, alternative=side, n=n, columns=len(kept))
-    if len(kept) == 2:
-        # A 2 x 2 table (as given, or with empty columns left out: then two-sided).
-        j0, j1 = kept
-        p_value = _fisher_2x2(first[j0], r1, cols[j0], cols[j1], side)
-        return FisherExact(p_value=p_value, alternative=side, n=n, columns=2)
-    if n * (len(kept) - 2) > _FISHER_SIZE_LIMIT:
-        raise ValueError(_too_large_message(len(kept), n))
+    _check_fisher_table(counts, side)
+    budget = _Budget(_FISHER_WORK_LIMIT)
     try:
-        p_value = _fisher_2xc([first[j] for j in kept], [cols[j] for j in kept])
-    except _TooLarge:
-        raise ValueError(_too_large_message(len(kept), n)) from None
-    return FisherExact(p_value=p_value, alternative=side, n=n, columns=len(kept))
+        return _fisher(counts, side, budget)
+    except _TooLarge as error:
+        raise ValueError(_too_large_message(counts, error.kind)) from None
 
 
-def _too_large_message(c: int, n: int) -> str:
+def _too_large_message(counts: IntArray, kind: str) -> str:
+    cols = counts.sum(axis=0)
+    c = int((cols > 0).sum())
+    n = int(cols.sum())
+    what = (
+        "more memory than inferplot allows one test (160 MB)"
+        if kind == "memory"
+        else "more work than inferplot allows one test (about a second)"
+    )
+    if c == 2 or n >= 50 * c * c:
+        advice = (
+            "at this many observations the chi-square test of the table answers "
+            "the same question"
+        )
+    else:
+        advice = "merge sparse columns (levels with few counts), or compare fewer"
     return (
-        f"Fisher's exact test of this 2 x {c} table (n = {n}) would take more than "
-        "about two seconds to compute exactly, and inferplot does not approximate it: "
-        "merge sparse levels of y, or compare fewer rows"
+        f"Fisher's exact test of this 2 x {c} table (n = {n:,}) would take {what} "
+        f"to compute exactly, and inferplot does not approximate it: {advice}"
     )
 
 
@@ -1363,54 +2341,138 @@ def _too_large_message(c: int, n: int) -> str:
 # Pairwise Fisher tests
 # --------------------------------------------------------------------------- #
 
+_TOO_LARGE_REASON: Final = "too large to compute exactly"
 
-def _pair(
-    counts: IntArray, i: int, j: int, level: float, side: Alternative
-) -> PairComparison:
-    """Rows i and j on the columns they hold: Fisher's p and Cramer's V (the
-    adjusted p is filled in by pairwise_fisher)."""
+
+def _pair_table(counts: IntArray, i: int, j: int) -> tuple[tuple[int, ...], IntArray]:
     pair = counts[[i, j]]
     columns = tuple(int(c) for c in np.flatnonzero(pair.sum(axis=0) > 0))
-    sub = pair[:, list(columns)]
-    n = int(sub.sum())
-    if len(columns) < 2:
-        return PairComparison(
-            row1=i,
-            row2=j,
-            columns=columns,
-            n=n,
-            p_value=None,
-            p_adjusted=None,
-            alternative=None,
-            effect=None,
-            reason=(
-                "the two levels occur in one column only, so their table has a "
-                "single column and no test (R: fisher.test stops)"
-            ),
-            effect_reason=None,
-        )
-    used: Alternative = side if sub.shape == (2, 2) else "two-sided"
-    p_value = fisher_exact(sub, alternative=used).p_value
-    effect: EffectSizeCI | None = None
-    effect_reason: str | None = None
-    if n <= max(sub.shape):
-        effect_reason = (
+    return columns, pair[:, list(columns)]
+
+
+def _pair_effect(
+    sub: IntArray, level: float, side: Alternative
+) -> tuple[EffectSizeCI | None, str | None]:
+    if int(sub.sum()) <= max(sub.shape):
+        return None, (
             "the bias-corrected Cramer's V needs more counts than columns (R: NaN)"
         )
-    else:
-        effect = cramers_v(sub, conf_level=level, alternative=side)
-    return PairComparison(
-        row1=i,
-        row2=j,
-        columns=columns,
-        n=n,
-        p_value=p_value,
-        p_adjusted=None,
-        alternative=used,
-        effect=effect,
-        reason=None,
-        effect_reason=effect_reason,
-    )
+    return cramers_v(sub, conf_level=level, alternative=side), None
+
+
+def _pair_key(sub: IntArray, side: Alternative) -> tuple[object, ...]:
+    """Pairs with equal keys have the same p (the two-sided p does not depend on
+    the order of rows and columns; a one-sided 2 x 2 test does)."""
+    first = [int(v) for v in sub[0]]
+    second = [int(v) for v in sub[1]]
+    if side == "two-sided":
+        first, second = _canonical(first, second)
+    return (side, tuple(first), tuple(second))
+
+
+def _pairwise(
+    counts: IntArray,
+    level: float,
+    side: Alternative,
+    budget: _Budget,
+) -> list[PairComparison]:
+    """The pairs of rows with their p (or the reason there is none) and V, before
+    adjustment; the Fisher tests share ``budget``."""
+    present = [i for i in range(counts.shape[0]) if int(counts[i].sum()) > 0]
+    pairs: list[tuple[int, int, tuple[int, ...], IntArray]] = []
+    for index, i in enumerate(present):
+        for j in present[index + 1 :]:
+            columns, sub = _pair_table(counts, i, j)
+            pairs.append((i, j, columns, sub))
+    # The tests, cheapest first by their estimated work, each distinct table once;
+    # the order depends on the tables only, never on the order of the rows.
+    tests: dict[
+        tuple[object, ...], tuple[float, float, float, IntArray, Alternative]
+    ] = {}
+    for _, _, columns, sub in pairs:
+        if len(columns) < 2:
+            continue
+        used: Alternative = side if sub.shape == (2, 2) else "two-sided"
+        key = _pair_key(sub, used)
+        if key not in tests:
+            estimate, least, certain = _fisher_work(sub, used)
+            tests[key] = (estimate, least, certain, sub, used)
+    results: dict[tuple[object, ...], float | None] = {}
+    for key in sorted(tests, key=lambda k: (tests[k][0], repr(k))):
+        _, least, certain, sub, used = tests[key]
+        remaining = budget.limit - budget.spent
+        if certain > remaining or least > _PAIRWISE_ESTIMATE_LIMIT:
+            results[key] = None
+            continue
+        one = _Budget(min(_FISHER_WORK_LIMIT, remaining))
+        try:
+            results[key] = _fisher(sub, used, one).p_value
+        except _TooLarge:
+            results[key] = None
+        budget.spent += one.spent
+        budget.largest = max(budget.largest, one.largest)
+    out: list[PairComparison] = []
+    for i, j, columns, sub in pairs:
+        n = int(sub.sum())
+        if len(columns) < 2:
+            out.append(
+                PairComparison(
+                    row1=i,
+                    row2=j,
+                    columns=columns,
+                    n=n,
+                    p_value=None,
+                    p_adjusted=None,
+                    alternative=None,
+                    effect=None,
+                    reason=(
+                        "the two levels occur in one column only, so their table has "
+                        "a single column and no test (R: fisher.test stops)"
+                    ),
+                    effect_reason=None,
+                )
+            )
+            continue
+        used = side if sub.shape == (2, 2) else "two-sided"
+        p_value = results[_pair_key(sub, used)]
+        effect, effect_reason = _pair_effect(sub, level, side)
+        out.append(
+            PairComparison(
+                row1=i,
+                row2=j,
+                columns=columns,
+                n=n,
+                p_value=p_value,
+                p_adjusted=None,
+                alternative=used if p_value is not None else None,
+                effect=effect,
+                reason=None if p_value is not None else _TOO_LARGE_REASON,
+                effect_reason=effect_reason,
+            )
+        )
+    return out
+
+
+def _pairwise_fisher(
+    table: CountTable,
+    p_adjust_method: PAdjustMethod,
+    conf_level: float,
+    alternative: Alternative,
+    budget: _Budget,
+) -> tuple[PairComparison, ...]:
+    counts = _as_counts(table)
+    level = check_conf_level(conf_level)
+    side = check_alternative(alternative)
+    pairs = _pairwise(counts, level, side, budget)
+    raw = [pair.p_value for pair in pairs if pair.p_value is not None]
+    adjusted = iter(p_adjust(raw, p_adjust_method) if raw else ())
+    out = [
+        pair
+        if pair.p_value is None
+        else dataclasses.replace(pair, p_adjusted=next(adjusted))
+        for pair in pairs
+    ]
+    return tuple(out)
 
 
 def pairwise_fisher(
@@ -1432,30 +2494,34 @@ def pairwise_fisher(
     pair's V interval, at ``conf_level``. ``p_adjust_method`` adjusts the p-values
     of the pairs that have a test (``p_adjust``).
 
+    Cost. The tests of one table share a budget of 1.6e9 work units (about two
+    seconds; fisher_exact describes the units), and each test is also held to
+    fisher_exact's own limit. They are computed cheapest first by their estimated
+    work (from the margins and the observed table: _fisher_work), each distinct
+    table once (a table and its permutations have the same p). A test is not
+    computed when its certain work exceeds what is left, when its estimate is
+    above 1e14 units (1e5 times a test's limit; the largest estimate of a test
+    answered in the tables measured is 2.5e12), or when it would pass what is
+    left. So the call returns after at
+    most about two seconds of tests on any table, and which pairs are tested
+    depends on the tables only, never on the order of the rows.
+
     A pair whose table keeps one column has no test (fisher.test stops; ggstatsplot
-    loses the whole pairwise table silently, edge_bar_degenerate-single-x): it is
-    returned with ``p_value`` None and a ``reason``. A pair whose V is not defined
-    (no more counts than columns) has ``effect`` None and an ``effect_reason``.
+    loses the whole pairwise table silently, edge_bar_degenerate-single-x), and a
+    pair whose test does not fit the budget has none either (``reason`` "too large
+    to compute exactly"): both are returned with ``p_value`` None and a
+    ``reason``, and the adjustment runs over the others. A pair whose V is not
+    defined (no more counts than columns) has ``effect`` None and an
+    ``effect_reason``.
 
     Raises:
         ValueError: an invalid count, ``conf_level``, ``alternative`` or
-            ``p_adjust_method``, or a pair's exact test is too large
-            (``fisher_exact``).
+            ``p_adjust_method``.
     """
-    counts = _as_counts(table)
-    level = check_conf_level(conf_level)
-    side = check_alternative(alternative)
-    present = [i for i in range(counts.shape[0]) if int(counts[i].sum()) > 0]
-    pairs: list[PairComparison] = []
-    for index, i in enumerate(present):
-        for j in present[index + 1 :]:
-            pairs.append(_pair(counts, i, j, level, side))
-    raw = [pair.p_value for pair in pairs if pair.p_value is not None]
-    adjusted = iter(p_adjust(raw, p_adjust_method) if raw else ())
-    out = [
-        pair
-        if pair.p_value is None
-        else dataclasses.replace(pair, p_adjusted=next(adjusted))
-        for pair in pairs
-    ]
-    return tuple(out)
+    return _pairwise_fisher(
+        table,
+        p_adjust_method,
+        conf_level,
+        alternative,
+        _Budget(_PAIRWISE_WORK_LIMIT),
+    )
