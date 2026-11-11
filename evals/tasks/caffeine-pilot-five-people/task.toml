@@ -3,13 +3,15 @@
 id = "caffeine-pilot-five-people"
 function = "withinstats"
 trap = "a very small sample (5 participants)"
+trap_scoring = "manual"
+read_for = "does the answer say that five participants give a test little power, so the result is a pilot's and calls for caution?"
 request = """
 A pilot study: five participants' alertness scores before and after a cup of
 coffee (data.csv: participant, time, alertness; one row per participant and time
 point). Is there a change in alertness?
 """
 design = "two time points on the same 5 participants"
-correct_rule = "The paired t-test or the Wilcoxon signed-rank test; five values call for caution in the report (inferplot's small_n check fires only below 5, so it is silent here)."
+correct_rule = "The paired t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test. Five participants call for caution in the report, which is not scored automatically (read_for); inferplot's small_n check fires only below 5, so it is silent here."
 rejected = ["welch_t", "student_t", "mann_whitney"]
 
 [data]
@@ -24,7 +26,13 @@ args = ["time", "alertness"]
 kwargs = { subject_id = "participant", type = "parametric" }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+pairs = 5  # subjects with both conditions
+observations = 10  # values the test used
+nonzero_differences = 5  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["observations"]
 family = "paired_t"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_small-parametric"
@@ -38,7 +46,14 @@ conf_low = { value = -0.0846924707996971, key = "stats/subtitle_data/0/conf.low"
 conf_high = { value = 1.70929626913457, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d_z"
+recipe = "cohen_dz"
+recipe_args = { x = "time", y = "alertness", subject = "participant", levels = ["after", "before"] }
+estimate = { value = 1.053801341395123 }
+
 [[accepted]]
+n_also = ["observations", "nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_small-nonparametric"
@@ -48,6 +63,42 @@ statistic = { value = 15.0, key = "stats/subtitle_data/0/statistic", alt = [0.0]
 p_value = { value = 0.0590582290905367, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 1.0, key = "stats/subtitle_data/0/estimate" }
 n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "time", y = "alertness", subject = "participant", levels = ["after", "before"], method = "exact", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 0.0, alt = [15.0] }
+p_value = { value = 0.0625 }
+n = { value = 5.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "time", y = "alertness", subject = "participant", levels = ["after", "before"], method = "approx", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 0.0, alt = [15.0, -2.0225995873897262] }
+p_value = { value = 0.043114446783075355 }
+n = { value = 5.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { x = "time", y = "alertness", subject = "participant", levels = ["after", "before"] }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 5.0, alt = [0.0] }
+p_value = { value = 0.0625 }
+n = { value = 5.0 }
 
 [[traps]]
 family = "welch_t"

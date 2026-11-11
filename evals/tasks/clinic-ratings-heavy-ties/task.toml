@@ -2,14 +2,15 @@
 # fixtures it cites; tests/test_evals.py checks every number against them.
 id = "clinic-ratings-heavy-ties"
 function = "betweenstats"
-trap = "ordinal 1-to-5 ratings with heavy ties: a rank test with the tie correction"
+trap = "ordinal 1-to-5 ratings with heavy ties: a rank test, not a means-based ANOVA"
+trap_scoring = "test"
 request = """
 Patients rated their satisfaction with one of three clinics on a 1-to-5 scale
 (1 = very unhappy, 5 = very happy); data.csv has one row per patient (clinic,
 satisfaction). Do the clinics differ in how satisfied their patients are?
 """
 design = "three independent groups, ordinal ratings with many ties"
-correct_rule = "The Kruskal-Wallis test (with R's and SciPy's default correction for ties). Means-based ANOVAs are rejected for 5-point ordinal ratings; the uncorrected H is flagged as a trap."
+correct_rule = "The Kruskal-Wallis test with the correction for ties (R's and SciPy's default). Means-based ANOVAs are rejected for 5-point ordinal ratings: that choice is the trap. The uncorrected H is kept as a named trap for answers computed by hand; SciPy cannot produce it."
 rejected = ["welch_anova", "oneway_anova"]
 
 [data]
@@ -24,6 +25,9 @@ args = ["clinic", "satisfaction"]
 kwargs = { type = "nonparametric" }
 check_codes = ["heavy_ties", "pairs_hidden"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 30  # values the test used
+
 [[accepted]]
 family = "kruskal_wallis"
 source = "fixture"
@@ -35,6 +39,12 @@ df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
 p_value = { value = 0.066611728497682, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.186818938853201, key = "stats/subtitle_data/0/estimate" }
 n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "eta squared H"
+recipe = "eta_squared_h"
+recipe_args = { x = "clinic", y = "satisfaction" }
+estimate = { value = 0.12658330469417833 }
 
 [[traps]]
 family = "kruskal_wallis"

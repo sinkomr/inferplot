@@ -3,6 +3,7 @@
 id = "cylinders-planned-shares"
 function = "barstats"
 trap = "a goodness-of-fit test against stated shares (1/2, 1/4, 1/4), not equal shares"
+trap_scoring = "traps"
 request = """
 Our fleet plan assumed that half of the car models would have 4 cylinders and
 a quarter each would have 6 and 8 cylinders. Do the 32 models in data.csv (car,
@@ -23,6 +24,9 @@ args = ["cyl"]
 kwargs = { ratio = [0.5, 0.25, 0.25] }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 32  # values the test used
+
 [[accepted]]
 family = "chi_square_gof"
 source = "fixture"
@@ -34,6 +38,12 @@ df = { value = 2.0, key = "stats/subtitle_data/0/df" }
 p_value = { value = 0.0453316416116763, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.40252883114356, key = "stats/subtitle_data/0/estimate" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted.effects]]
+label = "Cohen's w"
+recipe = "cohens_w"
+recipe_args = { x = "cyl", ratio = [0.5, 0.25, 0.25] }
+estimate = { value = 0.4397264774834465 }
 
 [[traps]]
 family = "chi_square_gof"

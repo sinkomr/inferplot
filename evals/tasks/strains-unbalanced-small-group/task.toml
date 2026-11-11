@@ -3,13 +3,15 @@
 id = "strains-unbalanced-small-group"
 function = "betweenstats"
 trap = "a group of 4 next to groups of 12 and 25"
+trap_scoring = "manual"
+read_for = "does the answer point out that strain_1 has only 4 plants (in the inferplot arm, check clean also asks for small_n)?"
 request = """
 We measured the growth (mm per week) of three plant strains, but only 4
 plants of strain_1 survived, against 12 of strain_2 and 25 of strain_3
 (data.csv: strain, growth). Does growth differ between the strains?
 """
 design = "three independent groups of very unequal size, one very small"
-correct_rule = "Welch's ANOVA, the classic one-way ANOVA or the Kruskal-Wallis test; the small group should be reported (inferplot's small_n check)."
+correct_rule = "Welch's ANOVA, the classic one-way ANOVA or the Kruskal-Wallis test. The small group should be reported, which is not scored automatically (read_for); in the inferplot arm check clean asks for small_n."
 rejected = []
 
 [data]
@@ -23,6 +25,9 @@ note = "inferplot oracle dataset edge_unbalanced (hand-made); renamed"
 args = ["strain", "growth"]
 kwargs = { type = "parametric" }
 check_codes = ["pairs_hidden", "small_n"]
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 41  # values the test used
 
 [[accepted]]
 family = "welch_anova"
@@ -39,6 +44,18 @@ conf_low = { value = 0.0267532333934209, key = "stats/subtitle_data/0/conf.low" 
 conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 41.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "eta squared"
+recipe = "eta_squared"
+recipe_args = { x = "strain", y = "growth" }
+estimate = { value = 0.1943528975138952 }
+
+[[accepted.effects]]
+label = "omega squared (from the sums of squares)"
+recipe = "omega_squared"
+recipe_args = { x = "strain", y = "growth" }
+estimate = { value = 0.14879576380484802 }
+
 [[accepted]]
 family = "kruskal_wallis"
 source = "fixture"
@@ -51,6 +68,12 @@ p_value = { value = 0.013093279263988, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.21678281068525, key = "stats/subtitle_data/0/estimate" }
 n = { value = 41.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "eta squared H"
+recipe = "eta_squared_h"
+recipe_args = { x = "strain", y = "growth" }
+estimate = { value = 0.1755608533528944 }
+
 [[accepted]]
 family = "oneway_anova"
 source = "recipe"
@@ -62,3 +85,15 @@ df = { value = 2.0 }
 df_error = { value = 38.0 }
 p_value = { value = 0.016472220240256644 }
 n = { value = 41.0 }
+
+[[accepted.effects]]
+label = "eta squared"
+recipe = "eta_squared"
+recipe_args = { x = "strain", y = "growth" }
+estimate = { value = 0.1943528975138952 }
+
+[[accepted.effects]]
+label = "omega squared (from the sums of squares)"
+recipe = "omega_squared"
+recipe_args = { x = "strain", y = "growth" }
+estimate = { value = 0.14879576380484802 }

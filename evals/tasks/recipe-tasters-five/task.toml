@@ -3,13 +3,15 @@
 id = "recipe-tasters-five"
 function = "histostats"
 trap = "a very small sample (5 tasters)"
+trap_scoring = "manual"
+read_for = "does the answer say that five tasters give a test little power, so the result calls for caution?"
 request = """
 Five tasters scored a new recipe on a scale where 3 means "as good as the old
 recipe" (data.csv: taster, score; each score is the average of three tastings).
 Do the tasters rate the new recipe differently from the old one?
 """
 design = "one sample of 5 against the value 3"
-correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 3; five values call for caution in the report (inferplot's small_n check fires only below 5, so it is silent here)."
+correct_rule = "The one-sample t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test against 3. Five values call for caution in the report, which is not scored automatically (read_for); inferplot's small_n check fires only below 5, so it is silent here."
 rejected = []
 
 [data]
@@ -22,6 +24,10 @@ note = "inferplot oracle dataset edge_one_small (hand-made); renamed"
 args = ["score"]
 kwargs = { test_value = 3, type = "parametric" }
 check_codes = []
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 5  # values the test used
+nonzero_differences = 5  # differences that are not zero (rank and sign tests drop the others)
 
 [[accepted]]
 family = "one_sample_t"
@@ -37,7 +43,14 @@ conf_low = { value = -0.240633431616365, key = "stats/subtitle_data/0/conf.low" 
 conf_high = { value = 1.36359000624088, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d"
+recipe = "cohen_dz"
+recipe_args = { column = "score", mu = 3.0 }
+estimate = { value = 0.7362176317847186 }
+
 [[accepted]]
+n_also = ["nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "gghistostats-edge_one_small-nonparametric"
@@ -49,3 +62,39 @@ estimate = { value = 0.733333333333333, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = -0.0331189237258056, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.956657804188121, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "score", mu = 3.0, method = "exact", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 2.0, alt = [13.0] }
+p_value = { value = 0.1875 }
+n = { value = 5.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { column = "score", mu = 3.0, method = "approx", correction = false }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 2.0, alt = [13.0, -1.4832396974191326] }
+p_value = { value = 0.1380107375686596 }
+n = { value = 5.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { column = "score", mu = 3.0 }
+n_also = ["nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 4.0, alt = [1.0] }
+p_value = { value = 0.375 }
+n = { value = 5.0 }

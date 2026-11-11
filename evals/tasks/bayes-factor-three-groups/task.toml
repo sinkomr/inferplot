@@ -3,6 +3,7 @@
 id = "bayes-factor-three-groups"
 function = "betweenstats"
 trap = "a Bayes factor for three groups, which inferplot v0.1 refuses (NotImplementedError)"
+trap_scoring = "test"
 request = """
 For the plant growth experiment in data.csv (treatment: control, treatment_1,
 treatment_2; dry_weight in grams), a reviewer asked for a Bayes factor for whether
@@ -24,6 +25,9 @@ note = "R datasets::PlantGrowth; renamed"
 args = ["treatment", "dry_weight"]
 kwargs = { type = "bayes" }
 raises = "NotImplementedError"
+
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 30  # values the test used
 
 [[accepted]]
 family = "no_test"

@@ -3,6 +3,7 @@
 id = "diets-three-groups"
 function = "betweenstats"
 trap = "none (baseline): three independent groups"
+trap_scoring = "none"
 request = """
 We grew 30 plants, 10 under a control condition and 10 under each of two
 treatments. data.csv has one row per plant (columns treatment and dry_weight, in
@@ -25,6 +26,9 @@ args = ["treatment", "dry_weight"]
 kwargs = { type = "parametric" }
 check_codes = ["pairs_hidden"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 30  # values the test used
+
 [[accepted]]
 family = "welch_anova"
 source = "fixture"
@@ -40,6 +44,18 @@ conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "eta squared"
+recipe = "eta_squared"
+recipe_args = { x = "treatment", y = "dry_weight" }
+estimate = { value = 0.2641482968321198 }
+
+[[accepted.effects]]
+label = "omega squared (from the sums of squares)"
+recipe = "omega_squared"
+recipe_args = { x = "treatment", y = "dry_weight" }
+estimate = { value = 0.20407884598997103 }
+
 [[accepted]]
 family = "kruskal_wallis"
 source = "fixture"
@@ -52,6 +68,12 @@ p_value = { value = 0.018423755731472, key = "stats/subtitle_data/0/p.value" }
 estimate = { value = 0.275456163773921, key = "stats/subtitle_data/0/estimate" }
 n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "eta squared H"
+recipe = "eta_squared_h"
+recipe_args = { x = "treatment", y = "dry_weight" }
+estimate = { value = 0.22178624997939686 }
+
 [[accepted]]
 family = "oneway_anova"
 source = "recipe"
@@ -63,3 +85,15 @@ df = { value = 2.0 }
 df_error = { value = 27.0 }
 p_value = { value = 0.015909958325622926 }
 n = { value = 30.0 }
+
+[[accepted.effects]]
+label = "eta squared"
+recipe = "eta_squared"
+recipe_args = { x = "treatment", y = "dry_weight" }
+estimate = { value = 0.2641482968321198 }
+
+[[accepted.effects]]
+label = "omega squared (from the sums of squares)"
+recipe = "omega_squared"
+recipe_args = { x = "treatment", y = "dry_weight" }
+estimate = { value = 0.20407884598997103 }

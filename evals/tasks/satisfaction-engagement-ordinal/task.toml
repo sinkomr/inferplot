@@ -3,13 +3,14 @@
 id = "satisfaction-engagement-ordinal"
 function = "scatterstats"
 trap = "two ordinal ratings with many ties"
+trap_scoring = "test"
 request = """
 Twenty employees rated their job satisfaction (1 to 5) and their engagement
 (1 to 6) in a survey (data.csv: employee, satisfaction, engagement). Are the two
 ratings associated?
 """
 design = "two ordinal ratings with ties"
-correct_rule = "Spearman's rho (a rank correlation for ordinal data). Pearson's r is rejected for ordinal ratings."
+correct_rule = "A rank correlation for ordinal data: Spearman's rho (R's p or SciPy's) or Kendall's tau-b. Pearson's r is rejected for ordinal ratings."
 rejected = ["pearson"]
 
 [data]
@@ -23,6 +24,9 @@ args = ["satisfaction", "engagement"]
 kwargs = { type = "nonparametric" }
 check_codes = ["heavy_ties"]
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 20  # values the test used
+
 [[accepted]]
 family = "spearman"
 source = "fixture"
@@ -35,3 +39,27 @@ estimate = { value = 0.869095276220977, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.685785658437855, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.948717062175691, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+label = "Spearman correlation, t-distribution p (SciPy)"
+source = "recipe"
+recipe = "spearman_t"
+recipe_args = { x = "satisfaction", y = "engagement" }
+[accepted.numbers]
+statistic = { value = 0.8690952762209768, alt = [7.454358283892032] }
+p_value = { value = 6.602264470637477e-07 }
+estimate = { value = 0.8690952762209768 }
+n = { value = 20.0 }
+
+[[accepted]]
+family = "kendall"
+label = "Kendall's tau-b, normal approximation"
+source = "recipe"
+recipe = "kendall"
+recipe_args = { x = "satisfaction", y = "engagement", method = "asymptotic" }
+[accepted.numbers]
+statistic = { value = 0.7973856209150327, alt = [4.2457691601762635] }
+p_value = { value = 2.178448219737183e-05 }
+estimate = { value = 0.7973856209150327 }
+n = { value = 20.0 }

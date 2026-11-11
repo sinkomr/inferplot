@@ -3,6 +3,7 @@
 id = "engine-transmission-two-by-two"
 function = "barstats"
 trap = "a 2 x 2 table: R's default chi-square has no continuity correction, SciPy's does"
+trap_scoring = "none"
 request = """
 Is the engine shape (V-shaped or straight) associated with the transmission
 type (automatic or manual) among the 32 car models in data.csv (car,
@@ -24,6 +25,9 @@ args = ["transmission", "engine"]
 kwargs = { type = "parametric" }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+observations = 32  # values the test used
+
 [[accepted]]
 family = "chi_square_independence"
 label = "Pearson's chi-square without continuity correction"
@@ -39,6 +43,12 @@ conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.490267825105949, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cramér's V without the bias correction (phi for 2 x 2)"
+recipe = "cramers_v"
+recipe_args = { x = "transmission", y = "engine" }
+estimate = { value = 0.16834512458535864 }
+
 [[accepted]]
 family = "chi_square_independence"
 label = "chi-square with Yates' correction"
@@ -51,6 +61,12 @@ df = { value = 1.0 }
 p_value = { value = 0.5555115470131495 }
 n = { value = 32.0 }
 
+[[accepted.effects]]
+label = "Cramér's V without the bias correction (phi for 2 x 2)"
+recipe = "cramers_v"
+recipe_args = { x = "transmission", y = "engine" }
+estimate = { value = 0.16834512458535864 }
+
 [[accepted]]
 family = "fisher"
 source = "recipe"
@@ -59,3 +75,9 @@ recipe_args = { x = "transmission", y = "engine" }
 [accepted.numbers]
 p_value = { value = 0.47269744160177996 }
 n = { value = 32.0 }
+
+[[accepted.effects]]
+label = "sample odds ratio"
+recipe = "odds_ratio"
+recipe_args = { x = "transmission", y = "engine" }
+estimate = { value = 2.0, alt = [0.5] }

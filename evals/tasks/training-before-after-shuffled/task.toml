@@ -3,13 +3,14 @@
 id = "training-before-after-shuffled"
 function = "withinstats"
 trap = "pairs must come from the subject column: the rows are not in subject order"
+trap_scoring = "traps"
 request = """
 Did students' test scores improve from before to after the training course?
 Each row of data.csv is one student at one time point (columns student, time and
 score).
 """
 design = "two time points on the same 20 students, rows in no particular order"
-correct_rule = "A paired analysis with pairs matched by student: the paired t-test or the Wilcoxon signed-rank test. Pairing by row order and independent-samples tests are flagged as traps."
+correct_rule = "A paired analysis with pairs matched by student: the paired t-test, the Wilcoxon signed-rank test (each SciPy variant: exact p, normal approximation with or without continuity correction) or the sign test. Pairing by row order and independent-samples tests are flagged as traps."
 rejected = ["welch_t", "student_t", "mann_whitney"]
 
 [data]
@@ -24,7 +25,13 @@ args = ["time", "score"]
 kwargs = { subject_id = "student", type = "parametric" }
 check_codes = []
 
+[counts]  # every n an answer may report; the dry run recomputes each
+pairs = 20  # subjects with both conditions
+observations = 40  # values the test used
+nonzero_differences = 20  # differences that are not zero (rank and sign tests drop the others)
+
 [[accepted]]
+n_also = ["observations"]
 family = "paired_t"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_shuffled-parametric"
@@ -38,7 +45,14 @@ conf_low = { value = -0.305343040904962, key = "stats/subtitle_data/0/conf.low" 
 conf_high = { value = 0.539364943868909, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
 
+[[accepted.effects]]
+label = "Cohen's d_z"
+recipe = "cohen_dz"
+recipe_args = { x = "time", y = "score", subject = "student", levels = ["after", "before"] }
+estimate = { value = 0.12349899501756958 }
+
 [[accepted]]
+n_also = ["observations", "nonzero_differences"]
 family = "wilcoxon_signed_rank"
 source = "fixture"
 fixture = "ggwithinstats-edge_within2_shuffled-nonparametric"
@@ -50,6 +64,42 @@ estimate = { value = 0.533333333333333, key = "stats/subtitle_data/0/estimate" }
 conf_low = { value = 0.0945094276297188, key = "stats/subtitle_data/0/conf.low" }
 conf_high = { value = 0.798620390501539, key = "stats/subtitle_data/0/conf.high" }
 n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, SciPy's exact p"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "time", y = "score", subject = "student", levels = ["after", "before"], method = "exact", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 49.0, alt = [161.0] }
+p_value = { value = 0.03623390197753906 }
+n = { value = 20.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, normal approximation"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "time", y = "score", subject = "student", levels = ["after", "before"], method = "approx", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 49.0, alt = [161.0, -2.0906295002503605] }
+p_value = { value = 0.03656128916854718 }
+n = { value = 20.0 }
+
+[[accepted]]
+family = "sign_test"
+label = "sign test (exact binomial)"
+source = "recipe"
+recipe = "sign_test"
+recipe_args = { x = "time", y = "score", subject = "student", levels = ["after", "before"] }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 15.0, alt = [5.0] }
+p_value = { value = 0.04138946533203125 }
+n = { value = 20.0 }
 
 [[traps]]
 family = "paired_t"
