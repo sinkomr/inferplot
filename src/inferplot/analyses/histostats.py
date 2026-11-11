@@ -66,7 +66,12 @@ from inferplot.result import (
     current_provenance,
     one_sample_tied_count,
 )
-from inferplot.text import build_texts, format_value, r_number_text
+from inferplot.text import (
+    build_texts,
+    format_value,
+    r_number_text,
+    with_zero_p_note,
+)
 
 __all__ = ["histostats"]
 
@@ -689,7 +694,11 @@ def _assemble(data: OneData, args: _Args, parts: _Parts, *, digits: int) -> Stat
         dropped_subjects=0,
         dropped_subject_rows=0,
         n_tied=one_sample_tied_count(observed, args.test_value),
-        warnings=(*data_notes(data), *parts.warnings, *_warnings(args, parts)),
+        warnings=with_zero_p_note(
+            (*data_notes(data), *parts.warnings, *_warnings(args, parts)),
+            parts.test,
+            shown=args.results_subtitle,
+        ),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
         text=texts,

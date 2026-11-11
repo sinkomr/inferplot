@@ -74,7 +74,7 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
-from inferplot.text import contingency_texts
+from inferplot.text import contingency_texts, zero_p_note
 
 __all__ = ["barstats"]
 
@@ -1010,6 +1010,7 @@ def _assemble(
         *_empty_level_notes(table, args),
         *parts.warnings,
         *_no_effect_warnings(table, args, parts),
+        *_zero_p_notes(parts, bars, settings),
     )
     return StatsResult(
         analysis="barstats",
@@ -1046,6 +1047,33 @@ def _assemble(
 # --------------------------------------------------------------------------- #
 # arguments
 # --------------------------------------------------------------------------- #
+
+
+def _zero_p_notes(parts: _Parts, bars: Sequence[Bar], settings: Settings) -> list[str]:
+    """What a p-value of exactly 0 means where a text prints it as 2.23e-308
+    (D108, review B15): the main test's in the subtitle, the bars' in the
+    labels above them and in the alt text."""
+    notes: list[str] = []
+    test = parts.test
+    if settings.results_subtitle and test is not None and test.p_value == 0.0:
+        notes.append(zero_p_note(test.label))
+    zero = [
+        bar.level
+        for bar in bars
+        if bar.test is not None and bar.test.p_value == 0.0 and bar.level is not None
+    ]
+    if zero and settings.proportion_test:
+        names = ", ".join(repr(level) for level in zero)
+        many = len(zero) > 1
+        notes.append(
+            zero_p_note(
+                f"the goodness-of-fit test of the bar{'s' if many else ''} {names}",
+                "The labels above those bars print"
+                if many
+                else "The label above that bar prints",
+            )
+        )
+    return notes
 
 
 def _check_type(value: object) -> str:

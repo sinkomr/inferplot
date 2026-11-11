@@ -2575,9 +2575,7 @@ def _possible_counts(
     return tuple(found)
 
 
-def _long_from_wide(
-    frame: nw.DataFrame[Any], key: str, values: Sequence[str]
-) -> str:
+def _long_from_wide(frame: nw.DataFrame[Any], key: str, values: Sequence[str]) -> str:
     """The code that reshapes a wide table of counts (one row per level of
     ``key``, one column of counts per category, ``values``) to one row per
     combination with a column of counts, in the frame's own library."""

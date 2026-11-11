@@ -65,7 +65,12 @@ from inferplot.result import (
 )
 from inferplot.stats.parametric import TINY
 from inferplot.stats.robust import SMM_ROWS
-from inferplot.text import build_texts, format_value, r_number_text
+from inferplot.text import (
+    build_texts,
+    format_value,
+    r_number_text,
+    with_zero_p_note,
+)
 
 __all__ = ["betweenstats"]
 
@@ -1723,7 +1728,7 @@ def betweenstats(
         dropped_subjects=0,
         dropped_subject_rows=0,
         n_tied=tied_count(observations),
-        warnings=tuple(warnings),
+        warnings=with_zero_p_note(warnings, parts.test, shown=subtitle_on),
         provenance=current_provenance(seed=rng_seed, citations=parts.citations),
         settings=settings,
         text=texts,

@@ -205,6 +205,35 @@ def format_p_subtitle(p: float, digits: int = 2) -> str:
     return format_value(DOUBLE_XMIN if p == 0.0 else p, digits)
 
 
+def zero_p_note(what: str, where: str = "The subtitle prints") -> str:
+    """The ``warnings`` entry for a p-value of exactly 0 that a text prints as
+    2.23e-308 (``format_p_subtitle``; D108, review B15): ``what`` names the
+    test ("the chi-square test"), ``where`` the text that prints it."""
+    return (
+        f"The p-value of {what} is 0 as computed: it is smaller than the smallest "
+        "number a double can hold (about 2.2e-308), not exactly zero. "
+        f"{where} p = 2.23e-308, as ggstatsplot prints a p-value of 0; report "
+        "p < 1e-300 (in APA style p < .001)."
+    )
+
+
+def with_zero_p_note(
+    warnings: Sequence[str], test: TestResult | None, *, shown: bool
+) -> tuple[str, ...]:
+    """``warnings`` with :func:`zero_p_note` for the main test, where its p is
+    exactly 0 and the subtitle is ``shown``, unless a warning already explains
+    the 2.23e-308 (histostats' bootstrap, scatterstats' exact correlation)."""
+    out = tuple(warnings)
+    if (
+        not shown
+        or test is None
+        or test.p_value != 0.0
+        or any("2.23e-308" in w for w in out)
+    ):
+        return out
+    return (*out, zero_p_note(test.label))
+
+
 def format_bf01_log(bf10: float, digits: int = 2) -> str:
     """Format ``log_e(BF01) = -log(bf10)`` as the caption and pairwise labels do.
 
