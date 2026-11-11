@@ -604,10 +604,13 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     many-digit values).
   - [x] L1 and five planted bugs nothing caught (second sample, y of Spearman, the
     two-unit window): tests added.
-  - [ ] M1: the Fisher budget leaves the 2 x 2 tests, the planning and the V intervals
-    uncounted (100 x 2 of 100,000 observations: 88 s; 3 x 2,000: 53 s). Being fixed
-    on `fix/fisher-cost-gaps`, with L2 (float32 `ratio`), L4 (wording with
-    `p_adjust_method="none"`) and a test of the p = 0 shortcut.
+  - [x] M1: fixed (D120 amended): the 2 x 2 tests, the planning and the V intervals
+    are counted. 100 x 2 of 100,000 observations: 1.2 s with all 4,950 pairs tested
+    (88 s); results identical to before on 15,132 pairs of ordinary tables. With L2
+    (float32 `ratio`), L4 (wording) and the p = 0 shortcut test. Open, low: with
+    2,000 levels of y `ip.analyze.barstats` takes 5 to 160 s in the per-bar
+    intervals and the alt text (a chart of 2,000 bars is refused anyway); on very
+    large tables only some pairs get a Cramér's V.
   - [ ] M2: R may count near-tied tables differently beyond 2 x 2 (three 2 x 3 tables
     where p would change by about 3%). Asked of R in oracle round 4, with R's
     `round()` above 1e9 (L5; not reachable from percent labels).

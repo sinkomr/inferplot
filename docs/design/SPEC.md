@@ -565,9 +565,12 @@ pair without a test, with the reason, and tests the others (D113). The APA sente
 counts the significant pairs among the tested ones and says how many have no test.
 Each pair's
 exact test is held to inferplot's cost limits (D120): 1e9 work units, about a second,
-and 160 MB for one test; 1.6e9 units for all the pairs of one table, the cheapest
-first by an estimate from the margins and the table, so that which pairs are tested
-never depends on the order of the levels. A pair beyond them has no p
+and 160 MB for one test; 1.6e9 units for the tests of one table, their planning
+included (2 x 2 tests first, together; then the larger, cheapest first), and 4e8
+units plus what the tests leave for the pairs' Cramér's V intervals, smallest tables
+first, so that which pairs are tested, and which have a V, never depends on the
+order of the levels. A pair whose V the allowance does not reach has none, with the
+reason. A pair beyond them has no p
 (`no_test_reason`), keeps its Cramér's V, and still counts in the adjustment as a
 test with p = 1, so that leaving it out makes no computed pair look more significant;
 a single-column pair is no comparison and is left out of the adjustment (ggstatsplot
