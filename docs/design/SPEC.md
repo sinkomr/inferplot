@@ -559,7 +559,9 @@ unpaired, x with more than two levels (declared empty levels count: edge_bar_zer
 declared computes its one pair b-a) and y with more than one, for every type (bayes
 too). A pair whose table keeps one column (edge_bar_degenerate-single-x) makes
 fisher.test stop and ggstatsplot loses the whole table silently; inferplot keeps the
-pair without a test, with the reason, and tests the others (D113). Each pair's
+pair without a test, with the reason, and tests the others (D113). The APA sentence
+counts the significant pairs among the tested ones and says how many have no test.
+Each pair's
 exact test is held to inferplot's cost limits (D120): 1e9 work units, about a second,
 and 160 MB for one test; 1.6e9 units for all the pairs of one table, the cheapest
 first by an estimate from the margins and the table, so that which pairs are tested
@@ -649,6 +651,16 @@ chi^2: from 1e9 (with df at most 1e-6 chi^2) the noncentrality bound is the solu
 of the Cornish-Fisher expansion of the noncentral chi-square quantile to its
 lambda^-1/2 term. A goodness-of-fit statistic beyond the largest double is refused,
 naming `ratio`.
+
+barstats, what the drawing arguments may change (D122, D123): `bar_args` styles the
+segments (edgecolor, hatch, linestyle, linewidth up to 2 pt, alpha from 0.4) and may
+not re-encode them: `color`, `facecolor` and `fill` (the colour is the key to the
+legend; `palette=` sets it), `zorder` (in every function's artist dicts), `angle` and
+`rotation_point` (every rectangle), and the least-squares line's `drawstyle` are
+refused. inferplot's own barstats figure has a plotting area of at most 26 in: up to
+32 bars keep 0.8 in each, up to 37 share the 26 in, and more are refused before
+drawing with the number that fits and the `ax=` remedy; a legend too tall is refused
+the same way.
 
 ## 5. Deliberate differences from ggstatsplot
 
@@ -1090,13 +1102,13 @@ no problems.
 | Code | Level | Severity | Trigger |
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once; histostats: fewer than 5 values; scatterstats: fewer than 5 complete pairs) |
-| `small_expected` | result | warning | barstats: Cochran's rule fails (an expected count below 1, or more than 20% of them below 5) for the main test (two-way: row total x column total / n over the non-empty rows and columns; one-way: n x ratio; paired: half the units that change between each pair of levels) or for a labelled bar's test; R's `chisq.test` warns there and ggstatsplot mutes it. `small_n` and `heavy_ties` do not apply to counts |
+| `small_expected` | result | warning | barstats: Cochran's rule fails (an expected count below 1, or more than 20% of them below 5) for the main test (two-way: row total x column total / n over the non-empty rows and columns; one-way: n x ratio; paired: half the units that change between each pair of levels) or for a bar's test (whenever `y` is given: the APA sentence reports the bars' tests, D108, D124); R's `chisq.test` warns there and ggstatsplot mutes it. `small_n` and `heavy_ties` do not apply to counts |
 | `pairs_without_test` | result | info | barstats: a pair of levels of x has no Fisher test (`no_test_reason`: its table keeps one column, or the exact test would exceed the cost limit); the other pairs are adjusted among themselves, a pair beyond the cost limit counting in that adjustment as a test with p = 1 (D113, D120) |
 | `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too; one sample, values minus the distinct nonzero \|x - test_value\|; correlation (Spearman), the ties within x plus those within y, of 2n ranked values (D83) |
 | `rows_dropped` | result | info or warning | `n_dropped > 0` or subjects dropped; a warning, with the share, when more than half of the subjects (within) or of the rows (between) were left out (D80) |
 | `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |
 | `infinite_effect_size` | result | warning | type robust: the effect size, or some of its bootstrap resamples, is infinite (a winsorized variance of 0 next to trimmed means that differ); the values are kept, so a CI bound can be ±Inf |
-| `estimate_outside_interval` | result | warning | the effect size lies outside its own CI (percentile bootstrap intervals: rank epsilon squared, xi; 12 noise groups of 6: 0.074 with [0.107, 1]); the message explains the bootstrap's bias and that the p-value is unaffected |
+| `estimate_outside_interval` | result | warning | the effect size lies outside its own CI (percentile bootstrap intervals: rank epsilon squared, xi; 12 noise groups of 6: 0.074 with [0.107, 1]); the message explains the bootstrap's bias and that the p-value is unaffected. Also Cramér's V and Pearson's C with their noncentral chi-square intervals (the estimate comes from the statistic, the bounds from the noncentrality, which leaves out the df the statistic carries; on wide tables V lies above its upper bound, as in R: oracle round 3, 2 x 20 to 2 x 61); the message says it is a property of the method |
 | `pairwise_conf_level` | result | info | the pairwise intervals are at a level other than `conf_level` (type robust with three or more groups: lincon's are always 95%, D53); for a robust within result the message says that every interval is a 95% interval whatever `conf_level` is (D66) |
 | `label_overlap` | figure | warning | any two text artists' rendered bounding boxes intersect, or a bracket label's box reaches more than 0.5 px into the bar or a leg of another bracket |
 | `text_clipped` | figure | warning | any text extends outside the figure |
@@ -1106,8 +1118,12 @@ no problems.
 | `centrality_label_overlap` | figure | warning | a centrality point at least half covered by a text's box |
 | `centrality_label_ambiguous` | figure | warning | a centrality label reads as another level's, wherever it is when checked: on its usual side its box's middle lies beyond the neighbouring point, on the other side it reaches past the middle toward the neighbouring point, or it lies over the centrality path between two other conditions (D75) |
 | `point_labels_crowded` | figure | warning | scatterstats: point labels overlap each other, lie across the least-squares line or are crossed by another label's link, or more than 200 points are labelled (D97, D111); labels over points of a dense cloud are not reported |
-| `figure_oversized` | figure | warning | inferplot's own figure: the panels fill under 25% of its area, or a side exceeds 30 in (plus 3 in per level and 0.5 in per bracket in comparison figures); the message names a text over 12 in that makes it grow (D109) |
+| `figure_oversized` | figure | warning | inferplot's own figure: the panels fill under 25% of its area, or a side exceeds 30 in (plus 3 in per level and 0.5 in per bracket in comparison figures; barstats has no allowance per bar, its own figure being bounded, D123); the message names a text over 12 in that makes it grow (D109) |
 | `cell_labels_hidden` | figure | warning | barstats: a cell label left out for lack of room (only with `ax=`), not drawn, reaching beyond its segment, or lying beside its bar over a segment (D114) |
+| `level_labels_alike` | figure | warning | betweenstats, withinstats, barstats: two levels drawn with tick labels or legend entries that read alike (line breaks and runs of spaces count as one space), for example names that differ only in spaces (D121) |
+| `level_colors_alike` | figure | warning | barstats: two levels of x whose drawn segment colours, over the background, are closer than a CIELAB difference (Delta E 1976) of 3, the legend's only key (D122) |
+| `legend_missing` | figure | warning | barstats: the legend, the only key to the colours, was removed or hidden after drawing |
+| `empty_level_tested` | result | warning | barstats: a declared level of x without observations counts as a category in the bars' drawn tests (expected share 1/k each), as in ggstatsplot; the message gives the call that removes it (D124) |
 | `line_label_ambiguous` | figure | warning | histostats: a line's label nearer to the other line than to its own, or crossed by it (D110) |
 | `low_contrast` | figure | warning | a text under 3:1 (WCAG 2.1, large text and graphics) against its background, or a level's colour under 1.1:1 against the Axes background (WCAG's 3:1 would report the default palette's yellow, 1.32:1 on white) |
 | `glyph_missing` | figure | warning | characters no font of a text can draw (DejaVu Sans, then the user's `font.sans-serif` fonts; in mathtext DejaVu Sans and STIX); matplotlib's own "Glyph ... missing" warning for these characters is held back during inferplot's drawing, `check()` and `save()`, and passes through for characters this check does not report (D79) |

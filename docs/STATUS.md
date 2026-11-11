@@ -366,18 +366,18 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   labels are moved beside their bar, never dropped in the own figure (D114); 120
   random tables clean in the own figure and in `ax=` at three dpi; the four existing
   figures byte-identical (492 of 492); four image baselines (18 in all)
-- [ ] end-of-phase review of barstats (two fresh reviewers). Visible half done
+- [x] end-of-phase review of barstats (two fresh reviewers; every finding fixed and
+  re-checked by the lead except C7's low open item). Visible half done
   (2026-11-11; scripts and images in `reviewBB/`): 43 hand-built frames on three
   backends and the same table written 14 ways (672 of 672 comparisons identical);
   texts of 159 results re-derived; about 190 figures measured; saved files and the
-  three forms sound. Findings (2 high, 10 medium, 5 low), being fixed:
-  - [ ] B1 (high; reproduced by the lead): two long level names that differ only at
-    the end are shortened to the same legend entry and tick label; nothing reports
-    it (shared tick wrapping: betweenstats too).
-  - [ ] B2 (high; reproduced): `bar_args` properties silently wreck the chart
-    (`color` paints every level alike, as the error message for `color=` itself
-    suggests; `zorder` hides every cell label; `angle`; wide edges); identical
-    palette colours are not reported.
+  three forms sound. Findings (2 high, 10 medium, 5 low), all fixed:
+  - [x] B1: fixed (D121). Names that would be drawn alike keep the part where they
+    differ; new check `level_labels_alike`. Lead's figure: two 60-character names
+    differing in the last word are apart on the ticks and whole in the legend.
+  - [x] B2: fixed (D122). `bar_args` may style, not re-encode (colour, zorder, angle,
+    wide edges and near-invisible alpha refused with the remedy); new checks
+    `level_colors_alike` and `legend_missing`.
   - [x] B3: fixed (D120). The exact Fisher test is a network search joined with
     sorted completions; its work and memory are counted before they are spent (about
     1 s and 160 MB a test, about 2 s for all the pairs of one table, cheapest first).
@@ -388,32 +388,32 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     in the adjustment as p = 1. Open: dense tables far from independence at
     n = 10,000 and most 2 x 10 and wider at n = 1,000 are still refused; grouping
     identical columns would help sparse wide tables.
-  - [ ] B4: the APA sentence counts pairs that were never tested ("0 of 3 pairs").
-  - [ ] B5: Cramér's V printed outside its own interval on wide tables (2 x 20: 10 of
-    60), as the SPEC formula gives; the check's message speaks of a bootstrap; no
-    fixture covers large df (oracle probe wanted).
-  - [ ] B6 to B9: hints that do not lead to a working call (paired data in long
-    format; the "declare both columns" recipe empties an integer column; `tail=` and
-    `one_sided=`; `x_label=`).
-  - [ ] B10: an aggregated table given without `counts=` is analysed as one
-    observation per row, silently.
-  - [ ] B11: the figure grows without bound with the number of bars (100 bars: 81
-    in) and `figure_oversized` allows it.
-  - [ ] B12: no test ties a level's colour to its legend entry.
-  - [ ] B13 to B17 (low): moved labels carry no colour key; pandas-only hints on
-    polars and pyarrow frames; "p = 2.23e-308" for an underflowed p (D108; owner's
-    call); fifteen-digit `ratio` in texts; small items.
+  - [x] B4: fixed: "in 2 of the 2 tested pairs; 1 pair has no test".
+  - [x] B5: as in R (oracle round 3: R prints V 0.33 with [0.00, 0.28] on a 2 x 61
+    table); the check's message now explains it as a property of the method.
+  - [x] B6 to B9: fixed (D125): every hint is in the frame's own library and is
+    executed by a test; direction and label keywords get targeted messages.
+  - [x] B10: fixed (D125): a table of counts without `counts=` is named in
+    `warnings` or refused with the reshape.
+  - [x] B11: fixed (D123): plotting area at most 26 in; more than 37 bars refused
+    with the number that fits (lead's run: 32 bars 27.3 in; 38 and 60 refused).
+  - [x] B12: tests added (colour to palette entry, legend key and place, for
+    barstats, betweenstats and withinstats); no defect found.
+  - [x] B13 to B21: fixed (D124, D125): colour keys on moved labels (one image
+    baseline regenerated); hints per library; a p of 0 printed as 2.23e-308 always
+    explained in `warnings` (the print convention stays the owner's call, D108);
+    shares rounded in texts; small items; `empty_level_tested`; paired unused
+    category; object column of booleans; `no_test_reason` names the column.
   Statistics half done (2026-11-11; scripts in `reviewBA/`): no wrong statistic, p,
   effect size or interval: 406 hostile two-way tables and 554 paired and one-way calls
   agree with exact rationals and mpmath to 3e-14; Fisher's test on 18,259 small tables
   against exact enumeration (10,084 with exact ties) with 0 misclassified; 1,954
   noncentral chi-square roots to 1.2e-13; all 22 pinned bounds of D99 confirmed; 2,837
   comparisons of the same table in different writings bit-identical; 39 of 41 planted
-  bugs caught. Findings (2 high, 4 medium, 6 low), being fixed:
-  - [ ] C1 (high): an unused declared category (a filtered pandas categorical) changes
-    the p-values drawn above the bars (59/41 and 44/56 splits labelled p = 2.27e-05
-    and 8.57e-06; 0.26 and 0.46 without the unused category), as in ggstatsplot, and
-    the user is not told what the bar's test counts.
+  bugs caught. Findings (2 high, 4 medium, 6 low), fixed but for C7's open item:
+  - [x] C1: fixed (D124, with B18): the numbers stay ggstatsplot's; `warnings`, the
+    check `empty_level_tested`, the APA sentence and the alt text say what the bars'
+    tests count and give the call that removes the unused level.
   - [x] C2: fixed with B3 (D120); the 2 x 2 path is bounded and its one-sided p is
     accurate at large n (8.9e-15 against 40-digit sums up to n = 1e10).
   - [x] C3: fixed (D118). Exact zeros are 0, decided in rational arithmetic on the
@@ -421,12 +421,12 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     127 of 400 are now 0; the lead's comparison of main and branch on 6,732 tables
     found every change an exact zero and nothing else moved. R prints the noise
     (oracle round 3), so this is a deliberate difference for the owner to confirm.
-  - [ ] C4: the refusal for a paired table with an unused category advises merging
-    levels instead of removing the unused one.
+  - [x] C4: fixed (with B19): the refusal names the level as unused in both
+    measurements and gives the call that leaves it out.
   - [x] C5 (statistics level): df at 8 to 12 and 50 categories against exact
     rationals; McNemar with an empty row and column refused. The analysis-level
     paired case is with the analysis fixes (fix G).
-  - [ ] C6: a pandas object column of booleans is refused.
+  - [x] C6: fixed (with B20).
   - [x] C7 (statistics): every finite chi-square has its interval (D119; within 0.5
     units in the last place of the lead's independent 40-digit roots); a statistic
     beyond the doubles raises naming `ratio`; D107's accuracy figure corrected (1.3e-10
@@ -461,7 +461,7 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   Visible half done (2026-11-10; scripts and images in `reviewP4B/`): about 230 first
   attempts with other libraries' argument names, 70 hand-built frames on three
   backends, 717 results' texts re-derived, about 200 figures measured, 60 saved files,
-  49 comparisons of the three forms: sound. Findings, being fixed on
+  49 comparisons of the three forms: sound. Findings, fixed on
   `fix/phase4-review-visible`:
   - [x] Y1 (high): fixed (D109). The histogram's own figure no longer grows to reach
     the test value: body temperatures 100.4 in to 6.5 in, heights 25.5 to 6.4, Unix
@@ -483,7 +483,7 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   2e-14; Hedges' g bounds 8e-12); 1 - r^2 exact on 300 of 300 data sets; Bayes factors
   against 30-digit integration on 432 and 720 settings (worst 1.5e-15 and 8.8e-14);
   the bootstrap-t against exact enumeration of all resamples; 75 of 82 planted bugs
-  caught; the evidence of D81 and D85 to D88 true as stated. Findings, being fixed on
+  caught; the evidence of D81 and D85 to D88 true as stated. Findings, fixed on
   `fix/phase4-review-stats`:
   - [x] Z1 (high): fixed (D105). Every robust bootstrap decides 0/0, infinite, zero
     and ties with |t| on the numbers as written. Before: ratings in tenths gave p .227
@@ -515,7 +515,7 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   the README's quick start (30 lines) runs as written and its printed output is
   compared; one figure per function in `docs/img` from `docs/examples/readme_images.py`;
   `docs/api.md` is 23,072 of 32,768 bytes and complete against the code (signatures,
-  every keyword, all 25 `check()` codes, every result field: a test fails when the code
+  every keyword, all `check()` codes (29 since the barstats review), every result field: a test fails when the code
   and the document drift apart); `llms.txt`; the skill; 9 example scripts; a runnable
   docstring example on all 21 public callables. Kept true by `tests/test_docs.py`,
   `tests/test_examples.py` and `tests/test_docstring_examples.py` (61 tests) on the
