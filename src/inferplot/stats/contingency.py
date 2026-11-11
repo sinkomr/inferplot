@@ -2118,9 +2118,12 @@ def fisher_exact(
     by bisection and each end is summed outward in blocks until a geometric bound
     of the rest falls below 1e-17 of the sum: about 10 to 40 standard deviations of
     terms, each from the exact ratio of consecutive terms between Loader anchors
-    every 256 terms (_LogPmf.run). Balanced margins are answered up to about n =
-    1e14 within the work limit below (n = 1e12: about 0.2 s), unbalanced ones
-    further; beyond, the test is refused having spent at most the limit.
+    every 256 terms (_LogPmf.run). With balanced margins the two-sided test is
+    answered up to about n = 1e13 within the work limit below (n = 1e12: 0.2 s;
+    1e13: 0.5 s), a one-sided one up to about 1e14; unbalanced margins go
+    further. Beyond, the test is refused having spent at most the limit (about
+    0.9 s at n = 1e15). Accuracy against 40-digit sums: 9e-15 relative or better
+    from n = 10 to 1e10, two-sided and one-sided.
 
     2 x c, c >= 3: a table is its first row b (each b_j in the range its column
     allows, with a fixed total), and its log probability is a sum over the columns
@@ -2160,8 +2163,9 @@ def fisher_exact(
     array per test would leave the allocator's caches of freed blocks to grow).
     The work grows with the number of columns, with n and with how far the table
     lies from independence: 2 x 8 at n = 300 takes about 0.1 s, 2 x 10 at n = 200
-    0.1 to 0.4 s; 2 x 10 at n = 1,000, 2 x 6 at n = 10,000 and 2 x 4 at n =
-    10,000 far from independence are refused (tests/stats/test_fisher_cost.py).
+    0.1 to 0.4 s, 2 x 4 at n = 100,000 0.1 s; 2 x 10 at n = 1,000, 2 x 6 at n =
+    10,000 far from independence and 2 x 5 at n = 100,000 are refused
+    (tests/stats/test_fisher_cost.py).
 
     Columns without counts do not change the test and are left out; a table with
     one non-empty column or one empty row has a single table with its margins, p 1

@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false, reportMissingModuleSource=false
 """40-digit references for Fisher's exact test of 2 x 2 tables at totals from 10 to
 1e10 (tests/data/fisher_2x2_reference.json), for tests/stats/test_fisher_cost.py.
 

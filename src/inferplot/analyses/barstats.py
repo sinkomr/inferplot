@@ -524,9 +524,8 @@ def _fisher_pairs(
         elif pair.p_value is None:
             costly.append(pair)
             reason = (
-                f"its exact test (a 2 x {len(pair.columns)} table of {pair.n:,} "
-                "observations) is too large to compute within inferplot's limits, "
-                "and inferplot does not approximate it"
+                "too large to compute exactly within inferplot's limits (a 2 x "
+                f"{len(pair.columns)} table of {pair.n:,}), not approximated"
             )
         elif pair.effect is None:
             warnings.append(

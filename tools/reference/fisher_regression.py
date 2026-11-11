@@ -40,7 +40,8 @@ def _table(rng: np.random.Generator) -> np.ndarray:
     elif c <= 5:
         n = int(rng.choice([8, 30, 80, 200, 500, 1_200]))
     else:
-        n = int(rng.choice([6, 20, 50, 100, 160, 240] if c <= 6 else [6, 20, 50, 100, 140]))
+        sizes = [6, 20, 50, 100, 160, 240] if c <= 6 else [6, 20, 50, 100, 140]
+        n = int(rng.choice(sizes))
     if kind == 0:  # equal column totals: mirror-image ties
         cols = np.full(c, max(1, n // c))
     elif kind == 1:  # one sparse row

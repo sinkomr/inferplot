@@ -801,8 +801,8 @@ def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
     ab, ac, bc_ = result.pairwise
     assert (ab.p_value, ab.p_adjusted, ab.significant) == (None, None, None)
     assert ab.no_test_reason == (
-        "its exact test (a 2 x 20 table of 840 observations) is too large to "
-        "compute within inferplot's limits, and inferplot does not approximate it"
+        "too large to compute exactly within inferplot's limits (a 2 x 20 table of "
+        "840), not approximated"
     )
     assert ab.estimate is not None  # Cramér's V is still reported
     assert ac.p_value is not None
@@ -832,8 +832,8 @@ def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
     )
     (issue,) = [i for i in result.check() if i.code == "pairs_without_test"]
     assert issue.message.startswith(
-        "1 of the 3 pairwise comparisons of 'x' has no p-value: 'x0' and 'x1' (its "
-        "exact test"
+        "1 of the 3 pairwise comparisons of 'x' has no p-value: 'x0' and 'x1' (too "
+        "large to compute exactly"
     )
 
 
