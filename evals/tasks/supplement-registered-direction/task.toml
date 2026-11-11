@@ -6,9 +6,8 @@ trap = "a one-sided hypothesis registered before the data were collected"
 request = """
 Before running this experiment we predicted, and pre-registered, that guinea
 pigs given vitamin C as orange juice grow longer teeth than those given it as
-ascorbic acid; the three doses were balanced across the two supplements.
-data.csv has one row per animal (tooth_length, supplement, dose_mg). Test our
-registered prediction and make the figure.
+ascorbic acid. data.csv has one row per animal (tooth_length, supplement).
+Test our registered prediction and make the figure.
 """
 design = "two independent groups, one-sided hypothesis stated in advance"
 correct_rule = "A one-sided test in the registered direction (orange juice greater): Welch's t-test or the Mann-Whitney test. A two-sided test is the right family but gives the wrong p and is flagged as a trap."
@@ -17,9 +16,9 @@ rejected = []
 [data]
 file = "data.csv"
 source = "oracle/datasets/ToothGrowth.csv"
-columns = { len = "tooth_length", supp = "supplement", dose = "dose_mg" }
+columns = { len = "tooth_length", supp = "supplement" }
 levels = { supplement = { OJ = "orange_juice", VC = "ascorbic_acid" } }
-note = "R datasets::ToothGrowth; supplement names spelled out"
+note = "R datasets::ToothGrowth without the dose column (one factor); supplement names spelled out"
 
 [reference]
 args = ["supplement", "tooth_length"]
