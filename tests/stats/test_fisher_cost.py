@@ -119,6 +119,34 @@ def test_the_regression_table_holds_616_entries() -> None:
     assert len(wide) == 403
 
 
+def test_the_regression_table_reaches_every_part_of_the_search() -> None:
+    # Tables with no network side (all columns listed), with one, and with a
+    # wide column (more than _WIDE_ROW children per node: the windowed rows).
+    kinds: set[str] = set()
+    for row in REGRESSION["tables"]:
+        table = np.array(row["table"], dtype=np.int64)
+        table = table[:, table.sum(axis=0) > 0]
+        if table.shape[1] < 3 or row["alternative"] != "two-sided":
+            continue
+        first, second = C._canonical(  # pyright: ignore[reportPrivateUsage]
+            [int(v) for v in table[0]], [int(v) for v in table[1]]
+        )
+        cols = [a + b for a, b in zip(first, second, strict=True)]
+        r1, n = sum(first), sum(cols)
+        if r1 in (0, n):
+            continue
+        widths = [min(c, r1) - max(0, c - (n - r1)) for c in cols]
+        plan = C._fisher_plan(widths)  # pyright: ignore[reportPrivateUsage]
+        network = [widths[j] for j in plan.order[: len(widths) - plan.list_columns]]
+        if not network:
+            kinds.add("list only")
+        elif max(network) + 1 > C._WIDE_ROW:  # pyright: ignore[reportPrivateUsage]
+            kinds.add("wide")
+        else:
+            kinds.add("network")
+    assert kinds == {"list only", "network", "wide"}
+
+
 @pytest.mark.parametrize("batch", range(8))
 def test_the_previous_implementation_on_616_tables(batch: int) -> None:
     # Every table the previous search answered, its p unchanged within
@@ -257,7 +285,7 @@ def test_work_known_from_the_margins_is_refused_before_it_is_spent() -> None:
     # The list and the bounds cost what the margins say whatever is pruned: a
     # budget smaller than that refuses at once, having spent nothing.
     table = _reviewer_2xc(304, 8, 0.0)
-    _, certain = C._fisher_work(table, "two-sided")  # pyright: ignore[reportPrivateUsage]
+    *_, certain = C._fisher_work(table, "two-sided")  # pyright: ignore[reportPrivateUsage]
     budget = C._Budget(certain / 2)  # pyright: ignore[reportPrivateUsage]
     with pytest.raises(C._TooLarge):  # pyright: ignore[reportPrivateUsage]
         C._fisher(table, "two-sided", budget)  # pyright: ignore[reportPrivateUsage]

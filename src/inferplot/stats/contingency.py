@@ -759,11 +759,11 @@ _UNIT_CALL: Final = 20_000.0  # one pass of Python over a chunk
 _FISHER_WORK_LIMIT: Final = 1.0e9
 # ... and the pairwise tests of one table this much in all (about two seconds).
 _PAIRWISE_WORK_LIMIT: Final = 1.6e9
-# A pairwise test whose estimated work (_fisher_work) is above this is not
-# attempted: the estimate exceeds the work spent by at most 3e3 times (largest
-# answered estimate 7.7e11) on the tables of tests/data and the grids measured,
+# A pairwise test whose smaller work estimate (_fisher_work) is above this is not
+# attempted: the estimate exceeds the work spent by at most 1.1e4 times (largest
+# answered estimate 2.5e12) on the tables of tests/data and the grids measured,
 # so the attempt would only spend the budget the other pairs need.
-_PAIRWISE_ESTIMATE_LIMIT: Final = 1e4 * _FISHER_WORK_LIMIT
+_PAIRWISE_ESTIMATE_LIMIT: Final = 1e5 * _FISHER_WORK_LIMIT
 _SPAN_SD: Final = 8.0
 # Memory: the arrays of one test, counted in bytes before any is allocated, stay
 # below this (every array the search allocates, temporaries included).
@@ -1809,7 +1809,8 @@ class _Network:
             count = index - lo
         else:
             self.budget.charge(
-                size * (_UNIT_QUERY + 4.0 * _bits(lst.longest)) + rows.size * _UNIT_CALL
+                size * (_UNIT_QUERY + 4.0 * _bits(lst.longest))
+                + rows.size * _UNIT_CALL / 4.0
             )
             count = np.empty(size, dtype=np.int64)
             bounds = np.concatenate((first, [size])).tolist()
@@ -1837,7 +1838,8 @@ class _Network:
         lst = self.list
         size = rem.size
         self.budget.charge(
-            size * (_UNIT_QUERY + 4.0 * _bits(lst.longest)) + rows.size * _UNIT_CALL
+            size * (_UNIT_QUERY + 4.0 * _bits(lst.longest))
+            + rows.size * _UNIT_CALL / 4.0
         )
         counted = np.empty(size)
         bounds = np.concatenate((first, [size])).tolist()
@@ -1918,12 +1920,13 @@ def _canonical(first: list[int], second: list[int]) -> tuple[list[int], list[int
     return [a for a, _ in chosen], [b for _, b in chosen]
 
 
-def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float]:
-    """(estimate, certain) work units of fisher_exact on a 2 x c table, from the
-    margins: an estimate of the work after pruning (the plan's estimate with
-    each column's range cut to 8 standard deviations either side of its mean,
-    where the tables a search cannot settle in bulk lie, for ordering the
-    pairwise tests), and the work spent whatever is pruned."""
+def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float, float]:
+    """Work units of fisher_exact on a 2 x c table, from the margins and the
+    observed table: two estimates of the work after pruning, the plan's estimate
+    with each column's range cut to 8 + sqrt(X^2) standard deviations either side
+    of its mean (X^2 Pearson's statistic: where the tables the search cannot
+    settle in bulk lie; for the order of the pairwise tests) and to 8 standard
+    deviations (smaller; for the cutoff), and the work spent whatever is pruned."""
     rows = table.tolist()
     first = [int(v) for v in rows[0]]
     cols = [int(a) + int(b) for a, b in zip(rows[0], rows[1], strict=True)]
@@ -1931,18 +1934,24 @@ def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float]:
     n = sum(cols)
     r1 = sum(first)
     if len(kept) < 2 or r1 in (0, n):
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0
     if len(kept) == 2:
         estimate = _estimate_2x2(r1, cols[kept[0]], cols[kept[1]])
-        return estimate, 0.0
+        return estimate, estimate, 0.0
     r2 = n - r1
     widths = [min(cols[j], r1) - max(0, cols[j] - r2) for j in kept]
-    spans: list[int] = []
-    for j, w in zip(kept, widths, strict=True):
-        c = cols[j]
-        sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
-        spans.append(min(w, 2 * math.ceil(_SPAN_SD * sd)))
-    return _fisher_plan(spans).estimate, _fisher_plan(widths).certain
+    chi2 = sum(
+        (first[j] - cols[j] * r1 / n) ** 2 / (cols[j] * r1 * r2 / n**2) for j in kept
+    )
+    estimates: list[float] = []
+    for reach in (_SPAN_SD + math.sqrt(chi2), _SPAN_SD):
+        spans: list[int] = []
+        for j, w in zip(kept, widths, strict=True):
+            c = cols[j]
+            sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
+            spans.append(min(w, 2 * math.ceil(reach * sd)))
+        estimates.append(_fisher_plan(spans).estimate)
+    return estimates[0], estimates[1], _fisher_plan(widths).certain
 
 
 def _fisher(table: IntArray, side: Alternative, budget: _Budget) -> FisherExact:
@@ -2018,39 +2027,51 @@ def fisher_exact(
     tables at most as probable form both ends of the range; their bounds are found
     by bisection and each end is summed outward in blocks until a geometric bound
     of the rest falls below 1e-17 of the sum: about 10 to 40 standard deviations of
-    terms (n = 1e6: about 1 ms; n = 1e12: about 0.1 s).
+    terms, each from the exact ratio of consecutive terms between Loader anchors
+    every 256 terms (_LogPmf.run). Balanced margins are answered up to about n =
+    1e14 within the work limit below (n = 1e12: about 0.2 s), unbalanced ones
+    further; beyond, the test is refused having spent at most the limit.
 
     2 x c, c >= 3: a table is its first row b (each b_j in the range its column
     allows, with a fixed total), and its log probability is a sum over the columns
-    of concave functions of b_j. The columns are split in two sides. The list side
-    (the narrowest columns, as many as fit 64 MB) lists every first row of its
-    columns, grouped by total and sorted by log probability, with running sums of
-    the masses. The network side takes the other columns one at a time in the
-    manner of Mehta & Patel's (1983, Journal of the American Statistical
-    Association 78: 427-434) network algorithm: for each partial first row the
-    largest and smallest log probability of any completion are known (the largest
-    by the greedy choice of increments, the log probabilities being concave in
-    each count; the smallest at a vertex of the box, or read off the list), so the
-    children of a partial row whose every completion counts are summed at once
-    (the mass of all completions is binomial; such children form both ends of a
-    concave sequence, found by bisection), children whose every completion is
-    more probable are dropped, and only the others are carried on. After the last
+    of concave functions of b_j. The columns are split in two sides, as the work
+    estimate from the margins is lowest within the limits. The list side (the
+    narrowest columns) lists every first row of its columns, grouped by total and
+    sorted by log probability, with running sums of the masses. The network side
+    takes the other columns one at a time in the manner of Mehta & Patel's (1983,
+    Journal of the American Statistical Association 78: 427-434) network
+    algorithm: for each partial first row the largest and smallest log
+    probability of any completion are known (the largest by the greedy choice of
+    increments, the log probabilities being concave in each count; the smallest
+    at a vertex of the box, or read off the list), so the children of a partial
+    row whose every completion counts are summed at once (the mass of all
+    completions is binomial; such children form both ends of a concave sequence,
+    found by bisection), children whose every completion is more probable are
+    dropped, and only the others are carried on. A column with more than 4096
+    children per node keeps, per node, the children whose mass is within 2^-1100
+    of the largest (the rest is below 1e-320 of the total). After the last
     network column every partial row left is joined with the list (meet in the
     middle, Horowitz & Sahni 1974): the completions that count are a prefix of
     the sorted row of its remaining total, found by bisection, and their mass is
     that prefix's running sum. Only this last comparison decides a table that
     lies near the threshold, and it compares the table's own log probability.
+    Two shortcuts are exact: p is 1 when the most probable table counts, and 0
+    when the number of tables times P_obs (1 + 1e-7) is below 2^-1075.
 
     Cost. The work is counted in units of about a nanosecond on the build machine
     (array elements times the passes over them; machine-independent), and the
     memory in bytes of every array the search may hold at once, both before the
-    step that spends them. A test may take 1e9 units (about a second) and 160 MB;
-    the list and the bounds, whose cost is known from the margins, are checked
-    before anything is allocated, and the rest as the search goes: a test that
-    would pass the limit raises ValueError having spent at most the limit. The
-    work grows with the number of columns, with n and with how far the table lies
-    from independence (tests/stats/test_fisher_cost.py and the before and after
-    table in DECISIONS.md D107).
+    step that spends them. A test may take 1e9 units (about a second) and 160 MB.
+    The bytes, and the work that does not depend on pruning (the list and the
+    bounds), follow from the margins and are checked before anything is
+    allocated; the rest is counted as the search goes, so a test that would pass
+    the limit raises ValueError having spent at most the limit. No array of the
+    list is longer than its longest row when it is kept row by row (one large
+    array per test would leave the allocator's caches of freed blocks to grow).
+    The work grows with the number of columns, with n and with how far the table
+    lies from independence: 2 x 8 at n = 300 takes about 0.1 s, 2 x 10 at n = 200
+    0.1 to 0.4 s; 2 x 10 at n = 1,000, 2 x 6 at n = 10,000 and 2 x 4 at n =
+    10,000 far from independence are refused (tests/stats/test_fisher_cost.py).
 
     Columns without counts do not change the test and are left out; a table with
     one non-empty column or one empty row has a single table with its margins, p 1
@@ -2142,20 +2163,22 @@ def _pairwise(
             pairs.append((i, j, columns, sub))
     # The tests, cheapest first by their estimated work, each distinct table once;
     # the order depends on the tables only, never on the order of the rows.
-    tests: dict[tuple[object, ...], tuple[float, float, IntArray, Alternative]] = {}
+    tests: dict[
+        tuple[object, ...], tuple[float, float, float, IntArray, Alternative]
+    ] = {}
     for _, _, columns, sub in pairs:
         if len(columns) < 2:
             continue
         used: Alternative = side if sub.shape == (2, 2) else "two-sided"
         key = _pair_key(sub, used)
         if key not in tests:
-            estimate, certain = _fisher_work(sub, used)
-            tests[key] = (estimate, certain, sub, used)
+            estimate, least, certain = _fisher_work(sub, used)
+            tests[key] = (estimate, least, certain, sub, used)
     results: dict[tuple[object, ...], float | None] = {}
     for key in sorted(tests, key=lambda k: (tests[k][0], repr(k))):
-        estimate, certain, sub, used = tests[key]
+        _, least, certain, sub, used = tests[key]
         remaining = budget.limit - budget.spent
-        if certain > remaining or estimate > _PAIRWISE_ESTIMATE_LIMIT:
+        if certain > remaining or least > _PAIRWISE_ESTIMATE_LIMIT:
             results[key] = None
             continue
         one = _Budget(min(_FISHER_WORK_LIMIT, remaining))
@@ -2248,14 +2271,17 @@ def pairwise_fisher(
     pair's V interval, at ``conf_level``. ``p_adjust_method`` adjusts the p-values
     of the pairs that have a test (``p_adjust``).
 
-    Cost. The tests of one table share a budget of 2e9 work units (about two
+    Cost. The tests of one table share a budget of 1.6e9 work units (about two
     seconds; fisher_exact describes the units), and each test is also held to
     fisher_exact's own limit. They are computed cheapest first by their estimated
-    work (an upper bound from the margins), each distinct table once (a table
-    and its permutations have the same p); a test whose certain work exceeds what
-    is left, or which would pass what is left, is not computed. So the call
-    returns after at most about two seconds of tests on any table, and which pairs
-    are tested depends on the tables only, never on the order of the rows.
+    work (from the margins and the observed table: _fisher_work), each distinct
+    table once (a table and its permutations have the same p). A test is not
+    computed when its certain work exceeds what is left, when its estimate is
+    above 1e14 units (1e5 times a test's limit; the largest estimate of a test
+    answered in the tables measured is 2.5e12), or when it would pass what is
+    left. So the call returns after at
+    most about two seconds of tests on any table, and which pairs are tested
+    depends on the tables only, never on the order of the rows.
 
     A pair whose table keeps one column has no test (fisher.test stops; ggstatsplot
     loses the whole pairwise table silently, edge_bar_degenerate-single-x), and a
