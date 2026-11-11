@@ -2923,10 +2923,10 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
     return notes
 
 
-def _declare_order(library: Library, name: str, order: Sequence[str]) -> str:
+def declare_order(library: Library, name: str, order: Sequence[str]) -> str:
     """A statement that declares column ``name`` (text) on the categories
     ``order``, in ``library``: a pandas Categorical, a polars Enum, an ordered
-    pyarrow dictionary."""
+    pyarrow dictionary (also to leave out unused categories)."""
     shown = list(order)
     if library == "polars":
         return (
@@ -2957,7 +2957,7 @@ def _table_natural_order_note(column: TableLevels, library: Library) -> str:
         "pyarrow": "an ordered pyarrow dictionary",
     }[library]
     if len(f"{list(natural)!r}") <= _MAX_EXAMPLE:
-        how = f"declare the column as {what} in that order: " + _declare_order(
+        how = f"declare the column as {what} in that order: " + declare_order(
             library, column.name, natural
         )
     else:

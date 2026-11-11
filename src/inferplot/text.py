@@ -2949,6 +2949,18 @@ def _share_text(share: float, digits: int) -> tuple[str, bool]:
     return r_number_text(rounded), abs(rounded - share) > 1e-12
 
 
+def _bars_shares_text(settings: Settings, empty: Sequence[str], k: int) -> str:
+    """What the bars' tests compare against (:func:`_shares_text`), naming the
+    levels of x without observations that they count as categories (review
+    B18): "equal shares of 3 categories, 'waitlist' among them with no
+    observations"."""
+    shares = _shares_text(settings)
+    if not empty:
+        return shares
+    names = _and_join([repr(level) for level in empty])
+    return f"{shares} of {k} categories ({names} with no observations)"
+
+
 def _shares_text(settings: Settings) -> str:
     """What the goodness-of-fit tests compare against: "equal shares" or
     "expected shares 0.5, 0.25 and 0.25" (``ratio``, in the order of the
@@ -3049,6 +3061,8 @@ def contingency_tests_sentence(
     y: str | None,
     settings: Settings,
     name_limit: int = APA_NAME_LIMIT,
+    empty: Sequence[str] = (),
+    k: int = 0,
 ) -> str | None:
     """One sentence on the bars' proportion tests and the pairwise tests, or
     None where there are neither (no y): how many are below .05, the method
@@ -3071,7 +3085,8 @@ def contingency_tests_sentence(
         )
         parts.append(
             f"Goodness-of-fit tests within each level of {_short(y, name_limit)} "
-            f"(shares of {sx} against {_shares_text(settings)}, unadjusted): "
+            f"(shares of {sx} against {_bars_shares_text(settings, empty, k)}, "
+            "unadjusted): "
             f"p < .05 in {below} of {_plural(len(tested), 'bar')}"
         )
     if pairwise:
@@ -3113,13 +3128,18 @@ def contingency_apa(
     y: str | None,
     n_obs: int,
     settings: Settings,
+    empty: Sequence[str] = (),
+    k: int = 0,
 ) -> str:
     """``result.text.apa`` of barstats: :func:`contingency_sentence`, then
-    :func:`contingency_tests_sentence` where there are bar or pair tests."""
+    :func:`contingency_tests_sentence` where there are bar or pair tests
+    (``empty``: the levels of x without observations, of ``k``)."""
     main = contingency_sentence(
         test, effect_size, x=x, y=y, n_obs=n_obs, settings=settings
     )
-    tests = contingency_tests_sentence(bars, pairwise, x=x, y=y, settings=settings)
+    tests = contingency_tests_sentence(
+        bars, pairwise, x=x, y=y, settings=settings, empty=empty, k=k
+    )
     return main if tests is None else f"{main} {tests}"
 
 
@@ -3287,7 +3307,7 @@ def contingency_alt_text(
         )
         tests_part = (
             "the p-value above each bar tests its shares against "
-            f"{_shares_text(settings)}"
+            f"{_bars_shares_text(settings, _empty_levels(levels, cells), len(levels))}"
             if bar_tests
             else ""
         )
@@ -3315,6 +3335,12 @@ def contingency_alt_text(
                 return text
     # Still too long: the bars and the second sentence go, the result stays whole.
     return f"{head}. {result}"
+
+
+def _empty_levels(levels: Sequence[str], cells: Sequence[Cell]) -> list[str]:
+    """The levels of x without observations (every cell of theirs 0)."""
+    held = {cell.level for cell in cells if cell.count > 0}
+    return [level for level in levels if level not in held]
 
 
 def contingency_texts(
@@ -3367,6 +3393,8 @@ def contingency_texts(
             y=y,
             n_obs=n_obs,
             settings=settings,
+            empty=_empty_levels(levels, cells),
+            k=len(levels),
         ),
         alt_text=contingency_alt_text(
             x=x,

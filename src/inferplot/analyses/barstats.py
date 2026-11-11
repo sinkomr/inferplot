@@ -48,7 +48,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from inferplot import stats
-from inferplot._data import TableData, TableLevels, read_table, table_notes
+from inferplot._data import (
+    TableData,
+    TableLevels,
+    declare_order,
+    read_table,
+    table_notes,
+)
 from inferplot._validate import (
     canonical_type,
     check_alternative,
@@ -74,7 +80,7 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
-from inferplot.text import contingency_texts, zero_p_note
+from inferplot.text import contingency_texts, r_number_text, zero_p_note
 
 __all__ = ["barstats"]
 
@@ -703,12 +709,14 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
             rest = (
                 f"; {'it stays a level' if one else 'they stay levels'} of both "
                 "measurements in McNemar's test, with a count of 0."
+                + (_empty_in_bar_tests(table, args, column) if role == "x" else "")
             )
         elif role == "x":
             rest = (
                 f"; {'it stays' if one else 'they stay'} in the legend with no share "
                 "of any bar, and the chi-square test leaves the empty "
                 f"{'row' if one else 'rows'} out (as ggstatsplot does)."
+                + _empty_in_bar_tests(table, args, column)
             )
         else:
             rest = (
@@ -718,6 +726,44 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
             )
         notes.append(start + rest)
     return notes
+
+
+def remove_unused(table: TableData, column: TableLevels) -> str:
+    """The statement that leaves the unused categories of ``column`` out, in the
+    frame's own library (review B18)."""
+    if table.library == "pandas":
+        name = column.name
+        return f"data[{name!r}] = data[{name!r}].cat.remove_unused_categories()"
+    return declare_order(table.library, column.name, column.present)
+
+
+def _empty_in_bar_tests(table: TableData, args: _Args, column: TableLevels) -> str:
+    """What declared empty levels of x do to the bars' proportion tests (review
+    B18): each bar's goodness-of-fit test counts them as categories expected
+    to hold their share of the bar, so a bar's p can be small although its
+    drawn shares are close; and how to leave them out."""
+    if table.y_levels is None:
+        return ""
+    k = len(column.levels)
+    one = len(column.empty) == 1
+    if args.ratio is None:
+        share = f"1/{k} of the bar" if one else f"1/{k} of the bar each"
+    else:
+        shares = [
+            r_number_text(args.ratio[column.levels.index(level)])
+            for level in column.empty
+        ]
+        share = f"the share {', '.join(shares)} of the bar"
+        if not one:
+            share = f"the shares {', '.join(shares)} of the bar"
+    return (
+        f" Each bar's proportion test, though, counts "
+        f"{'it as a category' if one else 'them as categories'} expected to hold "
+        f"{share} ({k} categories in all), so the p above a bar can be small "
+        "although its drawn shares are close. If "
+        f"{'it is not a possible answer' if one else 'they are not possible answers'}"
+        f", leave {'it' if one else 'them'} out: {remove_unused(table, column)}."
+    )
 
 
 def _no_effect_warnings(table: TableData, args: _Args, parts: _Parts) -> list[str]:

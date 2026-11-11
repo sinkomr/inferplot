@@ -275,6 +275,7 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `small_n` | warning | A group, the complete subjects, the sample or the pairs number fewer than 5. |
 | `small_expected` | warning | C: expected counts too small for the chi-square approximation (one below 1, or over 20% below 5). |
 | `pairs_without_test` | info | C: a pair of levels has no Fisher test; the others are adjusted among themselves. |
+| `empty_level_tested` | warning | C: a level of x without observations counts as a category in the bars' drawn tests. |
 | `heavy_ties` | warning | Nonparametric: over 25% of the ranked values are ties. |
 | `rows_dropped` | info | Rows or subjects were dropped for missing values; a warning when over half were. |
 | `pairs_hidden` | info | Some computed pairs have no bracket (`pairwise_display`). |

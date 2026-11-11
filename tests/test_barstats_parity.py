@@ -411,7 +411,12 @@ def _unlibrary(result: StatsResult) -> StatsResult:
     """The result with its recipes cut: they are written in each frame's own
     library (review B14)."""
     warnings = tuple(
-        re.sub(r"(in their names), .*", r"\1, ...", w) for w in result.warnings
+        re.sub(
+            r"(leave (?:it|them) out): .*",
+            r"\1: ...",
+            re.sub(r"(in their names), .*", r"\1, ...", w),
+        )
+        for w in result.warnings
     )
     return dataclasses.replace(result, warnings=warnings)
 
@@ -725,9 +730,20 @@ def test_round_trips_frames_and_printing(name: str) -> None:
 
 def test_checks_on_the_fixtures() -> None:
     codes = {name: sorted({i.code for i in result_of(name).check()}) for name in NAMES}
-    allowed = {"small_expected", "rows_dropped", "pairs_without_test"}
+    allowed = {
+        "small_expected",
+        "rows_dropped",
+        "pairs_without_test",
+        "empty_level_tested",
+    }
     assert set().union(*codes.values()) <= allowed
     assert [n for n, c in codes.items() if "pairs_without_test" in c] == [SINGLE_X]
+    # A declared level of x without observations, counted in the bars' drawn
+    # tests (review B18).
+    assert sorted(n for n, c in codes.items() if "empty_level_tested" in c) == [
+        "ggbarstats-edge_bar_paired_unequal-declared-parametric",
+        "ggbarstats-edge_bar_zero_cell-declared-parametric",
+    ]
     assert sorted(n for n, c in codes.items() if "rows_dropped" in c) == [
         "ggbarstats-edge_bar_missing-counts-parametric",
         "ggbarstats-edge_bar_missing-oneway-parametric",

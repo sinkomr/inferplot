@@ -448,11 +448,13 @@ def test_empty_declared_levels_are_worded_by_design() -> None:
         }
     )
     two_way = warnings_of(data, "x", "y")
-    assert (
+    (empty_x,) = [w for w in two_way if w.startswith("The declared level 'e'")]
+    assert empty_x.startswith(
         "The declared level 'e' of 'x' has no observations; it stays in the legend "
         "with no share of any bar, and the chi-square test leaves the empty row out "
-        "(as ggstatsplot does)."
-    ) in two_way
+        "(as ggstatsplot does). Each bar's proportion test, though, counts it as a "
+        "category expected to hold 1/3 of the bar (3 categories in all)"
+    )
     assert (
         "The declared level 'none' of 'y' has no observations, so it has no bar, and "
         "the chi-square test leaves the empty column out (as ggstatsplot does)."
@@ -628,7 +630,8 @@ def test_results_agree_across_backends(backend: Backend) -> None:
 
 
 def _unlibrary(warning: str) -> str:
-    return re.sub(r"(in their names), .*", r"\1, ...", warning)
+    warning = re.sub(r"(in their names), .*", r"\1, ...", warning)
+    return re.sub(r"(leave (?:it|them) out): .*", r"\1: ...", warning)
 
 
 def test_cell_percentages_are_shares_of_their_bar() -> None:

@@ -769,13 +769,65 @@ def _pairs_without_test(result: StatsResult) -> Issue | None:
     )
 
 
+def _empty_level_tested(result: StatsResult) -> Issue | None:
+    """barstats: a declared level of x without observations counts as a
+    category in each bar's proportion test, whose p is drawn above the bar
+    (review B18): the p can be tiny although the drawn shares are close."""
+    if result.design != "contingency" or result.y is None:
+        return None
+    if not result.settings.proportion_test:
+        return None
+    tested = [bar for bar in result.bars if bar.test is not None]
+    if not tested:
+        return None
+    k = len(result.levels)
+    # result.counts holds a row per level of x.
+    empty = [
+        level for level, row in zip(result.levels, result.counts, strict=True)
+        if sum(row) == 0
+    ]  # fmt: skip
+    if not empty:
+        return None
+    one = len(empty) == 1
+    names = ", ".join(repr(level) for level in empty)
+    labels = ", ".join(
+        f"{bar.level!r}: {text}"
+        for bar, text in zip(result.bars, result.text.bar_labels, strict=True)
+        if bar.test is not None and text
+    )
+    expected = (
+        f"equal shares, 1/{k} of each bar"
+        if result.settings.ratio is None
+        else "the shares ratio= gives"
+    )
+    return Issue(
+        code="empty_level_tested",
+        severity="warning",
+        message=(
+            f"The level{'' if one else 's'} {names} of {result.x!r} "
+            f"{'has' if one else 'have'} no observations, and each bar's proportion "
+            f"test counts {'it' if one else 'them'} as a category expected to hold "
+            f"{expected}: the p-values above the bars ({labels}) test {k} "
+            f"categories, {len(empty)} of them empty, so they can be small although "
+            "the drawn shares are close."
+        ),
+        fix=(
+            "If the empty level is not a possible answer, leave it out of the data "
+            "(pandas: .cat.remove_unused_categories(); result.warnings shows the "
+            "call for your frame) and analyse again; if it is, report the bars' "
+            "tests as tests against all the categories."
+        ),
+    )
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, small_expected, heavy_ties,
     infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
-    pairs_without_test, pairwise_conf_level."""
+    pairs_without_test, pairwise_conf_level, empty_level_tested."""
     found = (
         _small_n(result),
         _small_expected(result),
+        _empty_level_tested(result),
         _heavy_ties(result),
         _infinite_effect_size(result),
         _estimate_outside_interval(result),
