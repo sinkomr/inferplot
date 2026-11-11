@@ -30,7 +30,11 @@ exactly rounded, as R's long-double sum does): their relative error is a few uni
 of 2^-53 except near independence, where it is at most about 2^-52 sum |x - E| /
 chi^2 (absolute error about 2^-51 n), far below every printed digit; R's order is
 kept so that a statistic on a decimal tie prints as R prints it (edge_bar_rounding,
-bar g16: 7.625 + 1 ulp, printed 7.63). Fisher's test works with log probabilities
+bar g16: 7.625 + 1 ulp, printed 7.63). Where the exact value is 0, decided in
+rational arithmetic on the counts and on ``ratio`` as written, it is 0: an exactly
+independent table, an exact fit, a bias-corrected phi^2 of 0 or below (R's order
+leaves noise there: "V = 3.95e-09" for [[0, 1], [5, 4]]).
+Fisher's test works with log probabilities
 in Loader's (2000) saddle-point form, whose absolute error does not grow with the
 counts (fisher_exact).
 """
@@ -41,6 +45,7 @@ import dataclasses
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any, Final, TypeAlias
 
 import numpy as np
@@ -56,6 +61,7 @@ from inferplot.stats.noncentral import (
 )
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import Alternative, check_alternative
+from inferplot.stats.written import READ_ULPS, written_values
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
@@ -95,6 +101,14 @@ _MAX_TOTAL: Final = 2**53
 # R's chisq.test refuses probabilities whose sum is further than this from 1
 # (sqrt(.Machine$double.eps)).
 _SUM_TOLERANCE: Final = math.sqrt(2.0**-52)
+# A positive corrected phi^2 within this many times (sqrt(chi^2 n) + chi^2 + 2 df)
+# / n of 0 is checked in exact arithmetic (about 500 times its floating-point error
+# bound; _corrected_phi2_vanishes).
+_PHI2_SCREEN: Final = 2.0**-40
+# A share of ratio without a decimal reading (D105) is read as the fraction with
+# the smallest denominator up to this within READ_ULPS units in its last place
+# (1 / 3, 2 / 7); two such fractions are at least 1e-12 apart, so it is unique.
+_MAX_SHARE_DENOMINATOR: Final = 10**6
 # The per-bar tests are always two-sided 95% intervals (ggstatsplot's
 # onesample_data() passes neither alternative nor conf.level).
 _BAR_CONF_LEVEL: Final = 0.95
@@ -307,13 +321,36 @@ def _check_margins(counts: IntArray) -> None:
         )
 
 
+def _margins(counts: IntArray) -> tuple[list[list[int]], list[int], list[int], int]:
+    """The table, its row and column sums and its total as Python integers."""
+    table = [[int(v) for v in row] for row in counts.tolist()]
+    rows = [sum(row) for row in table]
+    cols = [sum(col) for col in zip(*table, strict=True)]
+    return table, rows, cols, sum(rows)
+
+
+def _exactly_independent(counts: IntArray) -> bool:
+    """Whether every count equals its expected count exactly (n x_ij = R_i C_j in
+    integers), so that Pearson's statistic is exactly 0."""
+    table, rows, cols, n = _margins(counts)
+    return all(
+        n * v == rows[i] * cols[j]
+        for i, row in enumerate(table)
+        for j, v in enumerate(row)
+    )
+
+
 def _independence(counts: IntArray) -> tuple[float, FloatArray]:
-    """Pearson's statistic in R's order of operations, and the expected counts."""
+    """Pearson's statistic in R's order of operations, and the expected counts;
+    exactly 0 where every count equals its expected count (``_exactly_independent``),
+    where R's order leaves a rounding remainder (1.9e-20 at counts of 1e10)."""
     x = counts.astype(np.float64)
     rows = x.sum(axis=1)
     cols = x.sum(axis=0)
     n = float(x.sum())
     expected = np.outer(rows, cols) / n
+    if _exactly_independent(counts):
+        return 0.0, expected
     return _chisq_sum((x - expected) ** 2 / expected), expected
 
 
@@ -362,6 +399,31 @@ def _cramers_v_from(chisq: float, n: int, r: int, c: int, *, adjust: bool) -> fl
     return min(1.0, math.sqrt(chisq / n / (min(r, c) - 1)))
 
 
+def _corrected_phi2_vanishes(counts: IntArray, chisq: float) -> bool:
+    """Whether a positive floating-point corrected phi^2, chi^2 / n - df / (n - 1),
+    is rounding noise: its exact value on the counts is 0 or below.
+
+    chi^2 = n (S - 1) with S = sum x_ij^2 / (R_i C_j), so phi^2 <= 0 exactly when
+    (S - 1)(n - 1) <= df, decided in rational arithmetic. Only values within
+    ``_PHI2_SCREEN`` (sqrt(chi^2 n) + chi^2 + 2 df) / n of 0 are checked: the
+    floating-point phi^2 is off by at most about 2^-49 times that (the expected
+    counts' rounding times sum |x - E| <= sqrt(chi^2 n), and the roundings of the
+    terms), so every value beyond is positive in exact arithmetic too.
+    """
+    table, rows, cols, n = _margins(counts)
+    df = (len(rows) - 1) * (len(cols) - 1)
+    phi2 = chisq / n - df / (n - 1)
+    screen = _PHI2_SCREEN * (math.sqrt(chisq * n) + chisq + 2.0 * df) / n
+    if not 0.0 < phi2 <= screen:
+        return False
+    common = math.lcm(*cols)
+    s = Fraction(0)  # S times common
+    for row, r in zip(table, rows, strict=True):
+        scaled = (v * v * (common // c) for v, c in zip(row, cols, strict=True))
+        s += Fraction(sum(scaled), r)
+    return (s / common - 1) * (n - 1) <= df
+
+
 def cramers_v(
     table: CountTable,
     *,
@@ -383,9 +445,12 @@ def cramers_v(
     P(X' <= chi^2) = 1 - alpha / 2 and alpha / 2; "greater" gives [low, 1], "less"
     [0, high]; a bound is 0 where no lambda > 0 solves) and puts each bound through
     the same formula with lambda in place of chi^2, capped at 1. The adjusted upper
-    bound can be 0 where phi^2 at the upper lambda is below the correction. The
-    roots are the accurate ones: effectsize's search stops short on some bounds
-    (DECISIONS D99; up to 0.00096 in a fixture bound). ``adjust=False`` gives
+    bound can be 0 where phi^2 at the upper lambda is below the correction. V is 0
+    where phi^2 is exactly 0 or below on the counts (``_corrected_phi2_vanishes``:
+    [[0, 1], [5, 4]] has phi^2 = 1/9 - 1/9, where R's order of operations leaves
+    V = 3.95e-09); its interval still inverts chi^2. The roots are the accurate
+    ones: effectsize's search stops short on some bounds (DECISIONS D99; up to
+    0.00096 in a fixture bound). ``adjust=False`` gives
     Cramer's (1946) V = sqrt(chi^2 / (n (min(r, c) - 1))).
 
     Raises:
@@ -407,8 +472,11 @@ def cramers_v(
     statistic, _ = _independence(counts)
     df = (r - 1) * (c - 1)
     low, high = chi2_ncp_interval(statistic, df, conf_level=level, alternative=side)
+    estimate = _cramers_v_from(statistic, n, r, c, adjust=adjust)
+    if adjust and _corrected_phi2_vanishes(counts, statistic):
+        estimate = 0.0
     return EffectSizeCI(
-        estimate=_cramers_v_from(statistic, n, r, c, adjust=adjust),
+        estimate=estimate,
         conf_low=_cramers_v_from(low, n, r, c, adjust=adjust),
         conf_high=_cramers_v_from(high, n, r, c, adjust=adjust),
         conf_level=level,
@@ -591,11 +659,43 @@ def _check_ratio(ratio: Probabilities | None, k: int) -> FloatArray:
     return p
 
 
-def _goodness_of_fit(counts: IntArray, p: FloatArray) -> GoodnessOfFit:
+def _shares_as_written(ratio: Probabilities | None, p: FloatArray) -> list[Fraction]:
+    """The shares of ``ratio`` as written, exactly, for deciding an exact fit.
+
+    ``None`` is exactly 1 / k each. A share given as a double is read as the
+    decimal it stands for (``written_values``, DECISIONS D105: 0.32 is 8/25);
+    one without such a reading, as the fraction with the smallest denominator up
+    to ``_MAX_SHARE_DENOMINATOR`` within ``READ_ULPS`` units in its last place
+    (1 / 3 computed in binary is a third, so equal shares written as 1 / k are
+    1 / k); otherwise as the double itself.
+    """
+    if ratio is None:
+        return [Fraction(1, p.size)] * p.size
+    out: list[Fraction] = []
+    for value, reading in zip(p.tolist(), written_values(p), strict=True):
+        if reading == Fraction(value):
+            simple = Fraction(value).limit_denominator(_MAX_SHARE_DENOMINATOR)
+            if abs(simple - reading) <= READ_ULPS * Fraction(math.ulp(value)):
+                reading = simple
+        out.append(reading)
+    return out
+
+
+def _goodness_of_fit(
+    counts: IntArray, p: FloatArray, shares: Sequence[Fraction]
+) -> GoodnessOfFit:
+    """The test in R's order of operations; exactly 0 where every count equals n
+    times its share as written (``_shares_as_written``), where R's order leaves a
+    rounding remainder (1.13e-31 for 8, 2, 7, 8 against 0.32, 0.08, 0.28, 0.32)."""
     x = counts.astype(np.float64)
     n = float(x.sum())
     expected = n * p
-    statistic = _chisq_sum((x - expected) ** 2 / expected)
+    total = int(counts.sum())
+    exact_fit = all(
+        total * share == int(v)
+        for v, share in zip(counts.tolist(), shares, strict=True)
+    )
+    statistic = 0.0 if exact_fit else _chisq_sum((x - expected) ** 2 / expected)
     df = counts.size - 1
     return GoodnessOfFit(
         statistic=statistic,
@@ -619,7 +719,10 @@ def goodness_of_fit(
     doubles nearest 1 / k). It is validated as R validates it and never rescaled: a
     sum further than sqrt(2^-52) from 1 and a wrong length raise, as in R; a zero
     probability raises too (R accepts it and returns an infinite or NaN statistic).
-    Every category is kept, a zero count included.
+    Every category is kept, a zero count included. Counts that fit the shares as
+    written exactly (x_i = n p_i for every i, decided in rational arithmetic on
+    ``ratio`` read as ``_shares_as_written`` says) give chi^2 = 0 and p = 1, where
+    R's order of operations can leave a rounding remainder.
 
     Raises:
         ValueError: fewer than 2 categories, no counts at all, an invalid ratio, or
@@ -629,7 +732,7 @@ def goodness_of_fit(
     p = _check_ratio(ratio, x.size)
     if int(x.sum()) == 0:
         raise ValueError("a goodness-of-fit test needs at least one count")
-    return _goodness_of_fit(x, p)
+    return _goodness_of_fit(x, p, _shares_as_written(ratio, p))
 
 
 def _pearsons_c_from(chisq: float, n: int) -> float:
@@ -699,6 +802,7 @@ def proportion_tests(
     counts = _as_counts(table)
     k, c = counts.shape
     p = None if k < 2 else _check_ratio(ratio, k)
+    shares = [] if p is None else _shares_as_written(ratio, p)
     out: list[BarTest] = []
     for j in range(c):
         column = counts[:, j]
@@ -719,7 +823,7 @@ def proportion_tests(
                 )
             )
             continue
-        test = _goodness_of_fit(column, p)
+        test = _goodness_of_fit(column, p, shares)
         out.append(
             BarTest(
                 column=j,
