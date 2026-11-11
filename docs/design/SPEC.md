@@ -553,7 +553,9 @@ Fisher's exact test (`fisher.test`) between every two levels of `x` that hold da
 group1, then group2, which differs when the levels are declared in another order;
 "group1" is the earlier level in both, so every pair's numbers are equal: D128), each on its own 2 x
 (levels of y the pair holds) table: two-sided p sums the tables at most as probable
-as the observed one times 1 + 1e-7; `alternative` "greater"/"less" changes only 2 x 2
+as the observed one times 1 + 1e-7 for a 2 x 2 table and times 1 + 3.45e-7 for a
+larger one (R's routine for larger tables allows more: probe-fisherties pins it
+between 3.44838e-7 and 3.45432e-7, D129); `alternative` "greater"/"less" changes only 2 x 2
 tables. `p_adjust_method` over all k(k - 1)/2 pairs; labels as betweenstats' (`p_Holm-adj.`,
 `p_FDR-adj.` for BH and fdr, `p_unadj.` for none). Each pair also carries Cramér's V
 (adjusted; CI at `conf_level`, following `alternative` as the main V's does: mtcars-cyl-am-greater, 4 against 8, [0.17, 1]). Computed only with `results_subtitle`,
@@ -582,7 +584,8 @@ share of its bar, (count / bar total) x 100, rounded to `digits_perc` by R's
 `round()` (R >= 4.0.0, `?Round`: at 0 digits halves to even; at 1 digit or more the
 nearer of the two decimal candidates as their distances come out in doubles, the
 even one on equal distances: 12.5% -> "12%", 6.25 -> "6.2" at 1 digit, (1/2000) x 100
--> "0" at 1 digit. Not Python's `round()`, which decides on the exact binary value
+-> "0" at 1 digit; x itself when d + log10(2) (e + 1/2) > 15, e the binary exponent
+of |x|, which no percent label reaches: probe-roundbig, D130. Not Python's `round()`, which decides on the exact binary value
 and differs on 98 of the 1,000 one-digit ties of k/2000; `inferplot.text.r_round`,
 probe-round, D127) and printed without trailing zeros
 ("50%", "33.3%"); "counts" the count with a thousands comma; "both" `"<count>\n(<p>%)"`.
@@ -1291,7 +1294,12 @@ in plain words, never mathtext source.
   differences of 2^-54), `probe-trimcibt` (trimcibt in three writings at 200, 2,000
   and 20,000 resamples, with the traced T*), `probe-bartables` (Cramér's V at 19 to
   60 df; exact zeros), `probe-round` (R's `round()` at decimal ties and ggbarstats'
-  cell labels). They are hashed in the
+  cell labels). Review round 4 (run 42981115556): `probe-fisherties` (`fisher.test`
+  with default arguments and with workspace = 2e7, hybrid = FALSE, on 194 tables of
+  2 x 3, 2 x 4 and 3 x 3 with one other table whose probability lies between
+  1 +/- 1.8e-10 and 1 +/- 1e-5 times the observed one's, and ggbarstats' pairwise p
+  on two of them), `probe-roundbig` (`round(x, d)` for 482 values from 1e6 to 1e17,
+  d 1 to 8). They are hashed in the
   manifest (`probes`) and checked like the fixtures; tests read them with
   `load_probes()` / `probe()` and `OracleProbe.section()` / `rows()`.
 - Both sides read CSVs the same way: only empty fields are missing, and R sorts strings

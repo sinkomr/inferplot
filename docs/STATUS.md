@@ -565,7 +565,8 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   labels: at least one of 8 bars flags p < .05 in 37% of null data. Refusals: up to
   23% (sparse 2 x 2), 12% (Bowker, 30 pairs). One seed changed under D115's rule
   (the lead recounted the draw without inferplot)
-- [ ] end-of-phase review of Phase 5 (two fresh reviewers). Documents, release and
+- [x] end-of-phase review of Phase 5 (two fresh reviewers; every finding fixed but
+  the low open items named below). Documents, release and
   evaluation half done (2026-11-11; scripts in `reviewP5A/`): the user documents are
   accurate (quick start, every code block and example re-run, 29 check codes,
   signatures and defaults, 46 likely first-user mistakes, every number of
@@ -611,9 +612,11 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     2,000 levels of y `ip.analyze.barstats` takes 5 to 160 s in the per-bar
     intervals and the alt text (a chart of 2,000 bars is refused anyway); on very
     large tables only some pairs get a Cramér's V.
-  - [ ] M2: R may count near-tied tables differently beyond 2 x 2 (three 2 x 3 tables
-    where p would change by about 3%). Asked of R in oracle round 4, with R's
-    `round()` above 1e9 (L5; not reachable from percent labels).
+  - [x] M2: asked of R (oracle round 4, 194 tables): beyond 2 x 2 R counts a table
+    whose probability is up to 1 + 3.45e-7 times the observed one's (1e-7 for 2 x 2).
+    inferplot's p was lower than R's on 45 of 186 probe tables, by 0.4% to 7.9%; it
+    now follows R on all 186 (D129). L5: R's `round()` keeps a large x by its binary
+    exponent; `r_round` follows (D130; no percent label is affected).
   - [ ] L6 = C7's open item (bounds for a chi-square between 1e7 and 1e9).
 - [ ] the owner runs the agent evaluation (each run needs their go-ahead)
 - [ ] the owner publishes: TestPyPI, then PyPI (`docs/RELEASING.md`)
