@@ -152,14 +152,13 @@ def test_the_paired_design_is_analyzed() -> None:
     )
 
 
-def test_render_checks_its_arguments_then_is_not_implemented() -> None:
+def test_render_checks_its_arguments() -> None:
     result = bc.assembled(bc.BY_NAME["ggbarstats-mtcars-cyl-am-parametric"])
-    text = message(NotImplementedError, lambda: draw(result))
-    assert text.startswith("render.barstats(): drawing a barstats result is not")
-    # A copy without observations keeps the counts: still a whole result.
+    # A copy without observations keeps the counts: still a whole result, and
+    # drawn (tests/render/test_barstats_render.py draws every fixture).
     copy = StatsResult.from_json(result.to_json(include_values=False))
     assert copy.counts == result.counts
-    message(NotImplementedError, lambda: draw(copy))
+    assert draw(copy).result.counts == result.counts
     message(TypeError, lambda: draw(result, xlab=1))
     message(TypeError, lambda: draw(result, legend_title=2))
     message(TypeError, lambda: draw(result, bar_args=[1]))

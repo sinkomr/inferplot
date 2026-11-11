@@ -453,8 +453,10 @@ def barstats(
             version yet.
     """
     from inferplot import render  # imports matplotlib
-    from inferplot.render.barstats import check_drawing
+    from inferplot.render.barstats import check_axes, check_drawing
+    from inferplot.render.base import check_one_call_subtitle
 
+    check_one_call_subtitle(subtitle, results_subtitle)
     check_drawing(
         xlab=xlab,
         ylab=ylab,
@@ -464,6 +466,7 @@ def barstats(
         legend_title=legend_title,
         bar_args=bar_args,
     )
+    check_axes(ax)
     result = analyze.barstats(
         data,
         x,

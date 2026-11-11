@@ -48,6 +48,7 @@ from matplotlib.transforms import Bbox, BboxBase, Transform
 from numpy.typing import NDArray
 
 from inferplot.check import Issue
+from inferplot.render.bar_checks import cell_label_issue
 from inferplot.render.figure import (
     describe_text,
     drawn_before,
@@ -791,6 +792,9 @@ _MIN_PLOT_SHARE: Final = 0.25
 _OVERSIZED_IN: Final = 30.0
 _PER_LEVEL_IN: Final = 3.0  # more than the widest level spacing seen (1.4 in)
 _PER_BRACKET_IN: Final = 0.5  # more than one bracket level (about 0.3 in)
+# barstats: room for each bar (the widest slot over the fixtures and 120 random
+# tables is 1.09 in; 20 bars make a 20 in figure, 40 bars 39 in).
+_PER_BAR_IN: Final = 1.5
 # A text longer than this (inches) is named as the cause; inferplot's own
 # texts (subtitles with large numbers) stay under 8 in.
 _LONG_TEXT_IN: Final = 12.0
@@ -811,6 +815,8 @@ def _oversized(fig: StatsFigure, extents: list[tuple[Text, str, Bbox]]) -> Issue
     if not fig.data:  # betweenstats, withinstats: room for levels and brackets
         max_w += _PER_LEVEL_IN * len(fig.result.levels)
         max_h += _PER_BRACKET_IN * len(fig.brackets)
+    if fig.cell_labels:  # barstats: room for its bars
+        max_w += _PER_BAR_IN * len(fig.result.bars)
     if share >= _MIN_PLOT_SHARE and width <= max_w and height <= max_h:
         return None
     # Texts longer than any inferplot draws itself, which the figure grows to
@@ -935,6 +941,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     oversized = _oversized(fig, extents)
     if oversized is not None:
         issues.append(oversized)
+    hidden = cell_label_issue(fig, extents)  # barstats
+    if hidden is not None:
+        issues.append(hidden)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
     if ambiguous is not None:
