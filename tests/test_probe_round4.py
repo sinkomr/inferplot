@@ -17,19 +17,20 @@ independently, the Fisher p-values in exact integer arithmetic.
    allowance of about 3.45e-7, the same on the log scale. R's p agrees with the
    exact p of that rule within 3.8e-12 relative; raising ``workspace`` (with
    ``hybrid = FALSE`` stated) moves it by at most 3.7e-15. ggbarstats' pairwise
-   Fisher p is ``fisher.test``'s, bit for bit. inferplot's ``fisher_exact`` allows
-   1e-7 for every shape, so on the 45 2 x c tables whose other table lies between
-   1 + 1e-7 and 1 + 3.45e-7 it leaves that table out and its p is lower than R's
-   by 0.38% to 7.9% (``FISHER_PINNED``; the lead decides). On the other 141 2 x c
-   tables it agrees with R within 3.8e-12.
+   Fisher p is ``fisher.test``'s, bit for bit. inferplot's ``fisher_exact`` follows
+   R (DECISIONS.md D129): 1e-7 for 2 x 2 tables and 3.45e-7 for larger ones, and
+   agrees with R on all 186 2 x c tables within 3.8e-12. With 1e-7 for every
+   shape, as it first had, the 45 tables whose other table lies between 1 + 1e-7
+   and 1 + 3.45e-7 (``FISHER_PINNED``) had a p lower than R's by 0.38% to 7.9%.
 2. R's ``round(x, d)`` far from percent labels (probe-roundbig). R returns x
    unchanged when d + log10(2) (e + 1/2) > 15, e the binary exponent of |x| (2^e <=
    |x| < 2^(e + 1)), and otherwise rounds as ``?Round`` describes. That reproduces
    all 482 values from 1e6 to 1e17 at d = 1 to 8 (352 of them change when
    rounded); no rule d + log10|x| > 15 + delta does, for any delta.
-   ``inferplot.text.r_round`` keeps x when d + log10|x| > 15 and differs from R on
-   43 of them, all where the two cutoffs part (|x| >= 10^(14.85 - d)). Percent
-   labels (|x| <= 100) never get there for d <= 13.
+   ``inferplot.text.r_round`` follows R on all of them (D130). A cutoff on
+   log10|x| itself, as it first had, differed on 43, all where the two cutoffs
+   part (|x| >= 10^(14.85 - d)); percent labels (|x| <= 100) never get there for
+   d <= 13.
 """
 
 from __future__ import annotations
@@ -366,12 +367,11 @@ def test_ggbarstats_pairwise_fisher_p_is_fisher_test() -> None:
             assert t_low <= Fraction(345, 10**9) < t_high
 
 
-# inferplot's fisher_exact counts a table when P <= P_obs (1 + 1e-7), for every
-# shape (stats/contingency.py, _RELATIVE_TIE); R allows about 3.45e-7 for tables
-# larger than 2 x 2. On these 2 x c tables the other table lies between 1 + 1e-7
-# and 1 + 3.45e-7: R counts it, inferplot does not. table -> (R's p, inferplot's
-# p). A deliberate difference until the lead decides (to follow R: an allowance t
-# with 3.44838e-7 <= t < 3.45432e-7 for c >= 3, 1e-7 for 2 x 2).
+# R allows about 3.45e-7 for tables larger than 2 x 2, and so does inferplot's
+# fisher_exact (stats/contingency.py, _RELATIVE_TIE_WIDE; D129). On these 2 x c
+# tables the other table lies between 1 + 1e-7 and 1 + 3.45e-7, so the allowance
+# of 2 x 2 tables, which inferplot first used for every shape, leaves it out.
+# table -> (R's p, the p of the 1e-7 rule).
 FISHER_PINNED: dict[Table, tuple[float, float]] = {
     ((13, 18, 60), (15, 13, 14)): (0.0013059798779535934, 0.0012610025028378833),
     ((35, 25, 45), (1, 29, 12)): (9.199547847338761e-08, 8.822549057332907e-08),
@@ -421,32 +421,47 @@ FISHER_PINNED: dict[Table, tuple[float, float]] = {
 }
 
 
-def test_inferplot_fisher_differs_from_r_as_pinned() -> None:
+def test_inferplot_fisher_follows_r_beyond_2x2() -> None:
     seen: set[Table] = set()
-    agree = 0
+    narrow = Fraction(1, 10**7)
     for row in _fisher_rows():
         table = _table(row)
         if len(table) != 2:
             continue  # inferplot tests 2 x c tables only
         r_p = _hex(row["default"]["p_value_hex"])
         ours = fisher_exact([list(r) for r in table]).p_value
-        # inferplot's p is the exact p of its own rule.
+        # inferplot's p is the exact p of R's rule, and R's p.
         assert math.isclose(
-            ours, float(_p_at(table, Fraction(1, 10**7))), rel_tol=R_REL_TOL
+            ours, float(_p_at(table, Fraction(345, 10**9))), rel_tol=R_REL_TOL
         )
+        assert math.isclose(ours, r_p, rel_tol=R_REL_TOL), table
         if table in FISHER_PINNED:
             seen.add(table)
-            pinned_r, pinned_ours = FISHER_PINNED[table]
+            pinned_r, pinned_narrow = FISHER_PINNED[table]
             assert r_p == pinned_r
-            assert math.isclose(ours, pinned_ours, rel_tol=1e-13)
-            assert Fraction(1, 10**7) < _nearest(table) - 1 < Fraction(345, 10**9)
-            assert 3.8e-3 < (r_p - ours) / r_p < 7.9e-2
+            # What the 2 x 2 allowance gives here: lower by 0.38% to 7.9%.
+            assert math.isclose(
+                float(_p_at(table, narrow)), pinned_narrow, rel_tol=1e-11
+            )
+            assert narrow < _nearest(table) - 1 < Fraction(345, 10**9)
+            assert 3.8e-3 < (r_p - pinned_narrow) / r_p < 7.9e-2
         else:
-            agree += 1
-            assert math.isclose(ours, r_p, rel_tol=R_REL_TOL), table
+            # Nothing lies between the two allowances: both rules give one p.
+            assert _p_at(table, narrow) == _p_at(table, Fraction(345, 10**9))
     assert seen == set(FISHER_PINNED)
     assert len(seen) == 45
-    assert agree == 141
+
+
+def test_the_two_allowances() -> None:
+    # 2 x 2 tables keep fisher.test's documented 1e-7 (the earlier probes'
+    # exact ties are decided by either; no 2 x 2 table with margins up to 60 has
+    # another table between the two allowances, searched by the lead), larger
+    # tables use a value inside the bracket this probe pins.
+    from inferplot.stats import contingency
+
+    assert contingency._RELATIVE_TIE == 1e-7  # pyright: ignore[reportPrivateUsage]
+    wide = Fraction(contingency._RELATIVE_TIE_WIDE)  # pyright: ignore[reportPrivateUsage]
+    assert Fraction(344838, 10**12) <= wide < Fraction(345432, 10**12)
 
 
 # 2. R's round() far from percent labels ---
@@ -522,29 +537,29 @@ def test_reviewers_round_examples() -> None:
     rows = {(x, d): r for x, d, r in _round_rows()}
     assert rows[1000000999.9999999, 6] == 1000001000.0
     assert rows[100000099999.99998, 4] == 100000100000.0
-    # inferplot keeps both as they are (pinned below).
-    assert tx.r_round(1000000999.9999999, 6) == 1000000999.9999999
-    assert tx.r_round(100000099999.99998, 4) == 100000099999.99998
+    # inferplot rounds both, as R does (a cutoff on log10|x| kept them).
+    assert tx.r_round(1000000999.9999999, 6) == 1000001000.0
+    assert tx.r_round(100000099999.99998, 4) == 100000100000.0
 
 
-# inferplot.text.r_round keeps x when d + log10|x| > 15; R decides by the binary
-# exponent (above). They part only where log10|x| and log10(2) (e + 1/2) lie on
-# either side of 15 - d, never for percent labels. A deliberate difference until
-# the lead decides; the count and two examples, one in each direction.
+# inferplot.text.r_round decides by the binary exponent, as R does (D130). A
+# cutoff on log10|x| parts from it only where log10|x| and log10(2) (e + 1/2) lie
+# on either side of 15 - d, never for percent labels: 43 of the probe's values,
+# one example in each direction.
 ROUND_DIFFERENCES = 43
 
 
-def test_r_round_differs_from_r_far_from_percent_labels_as_pinned() -> None:
+def test_r_round_follows_r_far_from_percent_labels() -> None:
     differ: list[tuple[float, int, float, float]] = []
     for x, d, r_value in _round_rows():
-        ours = tx.r_round(x, d)
-        assert ours == (x if _decimal_keeps(x, d) else _documented_round(x, d))
-        if ours != r_value:
-            differ.append((x, d, r_value, ours))
+        assert tx.r_round(x, d) == r_value, (x, d)
+        by_decimal = x if _decimal_keeps(x, d) else _documented_round(x, d)
+        if by_decimal != r_value:
+            differ.append((x, d, r_value, by_decimal))
             assert _decimal_keeps(x, d) != _r_keeps(x, d)
             assert math.log10(x) >= 14.85 - d
     assert len(differ) == ROUND_DIFFERENCES
-    # R rounds where inferplot keeps x, and keeps x where inferplot rounds.
+    # R rounds where the decimal cutoff keeps x, and keeps x where it rounds.
     assert (1073741823.9999999, 6, 1073741824.0, 1073741823.9999999) in differ
     assert (10000000000000.004, 2, 10000000000000.004, 10000000000000.0) in differ
     # Percent labels: for 0 < |x| <= 100 both cutoffs round, up to 13 digits. Both

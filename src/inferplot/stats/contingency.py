@@ -121,9 +121,15 @@ _MAX_SHARE_DENOMINATOR: Final = 10**6
 # onesample_data() passes neither alternative nor conf.level).
 _BAR_CONF_LEVEL: Final = 0.95
 # fisher.test counts a table as "at most as probable" as the observed one when its
-# probability is at most the observed one's times 1 + 1e-7 (relErr).
+# probability is at most the observed one's times 1 + 1e-7 (relErr): its rule for
+# 2 x 2 tables.
 _RELATIVE_TIE: Final = 1e-7
 _LOG_TIE: Final = math.log1p(_RELATIVE_TIE)
+# For larger tables R's routine allows more: P <= P_obs (1 + t) with
+# 3.44838e-7 <= t < 3.45432e-7, pinned between two 2 x 3 tables of the oracle
+# probe probe-fisherties (194 tables of 2 x 3, 2 x 4 and 3 x 3; DECISIONS.md D129).
+_RELATIVE_TIE_WIDE: Final = 3.45e-7
+_LOG_TIE_WIDE: Final = math.log1p(_RELATIVE_TIE_WIDE)
 _LOG_2PI: Final = math.log(2.0 * math.pi)
 
 
@@ -2604,14 +2610,14 @@ def _fisher_2xc(
     obs = [first[j] - lows[j] for j in order]
     log_total = float(_log_dbinom(np.array([float(r1)]), n, r1, n)[0])
     threshold = math.fsum(float(v[b]) for v, b in zip(logs, obs, strict=True))
-    threshold += _LOG_TIE
+    threshold += _LOG_TIE_WIDE
     start = r1 - sum(lows)
     if threshold >= float(_suffix_max(logs)[start]):
         # The most probable table counts, so every table does: p is 1 exactly.
         return 1.0
     log_tables = sum(math.log(w + 1.0) for w in widths)
     if log_tables + threshold - log_total < -746.0:
-        # p <= (number of tables) P_obs (1 + 1e-7) < 2^-1075: it rounds to 0.
+        # p <= (number of tables) P_obs (1 + 3.45e-7) < 2^-1075: it rounds to 0.
         return 0.0
     search = _Network(
         logs,
@@ -2719,8 +2725,12 @@ def fisher_exact(
     Given both margins, a table's probability is prod_j C(c_j, a_j) / C(n, r_1)
     (a_j the first row, c_j the column totals). The two-sided p sums the
     probabilities of every table at most as probable as the observed one, where,
-    as in R, "at most" allows a relative 1e-7: P <= P_obs (1 + 1e-7), so tables
-    that tie with the observed one (mirror images) always count. For a 2 x 2 table
+    as in R, "at most" allows a small relative excess, so tables that tie with the
+    observed one (mirror images) always count: P <= P_obs (1 + 1e-7) for a 2 x 2
+    table, and P <= P_obs (1 + 3.45e-7) for a larger one, where R's routine allows
+    more (the oracle probe probe-fisherties pins it between 3.44838e-7 and
+    3.45432e-7; a table between the two allowances changes p by up to 8%, in
+    45 of the probe's 186 2 x c tables; DECISIONS.md D129). For a 2 x 2 table
     ``alternative`` "greater" gives P(A >= a), "less" P(A <= a) for the first cell
     a; a larger table takes only "two-sided" (R ignores ``alternative`` there).
     The two-sided p does not depend on the order of the rows or the columns, and
@@ -2731,8 +2741,8 @@ def fisher_exact(
     Loader's (2000) saddle-point log binomial probabilities (with the binomial
     means as exact rationals), accurate to a few units of 2^-53 times the largest
     term, so a table is classified differently from the exact rational comparison
-    only if its probability lies within about 1e-13 relative of P_obs (1 + 1e-7),
-    far inside R's own allowance of 1e-7. The masses are summed with a relative
+    only if its probability lies within about 1e-13 relative of the threshold,
+    far inside R's own allowance. The masses are summed with a relative
     error of at most about 2 sqrt(m) 2^-53 for a sum of m terms (blocked sums of
     terms scaled by their largest; terms that would underflow are summed in log
     space), so the p-value's relative error is of order 1e-13 (measured against
@@ -2779,7 +2789,7 @@ def fisher_exact(
     that prefix's running sum. Only this last comparison decides a table that
     lies near the threshold, and it compares the table's own log probability.
     Two shortcuts are exact: p is 1 when the most probable table counts, and 0
-    when the number of tables times P_obs (1 + 1e-7) is below 2^-1075.
+    when the number of tables times the threshold is below 2^-1075.
 
     Cost. The work is counted in units of about a nanosecond on the build machine
     (array elements times the passes over them; machine-independent), and the

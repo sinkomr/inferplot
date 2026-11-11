@@ -2893,8 +2893,11 @@ def r_round(x: float, digits: int) -> float:
     between the two candidates, x rounded down and x rounded up to that decimal
     digit (each the double nearest the decimal), of the one nearer to x as the
     distances come out in double precision, and of the one whose last digit is
-    even when the two distances are equal. Where x already has more than 15
-    significant digits before that digit, x itself.
+    even when the two distances are equal. Where x is too large for that digit to
+    be among its 15 significant digits, x itself: when digits + log10(2) (e + 1/2)
+    > 15 with e the binary exponent of |x| (2^e <= |x| < 2^(e + 1)), as the oracle
+    probe ``probe-roundbig`` pins it (482 values from 1e6 to 1e17; a cutoff on
+    log10 |x| itself does not reproduce them).
 
     This is not Python's ``round()``, which decides on the exact binary value: for
     (1 / 2000) x 100 = 0.05000000000000000277, Python gives 0.1 and R 0 (both
@@ -2911,7 +2914,9 @@ def r_round(x: float, digits: int) -> float:
         return float(round(x))  # Python rounds halves to even, as R does here
     sign = -1.0 if x < 0 else 1.0
     magnitude = abs(x)
-    if digits + math.log10(magnitude) > 15:
+    # frexp gives |x| = m 2^k with 0.5 <= m < 1, so the binary exponent e is k - 1.
+    exponent = math.frexp(magnitude)[1] - 1
+    if digits + math.log10(2.0) * (exponent + 0.5) > 15:
         return x
     scale = 10.0**digits
     scaled = magnitude * scale
