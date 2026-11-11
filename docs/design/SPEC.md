@@ -559,7 +559,16 @@ unpaired, x with more than two levels (declared empty levels count: edge_bar_zer
 declared computes its one pair b-a) and y with more than one, for every type (bayes
 too). A pair whose table keeps one column (edge_bar_degenerate-single-x) makes
 fisher.test stop and ggstatsplot loses the whole table silently; inferplot keeps the
-pair without a test, with the reason, and tests the others (D113).
+pair without a test, with the reason, and tests the others (D113). Each pair's
+exact test is held to inferplot's cost limits (D120): 1e9 work units, about a second,
+and 160 MB for one test; 1.6e9 units for all the pairs of one table, the cheapest
+first by an estimate from the margins and the table, so that which pairs are tested
+never depends on the order of the levels. A pair beyond them has no p
+(`no_test_reason`), keeps its Cramér's V, and still counts in the adjustment as a
+test with p = 1, so that leaving it out makes no computed pair look more significant;
+a single-column pair is no comparison and is left out of the adjustment (ggstatsplot
+computes every pair or fails). The 2 x 2 test: two-sided at balanced margins up to
+about n = 1e13, one-sided up to about 1e14.
 
 **Labels and texts.** Inside each cell: `label` "percentage" (default) the cell's
 share of its bar, (count / bar total) x 100, rounded to `digits_perc` by R's
@@ -1082,7 +1091,7 @@ no problems.
 | --- | --- | --- | --- |
 | `small_n` | result | warning | any group with n < 5 (withinstats: fewer than 5 complete subjects, reported once; histostats: fewer than 5 values; scatterstats: fewer than 5 complete pairs) |
 | `small_expected` | result | warning | barstats: Cochran's rule fails (an expected count below 1, or more than 20% of them below 5) for the main test (two-way: row total x column total / n over the non-empty rows and columns; one-way: n x ratio; paired: half the units that change between each pair of levels) or for a labelled bar's test; R's `chisq.test` warns there and ggstatsplot mutes it. `small_n` and `heavy_ties` do not apply to counts |
-| `pairs_without_test` | result | info | barstats: a pair of levels of x has no Fisher test (`no_test_reason`: its table keeps one column, or the exact test would exceed the cost limit); the other pairs are adjusted among themselves (D113) |
+| `pairs_without_test` | result | info | barstats: a pair of levels of x has no Fisher test (`no_test_reason`: its table keeps one column, or the exact test would exceed the cost limit); the other pairs are adjusted among themselves, a pair beyond the cost limit counting in that adjustment as a test with p = 1 (D113, D120) |
 | `heavy_ties` | result | warning | type nonparametric where more than 25% of what the test ranks are ties (D47, D71): between groups, n minus the number of distinct values; signed-rank, zero or repeated absolute paired differences; Friedman, values tied within their subject. Read from `result.n_tied`, so the copy embedded in a saved figure reports it too; one sample, values minus the distinct nonzero \|x - test_value\|; correlation (Spearman), the ties within x plus those within y, of 2n ranked values (D83) |
 | `rows_dropped` | result | info or warning | `n_dropped > 0` or subjects dropped; a warning, with the share, when more than half of the subjects (within) or of the rows (between) were left out (D80) |
 | `pairs_hidden` | result | info | some pairs not displayed, unless `pairwise_display="none"` was passed |

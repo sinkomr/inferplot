@@ -378,10 +378,16 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     (`color` paints every level alike, as the error message for `color=` itself
     suggests; `zorder` hides every cell label; `angle`; wide edges); identical
     palette colours are not reported.
-  - [ ] B3 (reproduced: a 3 x 8 table of 377 observations takes 19 s and 3.2 GB; 8 x 8
-    of 682, 28 s; 10 x 10 does not finish in minutes): the pairwise Fisher tests,
-    which are never drawn. The limit is per pair, spent before the refusal, and the
-    search's arrays are not in the memory bound.
+  - [x] B3: fixed (D120). The exact Fisher test is a network search joined with
+    sorted completions; its work and memory are counted before they are spent (about
+    1 s and 160 MB a test, about 2 s for all the pairs of one table, cheapest first).
+    Lead's runs: 3 x 8 of 377 0.17 s (19 s before), 3 of 3 pairs; 8 x 8 of 682 1.15 s
+    (28 s), 28 of 28; 10 x 10 of 1,000 1.46 s (did not finish), 18 of 45, the rest
+    named; 20 x 20 of 4,000 0.48 s, none tested, all named; peak 232 MB. Exact on the
+    lead's 1,172 enumerated tables (worst 1.3e-14). Pairs too large to compute count
+    in the adjustment as p = 1. Open: dense tables far from independence at
+    n = 10,000 and most 2 x 10 and wider at n = 1,000 are still refused; grouping
+    identical columns would help sparse wide tables.
   - [ ] B4: the APA sentence counts pairs that were never tested ("0 of 3 pairs").
   - [ ] B5: Cramér's V printed outside its own interval on wide tables (2 x 20: 10 of
     60), as the SPEC formula gives; the check's message speaks of a bootstrap; no
@@ -408,8 +414,8 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     the p-values drawn above the bars (59/41 and 44/56 splits labelled p = 2.27e-05
     and 8.57e-06; 0.26 and 0.46 without the unused category), as in ggstatsplot, and
     the user is not told what the bar's test counts.
-  - [ ] C2 (high): the Fisher cost again, measured independently (5 x 10 with 1,000
-    rows: 27.8 s, 4.6 GB, 0 of 10 pairs tested); the 2 x 2 path has no limit either.
+  - [x] C2: fixed with B3 (D120); the 2 x 2 path is bounded and its one-sided p is
+    accurate at large n (8.9e-15 against 40-digit sums up to n = 1e10).
   - [x] C3: fixed (D118). Exact zeros are 0, decided in rational arithmetic on the
     counts and on `ratio` as written. Reviewer's counts 32 of 206, 283 of 4,000 and
     127 of 400 are now 0; the lead's comparison of main and branch on 6,732 tables
