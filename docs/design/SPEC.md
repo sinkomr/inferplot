@@ -788,7 +788,12 @@ Statistical and behavioral differences are exactly these:
     difference), Friedman's test with Durbin-Conover and Kendall's W, and Spearman's
     correlation. R ranks the doubles (probe-nearzero: one sample V 49 where
     inferplot gives 41; paired V 35.5 where inferplot drops the pair). Values
-    converted from text are unchanged, so every fixture is.
+    converted from text of up to 15 significant digits are unchanged, so every
+    fixture is; whole numbers below 2^64 are always read as themselves (5e15 + 1
+    is not 5e15); text of 16 or 17 digits that spells out a neighbour of a short
+    decimal ("0.30000000000000004") is read as that decimal. The one-sample test
+    and its rank-biserial r rank the same values, and `n_tied` and the
+    `heavy_ties` check count ties as written too.
 22. Exact zeros in count tables (D118): where Pearson's chi-square, the
     goodness-of-fit chi-square or the bias-corrected phi^2 is exactly 0 on the counts
     and on `ratio` as written, inferplot reports 0 (chi^2 = 0, p = 1, V or C = 0);

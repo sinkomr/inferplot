@@ -163,6 +163,7 @@ from inferplot.stats.within_robust import (
 )
 from inferplot.stats.written import (
     all_equal_as_written,
+    as_written,
     equal_as_written,
     written_value,
     written_values,
@@ -209,6 +210,7 @@ __all__ = [
     "YuenT",
     "akp_effect",
     "all_equal_as_written",
+    "as_written",
     "average_dependent_akp",
     "bootstrap_t_critical_value",
     "bw_sj",

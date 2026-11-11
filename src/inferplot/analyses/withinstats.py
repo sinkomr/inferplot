@@ -580,7 +580,8 @@ def _signed_rank_parts(data: WithinData, args: _Args) -> _NonparametricParts:
     x, levels = args.x, data.levels
     side, level = args.alternative, args.conf_level
     warnings: list[str] = []
-    a, b = data.by_level()
+    # As written (D126): 0.1 + 0.2 at one level and 0.3 at the other are equal.
+    a, b = (stats.as_written(column) for column in data.by_level())
     if bool((a == b).all()):
         raise ValueError(
             f"Every subject has the same value at {levels[0]!r} as at {levels[1]!r} "
@@ -619,7 +620,8 @@ def _signed_rank_parts(data: WithinData, args: _Args) -> _NonparametricParts:
 def _friedman_parts(data: WithinData, args: _Args) -> _NonparametricParts:
     """Three or more conditions: Friedman's test, Kendall's W with its seeded
     bootstrap interval and Durbin-Conover's comparisons of every pair."""
-    x, levels, columns = args.x, data.levels, data.by_level()
+    x, levels = args.x, data.levels
+    columns = [stats.as_written(column) for column in data.by_level()]  # D126
     k = len(levels)
     if all(bool((column == columns[0]).all()) for column in columns[1:]):
         raise ValueError(
@@ -1345,7 +1347,9 @@ def _assemble(
         n_dropped=data.n_dropped,
         dropped_subjects=len(data.dropped_subjects),
         dropped_subject_rows=data.n_rows_of_dropped_subjects,
-        n_tied=paired_tied_count(observations),
+        n_tied=paired_tied_count(
+            [stats.as_written(column).tolist() for column in columns]
+        ),
         warnings=with_zero_p_note(
             (*_data_warnings(data), *parts.warnings),
             parts.test,

@@ -29,8 +29,9 @@ whole numbers, whatever decimal unit or shift they were written in.
   about 2^18 values, and is then read at most two units away; otherwise it is read
   as the double itself, so a genuine difference in such data, however small, stays
   a difference.
-* A double whose significand ends in 20 zero bits (a whole number, a half, a
-  quarter: ``rounding_tolerance`` 0) is exact and is read as itself.
+* A double whose significand ends in 20 zero bits (a half, a quarter:
+  ``rounding_tolerance`` 0) is exact and is read as itself, and so is every whole
+  number an integer column can hold (below 2^64: 5e15 + 1 is not 5e15).
 
 Readings are symmetric (the reading of -v is minus that of v) and scale with
 decimal units: v / 10, v + 0.1 and v x 2.54 are read as the decimals they stand
@@ -69,6 +70,21 @@ READ_ULPS: Final = 2
 _MIN_UNIT_ULPS: Final = 2.0**20
 
 
+# Whole numbers below this are read as themselves: everything an integer column
+# can hold (64 bits).
+_WHOLE_BELOW: Final = 2.0**64
+
+
+def _whole(values: FloatArray) -> NDArray[np.bool_]:
+    """Which values are whole numbers an integer column can hold (below 2^64),
+    which are read as themselves. From 2^51 on, neighbouring whole numbers lie
+    within two units in the last place of a round one (5e15 + 1 of 5e15; a
+    nanosecond timestamp of the next one), and they are different numbers
+    (counts, identifiers, timestamps). Beyond 2^64 a whole-valued double is a
+    decimal in scientific notation (1.7e30) and is read as that decimal."""
+    return (values == np.rint(values)) & (np.abs(values) < _WHOLE_BELOW)
+
+
 def _exact_check(value: float, k: int, q: int) -> Fraction | None:
     """k x 10^q when it lies within READ_ULPS units in the last place of
     ``value``, decided exactly; else None."""
@@ -87,7 +103,7 @@ def written_values(values: FloatArray) -> list[Fraction]:
         return []
     unique, inverse = np.unique(arr, return_inverse=True)
     readings: list[Fraction] = [Fraction(v) for v in unique.tolist()]
-    inexact = (rounding_tolerance(unique) > 0.0).nonzero()[0]
+    inexact = ((rounding_tolerance(unique) > 0.0) & ~_whole(unique)).nonzero()[0]
     if inexact.size:
         magnitude = np.abs(unique[inexact])
         ulps: FloatArray = np.spacing(magnitude)
@@ -163,11 +179,67 @@ def as_written(values: FloatArray) -> FloatArray:
 
     The rank tests rank these (DECISIONS.md D126): a tie, an order and a zero
     difference are then what the data say, not what the rounding of a computed
-    column says. A value converted from text is already that double and is
-    returned unchanged, as is every value without a short decimal reading; a
-    changed value moves by at most ``READ_ULPS`` units in its last place.
+    column says. A value converted from text of up to 15 significant digits is
+    already that double and is returned unchanged, as is every whole number
+    below 2^64 and every value without a short decimal reading; a changed value
+    moves by at most ``READ_ULPS`` units in its last place (text of 16 or 17
+    digits that spells out
+    such a neighbour, "0.30000000000000004", is read as the short decimal too).
+    Applying it twice changes nothing more.
+
+    Values that cannot change are recognized without rational arithmetic
+    (``_surely_unchanged``), so a million two-decimal values cost milliseconds;
+    only the others are read one by one.
     """
-    return np.array([float(r) for r in written_values(values)], dtype=np.float64)
+    arr = np.asarray(values, dtype=np.float64)
+    out = arr.copy()
+    todo = ~_surely_unchanged(arr)
+    if bool(todo.any()):
+        out[todo] = [float(r) for r in written_values(arr[todo])]
+    return out
+
+
+# Decimals of at most this many significant digits are recognized by
+# _surely_unchanged: their integer significand stays below 1e15 < 2^53, and
+# v x 10^m, off by at most two parts in 2^53, rounds to it (error under 0.23).
+_SCREEN_DIGITS: Final = 14
+# 10^m is an exact double for |m| <= 22.
+_EXACT_POWER: Final = 22
+
+
+def _surely_unchanged(arr: FloatArray) -> NDArray[np.bool_]:
+    """Which values ``as_written`` returns as they are, decided in floating point:
+    whole numbers and other exact values (``written_values`` reads them as
+    themselves), and every double that is the one nearest a decimal of at most
+    ``_SCREEN_DIGITS`` significant digits.
+
+    The last holds because such a double v is read either as itself or as a
+    decimal within two units in its last place, and no other decimal that short
+    lies that near (two of them differ by at least 1e-14 |v|, 45 units), so a
+    decimal reading is the decimal v is nearest to, whose double is v. The test
+    is exact: with m chosen so that v x 10^m has ``_SCREEN_DIGITS`` digits before
+    the point, k = rint(v x 10^m) is the decimal's significand whenever v is
+    nearest such a decimal, and k / 10^m (or k x 10^-m) is one correctly rounded
+    operation on two exact doubles, the double nearest that decimal. Where 10^m
+    is not exact (values below about 1e-9 or above 1e35) nothing is claimed.
+    """
+    magnitude = np.abs(arr)
+    sure: NDArray[np.bool_] = _whole(arr) | (rounding_tolerance(arr) == 0.0)
+    rest = ~sure & np.isfinite(arr)
+    if not bool(rest.any()):
+        return sure
+    v = magnitude[rest]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m = (_SCREEN_DIGITS - 1) - np.floor(np.log10(v))
+    usable = np.isfinite(m) & (np.abs(m) <= _EXACT_POWER)
+    m = np.where(usable, m, 0.0)
+    scale = 10.0 ** np.abs(m)
+    down = m >= 0  # v x 10^m, undone by a division
+    k = np.rint(np.where(down, v * scale, v / scale))
+    back = np.where(down, k / scale, k * scale)
+    nearest = usable & (back == v) & (k < 10.0 ** (_SCREEN_DIGITS + 1))
+    sure[rest.nonzero()[0][nearest]] = True
+    return sure
 
 
 def all_equal_as_written(values: FloatArray, value: float) -> bool:
