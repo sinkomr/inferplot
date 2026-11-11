@@ -17,6 +17,7 @@ import pytest
 from scipy import special, stats
 
 from inferplot.stats import chi2_ncp_bound, chi2_ncp_interval, noncentral_chi2_logcdf
+from tests.timing import allowed
 from tests.tolerances import assert_close
 
 REFERENCE = Path(__file__).resolve().parents[1] / "data" / "ncx2_reference.json"
@@ -211,7 +212,7 @@ def test_roots_of_huge_chi_squares_match_mpmath() -> None:
         ours = chi2_ncp_bound(x, row["df"], prob=prob)
         expected = Fraction(Decimal(row["ncp"]))
         assert abs(Fraction(ours) - expected) <= Fraction(math.ulp(ours)), row
-    assert time.perf_counter() - start < 1.0
+    assert time.perf_counter() - start < allowed(1.0)
 
 
 @pytest.mark.parametrize("x", [2.5e31, 2.5e100, 1e300, 1.7976931348623157e308])
@@ -219,7 +220,7 @@ def test_huge_chi_square_interval_is_immediate(x: float) -> None:
     start = time.perf_counter()
     low, high = chi2_ncp_interval(x, 1.0, conf_level=0.95, alternative="two-sided")
     greater = chi2_ncp_interval(x, 3.0, conf_level=0.99, alternative="greater")
-    assert time.perf_counter() - start < 0.5
+    assert time.perf_counter() - start < allowed(0.5)
     root = math.sqrt(x)
     z = float(stats.norm.isf(0.025))
     assert low == pytest.approx((root - z) ** 2, rel=2**-52)

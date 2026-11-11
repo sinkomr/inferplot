@@ -21,6 +21,9 @@ implementation of R's method.
 | Winsorized correlation at a strong correlation (0.75, 20 pairs) | 95% | 90% | Holds at weak correlations |
 | Yuen's test, 10 against 25 values, the small group three times as spread out | 5% | 6% | Slightly too many false alarms |
 | Games-Howell with Holm's adjustment on top, no differences at all | 5% | 1.6% | Conservative: a real difference is harder to detect |
+| Repeated-measures ANOVA (Greenhouse-Geisser), 12 subjects, 4 conditions, when the correction is not needed | 5% | 3.6% | Slightly conservative; 5.2% when it is needed |
+| Trimmed-means repeated-measures ANOVA (robust), same design | 5% | 3.8% | Slightly conservative |
+| Bootstrap-t test of the trimmed mean, skewed data (lognormal, 20 values) | 5% | 5.7% | Slightly too many false alarms; 4.5% for normal data |
 | Cramér's V (barstats) at a weak association (V 0.14, 2 x 3 table, 100 observations) | 95% | 93%; the one-sided [0, upper] form 88% | The interval sits low: its upper bound is too often below the truth |
 | Cramér's V at a strong association (V 0.46) | 95% | 97% | Wider than needed on the low side |
 | Cramér's V and Pearson's C with no association or no difference | 95% | 98 to 100% | They cannot be negative, so their intervals reach 0 more often than 95% |
@@ -94,7 +97,7 @@ the paired and one-sample t-tests, Hedges' g and its interval, the Mann-Whitney,
 Kruskal-Wallis, signed-rank and Friedman tests, Pearson's and Spearman's
 correlations with their intervals (Spearman's slightly narrow at strong
 correlations, 94%), the trimmed-means ANOVA, the dependent Yuen test, the
-bootstrap-t test of the trimmed mean, the between-groups AKP interval, the robust
+bootstrap-t test of the trimmed mean for normal data, the between-groups AKP interval, the robust
 pairwise intervals, Pearson's chi-square test at ordinary sizes, McNemar's test, the
 goodness-of-fit test, Cohen's g's two-sided interval, and each bar's proportion test
 on its own.

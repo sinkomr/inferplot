@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.timing import allowed
+
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "examples"
 SCRIPTS = sorted(
     p for p in EXAMPLES.glob("*.py") if p.name != "readme_images.py"
@@ -53,7 +55,7 @@ def test_example_runs(
     runpy.run_path(str(script), run_name="__main__")
     elapsed = time.perf_counter() - start
     # A few seconds on a developer machine; generous for slow CI runners.
-    assert elapsed < 30, f"{script.name} took {elapsed:.1f} s"
+    assert elapsed < allowed(30), f"{script.name} took {elapsed:.1f} s"
     printed = capsys.readouterr().out
     assert printed.strip(), f"{script.name} printed nothing"
     written = _writes(script)

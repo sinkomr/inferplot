@@ -29,6 +29,7 @@ from inferplot.stats import (
     rank_epsilon_squared,
 )
 from inferplot.stats.nonparametric import _percentile_lower
+from tests.timing import allowed
 from tests.tolerances import assert_close
 
 FloatArray = NDArray[np.float64]
@@ -422,4 +423,4 @@ def test_closed_form_methods_at_n_1e5_take_under_a_second() -> None:
         ("dunn", lambda: dunn(groups)),
     ]:
         seconds = _best_of_three(fn)
-        assert seconds < 1.0, f"{name} on 1e5 values took {seconds:.3f} s"
+        assert seconds < allowed(1.0), f"{name} on 1e5 values took {seconds:.3f} s"

@@ -24,6 +24,7 @@ import inferplot as ip
 from inferplot import stats
 from inferplot.result import StatsResult
 from tests.oracle_fixtures import DATASET_DIR
+from tests.timing import allowed
 
 betweenstats: Any = ip.analyze.betweenstats
 
@@ -865,7 +866,7 @@ def test_well_separated_low_noise_groups(sd: float) -> None:
     )
     start = time.perf_counter()
     result = betweenstats(data, "g", "y")
-    assert time.perf_counter() - start < 5.0
+    assert time.perf_counter() - start < allowed(5.0)
     assert result.test.statistic > 1e6
     es = result.effect_size
     assert 0.99 < es.conf_low <= es.estimate <= 1.0

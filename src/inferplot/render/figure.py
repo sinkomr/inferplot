@@ -361,6 +361,17 @@ class StatsFigure:
 
         return png_bytes(self, dpi=100)
 
+    def show(self) -> None:
+        """Always raises: inferplot opens no window. Its figures are drawn without
+        a display and are not pyplot figures, so there is nothing for ``show()`` to
+        show; the error says how to look at the figure instead."""
+        raise RuntimeError(
+            "inferplot figures are not shown in a window: they are drawn without a "
+            "display and are not pyplot figures. Save the figure and open the "
+            "file, for example fig.save('figure.png'); in a Jupyter notebook, end "
+            "the cell with the figure itself (fig) to see it inline."
+        )
+
     def __repr__(self) -> str:
         r = self._result
         if r.design == "one-sample":

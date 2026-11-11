@@ -60,6 +60,29 @@ jobs:
             refs/tags/v*) echo "publishing $REF" ;;
             *) echo "::error::target pypi needs a version tag as the ref, not $REF"; exit 1 ;;
           esac
+      - name: Refuse to go on unless the pypi environment requires a reviewer
+        # GitHub creates a missing environment on first use, without protection.
+        # A tag pushed before docs/RELEASING.md step 0.4 would then publish to
+        # PyPI with no approval. So every run that could reach PyPI (a tag push,
+        # or target pypi) first reads the environment's protection rules and
+        # stops, before anything is built or published, unless a required
+        # reviewer is set. Environments of a public repository are readable
+        # without extra permissions.
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          rules=$(gh api "repos/$REPOSITORY/environments/pypi" --jq '[.protection_rules[]?.type] | join(",")' 2>/dev/null \
+            || curl -fsSL "https://api.github.com/repos/$REPOSITORY/environments/pypi" | python3 -c "import json, sys; print(','.join(r['type'] for r in json.load(sys.stdin).get('protection_rules', [])))" \
+            || true)
+          echo "pypi environment protection rules: ${rules:-none found}"
+          case ",$rules," in
+            *,required_reviewers,*) echo "a required reviewer is set" ;;
+            *) echo "::error::the pypi environment has no required reviewer (or does not exist), so nothing would wait for approval. Do docs/RELEASING.md step 0.4, then run again."; exit 1 ;;
+          esac
       - name: Build the sdist and the wheel
         run: uv build --out-dir dist
       - name: Check what the packages contain and their metadata
@@ -117,6 +140,9 @@ jobs:
           ./venv/bin/python -I -c "import inferplot, sys; print(inferplot.__version__, inferplot.__file__); assert 'site-packages' in inferplot.__file__"
           ./venv/bin/python -I quickstart.py
           test -s weight.svg
+      - name: Draw one figure with each of the five functions from the wheel
+        working-directory: ${{ runner.temp }}
+        run: ./venv/bin/python -I "$GITHUB_WORKSPACE/tools/release_check.py" smoke
 
   sdist:
     # A downstream packager builds and tests from the sdist: unpack it and run the

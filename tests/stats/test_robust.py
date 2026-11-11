@@ -42,6 +42,7 @@ from inferplot.stats.robust import (
 )
 from tests.oracle_fixtures import probe, r_double
 from tests.stats.fixture_data import between_cases, groups
+from tests.timing import allowed
 from tests.tolerances import assert_close
 
 FloatArray = NDArray[np.float64]
@@ -775,13 +776,15 @@ def test_large_n_timing() -> None:
     trimmed_means_anova(data)
     lincon(data)
     seconds = time.perf_counter() - start
-    assert seconds <= 5.0, f"robust statistics at n = 3,600 took {seconds:.2f} s"
+    assert seconds <= allowed(5.0), (
+        f"robust statistics at n = 3,600 took {seconds:.2f} s"
+    )
     big = _draw([300_000, 300_000, 400_000], 42)
     start = time.perf_counter()
     trimmed_means_anova(big)
     lincon(big)
     seconds = time.perf_counter() - start
-    assert seconds <= 3.0, f"t1way and lincon at n = 1e6 took {seconds:.2f} s"
+    assert seconds <= allowed(3.0), f"t1way and lincon at n = 1e6 took {seconds:.2f} s"
 
 
 # ------------------------------------------------------------------ tiny p-values

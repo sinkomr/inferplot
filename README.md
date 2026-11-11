@@ -73,7 +73,9 @@ note: The Bayes factor caption for three or more groups arrives in inferplot 0.2
 `fig.result.to_frame()` gives one row per test. Save with `fig.save()`, not with
 pyplot: the figure is not pyplot's current figure, so `plt.savefig()` writes
 pyplot's own, empty figure, and `fig.figure.savefig()` writes the text as outlines and leaves the
-result out of the file.
+result out of the file. To look at a figure, save it and open the file; in a
+Jupyter notebook, end the cell with `fig` and it is shown inline. There is no
+window and no `fig.show()`: inferplot draws without a display.
 
 ## One figure per function
 
@@ -151,6 +153,14 @@ on purpose in these ways:
 - Where R's numerical routines are inaccurate, inferplot reports the accurate value:
   a few printed numbers differ, for example a Games-Howell p of 2.24e-14 where
   ggstatsplot prints 1.41e-09. Exactly collinear data give r = 1 or -1 and an infinite t.
+  Counts that fit exactly print 0, not rounding noise such as 5.59e-09.
+- Numbers are read as written: a value computed as 0.1 + 0.2 and a typed 0.3 are one
+  value in the rank tests and the robust bootstraps (a tie, or a zero difference);
+  R works on the two different binary numbers.
+- In `barstats`, the exact tests between pairs of levels are held to about two
+  seconds per table: a pair too large to compute is named, never approximated, and
+  still counts in the adjustment for multiple comparisons. The pairs are listed in
+  the order of the levels (ggstatsplot sorts them as text).
 - The figures have their own look (Okabe-Ito colours) with ggstatsplot's layers and
   texts.
 

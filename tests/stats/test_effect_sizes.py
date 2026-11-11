@@ -19,6 +19,7 @@ from inferplot.stats import (
     welch_anova,
 )
 from tests.stats.test_noncentral import OLD_BETAINC
+from tests.timing import allowed
 from tests.tolerances import assert_close
 
 RNG = np.random.Generator(np.random.PCG64(5))
@@ -245,7 +246,7 @@ def test_partial_omega_squared_is_fast_at_any_f(
     start = time.perf_counter()
     omega = partial_omega_squared(f, df1, df2, conf_level=level)
     seconds = time.perf_counter() - start
-    assert seconds < 2.0, f"F={f!r} took {seconds:.2f} s"
+    assert seconds < allowed(2.0), f"F={f!r} took {seconds:.2f} s"
     assert 0.999 < omega.conf_low <= omega.estimate <= 1.0
     assert (omega.conf_high, omega.sidedness) == (1.0, "greater")
     if f >= 1e50:

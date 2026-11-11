@@ -38,6 +38,7 @@ from inferplot.stats import (
 from tests.test_reference_vs_oracle import (
     _fisher_two_by_c,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.timing import allowed
 
 IntArray = NDArray[np.int64]
 RNG: Final = np.random.default_rng(20261110)
@@ -347,7 +348,7 @@ def test_tiny_shares_are_computed_at_once(tiny: float) -> None:
     test = goodness_of_fit([5, 5], ratio)
     c = pearsons_c([5, 5], ratio)
     (bar,) = proportion_tests(np.array([[5], [5]]), ratio)
-    assert time.perf_counter() - start < 1.0
+    assert time.perf_counter() - start < allowed(1.0)
     exact = sum(
         (Fraction(25) / (10 * Fraction(p)) for p in ratio), Fraction(0)
     ) - Fraction(10)
@@ -386,7 +387,7 @@ def test_a_statistic_beyond_the_doubles_names_ratio(
         goodness_of_fit(counts, ratio)
     with pytest.raises(ValueError, match=r"^ratio gives category 0 a share of "):
         proportion_tests(np.array([counts]).T, ratio)
-    assert time.perf_counter() - start < 1.0
+    assert time.perf_counter() - start < allowed(1.0)
 
 
 def test_pearsons_c_definition() -> None:
@@ -635,7 +636,7 @@ def test_fisher_cost(table: IntArray, what: str) -> None:
     # clock is not asserted (a loaded CI runner is several times slower than the
     # timings above). A generous bound still catches a search gone quadratic.
     seconds = _seconds(lambda: fisher_exact(table))
-    assert seconds <= 60.0, f"{what}: {seconds:.3f} s"
+    assert seconds <= allowed(60.0), f"{what}: {seconds:.3f} s"
 
 
 def test_fisher_refuses_what_would_take_too_long() -> None:

@@ -70,6 +70,13 @@ These are deliberate; each is recorded in `docs/design/DECISIONS.md`.
   too large to compute is named, not approximated, and still counts in the
   adjustment for multiple comparisons (D120). ggstatsplot computes every pair or
   fails.
+- Numbers are read as written: a value computed as 0.1 + 0.2 and a typed 0.3 are one
+  value in every rank test (a tie, or a zero difference) and in the robust
+  bootstraps, where R works on the two different binary numbers (D105, D126).
+- The pairwise Fisher tests are listed in the order of the levels; ggstatsplot sorts
+  them as text (D128). The numbers of each pair are the same.
+- A `ratio` share so small that the goodness-of-fit statistic exceeds the largest
+  floating-point number raises an error; R reports Inf (D119).
 - Nothing is ignored silently. Unknown arguments raise an error; settings that would
   change nothing raise or add a note; where ggstatsplot drops its subtitle without a
   word (for example a table with one category), inferplot raises an error that says
@@ -84,6 +91,8 @@ These are deliberate; each is recorded in `docs/design/DECISIONS.md`.
   conditions and for counts, posterior estimates, `grouping_var`, and counterparts
   of `ggpiestats`, `ggdotplotstats`, `ggcorrmat` and `ggcoefstats`. Asking for them
   raises `NotImplementedError` with a message that says what to do instead.
+- `barstats` draws at most 37 bars in its own figure; more are refused with the
+  way to draw them into a figure of your own size (`ax=`).
 - Robust pairwise comparisons in `betweenstats` raise when a pair has fewer than 2
   degrees of freedom, as ggstatsplot does.
 - Some intervals do not hold their nominal level in every setting (for example

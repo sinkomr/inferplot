@@ -5,13 +5,17 @@ Run from the repository root:
     python -I tools/release_check.py dists dist/
     python -I tools/release_check.py version dist/ --tag v0.1.0
     python -I tools/release_check.py quickstart README.md > quickstart.py
+    python -I tools/release_check.py smoke        # in an environment with the wheel
 
 ``dists`` checks that the wheel holds the package and nothing else and that the
 sdist holds what the tests and a downstream packager need; ``version`` checks the
 tag, the built version and the CHANGELOG against each other; ``quickstart`` prints
-the README's quick start so that it can be run against an installed wheel. Each
-prints what it checked and exits 1 with the reasons on the first failure. Standard
-library only, so it runs before anything is installed. tests/test_packaging.py
+the README's quick start so that it can be run against an installed wheel;
+``smoke`` draws one figure with each of the five functions from the installed
+package (a wheel that lacks a module passes the quick start, which draws one
+kind of figure only). Each prints what it checked and exits 1 with the reasons on
+the first failure. Standard library only at import, so it runs before anything is
+installed (``smoke`` imports inferplot and pandas when it runs). tests/test_packaging.py
 tests these functions on hand-built archives.
 """
 
@@ -81,6 +85,7 @@ FORBIDDEN_PARTS = frozenset(
 # Words that mark test data; none may appear in a wheel path.
 WHEEL_FORBIDDEN_WORDS = ("tests", "fixtures", "oracle", "evals", "conftest")
 
+UNRELEASED = re.compile(r"not (?:yet )?(?:released|on PyPI)", re.IGNORECASE)
 LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
 CHANGELOG_ENTRY = re.compile(
     r"^## \[(?P<version>[^\]]+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}|Unreleased))?\s*$",
@@ -100,8 +105,10 @@ def _one(dist_dir: Path, pattern: str) -> Path:
     return found[0]
 
 
-def check_wheel(path: Path) -> list[str]:
-    """Check a wheel's file list and metadata; return its file names."""
+def check_wheel(path: Path, source: Path | None = None) -> list[str]:
+    """Check a wheel's name, file list and metadata; return its file names.
+    ``source`` is the package directory the wheel was built from (src/inferplot):
+    every Python file and ``py.typed`` there must be in the wheel."""
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         info_dirs = {n.split("/", 1)[0] for n in names if ".dist-info/" in n}
@@ -110,6 +117,14 @@ def check_wheel(path: Path) -> list[str]:
         info = info_dirs.pop()
         metadata = archive.read(f"{info}/METADATA").decode("utf-8")
     problems: list[str] = []
+    if not path.name.endswith("-py3-none-any.whl"):
+        problems.append(f"{path.name}: not a pure-Python wheel (py3-none-any)")
+    if source is not None:
+        for file in sorted(source.rglob("*")):
+            if file.suffix == ".py" or file.name == "py.typed":
+                inside = f"{WHEEL_PACKAGE}/{file.relative_to(source).as_posix()}"
+                if inside not in names:
+                    problems.append(f"{inside}: in the source tree, not in the wheel")
     for name in names:
         top = name.split("/", 1)[0]
         parts = PurePosixPath(name).parts
@@ -127,6 +142,11 @@ def check_wheel(path: Path) -> list[str]:
         if f"{info}/{license_file}" not in names:
             problems.append(f"{info}/{license_file}: missing")
     problems.extend(_metadata_problems(metadata, path.name))
+    version = HeaderParser().parsestr(metadata).get("Version")
+    if version != path.name.split("-")[1]:
+        problems.append(
+            f"{path.name}: METADATA Version is {version!r}, not the file name's"
+        )
     if problems:
         raise CheckError(f"{path.name}:\n  " + "\n  ".join(problems))
     return names
@@ -157,18 +177,27 @@ def _metadata_problems(text: str, label: str) -> list[str]:
     if not isinstance(body, str) or "## Quick start" not in body:
         problems.append(f"{label} long description lacks the README's quick start")
         return problems
-    # PyPI shows the description on its own: a relative link leads nowhere there
-    # (hatch_build.py makes them absolute at build time).
+    # PyPI shows the description on its own: a relative link leads nowhere there,
+    # nor does a link to one of its own headings, which get no anchors
+    # (hatch_build.py makes both absolute at build time).
     relative = sorted(
         {
             target
             for target in LINK_TARGET.findall(body)
-            if not target.startswith(("http://", "https://", "mailto:", "#"))
+            if not target.startswith(("http://", "https://", "mailto:"))
         }
     )
     if relative:
         problems.append(
             f"{label} long description has relative links: {', '.join(relative)}"
+        )
+    # A final version is on PyPI: its description may not say it is not.
+    version = str(meta.get("Version", ""))
+    stale = UNRELEASED.search(body)
+    if re.fullmatch(r"\d+\.\d+\.\d+", version) and stale is not None:
+        problems.append(
+            f"{label} long description of the final version {version} still says "
+            f"{stale[0]!r} (docs/RELEASING.md step 1.3)"
         )
     return problems
 
@@ -200,10 +229,10 @@ def check_sdist(path: Path) -> list[str]:
     return names
 
 
-def check_dists(dist_dir: Path) -> str:
+def check_dists(dist_dir: Path, source: Path | None = None) -> str:
     wheel = _one(dist_dir, "*.whl")
     sdist = _one(dist_dir, "*.tar.gz")
-    wheel_names = check_wheel(wheel)
+    wheel_names = check_wheel(wheel, source)
     sdist_names = check_sdist(sdist)
     wheel_version = wheel.name.split("-")[1]
     sdist_version = sdist.name.removesuffix(".tar.gz").split("-")[1]
@@ -264,23 +293,80 @@ def quickstart(readme: Path) -> str:
     return match[1] + "\n"
 
 
+def smoke(out_dir: Path) -> str:
+    """One figure with each of the five functions from the installed package,
+    analyzed, drawn, checked, saved as SVG and PNG and read back."""
+    import pandas as pd
+
+    import inferplot as ip
+
+    score = [4.2, 5.6, 5.2, 6.1, 4.5, 4.6, 5.2, 4.5, 5.3, 5.1, 4.8, 4.2] * 2
+    score = [v + 0.1 * (i % 7) for i, v in enumerate(score)]
+    frame = pd.DataFrame(
+        {
+            "subject": [f"s{i % 12:02d}" for i in range(24)],
+            "group": ["a"] * 12 + ["b"] * 12,
+            "score": score,
+            "other": [v * 1.5 + (i % 5) for i, v in enumerate(score)],
+            "answer": (["yes", "no", "yes", "yes", "no", "no"] * 4),
+        }
+    )
+    figures = {
+        "betweenstats": ip.betweenstats(frame, "group", "score"),
+        "withinstats": ip.withinstats(frame, "group", "score", subject_id="subject"),
+        "histostats": ip.histostats(frame, "score", test_value=5.0),
+        "scatterstats": ip.scatterstats(frame, "score", "other"),
+        "barstats": ip.barstats(frame, "answer", "group"),
+    }
+    lines = [f"inferplot {ip.__version__} from {Path(ip.__file__).parent}"]
+    for name, figure in figures.items():
+        result = figure.result
+        if not result.text.apa:
+            raise CheckError(f"{name}: no results sentence")
+        copy = type(result).from_json(result.to_json())
+        if copy.text.apa != result.text.apa:
+            raise CheckError(f"{name}: the result does not survive JSON")
+        for suffix in ("svg", "png"):
+            target = out_dir / f"smoke_{name}.{suffix}"
+            figure.save(target)
+            if target.stat().st_size == 0:
+                raise CheckError(f"{name}: {target.name} is empty")
+        codes = sorted({issue.code for issue in figure.check()})
+        lines.append(
+            f"{name}: {result.text.apa} (checks: {', '.join(codes) or 'none'})"
+        )
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     dists = sub.add_parser("dists")
     dists.add_argument("dist_dir", type=Path)
+    dists.add_argument(
+        "--source",
+        type=Path,
+        default=Path("src") / WHEEL_PACKAGE,
+        help="the package directory the wheel was built from (its modules must "
+        "all be in the wheel); skipped when it does not exist",
+    )
     version = sub.add_parser("version")
     version.add_argument("dist_dir", type=Path)
     version.add_argument("--tag", default=None)
     version.add_argument("--changelog", type=Path, default=Path("CHANGELOG.md"))
     quick = sub.add_parser("quickstart")
     quick.add_argument("readme", type=Path)
+    smoked = sub.add_parser("smoke")
+    smoked.add_argument("out_dir", type=Path, nargs="?", default=Path())
     args = parser.parse_args(argv)
     try:
         if args.command == "dists":
-            print(check_dists(args.dist_dir))
+            source = args.source if args.source.is_dir() else None
+            print(check_dists(args.dist_dir, source))
         elif args.command == "version":
             print(check_version(args.dist_dir, args.tag, args.changelog))
+        elif args.command == "smoke":
+            print(smoke(args.out_dir))
         else:
             sys.stdout.write(quickstart(args.readme))
     except CheckError as error:

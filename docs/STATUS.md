@@ -565,6 +565,30 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   labels: at least one of 8 bars flags p < .05 in 37% of null data. Refusals: up to
   23% (sparse 2 x 2), 12% (Bowker, 30 pairs). One seed changed under D115's rule
   (the lead recounted the draw without inferplot)
+- [ ] end-of-phase review of Phase 5 (two fresh reviewers). Documents, release and
+  evaluation half done (2026-11-11; scripts in `reviewP5A/`): the user documents are
+  accurate (quick start, every code block and example re-run, 29 check codes,
+  signatures and defaults, 46 likely first-user mistakes, every number of
+  `docs/intervals.md` against the pinned rates); the wheel and sdist were built,
+  installed and inspected. Findings:
+  - [x] R1 (medium): a tag pushed before the `pypi` environment has a required
+    reviewer would have published without approval. The workflow now checks the
+    environment's protection before it builds and stops otherwise.
+  - [x] R2 to R6: releasing guide corrected; the release check catches a wheel with
+    missing modules, a wrong name or version and a stale "not released" text, and
+    the installed wheel draws all five figures; heading links work on PyPI;
+    wall-clock limits scale with the machine's speed (13 assertions).
+  - [x] D1, I2, I3, U1: differences and limits added to the changelog and README;
+    three rates added to `docs/intervals.md`; `fig.show()` says how to look at a
+    figure.
+  - [ ] E1 to E10 (5 high): the evaluation scorer would mislead as it stands: every
+    baseline run flagged contaminated (the folder names contain "inferplot"); a
+    correct exact McNemar answer and SciPy's default signed-rank test scored as
+    wrong numbers; inferplot's own test names not recognised; a task that
+    penalises the textbook two-way analysis; expected numbers reachable from the
+    run directories. Being fixed on `fix/evals-review`; the evaluation must not be
+    run before it is merged.
+  Statistics half (the lead's changes of 2026-11-11): in progress.
 - [ ] the owner runs the agent evaluation (each run needs their go-ahead)
 - [ ] the owner publishes: TestPyPI, then PyPI (`docs/RELEASING.md`)
 

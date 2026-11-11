@@ -260,7 +260,8 @@ welch_anova partial_omega_squared greater
   embedded: SVG metadata description, PNG text chunk `Description`, PDF `Subject`.
   `StatsResult.from_json()` reads it back.
 
-Save with `fig.save()`. The figure is not pyplot's current figure:
+Save with `fig.save()` and open the file to look at it (in a notebook, a cell
+ending in `fig` shows it; `fig.show()` raises, inferplot opens no window). The figure is not pyplot's current figure:
 `plt.savefig()` writes pyplot's own, empty figure, and `fig.figure.savefig()`
 writes text as outlines and embeds no result. With `ax=`, `fig.save()` writes the
 whole figure and embeds the result of the panel it is called on.

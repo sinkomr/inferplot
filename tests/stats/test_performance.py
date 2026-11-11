@@ -9,6 +9,7 @@ from collections.abc import Callable
 import numpy as np
 
 from inferplot.stats import mean
+from tests.timing import allowed
 
 
 def _best_of_three(fn: Callable[[], object]) -> float:
@@ -24,4 +25,4 @@ def _best_of_three(fn: Callable[[], object]) -> float:
 def test_mean_of_a_million_values_takes_at_most_0_2_s() -> None:
     x = np.random.Generator(np.random.PCG64(1)).normal(5.0, 3.0, 1_000_000)
     seconds = _best_of_three(lambda: mean(x))
-    assert seconds <= 0.2, f"mean of 1e6 values took {seconds:.3f} s"
+    assert seconds <= allowed(0.2), f"mean of 1e6 values took {seconds:.3f} s"

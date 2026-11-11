@@ -3,7 +3,9 @@
 This is the owner's checklist for publishing a version to PyPI, written for a first
 release. Everything up to the tag is prepared in the repository; the steps below
 are the ones only the owner can take, because each one publishes or grants the
-right to publish. Nothing is published unless you do steps 4 and 6 yourself.
+right to publish. Nothing is published unless you push the tag (step 3, which
+sends the files to TestPyPI, the practice site) and then approve the waiting job
+(step 4, which sends them to PyPI).
 
 How it works, in one paragraph: pushing a tag such as `v0.1.0` starts
 `.github/workflows/release.yml`. It builds the package, checks it (the tag equals
@@ -12,6 +14,12 @@ README's quick start on Python 3.11 and 3.15, the test suite passes from the sdi
 uploads it to TestPyPI, and then stops and waits. PyPI gets the files only after
 you approve the waiting job on GitHub. No password or token is stored anywhere:
 PyPI trusts this one workflow file in this one repository ("trusted publishing").
+
+The approval exists only if the GitHub environment `pypi` has you as a required
+reviewer (step 0.4). GitHub would otherwise create that environment by itself,
+unprotected, and nothing would wait. The workflow therefore checks this before it
+builds anything and stops with an error if no reviewer is required; do not remove
+that check, and do step 0.4 before you register the publisher on PyPI (step 0.2).
 
 Values used below (they must match exactly; PyPI compares them as text):
 
@@ -77,8 +85,11 @@ Each must print the SHA used in `release.yml` (`3d3c42e5...`, `cf430e03...`,
 2. In `CHANGELOG.md`, change `## [0.1.0] - Unreleased` to `## [0.1.0] - YYYY-MM-DD`
    with the day's date.
 3. In `README.md`, replace the "not released" status and the install-from-a-clone
-   instructions with `pip install "inferplot[pandas]"`, and in
-   `skills/inferplot/SKILL.md` the sentence that says it is not on PyPI.
+   instructions with `pip install "inferplot[pandas]"`; in
+   `skills/inferplot/SKILL.md` change the sentence that says it is not on PyPI; in
+   `llms.txt` the sentence "Not yet on PyPI: install from the repository." The
+   release check refuses a final version whose description still says "not
+   released" or "not on PyPI".
 4. Merge to main and wait until every CI job is green, the lowest-dependency job
    included.
 
@@ -89,6 +100,9 @@ mismatch shows up in CI before any tag exists.
 
 A practice run uploads a pre-release to TestPyPI only. TestPyPI, like PyPI, never
 accepts the same version twice, so practise with a pre-release number:
+
+Do it before the release commit of step 1, or set the version back afterwards:
+the tag of step 3 must point at a commit whose version is exactly `0.1.0`.
 
 1. Set `__version__ = "0.1.0rc1"` on main (the CHANGELOG entry stays `0.1.0`).
 2. GitHub > *Actions* > *Release* > *Run workflow*, branch `main`, target
@@ -106,13 +120,18 @@ accepts the same version twice, so practise with a pre-release number:
 
    (The extra index supplies numpy, scipy and the other dependencies, which
    TestPyPI does not carry.) A second practice run needs `0.1.0rc2`, and so on.
+4. When you are done practising, set `__version__` to `"0.1.0"` (step 1.1) before
+   you tag. If main still says `0.1.0rc1`, the workflow refuses the tag `v0.1.0`
+   and publishes nothing.
 
 The target `build-only` (the default) builds and checks without publishing; it is
 safe to run at any time.
 
 ## 3. Tag the release
 
-On an up-to-date main whose last commit is the release commit, from a terminal:
+First check, on GitHub under *Settings* > *Environments* > `pypi`, that *Required
+reviewers* is ticked with your name (step 0.4). Then, on an up-to-date main whose
+last commit is the release commit (version `0.1.0`), from a terminal:
 
 ```sh
 git switch main && git pull
@@ -128,7 +147,9 @@ refuses anything else before it publishes.
 GitHub > *Actions* > *Release*, the run named after the tag. It takes about 10 to
 15 minutes:
 
-1. *Build and check the packages*, *Install the wheel* (3.11 and 3.15) and *Test
+1. *Build and check the packages* (which first checks that the `pypi` environment
+   requires a reviewer), *Install the wheel* (3.11 and 3.15; it runs the README's
+   quick start and draws one figure with each of the five functions) and *Test
    from the sdist* run first. If any fails, nothing has been published: fix the
    problem on main, delete the tag (`git push origin :refs/tags/v0.1.0`,
    `git tag -d v0.1.0`) and tag again.

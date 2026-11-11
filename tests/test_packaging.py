@@ -234,6 +234,86 @@ def test_wheel_check_refuses_anything_else(tmp_path: Path, extra: str) -> None:
         release_check.check_wheel(wheel)
 
 
+def test_wheel_check_needs_every_module_of_the_source_tree(tmp_path: Path) -> None:
+    # A wheel that lacks a module imports and runs the quick start (renderers
+    # load on first use), so the file list is compared with the source tree.
+    source = tmp_path / "src" / "inferplot"
+    (source / "stats").mkdir(parents=True)
+    for name in ("__init__.py", "py.typed", "stats/contingency.py"):
+        (source / name).write_text("")
+    wheel = _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl")
+    release_check.check_wheel(wheel, source)
+    (source / "render").mkdir()
+    (source / "render" / "barstats.py").write_text("")
+    with pytest.raises(
+        release_check.CheckError, match=r"inferplot/render/barstats\.py: in the source"
+    ):
+        release_check.check_wheel(wheel, source)
+    # The real tree: every module is where the sdist rules put it.
+    real = ROOT / "src" / "inferplot"
+    assert (real / "render" / "barstats.py").is_file()
+
+
+def test_wheel_check_refuses_a_wrong_name_or_version(tmp_path: Path) -> None:
+    platform = _wheel(tmp_path / "inferplot-0.1.0-cp314-cp314-macosx_11_0_arm64.whl")
+    with pytest.raises(release_check.CheckError, match="not a pure-Python wheel"):
+        release_check.check_wheel(platform)
+    renamed = _wheel(tmp_path / "inferplot-0.1.1-py3-none-any.whl")
+    with pytest.raises(
+        release_check.CheckError, match=r"METADATA Version is '0\.1\.0'"
+    ):
+        release_check.check_wheel(renamed)
+
+
+def test_a_final_version_may_not_say_it_is_unreleased(tmp_path: Path) -> None:
+    stale = METADATA + "\n**Status:** not released. inferplot is not on PyPI yet.\n"
+    with pytest.raises(release_check.CheckError, match="still says 'not released'"):
+        release_check.check_wheel(
+            _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=stale)
+        )
+    # A development or pre-release version may: it is not the release.
+    dev = stale.replace("Version: 0.1.0", "Version: 0.1.0rc1")
+    release_check.check_wheel(
+        _wheel(tmp_path / "inferplot-0.1.0rc1-py3-none-any.whl", metadata=dev)
+    )
+    # The README of this repository says so today, which is why a release commit
+    # has to change it (docs/RELEASING.md step 1.3).
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert (release_check.UNRELEASED.search(readme) is None) == bool(
+        re.fullmatch(r"\d+\.\d+\.\d+", inferplot.__version__)
+    )
+
+
+def test_smoke_draws_one_figure_with_each_function(tmp_path: Path) -> None:
+    report = release_check.smoke(tmp_path)
+    for name in (
+        "betweenstats",
+        "withinstats",
+        "histostats",
+        "scatterstats",
+        "barstats",
+    ):
+        assert f"\n{name}: " in report
+        assert (tmp_path / f"smoke_{name}.svg").stat().st_size > 0
+        assert (tmp_path / f"smoke_{name}.png").stat().st_size > 0
+
+
+def test_workflow_stops_unless_the_pypi_environment_requires_a_reviewer() -> None:
+    # GitHub creates a missing environment without protection on first use, so
+    # the first job checks the protection rules before anything is built.
+    steps = _workflow()["jobs"]["build"]["steps"]
+    names = [step.get("name", "") for step in steps]
+    guard = next(i for i, name in enumerate(names) if "requires a reviewer" in name)
+    build = names.index("Build the sdist and the wheel")
+    assert guard < build
+    step = steps[guard]
+    assert "github.event_name == 'push'" in step["if"]
+    assert "inputs.target == 'pypi'" in step["if"]
+    assert "environments/pypi" in step["run"]
+    assert "required_reviewers" in step["run"]
+    assert "exit 1" in step["run"]
+
+
 def test_wheel_check_refuses_another_runtime_dependency(tmp_path: Path) -> None:
     metadata = METADATA.replace(
         "Requires-Dist: scipy", "Requires-Dist: seaborn\nRequires-Dist: scipy"
@@ -248,7 +328,12 @@ def test_wheel_check_refuses_relative_links_in_the_description(tmp_path: Path) -
     wheel = _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=metadata)
     with pytest.raises(release_check.CheckError, match=r"relative links: docs/api\.md"):
         release_check.check_wheel(wheel)
-    absolute = METADATA + "\n[the API](https://example.org/api.md), [below](#usage)\n"
+    anchored = METADATA + "\n[below](#usage)\n"
+    with pytest.raises(release_check.CheckError, match="relative links: #usage"):
+        release_check.check_wheel(
+            _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=anchored)
+        )
+    absolute = METADATA + "\n[the API](https://example.org/api.md)\n"
     release_check.check_wheel(
         _wheel(tmp_path / "inferplot-0.1.0-py3-none-any.whl", metadata=absolute)
     )
@@ -285,12 +370,17 @@ def test_readme_links_are_made_absolute_for_pypi() -> None:
     assert not [
         target
         for target in release_check.LINK_TARGET.findall(released)
-        if not target.startswith(("https://", "#"))
+        if not target.startswith("https://")
     ]
     base = "https://raw.githubusercontent.com/sinkomr/inferplot/v0.1.0/"
     assert f"]({base}docs/img/betweenstats.png)" in released
     assert "](https://github.com/sinkomr/inferplot/blob/v0.1.0/docs/api.md)" in released
-    assert "](#not-in-v01)" in released
+    # A link to one of the README's own headings: PyPI gives headings no anchors.
+    assert "](#not-in-v01)" in readme
+    assert (
+        "](https://github.com/sinkomr/inferplot/blob/v0.1.0/README.md#not-in-v01)"
+        in released
+    )
     # Only link targets change.
     assert release_check.LINK_TARGET.sub("", released) == release_check.LINK_TARGET.sub(
         "", readme
@@ -364,7 +454,11 @@ def test_command_line_entry_point(tmp_path: Path) -> None:
     dist.mkdir()
     _wheel(dist / "inferplot-0.1.0-py3-none-any.whl")
     _sdist(dist / "inferplot-0.1.0.tar.gz", release_check.SDIST_REQUIRED)
-    assert release_check.main(["dists", str(dist)]) == 0
+    # (The hand-built wheel holds three files, so it is not compared with this
+    # repository's source tree; the workflow's real wheel is.)
+    none = str(tmp_path / "no-source")
+    assert release_check.main(["dists", str(dist), "--source", none]) == 0
+    assert release_check.main(["dists", str(dist)]) == 1  # modules missing
     (dist / "inferplot-0.1.0.tar.gz").unlink()
     _sdist(dist / "inferplot-0.1.0.tar.gz", ("README.md",))
-    assert release_check.main(["dists", str(dist)]) == 1
+    assert release_check.main(["dists", str(dist), "--source", none]) == 1

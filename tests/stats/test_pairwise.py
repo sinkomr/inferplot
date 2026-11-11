@@ -10,6 +10,7 @@ import pytest
 from tools.reference import stats_reference as ref
 
 from inferplot.stats import P_ADJUST_METHODS, games_howell, p_adjust, welch_t
+from tests.timing import allowed
 from tests.tolerances import TOLERANCES, assert_close
 
 RNG = np.random.Generator(np.random.PCG64(8))
@@ -85,4 +86,4 @@ def test_twenty_groups_of_thirty_take_under_half_a_second() -> None:
         pairs = games_howell(groups)
         best = min(best, time.perf_counter() - start)
     assert len(pairs) == 190
-    assert best < 0.5, f"games_howell for k = 20 took {best:.3f} s"
+    assert best < allowed(0.5), f"games_howell for k = 20 took {best:.3f} s"
