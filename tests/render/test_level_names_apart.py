@@ -109,6 +109,9 @@ def test_barstats_legend_and_ticks_keep_names_apart() -> None:
     assert len(set(ticks)) == 2, ticks
     assert ticks[0].endswith("2023")
     assert ticks[1].endswith("2024")
+    # Two bars keep their lines TICK_LINE_IN wide (only many bars narrow them).
+    drawn = fig.axes["main"].get_xticklabels()[0].get_text()
+    assert drawn.startswith("Measured in\nthe first half\n"), drawn
     assert "level_labels_alike" not in _codes(fig)
     # The texts name the levels apart too (the alt text shortens them by D77).
     alt = fig.result.text.alt_text

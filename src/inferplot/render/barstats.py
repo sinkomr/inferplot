@@ -784,7 +784,12 @@ class _BarDrawing(base.BaseDrawing):
             [slot]
             + [self.extent(t).width + gap for t in self.bar_labels if t is not None]
         )
-        self.wrap_ticks(min(TICK_LINE_IN * dpi, floor - 2 * gap))
+        # Level names wrap to TICK_LINE_IN, narrower only where many bars
+        # share the bounded area (B11).
+        narrow = floor < MIN_SPACING_IN * dpi
+        self.wrap_ticks(
+            min(TICK_LINE_IN * dpi, floor - 2 * gap) if narrow else TICK_LINE_IN * dpi
+        )
         slot = max(slot, self.widest_tick() + 2 * gap)
         self.slot_px = slot
         strip = self.strip_px()
