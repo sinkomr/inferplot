@@ -1,0 +1,64 @@
+# Evaluation task yield-missing-values (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "yield-missing-values"
+function = "betweenstats"
+trap = "missing outcomes and one row without a group: n is 26 of 30 rows"
+request = """
+Crop yields (tonnes per hectare) from fields at three sites, Ashford,
+Brookfield and Carlow (data.csv, one row per field). Some fields have no yield
+recorded and one row is missing its site. Do the sites differ in yield?
+"""
+design = "three independent groups with missing values"
+correct_rule = "Welch's ANOVA, the classic one-way ANOVA or the Kruskal-Wallis test on the 26 complete rows."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_missing.csv"
+columns = { group = "site", value = "yield_t_ha" }
+levels = { site = { a = "Ashford", b = "Brookfield", c = "Carlow" } }
+note = "inferplot oracle dataset edge_missing (hand-made); columns and group names renamed"
+
+[reference]
+args = ["site", "yield_t_ha"]
+kwargs = { type = "parametric" }
+check_codes = ["pairs_hidden", "rows_dropped"]
+
+[[accepted]]
+family = "welch_anova"
+source = "fixture"
+fixture = "ggbetweenstats-edge_missing-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 9.08057201696582, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+df_error = { value = 13.8248564373033, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0030325444485713, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.489939483509824, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.11435330386419, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 26.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-edge_missing-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 10.6792497625831, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.00479767006858855, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.427169990503324, key = "stats/subtitle_data/0/estimate" }
+n = { value = 26.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "oneway_anova"
+source = "recipe"
+recipe = "oneway_anova"
+recipe_args = { x = "site", y = "yield_t_ha" }
+[accepted.numbers]
+statistic = { value = 7.585977622917939 }
+df = { value = 2.0 }
+df_error = { value = 23.0 }
+p_value = { value = 0.0029499146147719496 }
+n = { value = 26.0 }

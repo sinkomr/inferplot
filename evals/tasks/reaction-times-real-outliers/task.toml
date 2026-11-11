@@ -1,0 +1,61 @@
+# Evaluation task reaction-times-real-outliers (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "reaction-times-real-outliers"
+function = "betweenstats"
+trap = "two extreme values that are real observations and must stay in"
+request = """
+Reaction times (seconds) of 30 participants in three training conditions, A,
+B and C (data.csv: condition, reaction_time_s). Two participants in condition C
+took far longer than everyone else; we checked, and these are real measurements,
+not errors, so they must stay in the analysis. Do the conditions differ?
+"""
+design = "three independent groups, two real extreme values in one group"
+correct_rule = "A method that resists the two extreme values without removing them: the Kruskal-Wallis test or the trimmed-means ANOVA. Welch's and the classic ANOVA are rejected here (the two values inflate group C's variance; Welch's p is .054 against .0007 and .008)."
+rejected = ["welch_anova", "oneway_anova"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_outliers.csv"
+columns = { group = "condition", value = "reaction_time_s" }
+levels = { condition = { a = "A", b = "B", c = "C" } }
+note = "inferplot oracle dataset edge_outliers (hand-made); renamed"
+
+[reference]
+args = ["condition", "reaction_time_s"]
+kwargs = { type = "nonparametric" }
+check_codes = ["pairs_hidden"]
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-edge_outliers-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 14.5858064516129, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.000680349973140435, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.502958843159065, key = "stats/subtitle_data/0/estimate" }
+n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "trimmed_anova"
+source = "fixture"
+fixture = "ggbetweenstats-edge_outliers-robust"
+kwargs = { type = "robust" }
+[accepted.numbers]
+statistic = { value = 8.30945076266822, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+df_error = { value = 9.40888774295644, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.00833894255196832, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.930761596706897, key = "stats/subtitle_data/0/estimate" }
+n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_anova"
+label = "Welch's ANOVA driven by the two extreme values"
+source = "fixture"
+fixture = "ggbetweenstats-edge_outliers-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = 3.53510828075708, key = "stats/subtitle_data/0/statistic" }
+p_value = { value = 0.0535511391739242, key = "stats/subtitle_data/0/p.value" }

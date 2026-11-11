@@ -1,0 +1,36 @@
+# Evaluation task bayes-factor-three-groups (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "bayes-factor-three-groups"
+function = "betweenstats"
+trap = "a Bayes factor for three groups, which inferplot v0.1 refuses (NotImplementedError)"
+request = """
+For the plant growth experiment in data.csv (treatment: control, treatment_1,
+treatment_2; dry_weight in grams), a reviewer asked for a Bayes factor for whether
+the three conditions differ, instead of a p-value. Please compute it and make the
+figure.
+"""
+design = "three independent groups; a Bayesian ANOVA is asked for"
+correct_rule = "Either no test with an explanation that inferplot v0.1 has no Bayes factor for three groups (it raises NotImplementedError), or a Bayes factor from another tool named as such. A frequentist test reported in its place is rejected (a silent switch)."
+rejected = ["welch_anova", "oneway_anova", "kruskal_wallis"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/PlantGrowth.csv"
+columns = { group = "treatment", weight = "dry_weight" }
+levels = { treatment = { ctrl = "control", trt1 = "treatment_1", trt2 = "treatment_2" } }
+note = "R datasets::PlantGrowth; renamed"
+
+[reference]
+args = ["treatment", "dry_weight"]
+kwargs = { type = "bayes" }
+raises = "NotImplementedError"
+
+[[accepted]]
+family = "no_test"
+label = "no test, with the reason"
+source = "none"
+
+[[accepted]]
+family = "bayes_factor"
+label = "a Bayes factor from another tool, named"
+source = "none"

@@ -1,0 +1,62 @@
+# Evaluation task caffeine-pilot-five-people (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "caffeine-pilot-five-people"
+function = "withinstats"
+trap = "a very small sample (5 participants)"
+request = """
+A pilot study: five participants' alertness scores before and after a cup of
+coffee (data.csv: participant, time, alertness; one row per participant and time
+point). Is there a change in alertness?
+"""
+design = "two time points on the same 5 participants"
+correct_rule = "The paired t-test or the Wilcoxon signed-rank test; five values call for caution in the report (inferplot's small_n check fires only below 5, so it is silent here)."
+rejected = ["welch_t", "student_t", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_within2_small.csv"
+columns = { subject = "participant", condition = "time", value = "alertness" }
+levels = { time = { pre = "before", post = "after" } }
+note = "inferplot oracle dataset edge_within2_small (hand-made); renamed"
+
+[reference]
+args = ["time", "alertness"]
+kwargs = { subject_id = "participant", type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "paired_t"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_small-parametric"
+kwargs = { subject_id = "participant", type = "parametric" }
+[accepted.numbers]
+statistic = { value = 2.35637143413996, key = "stats/subtitle_data/0/statistic" }
+df = { value = 4.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.0779710123529257, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.840811820452518, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.0846924707996971, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.70929626913457, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_small-nonparametric"
+kwargs = { subject_id = "participant", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 15.0, key = "stats/subtitle_data/0/statistic", alt = [0.0] }
+p_value = { value = 0.0590582290905367, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 1.0, key = "stats/subtitle_data/0/estimate" }
+n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_t"
+label = "unpaired Welch's t-test"
+source = "recipe"
+recipe = "welch_t"
+recipe_args = { x = "time", y = "alertness", levels = ["after", "before"] }
+[traps.numbers]
+statistic = { value = 0.5624155637618196 }
+df = { value = 7.884858057093004 }
+p_value = { value = 0.5894601016105641 }
+n = { value = 10.0 }

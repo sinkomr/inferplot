@@ -1,0 +1,65 @@
+# Evaluation task diets-three-groups (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "diets-three-groups"
+function = "betweenstats"
+trap = "none (baseline): three independent groups"
+request = """
+We grew 30 plants, 10 under a control condition and 10 under each of two
+treatments. data.csv has one row per plant (columns treatment and dry_weight, in
+grams). Do the three conditions differ in the plants' dry weight? Please make a
+figure for the paper and report the result.
+"""
+design = "three independent groups, continuous outcome"
+correct_rule = "An omnibus test of three independent groups: Welch's ANOVA, the classic one-way ANOVA or the Kruskal-Wallis test, each scored against its own numbers."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/PlantGrowth.csv"
+columns = { group = "treatment", weight = "dry_weight" }
+levels = { treatment = { ctrl = "control", trt1 = "treatment_1", trt2 = "treatment_2" } }
+note = "R datasets::PlantGrowth; columns and condition names renamed"
+
+[reference]
+args = ["treatment", "dry_weight"]
+kwargs = { type = "parametric" }
+check_codes = ["pairs_hidden"]
+
+[[accepted]]
+family = "welch_anova"
+source = "fixture"
+fixture = "ggbetweenstats-PlantGrowth-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 5.18097240811319, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+df_error = { value = 17.1284186166441, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.01739282149017, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.293500812509077, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-PlantGrowth-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 7.98822874944372, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.018423755731472, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.275456163773921, key = "stats/subtitle_data/0/estimate" }
+n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "oneway_anova"
+source = "recipe"
+recipe = "oneway_anova"
+recipe_args = { x = "treatment", y = "dry_weight" }
+[accepted.numbers]
+statistic = { value = 4.846087862380136 }
+df = { value = 2.0 }
+df_error = { value = 27.0 }
+p_value = { value = 0.015909958325622926 }
+n = { value = 30.0 }

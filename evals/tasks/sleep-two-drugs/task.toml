@@ -1,0 +1,64 @@
+# Evaluation task sleep-two-drugs (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "sleep-two-drugs"
+function = "withinstats"
+trap = "repeated measures in long format: each patient has two rows"
+request = """
+Ten patients each took two sleep drugs on separate occasions. data.csv has
+one row per patient and drug (patient, drug, extra_sleep_h: hours of sleep gained
+compared with no drug). Does the extra sleep differ between the two drugs?
+"""
+design = "two conditions measured on the same 10 patients (paired)"
+correct_rule = "A paired analysis: the paired t-test or the Wilcoxon signed-rank test. Independent-samples tests are rejected and flagged as traps."
+rejected = ["welch_t", "student_t", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/sleep.csv"
+columns = { ID = "patient", group = "drug", extra = "extra_sleep_h" }
+levels = { drug = { 1 = "drug_A", 2 = "drug_B" } }
+note = "R datasets::sleep; drug labels spelled out"
+
+[reference]
+args = ["drug", "extra_sleep_h"]
+kwargs = { subject_id = "patient", type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "paired_t"
+source = "fixture"
+fixture = "ggwithinstats-sleep-parametric"
+kwargs = { subject_id = "patient", type = "parametric" }
+[accepted.numbers]
+statistic = { value = -4.06212768338204, key = "stats/subtitle_data/0/statistic" }
+df = { value = 9.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.00283289019738427, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -1.1739249035142, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -1.93560212783375, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -0.378917883828817, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "ggwithinstats-sleep-nonparametric"
+kwargs = { subject_id = "patient", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 0.0, key = "stats/subtitle_data/0/statistic", alt = [45.0] }
+p_value = { value = 0.00909069801592506, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -1.0, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -1.0, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 10.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_t"
+label = "unpaired Welch's t-test"
+source = "recipe"
+recipe = "welch_t"
+recipe_args = { x = "drug", y = "extra_sleep_h", levels = ["drug_A", "drug_B"] }
+[traps.numbers]
+statistic = { value = -1.8608134674868526 }
+df = { value = 17.776473516178495 }
+p_value = { value = 0.07939414018735828 }
+n = { value = 20.0 }

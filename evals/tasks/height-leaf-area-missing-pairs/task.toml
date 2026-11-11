@@ -1,0 +1,50 @@
+# Evaluation task height-leaf-area-missing-pairs (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "height-leaf-area-missing-pairs"
+function = "scatterstats"
+trap = "missing values in either column: 11 of 14 pairs are complete"
+request = """
+We measured the height and the leaf area of 14 seedlings (data.csv:
+seedling, height_cm, leaf_area_cm2), but some measurements are missing. How
+strongly are height and leaf area related?
+"""
+design = "two measurements with missing values"
+correct_rule = "Pearson's or Spearman's correlation on the 11 complete pairs."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_corr_missing.csv"
+columns = { id = "seedling", x = "height_cm", y = "leaf_area_cm2" }
+note = "inferplot oracle dataset edge_corr_missing (hand-made); renamed"
+
+[reference]
+args = ["height_cm", "leaf_area_cm2"]
+kwargs = { type = "parametric" }
+check_codes = ["rows_dropped"]
+
+[[accepted]]
+family = "pearson"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_missing-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 17.6279800221973, key = "stats/subtitle_data/0/statistic", alt = [0.985825861827497] }
+p_value = { value = 2.75620896945263e-08, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.985825861827497, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.944504864386455, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.996436140785183, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 11.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_missing-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 6.00000000000001, key = "stats/subtitle_data/0/statistic", alt = [0.972727272727273] }
+p_value = { value = 5.14217704904937e-07, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.972727272727273, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.89109236210694, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.993384411230704, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 11.0, key = "stats/subtitle_data/0/n.obs" }

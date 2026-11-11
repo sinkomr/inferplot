@@ -1,0 +1,47 @@
+# Evaluation task clinic-ratings-heavy-ties (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "clinic-ratings-heavy-ties"
+function = "betweenstats"
+trap = "ordinal 1-to-5 ratings with heavy ties: a rank test with the tie correction"
+request = """
+Patients rated their satisfaction with one of three clinics on a 1-to-5 scale
+(1 = very unhappy, 5 = very happy); data.csv has one row per patient (clinic,
+satisfaction). Do the clinics differ in how satisfied their patients are?
+"""
+design = "three independent groups, ordinal ratings with many ties"
+correct_rule = "The Kruskal-Wallis test (with R's and SciPy's default correction for ties). Means-based ANOVAs are rejected for 5-point ordinal ratings; the uncorrected H is flagged as a trap."
+rejected = ["welch_anova", "oneway_anova"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_ties.csv"
+columns = { group = "clinic", score = "satisfaction" }
+levels = { clinic = { a = "clinic_A", b = "clinic_B", c = "clinic_C" } }
+note = "inferplot oracle dataset edge_ties (hand-made); renamed"
+
+[reference]
+args = ["clinic", "satisfaction"]
+kwargs = { type = "nonparametric" }
+check_codes = ["heavy_ties", "pairs_hidden"]
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-edge_ties-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 5.41774922674282, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.066611728497682, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.186818938853201, key = "stats/subtitle_data/0/estimate" }
+n = { value = 30.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "kruskal_wallis"
+label = "Kruskal-Wallis H without the tie correction"
+source = "recipe"
+recipe = "kruskal_untied"
+recipe_args = { x = "clinic", y = "satisfaction" }
+[traps.numbers]
+statistic = { value = 5.065806451612914 }
+p_value = { value = 0.07942808754963226 }

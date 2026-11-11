@@ -1,0 +1,65 @@
+# Evaluation task insect-sprays-six-groups (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "insect-sprays-six-groups"
+function = "betweenstats"
+trap = "six groups with very unequal variances; pairwise comparisons need a multiplicity adjustment"
+request = """
+We tested six insecticide sprays (A to F), each on 12 plots, and counted the
+insects left on every plot (data.csv: spray, insects). Do the sprays differ, and
+which ones differ from which? Please give the overall test, the pairwise
+comparisons and a figure.
+"""
+design = "six independent groups, counts with spreads that differ about fivefold"
+correct_rule = "Welch's ANOVA or the Kruskal-Wallis test as the overall test (pairwise comparisons are not scored). The classic equal-variance ANOVA is flagged as a trap: the standard deviations range from 1.0 to 4.7."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/InsectSprays.csv"
+columns = { spray = "spray", count = "insects" }
+note = "R datasets::InsectSprays"
+
+[reference]
+args = ["spray", "insects"]
+kwargs = { type = "parametric" }
+check_codes = ["pairs_hidden"]
+
+[[accepted]]
+family = "welch_anova"
+source = "fixture"
+fixture = "ggbetweenstats-InsectSprays-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = 36.0654438935773, key = "stats/subtitle_data/0/statistic" }
+df = { value = 5.0, key = "stats/subtitle_data/0/df" }
+df_error = { value = 30.0425605087674, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 7.99937945567335e-12, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.829481014207668, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.719423351695877, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.0, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 72.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "kruskal_wallis"
+source = "fixture"
+fixture = "ggbetweenstats-InsectSprays-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 54.6913446223714, key = "stats/subtitle_data/0/statistic" }
+df = { value = 5.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 1.51084443941851e-10, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.770300628484105, key = "stats/subtitle_data/0/estimate" }
+n = { value = 72.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "oneway_anova"
+label = "classic one-way ANOVA assuming equal variances"
+source = "recipe"
+recipe = "oneway_anova"
+recipe_args = { x = "spray", y = "insects" }
+[traps.numbers]
+statistic = { value = 34.702282055491715 }
+df = { value = 5.0 }
+df_error = { value = 66.0 }
+p_value = { value = 3.1825837261451046e-17 }
+n = { value = 72.0 }

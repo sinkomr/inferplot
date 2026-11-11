@@ -1,0 +1,37 @@
+# Evaluation task satisfaction-engagement-ordinal (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "satisfaction-engagement-ordinal"
+function = "scatterstats"
+trap = "two ordinal ratings with many ties"
+request = """
+Twenty employees rated their job satisfaction (1 to 5) and their engagement
+(1 to 6) in a survey (data.csv: employee, satisfaction, engagement). Are the two
+ratings associated?
+"""
+design = "two ordinal ratings with ties"
+correct_rule = "Spearman's rho (a rank correlation for ordinal data). Pearson's r is rejected for ordinal ratings."
+rejected = ["pearson"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_corr_ties.csv"
+columns = { id = "employee", x = "satisfaction", y = "engagement" }
+note = "inferplot oracle dataset edge_corr_ties (hand-made); renamed"
+
+[reference]
+args = ["satisfaction", "engagement"]
+kwargs = { type = "nonparametric" }
+check_codes = ["heavy_ties"]
+
+[[accepted]]
+family = "spearman"
+source = "fixture"
+fixture = "ggscatterstats-edge_corr_ties-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 174.103282626101, key = "stats/subtitle_data/0/statistic", alt = [0.869095276220977] }
+p_value = { value = 6.60226447063746e-07, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.869095276220977, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.685785658437855, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.948717062175691, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }

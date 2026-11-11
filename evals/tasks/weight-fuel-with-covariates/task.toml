@@ -1,0 +1,47 @@
+# Evaluation task weight-fuel-with-covariates (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "weight-fuel-with-covariates"
+function = "scatterstats"
+trap = "a regression with covariates: inferplot v0.1 has no such function, so redirect"
+request = """
+Does car weight affect fuel economy once you account for horsepower and the
+number of cylinders? data.csv has mpg, wt (weight in 1000 lb), hp and cyl for 32
+car models. Please give me the estimate for weight and a figure.
+"""
+design = "an outcome with one predictor of interest and two covariates (multiple regression)"
+correct_rule = "A multiple regression (or ANCOVA) of mpg on wt, hp and cyl; scored on the t-test of the wt coefficient. A simple correlation of wt and mpg ignores the covariates and is rejected and flagged as a trap. In the inferplot arm the agent should say that inferplot does not cover this and use another tool."
+rejected = ["pearson", "spearman", "winsorized"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", mpg = "mpg", wt = "wt", hp = "hp", cyl = "cyl" }
+note = "R datasets::mtcars"
+
+[reference]
+args = ["wt", "mpg"]
+kwargs = { type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "regression"
+label = "multiple regression mpg ~ wt + hp + cyl"
+source = "recipe"
+recipe = "ols_term"
+recipe_args = { y = "mpg", predictors = ["wt", "hp", "cyl"], term = "wt" }
+[accepted.numbers]
+statistic = { value = -4.276365460187177 }
+df = { value = 28.0 }
+p_value = { value = 0.00019947649747218617 }
+estimate = { value = -3.1669731107486037 }
+n = { value = 32.0 }
+
+[[traps]]
+family = "pearson"
+label = "simple correlation ignoring the covariates"
+source = "fixture"
+fixture = "ggscatterstats-mtcars-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = -9.55904414697211, key = "stats/subtitle_data/0/statistic", alt = [-0.867659376517228] }
+p_value = { value = 1.29395870135052e-10, key = "stats/subtitle_data/0/p.value" }

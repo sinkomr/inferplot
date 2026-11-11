@@ -1,0 +1,49 @@
+# Evaluation task weight-fuel-correlation (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "weight-fuel-correlation"
+function = "scatterstats"
+trap = "none (baseline): two measurements on the same cars"
+request = """
+Is car weight (wt, in 1000 lb) related to fuel economy (mpg) in data.csv?
+Please plot it and report how strong the relationship is.
+"""
+design = "two continuous measurements on 32 cars"
+correct_rule = "Pearson's or Spearman's correlation (the statistic may be given as t or S, or as r or rho)."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", wt = "wt", mpg = "mpg" }
+note = "R datasets::mtcars"
+
+[reference]
+args = ["wt", "mpg"]
+kwargs = { type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "pearson"
+source = "fixture"
+fixture = "ggscatterstats-mtcars-parametric"
+kwargs = { type = "parametric" }
+[accepted.numbers]
+statistic = { value = -9.55904414697211, key = "stats/subtitle_data/0/statistic", alt = [-0.867659376517228] }
+p_value = { value = 1.29395870135052e-10, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -0.867659376517228, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.933826413284994, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -0.744087196460113, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "spearman"
+source = "fixture"
+fixture = "ggscatterstats-mtcars-nonparametric"
+kwargs = { type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 10292.3186135227, key = "stats/subtitle_data/0/statistic", alt = [-0.886422033270298] }
+p_value = { value = 1.48759485812743e-11, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -0.886422033270298, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.944661767634971, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = -0.774011803061892, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
