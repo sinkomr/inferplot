@@ -31,7 +31,107 @@
   "lognormal_trimmed_mean": {
    "formula": 1.1110015059675609,
    "monte_carlo": 1.1102298031753681
+  },
+  "cramers_v_weak": {
+   "formula": 0.14491376746189438,
+   "monte_carlo": 0.14586730887141328
+  },
+  "cramers_v_strong": {
+   "formula": 0.4575295983139597,
+   "monte_carlo": 0.4571954087465175
+  },
+  "pearsons_c": {
+   "formula": 0.2945470944816464,
+   "monte_carlo": 0.29376297834265097
   }
+ },
+ "bar_bowker_30": {
+  "params": "paired 3 x 3, 30 pairs, symmetric cells ((0.2333333333333333, 0.05, 0.05), (0.05, 0.2333333333333333, 0.05), (0.05, 0.05, 0.2333333333333333))",
+  "reps": 20000,
+  "seed": 30261613,
+  "hits": {
+   "p": 262,
+   "refused": 2463
+  },
+  "seconds": 0.7
+ },
+ "bar_bowker_60": {
+  "params": "paired 3 x 3, 60 pairs, symmetric cells ((0.2333333333333333, 0.05, 0.05), (0.05, 0.2333333333333333, 0.05), (0.05, 0.05, 0.2333333333333333))",
+  "reps": 20000,
+  "seed": 30261612,
+  "hits": {
+   "p": 681,
+   "refused": 105
+  },
+  "seconds": 0.7
+ },
+ "bar_chisq_2x3_null": {
+  "params": "2 x 3, n 90, independent, rows (0.4, 0.6), columns (0.2, 0.3, 0.5)",
+  "reps": 20000,
+  "seed": 30261603,
+  "hits": {
+   "p": 1002,
+   "two": 19976,
+   "greater": 19932,
+   "inside": 20000
+  },
+  "seconds": 37.9
+ },
+ "bar_chisq_3x4_null": {
+  "params": "3 x 4, n 120, independent, rows (0.2, 0.3, 0.5), columns (0.25, 0.25, 0.25, 0.25)",
+  "reps": 20000,
+  "seed": 30261604,
+  "hits": {
+   "p": 935,
+   "two": 19997,
+   "greater": 19993,
+   "inside": 20000
+  },
+  "seconds": 29.1
+ },
+ "bar_cramers_v_strong": {
+  "params": "2 x 3, n 100, cells ((0.24, 0.16, 0.1), (0.06, 0.14, 0.3)); V = 0.457530",
+  "reps": 10000,
+  "seed": 30261606,
+  "hits": {
+   "two": 9741,
+   "greater": 9899,
+   "less": 9539,
+   "inside": 10000
+  },
+  "seconds": 91.6
+ },
+ "bar_cramers_v_weak": {
+  "params": "2 x 3, n 100, cells ((0.18, 0.15, 0.17), (0.12, 0.15, 0.23)); V = 0.144914",
+  "reps": 10000,
+  "seed": 30261605,
+  "hits": {
+   "two": 9325,
+   "greater": 9891,
+   "less": 8822,
+   "inside": 10000
+  },
+  "seconds": 36.7
+ },
+ "bar_fisher_holm_3": {
+  "params": "3 x 2, n 60, independent, rows (0.3333333333333333, 0.3333333333333333, 0.3333333333333333), columns (0.5, 0.5)",
+  "reps": 10000,
+  "seed": 30261619,
+  "hits": {
+   "raw": 836,
+   "holm": 262
+  },
+  "seconds": 73.5
+ },
+ "bar_fisher_holm_4": {
+  "params": "4 x 3, n 80, independent, rows (0.25, 0.25, 0.25, 0.25), columns (0.3, 0.3, 0.4)",
+  "reps": 10000,
+  "seed": 30261620,
+  "hits": {
+   "raw": 1948,
+   "holm": 410
+  },
+  "seconds": 117.5
  },
  "between_akp_effect": {
   "params": "normal n (12, 24), sd (1, 2), means (0.8, 0); AKP = 0.8",

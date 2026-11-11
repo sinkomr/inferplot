@@ -82,6 +82,9 @@ def test_true_values_agree_with_the_recorded_monte_carlo() -> None:
         "epsilon_squared": ss.EPS_TRUE,
         "kendall_w": ss.W_TRUE,
         "lognormal_trimmed_mean": ss.LOGNORMAL_TM,
+        "cramers_v_weak": ss.V_WEAK_TRUE,
+        "cramers_v_strong": ss.V_STRONG_TRUE,
+        "pearsons_c": ss.GOF_C_TRUE,
     }
     assert set(formulas) == set(recorded)
     for name, value in formulas.items():
