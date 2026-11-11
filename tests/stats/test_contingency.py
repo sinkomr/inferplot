@@ -238,6 +238,12 @@ def test_mcnemar_refusals() -> None:
     # R: NaN for a pair of empty mirrored cells (0 / 0), df still 3.
     with pytest.raises(ValueError, match=r"\[\(0, 1\), \(0, 2\)\]"):
         mcnemar(np.array([[5, 0, 0], [0, 5, 2], [0, 1, 5]]))
+    # A declared level empty in both measurements (an empty row and column) leaves
+    # its pairs of cells empty: refused, not dropped (review C5; R: NaN).
+    with pytest.raises(ValueError, match=r"\[\(0, 2\), \(1, 2\)\]"):
+        mcnemar(np.array([[5, 2, 0], [3, 6, 0], [0, 0, 0]]))
+    with pytest.raises(ValueError, match=r"\[\(0, 1\), \(1, 2\)\]"):
+        mcnemar(np.array([[5, 0, 2], [0, 0, 0], [3, 0, 6]]))
     with pytest.raises(ValueError, match="square"):
         mcnemar(np.array([[3, 6, 0], [2, 5, 7]]))
     with pytest.raises(ValueError, match="square"):
@@ -370,6 +376,55 @@ def test_proportion_tests() -> None:
     assert all(b.reason for b in one_row)
     with pytest.raises(ValueError, match="one probability per category"):
         proportion_tests(table, [0.5, 0.5])
+
+
+def _exact_gof(counts: list[int], shares: list[float]) -> Fraction:
+    """sum (x - n p)^2 / (n p) in rational arithmetic on the doubles p."""
+    n = sum(counts)
+    return sum(
+        (
+            (x - n * Fraction(p)) ** 2 / (n * Fraction(p))
+            for x, p in zip(counts, shares, strict=True)
+        ),
+        Fraction(0),
+    )
+
+
+def _check_gof(test: Any, counts: list[int], shares: list[float]) -> None:
+    k = len(counts)
+    exact = _exact_gof(counts, shares)
+    assert test.df == k - 1
+    assert test.n == sum(counts)
+    assert test.statistic == pytest.approx(float(exact), rel=1e-13)
+    assert test.p_value == pytest.approx(
+        float(stats.chi2.sf(float(exact), k - 1)), rel=1e-12
+    )
+
+
+@pytest.mark.parametrize("k", [8, 9, 10, 11, 12, 50])
+def test_goodness_of_fit_with_many_categories(k: int) -> None:
+    # Review C5: the degrees of freedom are k - 1 for every k (a df wrong from 7
+    # categories up went unnoticed), checked against exact rational arithmetic,
+    # in the one-way test and in every bar's test.
+    rng = np.random.default_rng(k)
+    weights = rng.integers(1, 20, size=k)
+    given = (weights / weights.sum()).tolist()
+    for shares in (None, given):
+        p = [1 / k] * k if shares is None else shares
+        for _ in range(5):
+            counts = rng.integers(0, 40, size=k).tolist()
+            if sum(counts) == 0:
+                continue
+            _check_gof(goodness_of_fit(counts, shares), counts, p)
+        table = rng.integers(0, 30, size=(k, 3))
+        table[0, :] += 1  # every column holds counts
+        bars = proportion_tests(table, shares)
+        assert [b.column for b in bars] == [0, 1, 2]
+        for bar in bars:
+            column = [int(v) for v in table[:, bar.column].tolist()]
+            _check_gof(bar.test, column, p)
+            assert bar.effect is not None
+            assert bar.effect == pearsons_c(column, shares)
 
 
 def test_column_percentages() -> None:
