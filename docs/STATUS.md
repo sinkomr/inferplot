@@ -5,6 +5,53 @@ A slice is done only when its definition of done in `CLAUDE.md` is met.
 
 Current phase: **5 — documentation, evaluation, release 0.1.0** (Phase 4 closed 2026-11-11: all five functions work end to end and are reviewed)
 
+## Waiting for the owner
+
+Everything the lead can do without the owner is done and reviewed (Phases 0 to 4
+closed; Phase 5 built and reviewed). What is left is the owner's to decide or do:
+
+1. **Publish 0.1.0** (`docs/RELEASING.md`, about 30 minutes the first time): accounts
+   on PyPI and TestPyPI, the two trusted publishers, the two GitHub environments
+   (`pypi` with you as required reviewer: the workflow refuses to run without it).
+   Then say so, and the lead prepares the release commit (version, changelog date,
+   install instructions); you push the tag and approve.
+2. **Run the agent evaluation** (`evals/README.md`): 64 Claude sessions, spending
+   your usage; run it in a container or a throwaway account. Not run so far.
+3. **Confirm, or overrule, the places where inferplot deliberately differs from
+   ggstatsplot's numbers.** Until then they stay as they are; each is listed in
+   `CHANGELOG.md` and SPEC §5 with R's number beside inferplot's in a test.
+   - Accurate where R's routine is not: Bayes factors at very large t (D61, D81),
+     interval bounds R's root search stops short of (D99), exactly collinear data
+     (D85, D86, D106).
+   - Fewer subjects than conditions: the repeated-measures ANOVA keeps its
+     correction (D62). Undefined bootstrap resamples are left out and counted (D65).
+   - Numbers are read as written: 0.1 + 0.2 and 0.3 are one value in the rank tests
+     and robust bootstraps (D74, D105, D126). Counts that fit exactly print 0 where
+     R prints rounding noise (D118).
+   - Two places where inferplot follows R although another choice is defensible:
+     ties among signed-rank differences are R's (W9, D88), and a p of exactly 0
+     prints as 2.23e-308 (D108).
+4. **Make `Fixture provenance` a required check on main** (GitHub > Settings >
+   Branches; T8). It runs and passes today, but nothing blocks a merge on it.
+5. **Clean up what the lead may not delete.** Remote branches, all merged or
+   obsolete: `baselines/barstats`, `baselines/barstats-keys`,
+   `baselines/phase3-visible`, `baselines/phase3-within`, `baselines/phase4-fixes`,
+   `baselines/phase4-render`, `baselines/review-render`, `oracle/phase1-cases`,
+   `oracle/phase2-cases`, `oracle/phase3-cases`, `oracle/phase4-barstats`,
+   `oracle/phase4-cases`, `oracle/probes-round3`, `oracle/probes-round4`,
+   `phase0-review-fixes`, `phase1/integration`, `phase2/oracle-fixes`,
+   `phase2/oracle-merge`, `phase2/review-fixes`, `test/mpl-baselines`
+   (`git push origin --delete <name>`). Local branches that need `git branch -D`:
+   `baselines/barstats`, `baselines/barstats-keys`, `baselines/phase3-visible`,
+   `baselines/phase4-fixes`, `baselines/phase4-render`, `oracle/phase4-barstats`,
+   `test/mpl-baselines-break`, `test/mpl-baselines-break2`. The session's scratch
+   folder (about 5 GB of agents' environments and outputs) can be removed whole.
+
+Open, low priority, no decision needed: a table with 2,000 levels of y takes 5 to
+160 s to analyse (a chart that size is refused anyway); on very large tables only
+some pairs get a Cramér's V; `oracle.yml` should skip its attest job on trial runs
+(they end as "failed" and send an email), to change with the next full R run.
+
 ## Phase 0 — Scaffold
 
 - [x] `pyproject.toml` (hatchling, src layout, `requires-python >= 3.11`), `uv.lock`, MIT `LICENSE` ("inferplot contributors"), `NOTICE` (ggstatsplot MIT notice; plotsalot credit)
