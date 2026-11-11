@@ -56,6 +56,7 @@ FIGURE_CODES = frozenset(
         "point_labels_crowded",
         "cell_labels_hidden",
         "figure_oversized",
+        "level_labels_alike",
     }
 )
 draw: Any = ip.render.barstats  # for calls with wrong argument types

@@ -291,6 +291,7 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `point_labels_crowded` | warning | S: point labels overlap, cross the line, or more than 200 are labelled. |
 | `figure_oversized` | warning | inferplot's own figure grew far beyond its panels (a very long text). |
 | `cell_labels_hidden` | warning | C: a cell label left out, or drawn where it does not read as its cell's. |
+| `level_labels_alike` | warning | B, W, C: two levels drawn with tick labels or legend entries that read alike. |
 | `line_label_ambiguous` | warning | H: a line's label is nearer the other line or crossed by it. |
 | `low_contrast` | warning | A text or a level colour can hardly be told from its background. |
 | `glyph_missing` | warning | Characters no available font can draw. |

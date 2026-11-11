@@ -59,7 +59,7 @@ from matplotlib.transforms import offset_copy
 from inferplot import _validate as v
 from inferplot.render import base, theme
 from inferplot.render.base import GAP_PT, LABEL_PAD_PT, LayerArgs, px
-from inferplot.render.comparison import wrap_tick_label
+from inferplot.render.comparison import wrap_names
 from inferplot.render.figure import (
     CellLabel,
     DrawnData,
@@ -584,7 +584,7 @@ class _BarDrawing(base.BaseDrawing):
             return float(probe.get_window_extent(renderer).width) <= room
 
         try:
-            return [wrap_tick_label(f"{name}\n", fits)[:-1] for name in names]
+            return wrap_names(names, fits)
         finally:
             probe.remove()
 
@@ -609,10 +609,12 @@ class _BarDrawing(base.BaseDrawing):
             return float(probe.get_window_extent(renderer).width) <= room
 
         try:
+            named = [name for name in self.texts.tick_labels if name]
+            wrapped = iter(wrap_names(named, fits))
             self.tick_texts = [
-                wrap_tick_label(label, fits) if name else label
-                for label, name in zip(
-                    self.unwrapped_ticks(), self.texts.tick_labels, strict=True
+                f"{next(wrapped)}\n{n}" if name else n
+                for name, n in zip(
+                    self.texts.tick_labels, self.texts.n_labels, strict=True
                 )
             ]
         finally:

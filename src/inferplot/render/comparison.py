@@ -91,7 +91,11 @@ __all__ = [
     "draw",
     "points_artist",
     "px",
+    "reads",
+    "wrap_name",
+    "wrap_names",
     "wrap_tick_label",
+    "wrap_tick_labels",
 ]
 
 FloatArray = NDArray[np.float64]
@@ -548,17 +552,13 @@ def _shortened(text: str, fits: Callable[[str], bool]) -> str:
     return text[:lo].rstrip() + _ELLIPSIS
 
 
-def wrap_tick_label(label: str, fits: Callable[[str], bool]) -> str:
-    """A tick label ``"<level>\n(n = <n>)"`` as drawn.
-
-    The level name is wrapped on spaces into lines that ``fits`` accepts, at
-    most TICK_LINES of them; a word too long for a line, and whatever does not
-    fit in the last line, is shortened with an ellipsis. The result keeps the
-    full name; a name that fits on one line is drawn as it is.
-    """
-    name, sep, count = label.rpartition("\n")
-    if not sep:
-        name, count = label, ""
+def wrap_name(name: str, fits: Callable[[str], bool], *, shorten: bool = True) -> str:
+    """A level name as drawn: wrapped on spaces into lines that ``fits``
+    accepts, at most TICK_LINES of them; a word too long for a line, and
+    whatever does not fit in the last line, is shortened with an ellipsis. A
+    name that fits on one line is drawn as it is. ``shorten=False`` keeps every
+    line and every word whole (a name that shortening would draw like
+    another's, :func:`wrap_names`)."""
     lines: list[str] = []
     for paragraph in name.split("\n"):
         current = ""
@@ -570,11 +570,99 @@ def wrap_tick_label(label: str, fits: Callable[[str], bool]) -> str:
                 lines.append(current)
                 current = word
         lines.append(current)
+    if not shorten:
+        return "\n".join(lines)
     if len(lines) > TICK_LINES:
         rest = " ".join(lines[TICK_LINES - 1 :])
         lines = [*lines[: TICK_LINES - 1], _shortened(rest, fits)]
-    wrapped = "\n".join(_shortened(line, fits) for line in lines)
-    return f"{wrapped}\n{count}" if sep else wrapped
+    return "\n".join(_shortened(line, fits) for line in lines)
+
+
+def reads(text: str) -> str:
+    """How a drawn label reads: its line breaks and runs of spaces as one space
+    (two names that differ only there look alike)."""
+    return " ".join(text.split())
+
+
+def _apart(alike: Sequence[str], fits: Callable[[str], bool]) -> dict[str, str] | None:
+    """Names that :func:`wrap_name` draws alike, each drawn with the part where
+    they differ kept (D77): an elided shared start, "… ", then the rest from
+    the word where they part. As many leading words are kept as leave every
+    rest whole; where no rest stays whole, the most that keeps them apart; None
+    where no elision keeps them apart."""
+    shared = 0
+    first = alike[0]
+    while all(len(n) > shared and n[shared] == first[shared] for n in alike):
+        shared += 1
+    start = first.rfind(" ", 0, shared) + 1  # the word where they part
+    lead = first[:start].split()
+    tails = [n[start:] for n in alike]
+    best: dict[str, str] | None = None
+    for kept in range(len(lead) - 1, -1, -1):
+        head = " ".join([*lead[:kept], "…"])
+        wanted = [f"{head} {tail}" for tail in tails]
+        drawn = [wrap_name(w, fits) for w in wanted]
+        if len({reads(d) for d in drawn}) < len(drawn):
+            continue
+        whole = all(reads(d) == reads(w) for d, w in zip(drawn, wanted, strict=True))
+        if whole:
+            return dict(zip(alike, drawn, strict=True))
+        if best is None:
+            best = dict(zip(alike, drawn, strict=True))
+    return best
+
+
+def wrap_names(names: Sequence[str], fits: Callable[[str], bool]) -> list[str]:
+    """Each of ``names`` (distinct level names) as drawn by :func:`wrap_name`,
+    every one still told apart from the others (D77, as the alt text shortens
+    names): names that would be drawn alike keep where they differ after an
+    elided shared start (:func:`_apart`); a name that would still read like
+    another's is drawn whole, on as many lines as it needs. Names that do not
+    collide are drawn exactly as :func:`wrap_name` draws them."""
+    drawn = {name: wrap_name(name, fits) for name in dict.fromkeys(names)}
+    groups: dict[str, list[str]] = {}
+    for name, text in drawn.items():
+        groups.setdefault(reads(text), []).append(name)
+    for alike in groups.values():
+        if len(alike) < 2:
+            continue
+        kept = _apart(alike, fits)
+        for name in alike:
+            drawn[name] = (
+                kept[name] if kept is not None else wrap_name(name, fits, shorten=False)
+            )
+    # An elided name may now read like a third name: those are drawn whole.
+    seen: dict[str, int] = {}
+    for text in drawn.values():
+        seen[reads(text)] = seen.get(reads(text), 0) + 1
+    for name, text in drawn.items():
+        if seen[reads(text)] > 1:
+            drawn[name] = wrap_name(name, fits, shorten=False)
+    return [drawn[name] for name in names]
+
+
+def wrap_tick_label(label: str, fits: Callable[[str], bool]) -> str:
+    """A tick label ``"<level>\n(n = <n>)"`` as drawn: the level name as
+    :func:`wrap_name` draws it, over the n line. The result keeps the full name."""
+    name, sep, count = label.rpartition("\n")
+    if not sep:
+        return wrap_name(label, fits)
+    return f"{wrap_name(name, fits)}\n{count}"
+
+
+def wrap_tick_labels(labels: Sequence[str], fits: Callable[[str], bool]) -> list[str]:
+    """:func:`wrap_tick_label` of each label, with the level names kept apart
+    (:func:`wrap_names`)."""
+    parts = [label.rpartition("\n") for label in labels]
+    names = [
+        name if sep else label
+        for (name, sep, _), label in zip(parts, labels, strict=True)
+    ]
+    wrapped = wrap_names(names, fits)
+    return [
+        f"{w}\n{count}" if sep else w
+        for w, (_, sep, count) in zip(wrapped, parts, strict=True)
+    ]
 
 
 _EMPTY: Final = np.empty(0, dtype=np.float64)
@@ -644,7 +732,7 @@ class Drawing(base.BaseDrawing):
             return float(probe.get_window_extent(renderer).width) <= room
 
         try:
-            self.tick_texts = [wrap_tick_label(t, fits) for t in self.texts.tick_labels]
+            self.tick_texts = wrap_tick_labels(self.texts.tick_labels, fits)
         finally:
             probe.remove()
         return self.tick_texts

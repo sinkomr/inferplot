@@ -26,6 +26,8 @@ Measured on the drawn figure from the rendered bounding boxes of its texts:
   larger than any of its layouts needs (30 in a side, plus 3 in a level and 0.5
   in a bracket for the comparison figures); the message names the long texts
   that widen it, or says that the layout went wrong;
+* ``level_labels_alike`` (warning): two different levels drawn with tick
+  labels or legend entries that read alike (:mod:`inferplot.render.level_checks`);
 * ``centrality_label_ambiguous`` (warning): a centrality label that reads as
   another level's (:func:`inferplot.render.labels.ambiguities`): mostly beyond
   the neighbouring point on its usual side, past the middle toward the
@@ -57,6 +59,7 @@ from inferplot.render.figure import (
     shows_all,
 )
 from inferplot.render.labels import ambiguities, covered
+from inferplot.render.level_checks import level_label_issue
 from inferplot.render.view_checks import view_issues
 
 if TYPE_CHECKING:
@@ -944,6 +947,9 @@ def figure_issues(fig: StatsFigure) -> tuple[Issue, ...]:
     hidden = cell_label_issue(fig, extents)  # barstats
     if hidden is not None:
         issues.append(hidden)
+    alike = level_label_issue(fig)
+    if alike is not None:
+        issues.append(alike)
     issues += _path_issues(fig, extents)
     ambiguous = _ambiguous_labels(fig)
     if ambiguous is not None:
