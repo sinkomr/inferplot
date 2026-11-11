@@ -16,6 +16,7 @@ import pytest
 from scipy import stats as sp_stats
 
 from inferplot.stats import histogram_bins, marginal_bins, ols_band
+from inferplot.text import r_round
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
     ACCURATE_BAYES_FACTORS,
@@ -2001,10 +2002,12 @@ def test_backends_see_the_table_r_analyzed(case: OracleCase, backend: Backend) -
 
 
 def _r_round_text(value: float, digits: int) -> str:
-    """paste0(round(value, digits)): R's round() (probe-contingency's 927 labels:
-    Python's round() on the same double, ties to even on the exact binary value)
-    printed with up to 15 significant digits, no trailing zeros."""
-    return format(round(value, digits), ".15g")
+    """paste0(round(value, digits)): R's round() (R >= 4.0.0, ``?Round``: the
+    nearer of the two decimal candidates in double arithmetic, the even one on
+    equal distances; tests/test_probe_round3.py pins it on probe-round's 3,960
+    values, 98 of which Python's round() gets wrong) printed with up to 15
+    significant digits, no trailing zeros."""
+    return format(r_round(value, digits), ".15g")
 
 
 @pytest.mark.parametrize("case", _bar_completed())
@@ -2089,9 +2092,9 @@ def test_bar_failed_case(case: OracleCase) -> None:
 
 def test_probe_contingency_covers_its_grid() -> None:
     # The rules are tested in tests/test_reference_vs_oracle.py; the percent labels
-    # here: paste0(round(perc, d), "%") is Python's round() on the same double
-    # (ties to even on the exact binary value: 12.5 -> 12, 6.25 -> 6.2, 31.25 ->
-    # 31.2), printed with up to 15 significant digits.
+    # here: paste0(round(perc, d), "%") is R's round() of the double (12.5 -> 12,
+    # 6.25 -> 6.2, 31.25 -> 31.2; on these 927 Python's round() happens to agree,
+    # not on probe-round's k / 2000), printed with up to 15 significant digits.
     contingency = probe("probe-contingency")
     assert len(contingency.rows("chisq")) == 22
     assert len(contingency.rows("goodness_of_fit")) == 13
@@ -2105,7 +2108,7 @@ def test_probe_contingency_covers_its_grid() -> None:
         perc = r_double(str(row["perc_hex"]))
         assert perc is not None
         assert perc == (row["k"] / row["n"]) * 100
-        rounded = round(perc, row["digits"])
+        rounded = r_round(perc, row["digits"])
         assert r_double(str(row["rounded_hex"])) == rounded
         assert row["label"] == f"{_r_round_text(perc, row['digits'])}%"
     ties = {row["label"] for row in labels if row["n"] in (8, 16)}

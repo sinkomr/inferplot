@@ -869,10 +869,10 @@ def column_percentages(table: CountTable) -> tuple[tuple[float | None, ...], ...
     the exact share differ from R's double in 81 of them). None for a column with
     no counts. Row by row, like the table.
 
-    The label is this double rounded by R's ``round(x, digits.perc)`` (on the
-    binary value, ties to even: 12.5 gives 12, 6.25 gives 6.2 at one digit, as
-    Python's ``round()`` on the same double) and printed without trailing zeros;
-    a zero cell gets no label. That belongs to the text layer.
+    The label is this double rounded by R's ``round(x, digits.perc)`` (12.5 gives
+    12, 6.25 gives 6.2 at one digit, 0.05 gives 0; not Python's ``round()``, see
+    ``inferplot.text.r_round``) and printed without trailing zeros; a zero cell
+    gets no label. That belongs to the text layer.
     """
     counts = _as_counts(table)
     totals = counts.sum(axis=0)

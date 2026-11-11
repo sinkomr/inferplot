@@ -923,6 +923,43 @@ CHISQ_ROOT_MISSES: Mapping[
 )
 
 
+# Exact zeros R reports as rounding noise, where inferplot reports exactly 0
+# (DECISIONS.md D118, deliberate; owner to confirm). (case, subtitle column) -> (R's
+# value, R's printed text at the case's digits, inferplot's printed text). Every
+# other number and text of these cases must equal R's. Oracle round 3: the exact
+# fit 8, 2, 7, 8 against 0.32, 0.08, 0.28, 0.32 (probe-bartables records the same
+# doubles from chisq.test and pearsons_c).
+EXACT_ZEROS: Mapping[tuple[str, str], tuple[float, str, str]] = MappingProxyType(
+    {
+        ("ggbarstats-edge_bar_exact_fit-parametric", "statistic"): (
+            1.12694415031573e-31,
+            "1.13e-31",
+            "0.00",
+        ),
+        ("ggbarstats-edge_bar_exact_fit-parametric", "estimate"): (
+            6.71399776680252e-17,
+            "6.71e-17",
+            "0.00",
+        ),
+    }
+)
+
+
+def exact_zero(value: float) -> bool:
+    """Whether ``value`` is R's rounding noise for an exact zero (EXACT_ZEROS), so
+    that inferplot's value is 0.0. Matched by value, as CHISQ_ROOT_MISSES is."""
+    return any(
+        value != 0.0 and math.isclose(value, r_value, rel_tol=1e-13)
+        for r_value, _, _ in EXACT_ZEROS.values()
+    )
+
+
+def expected_value(value: float) -> float:
+    """The value inferplot reports for R's ``value``: 0.0 for registered noise of
+    an exact zero (EXACT_ZEROS), else R's value."""
+    return 0.0 if exact_zero(value) else value
+
+
 # Geoms whose layer parameters generate.R records (the drawn pairs and labels).
 PARAMETER_GEOMS = frozenset({"GeomSignif"})
 

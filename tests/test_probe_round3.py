@@ -3,9 +3,13 @@
 Review round 3 of the oracle (generate.R's ROUND3_CASES, the round-3 entries of
 HELD_OUT_CASES, and four probes). Each test states an answer as a fact about R 4.5.3
 with ggstatsplot 1.1.4 and its packages, and re-computes it independently where a
-method exists. Where inferplot differs today the case is held out (probe-heldout),
-not marked as failing; the tests here say nothing about inferplot except where it
-agrees with a probe that no fixture covers (the paired signed-rank test).
+method exists. Where inferplot differs by a deliberate rule the case is held out
+(probe-heldout), not marked as failing, and the difference is pinned here with R's
+numbers beside inferplot's: the one-sample signed-rank test near the test value
+(D105), trimcibt's 0/0 resamples (D65), exact zeros (D118), the order of the
+Fisher pair rows. inferplot agrees with R on the paired signed-rank test, Cramer's
+V at large df, the percent labels (``inferplot.text.r_round``) and every Fisher
+pair's numbers.
 
 1. Signed-rank test, a value equal to the test value only as written (W9, D88,
    D105; probe-nearzero). ``wilcox.test`` drops a difference only when it is
@@ -21,11 +25,12 @@ agrees with a probe that no fixture covers (the paired signed-rank test).
 3. Cramer's V at 19 to 60 df (B5; probe-bartables, edge_bar_wide*). R prints the
    adjusted V above its own upper bound, as inferplot does.
 4. Exact zeros (C3; probe-bartables, edge_bar_exact_fit, held-out edge_bar_zero_v).
-   R prints its rounding noise (chi-squared 1.13e-31, C 6.71e-17, V 5.59e-09).
+   R prints its rounding noise (chi-squared 1.13e-31, C 6.71e-17, V 5.59e-09);
+   inferplot reports 0 (D118; ``EXACT_ZEROS`` pins the exact fit's fixture).
 5. Percent labels (D108; probe-round, edge_bar_ties-*). R's ``round(x, d)`` for d
    >= 1 picks between the two decimal candidates by their distance to the double,
    the even one on a tie of distances; for 98 values k / 2000 at one digit that is
-   not Python's ``round()``.
+   not Python's ``round()``. inferplot's ``text.r_round`` follows R.
 6. One-sided Fisher pairs (edge_bar_reduced-*). A pair whose own table keeps two
    levels of y is a 2 x 2 table and gets the one-sided p of ``fisher.test``, with
    group1 (the earlier level) as its first row; 2 x 3 pairs stay two-sided. The
@@ -38,6 +43,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -45,6 +51,7 @@ import pytest
 from scipy import optimize, stats
 
 import inferplot as ip
+from inferplot import text as tx
 from tests.oracle_fixtures import (
     DATASET_DIR,
     OracleCase,
@@ -54,6 +61,7 @@ from tests.oracle_fixtures import (
     probe,
     r_double,
 )
+from tests.tolerances import assert_close
 
 MU = 0.3
 TINY = 2.0**-54  # 0.1 + 0.2 - 0.3 and -(0.7 - 0.4 - 0.3)
@@ -189,6 +197,61 @@ def test_held_out_histostats_cases_print_what_the_probe_records() -> None:
     )
 
 
+def _read_exact(csv: str, **dtypes: type) -> pd.DataFrame:
+    """A dataset with every number column read exactly (Python's float())."""
+    frame = pd.read_csv(DATASET_DIR / csv, dtype=str)
+    for column in frame.columns:
+        if column not in dtypes:
+            continue
+        frame[column] = frame[column].map(dtypes[column])
+    return frame
+
+
+# A value equal to the test value 0.3 as written: R ranks its difference of
+# +-2^-54, inferplot counts it as a zero (D105, SPEC section 5; deliberate, held
+# out). column -> (R's V, inferplot's V); the literal 0.3 agrees (a fixture).
+NEAR_MU_V: dict[str, tuple[float, float]] = {
+    "literal": (41.0, 41.0),
+    "sum": (49.0, 41.0),
+    "below": (48.0, 41.0),
+    "both": (39.0, 32.0),
+    "sum_ties": (48.0, 33.0),
+}
+
+
+def test_signed_rank_near_the_test_value_differs_from_r_as_pinned() -> None:
+    rows = {row["column"]: row for row in probe("probe-nearzero").rows("one_sample")}
+    frame = _read_exact("edge_one_near_mu.csv", **dict.fromkeys(NEAR_MU_V, float))
+    for column, (r_v, our_v) in NEAR_MU_V.items():
+        row = rows[column]
+        assert _hex(row["wilcox"]["statistic_hex"]) == r_v
+        result = ip.analyze.histostats(
+            frame, column, type="nonparametric", test_value=MU
+        )
+        test, effect = result.test, result.effect_size
+        assert test is not None
+        assert effect is not None
+        assert test.statistic == our_v
+        # inferplot's numbers are the signed-rank test with every value equal to
+        # 0.3 as written made an exact zero.
+        x = [float(v) for v in frame[column]]
+        assert x == _hexes(row["x_hex"])
+        d = [0.0 if abs(v - MU) == TINY else v - MU for v in x]
+        v, p, _, r, low, high = _signed_rank(d)
+        assert v == our_v
+        assert math.isclose(test.p_value, p, rel_tol=1e-13)
+        assert math.isclose(effect.estimate, r, rel_tol=1e-13)
+        assert effect.conf_low is not None
+        assert effect.conf_high is not None
+        assert math.isclose(effect.conf_low, low, rel_tol=1e-12)
+        assert math.isclose(effect.conf_high, high, rel_tol=1e-12)
+        if r_v == our_v:
+            assert math.isclose(p, _hex(row["wilcox"]["p_value_hex"]), rel_tol=1e-13)
+        else:
+            assert not math.isclose(p, _hex(row["wilcox"]["p_value_hex"]), rel_tol=1e-6)
+        assert result.n_obs == 10
+
+
 def test_paired_signed_rank_ranks_a_difference_of_2_to_the_minus_54() -> None:
     row = probe("probe-nearzero").section("paired")
     a, b = _hexes(row["a_hex"]), _hexes(row["b_hex"])
@@ -203,9 +266,7 @@ def test_paired_signed_rank_ranks_a_difference_of_2_to_the_minus_54() -> None:
 def test_withinstats_agrees_with_the_paired_probe() -> None:
     # inferplot ranks a paired difference unless it is exactly 0, as R does (D64).
     row = probe("probe-nearzero").section("paired")
-    frame = pd.read_csv(
-        DATASET_DIR / "edge_paired_near_zero.csv", dtype={"value": str}
-    ).assign(value=lambda f: f["value"].map(float))
+    frame = _read_exact("edge_paired_near_zero.csv", value=float)
     result = ip.analyze.withinstats(
         frame, "condition", "value", subject_id="subject", type="nonparametric"
     )
@@ -376,6 +437,76 @@ def test_held_out_trimcibt_cases_print_the_probe_at_200_resamples() -> None:
             assert math.isclose(number(row["conf.high"]), high, rel_tol=1e-14)
 
 
+RATINGS_TEST_VALUES = {
+    "whole": 2.5,
+    "tenths": 0.25,
+    "centred_whole": 3.0,
+    "centred_tenths": 0.3,
+}
+
+
+def test_trimcibt_0_0_resamples_differ_from_r_as_pinned() -> None:
+    # R keeps the 0/0 resamples in p's denominator and in the bound's position
+    # (p 0.12 and the interval NA on the ratings, p 0.975 at t = 0); inferplot leaves
+    # them out of both (D65, SPEC section 5; deliberate, held out). inferplot gives
+    # the same in both writings (D105), as R does.
+    frame = _read_exact(
+        "edge_one_ratings.csv", **dict.fromkeys(RATINGS_TEST_VALUES, float)
+    )
+    reference = {
+        (r["set"], r["writing"]): r
+        for r in _trimcibt_rows()
+        if r["B"] == 20000 and r["seed"] == CASE_SEED
+    }
+    results = {
+        column: ip.analyze.histostats(frame, column, type="robust", test_value=tv)
+        for column, tv in RATINGS_TEST_VALUES.items()
+    }
+    for column, result in results.items():
+        test, effect = result.test, result.effect_size
+        assert test is not None
+        assert effect is not None
+        assert effect.conf_low is not None
+        assert effect.conf_high is not None
+        assert effect.undefined_resamples is not None
+        assert effect.undefined_resamples > 0
+        key = ("centred" if column.startswith("centred") else "ratings", "whole")
+        r_row = reference[key]
+        _, r_low, _, r_p, r_t = _hexes(r_row["values_hex"])
+        scale = 10.0 if column.endswith("tenths") else 1.0
+        assert math.isclose(test.statistic, r_t, rel_tol=1e-14, abs_tol=0)
+        if key[0] == "ratings":
+            # R: interval NA; inferplot: finite, and its p is R's p counted over the
+            # defined resamples, to within Monte Carlo error.
+            assert math.isnan(r_low)
+            assert math.isfinite(effect.conf_low * effect.conf_high)
+            defined_p = r_p * 20000 / (20000 - r_row["nan"])
+            sd = math.sqrt(defined_p * (1 - defined_p) / 1750)
+            assert abs(test.p_value - defined_p) < 4 * sd
+            assert test.p_value > r_p
+        else:
+            # t = 0: R's p is the share of defined resamples (0.98715), inferplot's 1.
+            assert r_t == 0.0
+            assert test.p_value == 1.0
+            assert r_p == (20000 - r_row["nan"]) / 20000
+            assert math.isclose(
+                effect.conf_low * scale, 2.090758790683365, rel_tol=1e-9
+            )
+    # The same in both writings.
+    for whole, tenths in (("whole", "tenths"), ("centred_whole", "centred_tenths")):
+        a, b = results[whole], results[tenths]
+        assert a.test is not None
+        assert b.test is not None
+        assert a.test.p_value == b.test.p_value
+        assert a.effect_size is not None
+        assert b.effect_size is not None
+        assert a.effect_size.conf_low is not None
+        assert b.effect_size.conf_low is not None
+        assert math.isclose(
+            a.effect_size.conf_low, 10 * b.effect_size.conf_low, rel_tol=1e-12
+        )
+
+
 # 3. Cramer's V at large df ---
 
 
@@ -501,6 +632,26 @@ def test_corrected_v_of_an_exact_zero_is_rounding_noise_in_r() -> None:
     assert (
         held["ggbarstats-edge_bar_zero_v-parametric"]["subtitle"] == table["expression"]
     )
+    # inferplot reports the exact 0 (D118, deliberate; held out): V = 0 where R
+    # prints 5.59e-09, and the same chi-square and upper bound (the bound inverts
+    # chi^2, not the vanished phi^2).
+    result = _bars("edge_bar_zero_v.csv", y="y")
+    assert result.test is not None
+    assert result.effect_size is not None
+    assert result.test.statistic == 10 / 9
+    assert result.effect_size.estimate == 0.0
+    assert result.effect_size.conf_low == 0.0
+    assert result.effect_size.conf_high is not None
+    assert math.isclose(
+        result.effect_size.conf_high, _hex(adjusted["ci_high_hex"]), rel_tol=1e-6
+    )
+    assert '"V"))["Cramer"] == "0.00"' not in table["expression"]
+    assert "V_Cramer = 0.00," in result.text.subtitle
+
+
+def _bars(csv: str, **arguments: object) -> Any:
+    frame = pd.read_csv(DATASET_DIR / csv)
+    return ip.analyze.barstats(frame, "x", counts="n", **arguments)  # type: ignore[arg-type]
 
 
 def _gof_statistic(x: Sequence[float], p: Sequence[float]) -> float:
@@ -543,6 +694,18 @@ def test_exact_fits_print_rounding_noise_in_r() -> None:
     assert case.subtitle == printed["edge_bar_exact_fit"][2]
     stop = rows["edge_bar_equal49"]["ggbarstats"]["error"]
     assert "must be a whole number between 1 and 24, not the number 49" in stop
+    # inferplot reports both as exactly 0 (D118, deliberate: EXACT_ZEROS in
+    # tests/oracle_fixtures.py pins the exact fit's fixture).
+    for csv, arguments in (
+        ("edge_bar_exact_fit.csv", {"ratio": [0.32, 0.08, 0.28, 0.32]}),
+        ("edge_bar_equal49.csv", {}),
+    ):
+        result = _bars(csv, **arguments)
+        assert result.test is not None
+        assert result.effect_size is not None
+        assert (result.test.statistic, result.test.p_value) == (0.0, 1.0)
+        assert result.effect_size.estimate == 0.0
+        assert (result.effect_size.conf_low, result.effect_size.conf_high) == (0.0, 0.0)
 
 
 def test_counts_beyond_an_integer_stop_ggbarstats() -> None:
@@ -562,13 +725,29 @@ def test_counts_beyond_an_integer_stop_ggbarstats() -> None:
     assert _hex(rows["big_3x3"]["chisq"]["statistic_hex"]) == pytest.approx(
         1.3008530279903701e-21, rel=1e-15
     )
+    # inferplot takes the counts as they are and reports the 3 x 3's exact 0 (D118).
+    big = rows["big_3x3"]
+    frame = pd.DataFrame(
+        [
+            (x, y, int(count))
+            for x, y_levels, cells in zip(
+                big["x_levels"], [big["y_levels"]] * 3, big["table"], strict=True
+            )
+            for y, count in zip(y_levels, cells, strict=True)
+        ],
+        columns=["x", "y", "n"],
+    )
+    result = ip.analyze.barstats(frame, "x", "y", counts="n", bf_message=False)
+    assert result.test is not None
+    assert result.test.statistic == 0.0
 
 
 # 5. R's round() on percent labels ---
 
 
-def r_round(x: float, digits: int) -> float:
-    """R >= 4.0.0's round(x, digits) as its documentation describes it: for digits
+def _documented_round(x: float, digits: int) -> float:
+    """R >= 4.0.0's round(x, digits) as ``?Round`` describes it, written apart from
+    ``inferplot.text.r_round`` as a cross-check: for digits
     >= 1 the two candidates, x rounded down and up to that decimal digit, and the
     one nearer to x in double arithmetic; on a tie of the two distances the one with
     an even last digit. digits = 0 rounds half to even (IEEE nearbyint)."""
@@ -599,8 +778,10 @@ def test_r_round_at_decimal_ties() -> None:
         assert perc == (k / n) * 100
         for d in range(3):
             rounded = _hex(row["rounded_hex"][d])
-            assert rounded == r_round(perc, d), (n, k, d)
+            assert rounded == _documented_round(perc, d), (n, k, d)
             assert row["labels"][d] == _label(rounded)
+            assert tx.r_round(perc, d) == rounded  # inferplot's
+            assert tx.percent_text(perc, d) + "%" == row["labels"][d]
             if rounded != round(perc, d):
                 differ.setdefault((n, d), []).append(k)
     # Python's round() decides on the exact binary value, R on the two candidates'
@@ -609,6 +790,24 @@ def test_r_round_at_decimal_ties() -> None:
     assert list(differ) == [(2000, 1)]
     assert len(differ[2000, 1]) == 98
     assert differ[2000, 1][:6] == [1, 21, 39, 89, 91, 109]
+
+
+def test_r_round_by_hand() -> None:
+    # The candidates' distances decide, not the binary value: 0.05 (just above the
+    # tie in binary) gives 0 at one digit; signs are symmetric; 0 digits round
+    # halves to even; non-finite values and zero pass through.
+    assert tx.r_round(0.05, 1) == 0.0
+    assert round(0.05, 1) == 0.1
+    assert tx.r_round(-0.05, 1) == -0.0
+    assert tx.r_round(0.15, 1) == 0.1
+    assert tx.r_round(2.5, 0) == 2.0
+    assert tx.r_round(3.5, 0) == 4.0
+    assert tx.r_round(99.95, 1) == 100.0
+    assert tx.r_round(1e300, 2) == 1e300
+    assert math.isnan(tx.r_round(math.nan, 1))
+    assert tx.r_round(math.inf, 1) == math.inf
+    with pytest.raises(ValueError, match="digits must be >= 0"):
+        tx.r_round(1.0, -1)
 
 
 def test_ggbarstats_cell_labels_follow_r_round() -> None:
@@ -622,7 +821,8 @@ def test_ggbarstats_cell_labels_follow_r_round() -> None:
         for cell in path["cells"]:
             perc = _hex(cell["perc_hex"])
             assert perc == (cell["counts"] / path["n"]) * 100
-            assert cell["label"] == _label(r_round(perc, path["digits_perc"]))
+            assert cell["label"] == _label(_documented_round(perc, path["digits_perc"]))
+            assert cell["label"] == tx.percent_text(perc, path["digits_perc"]) + "%"
             cells += 1
     assert cells == 3 * 2 * (10 + 50 + 50 + 550)
 
@@ -637,6 +837,16 @@ def test_held_out_tie_labels_are_r_rounds() -> None:
     assert labels["n2000k003", "b"] == "99.9%"  # 99.85: Python 99.8
     assert labels["n2000k089", "a"] == "4.4%"  # 4.45: Python 4.5
     assert labels["n2000k091", "a"] == "4.6%"  # 4.55: Python 4.5
+    # inferplot prints every cell as ggbarstats does (R's round, tx.r_round).
+    frame = pd.read_csv(DATASET_DIR / "edge_bar_ties.csv")
+    result = ip.analyze.barstats(
+        frame, "x", "y", counts="n", digits_perc=1, ratio=[0.05, 0.95]
+    )
+    mine = {
+        (cell.bar, cell.level): label
+        for cell, label in zip(result.cells, result.text.cell_labels, strict=True)
+    }
+    assert mine == labels
 
 
 # 6. One-sided Fisher pairs on reduced tables ---
@@ -740,3 +950,44 @@ def test_which_pair_row_is_greater() -> None:
                 p[declared, alt, g1, g2] for alt in ("two.sided", "greater", "less")
             }
             assert len(values) == 1
+
+
+def test_inferplot_pairs_equal_r_pair_by_pair_in_level_order() -> None:
+    # Every pair's p, adjusted p and Cramer's V with its interval equal R's, pair by
+    # pair. The one difference is the row order with x declared d, b, c, a: R lists
+    # the pairs sorted as text (b-a, b-c, c-a, d-a, d-b, d-c), inferplot in level
+    # order (d-b, d-c, d-a, b-c, b-a, c-a); a deliberate difference the lead logs.
+    frame = pd.read_csv(DATASET_DIR / "edge_bar_reduced.csv")
+    for (declared, alternative), case in _reduced_cases().items():
+        data = frame.copy()
+        levels = ["d", "b", "c", "a"] if declared else ["a", "b", "c", "d"]
+        if declared:
+            data["x"] = pd.Categorical(data["x"], categories=levels)
+        side = "two-sided" if alternative == "two.sided" else alternative
+        result = ip.analyze.barstats(
+            data, "x", "y", counts="n", alternative=side, bf_message=False
+        )
+        ours = {(p.group1, p.group2): p for p in result.pairwise}
+        theirs = {(r["group1"], r["group2"]): r for r in case.pairwise}
+        assert set(ours) == set(theirs)
+        assert list(ours) == [
+            (g, h) for i, g in enumerate(levels) for h in levels[i + 1 :]
+        ]
+        assert list(theirs) == sorted(theirs)
+        assert (list(ours) == list(theirs)) == (not declared)
+        for key, row in theirs.items():
+            pair = ours[key]
+            assert pair.p_value is not None
+            assert pair.p_adjusted is not None
+            assert math.isclose(pair.p_value, number(row["p.value"]), rel_tol=1e-12)
+            assert math.isclose(
+                pair.p_adjusted, number(row["p.value.adj"]), rel_tol=1e-12
+            )
+            assert pair.estimate is not None
+            assert math.isclose(pair.estimate, number(row["estimate"]), rel_tol=1e-10)
+            for mine, r_value in (
+                (pair.conf_low, number(row["conf.low"])),
+                (pair.conf_high, number(row["conf.high"])),
+            ):
+                assert mine is not None
+                assert_close("noncentral_ci", mine, r_value, what=f"{case.name} {key}")

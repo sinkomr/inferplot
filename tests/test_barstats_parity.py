@@ -56,6 +56,8 @@ from tests.oracle_fixtures import (
     CHISQ_ROOT_MISSES,
     Backend,
     OracleCase,
+    exact_zero,
+    expected_value,
     number,
     read_dataset,
 )
@@ -244,7 +246,9 @@ def check_main(name: str, backend: Backend) -> Pins:
         None,
         "two-sided",
     )
-    assert_close("closed_form", test.statistic, number(row["statistic"]), what="chi2")
+    # An exact zero R prints as rounding noise is 0 in inferplot (D118, EXACT_ZEROS).
+    chi2 = expected_value(number(row["statistic"]))
+    assert_close("closed_form", test.statistic, chi2, what="chi2")
     assert test.df_error == number(row["df"])
     assert_close("closed_form", test.p_value, number(row["p.value"]), what="p")
     assert int(number(row["n.obs"])) == result.n_obs
@@ -253,7 +257,8 @@ def check_main(name: str, backend: Backend) -> Pins:
     assert row["effectsize"] == bc.R_EFFECTS[design]
     assert es.conf_level == number(row["conf.level"]) == result.settings.conf_level
     assert es.sidedness == _side(case) == result.settings.alternative
-    assert_close("closed_form", es.estimate, number(row["estimate"]), what="estimate")
+    estimate = expected_value(number(row["estimate"]))
+    assert_close("closed_form", es.estimate, estimate, what="estimate")
     if design == "paired":
         assert_close("closed_form", es.conf_low, number(row["conf.low"]), what="low")
         assert_close("closed_form", es.conf_high, number(row["conf.high"]), what="high")
@@ -429,6 +434,9 @@ def _same(kind: str, mine: object, theirs: object, what: str) -> None:
     """Strings, ints, bools and None exactly; floats under ``kind``, or a bound
     R stopped short on against the accurate root."""
     if isinstance(theirs, float) and isinstance(mine, float):
+        if exact_zero(theirs):  # R's noise for an exact zero (D118, EXACT_ZEROS)
+            assert mine == 0.0, what
+            return
         accurate = _r_pinned(theirs) if kind == "noncentral_ci" else None
         if accurate is not None and not is_close(kind, mine, theirs):
             assert math.isclose(mine, accurate, rel_tol=1e-9), what
