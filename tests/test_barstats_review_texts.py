@@ -124,6 +124,27 @@ def test_cramers_v_above_its_interval_is_explained() -> None:
     assert "few observations per cell" in message
 
 
+def test_cramers_v_beside_a_zero_interval_is_explained_by_the_correction() -> None:
+    # A 2 x 20 table (chi-square 19.70 on 19 df): the bias correction takes the
+    # upper bound to 0, not the lower tail of the statistic.
+    first = [7, 1, 9, 4, 7, 6, 4, 7, 6, 2, 1, 1, 5, 8, 2, 9, 9, 3, 6, 6]
+    second = [4, 5, 5, 4, 3, 3, 1, 0, 3, 2, 0, 3, 2, 8, 0, 5, 8, 2, 1, 6]
+    frame = pd.DataFrame(
+        [("x0", f"y{j:03d}", n) for j, n in enumerate(first)]
+        + [("x1", f"y{j:03d}", n) for j, n in enumerate(second)],
+        columns=["x", "y", "n"],
+    )
+    result = ip.analyze.barstats(
+        frame, "x", "y", counts="n", bf_message=False, proportion_test=False
+    )
+    es = result.effect_size
+    assert es is not None
+    assert es.conf_low == es.conf_high == 0.0 < es.estimate
+    message = _outside(result)
+    assert "property of the method" in message
+    assert "both bounds are 0" not in message
+
+
 def test_pearsons_c_beside_a_zero_interval_is_explained() -> None:
     # A fit closer than chance (chi-square 0.58 on 9 df, n = 1,000): C = 0.024
     # with CI [0, 0].

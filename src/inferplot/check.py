@@ -535,15 +535,17 @@ def _noncentral_why(result: StatsResult) -> str:
     can exceed the noncentrality of the upper bound; and where the statistic
     lies in the lower tail of the chi-square distribution without association
     the interval is [0, 0], beside an estimate that is positive whenever the
-    statistic is (one-way C; about (1 - conf_level) / 2 of tables without
-    association for a two-sided interval)."""
+    statistic is (Pearson's C, which has no correction; about
+    (1 - conf_level) / 2 of tables without association for a two-sided
+    interval). A V of [0, 0] comes from the correction and gets the first
+    wording."""
     es, test = result.effect_size, result.test
     assert es is not None
     assert test is not None
     df = test.df_error if test.df_error is not None else test.df
     dfs = "" if df is None else f" on {df:g} df"
     statistic = f"{test.statistic:.2f}"
-    if es.conf_high <= 0.0:
+    if es.conf_high <= 0.0 and es.name == "pearsons_c":
         tail = (1.0 - es.conf_level) / (2.0 if es.sidedness == "two-sided" else 1.0)
         return (
             f" This is a property of the interval, not an error: the interval "
@@ -564,7 +566,7 @@ def _noncentral_why(result: StatsResult) -> str:
         "bias correction then subtracts the same amount from each. With many "
         "categories and few observations per cell the statistic can exceed the "
         "noncentrality of the upper bound, and the estimate then lies above the "
-        "interval."
+        "interval (an upper bound the correction takes to 0 gives [0, 0])."
     )
 
 
