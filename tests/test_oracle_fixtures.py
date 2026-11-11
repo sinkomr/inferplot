@@ -489,6 +489,9 @@ EXPECTED_PROBES = frozenset(
         "probe-trimcibt",
         "probe-bartables",
         "probe-round",
+        # Review round 4 (tests/test_probe_round4.py).
+        "probe-fisherties",
+        "probe-roundbig",
     }
 )
 

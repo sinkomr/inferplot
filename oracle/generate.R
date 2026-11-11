@@ -5979,6 +5979,245 @@ round_probe <- function() {
   )
 }
 
+# Probes of review round 4 ----------------------------------------------------------
+#
+# Two questions about R that the review could only reason about: which tables
+# fisher.test counts as "at most as probable" as the observed one when a table is
+# larger than 2 x 2 (probe-fisherties), and from what size on R's round(x, d) returns
+# x unchanged (probe-roundbig). Doubles are hex text as above.
+
+# probe-fisherties: stats::fisher.test's two-sided p, with its default arguments and
+# with workspace = 2e7 and hybrid = FALSE stated, on 2 x 3, 2 x 4 and 3 x 3 tables
+# that have another table with the same margins whose probability lies just above or
+# just below the observed one's (ratios from 1 + 1e-10 to 1 + 1e-5 and the same
+# below 1, found by an exact search; the ratios are computed in the tests, not here).
+# Each table is written row by row, the rows separated by ";". The first three are the
+# reviewer's. Then two of the 2 x 3 tables as the pair a-b of a ggbarstats table
+# whose x has a third level c (counts 7, 9, 11), for the p of ggstatsplot's pairwise
+# Fisher test.
+FISHER_TIE_TABLES <- c(
+  # The reviewer's three tables
+  "13,18,60;15,13,14", "35,25,45;1,29,12", "34,54,17;23,29,71",
+  # 2 x 3, another table at 1 + (0, 1e-09]
+  "6,43,38;35,23,34",
+  # 2 x 3, another table at 1 - (0, 1e-09]
+  "15,49,23;26,17,49",
+  # 2 x 3, another table at 1 + (1e-09, 1e-08]
+  "27,28,5;27,10,27", "4,17,123;38,24,83", "20,52,33;17,27,80", "60,4,49;68,50,45",
+  # 2 x 3, another table at 1 - (1e-09, 1e-08]
+  "33,6,21;21,32,11", "21,3,120;21,38,86", "31,29,45;6,50,68", "37,14,62;91,40,32",
+  # 2 x 3, another table at 1 + (1e-08, 1e-07]
+  "93,12,1;155,3,34", "0,10,67;10,13,173", "10,65,3;72,70,10", "5,20,33;113,38,30",
+  "40,6,5;58,19,106", "15,29,10;23,43,141",
+  # 2 x 3, another table at 1 - (1e-08, 1e-07]
+  "85,15,6;163,0,29", "1,2,74;9,21,166", "17,48,13;65,87,0", "17,37,4;101,21,59",
+  "24,18,9;74,7,102", "4,0,50;34,72,101",
+  # 2 x 3, another table at 1 + (1e-07, 2e-07]
+  "2,49,36;15,15,120", "6,31,0;15,93,31", "12,22,22;41,58,0", "29,55,0;37,165,9",
+  "27,49,5;56,14,13", "6,86,7;25,83,3",
+  # 2 x 3, another table at 1 - (1e-07, 2e-07]
+  "3,2,82;14,62,74", "9,17,11;12,107,20", "6,49,1;47,31,21", "28,51,5;38,169,4",
+  "45,18,18;38,45,0", "22,76,1;9,93,9",
+  # 2 x 3, another table at 1 + (2e-07, 3e-07]
+  "19,7,21;103,3,22", "19,27,13;23,113,2", "6,17,24;3,81,98", "20,15,10;40,0,27",
+  "1,20,6;10,40,28", "28,7,20;71,69,4",
+  # 2 x 3, another table at 1 - (2e-07, 3e-07]
+  "37,8,2;85,2,41", "0,56,3;42,84,12", "3,11,33;6,87,89", "11,12,22;49,3,15",
+  "4,11,12;7,49,22", "9,42,4;90,34,20",
+  # 2 x 3, another table at 1 + (3e-07, 3.4e-07]
+  "13,2,26;112,23,11", "27,7,39;23,1,122", "3,59,3;5,85,24", "13,8,30;1,9,56",
+  "14,8,30;2,9,56", "16,29,5;9,23,56",
+  # 2 x 3, another table at 1 - (3e-07, 3.4e-07]
+  "17,21,3;108,4,34", "7,8,58;43,0,103", "7,47,11;1,97,16", "1,3,47;13,14,39",
+  "2,3,47;14,14,39", "23,13,14;2,39,47",
+  # 2 x 3, another table at 1 + (3.4e-07, 3.45e-07]
+  "44,8,8;115,95,9", "93,11,11;100,5,42", "34,9,67;80,17,43", "82,35,7;72,11,52",
+  "29,21,60;39,16,96",
+  # 2 x 3, another table at 1 - (3.4e-07, 3.45e-07]
+  "18,36,6;141,67,11", "71,13,31;122,3,22", "55,21,34;59,5,76", "92,2,30;62,44,29",
+  "30,10,70;38,27,86",
+  # 2 x 3, another table at 1 + (3.45e-07, 3.46e-07]
+  "20,48,28;47,33,57",
+  # 2 x 3, another table at 1 - (3.45e-07, 3.46e-07]
+  "26,47,23;41,34,62",
+  # 2 x 3, another table at 1 + (3.46e-07, 3.5e-07]
+  "15,30,53;19,3,143", "0,38,79;32,11,95", "9,60,44;12,47,78", "20,34,75;51,65,25",
+  # 2 x 3, another table at 1 - (3.46e-07, 3.5e-07]
+  "3,0,95;31,33,101", "12,2,103;20,47,71", "5,42,66;16,65,56", "49,59,21;22,40,79",
+  # 2 x 3, another table at 1 + (3.5e-07, 1e-06]
+  "15,10,5;13,5,61", "2,75,1;6,56,51", "21,4,12;5,61,10", "15,5,5;61,10,3",
+  "4,5,46;5,37,28", "10,19,33;11,61,1",
+  # 2 x 3, another table at 1 - (3.5e-07, 1e-06]
+  "3,14,13;25,1,53", "8,30,40;0,101,12", "24,12,1;2,53,21", "23,0,2;53,15,6",
+  "9,27,19;0,15,55", "4,57,1;17,23,33",
+  # 2 x 3, another table at 1 + (1e-06, 1e-05]
+  "9,40,0;0,60,13", "1,51,29;3,45,150", "62,12,3;33,68,0", "3,49,46;2,8,96",
+  "9,13,25;91,0,28", "31,2,9;13,2,46",
+  # 2 x 3, another table at 1 - (1e-06, 1e-05]
+  "7,30,12;2,70,1", "3,7,71;1,89,108", "18,57,2;77,23,1", "2,6,90;3,51,52",
+  "8,3,36;92,10,17", "6,0,36;38,4,19",
+  # 2 x 4, another table at 1 + (1e-09, 1e-08]
+  "16,4,29,1;16,0,41,24", "27,28,1,5;10,27,27,5", "9,18,17,0;16,12,17,48",
+  "27,3,13,25;28,11,28,4",
+  # 2 x 4, another table at 1 - (1e-09, 1e-08]
+  "22,3,15,10;10,1,55,15", "31,22,8,0;6,33,20,10", "22,4,3,15;3,26,31,33",
+  "22,6,33,7;33,8,8,22",
+  # 2 x 4, another table at 1 + (1e-08, 1e-07]
+  "6,4,53,1;6,20,34,5", "6,20,34,4;6,4,53,2", "8,0,25,5;2,22,12,22",
+  "53,3,5,2;34,13,20,5", "7,29,0,5;25,21,29,11", "0,27,11,3;14,25,14,23",
+  # 2 x 4, another table at 1 - (1e-08, 1e-07]
+  "12,9,42,1;0,15,45,5", "0,15,45,4;12,9,42,2", "7,19,3,9;3,3,34,18",
+  "42,1,13,7;45,15,12,0", "0,26,13,2;32,24,16,14", "6,10,6,19;8,42,19,7",
+  # 2 x 4, another table at 1 + (1e-07, 2e-07]
+  "0,15,7,5;33,42,15,1", "15,20,5,1;4,62,2,27", "15,0,12,0;7,12,42,31",
+  "2,8,38,6;47,2,29,7", "9,15,11,0;1,42,11,31", "25,4,6,5;53,4,10,30",
+  # 2 x 4, another table at 1 - (1e-07, 2e-07]
+  "17,5,2,3;16,52,20,3", "4,10,2,11;18,2,52,20", "4,5,32,13;45,5,35,0",
+  "1,5,17,12;9,52,5,19", "19,5,3,13;59,3,13,22", "0,0,3,36;15,21,13,48",
+  # 2 x 4, another table at 1 + (2e-07, 3e-07]
+  "5,0,26,0;0,17,42,25", "2,10,8,7;62,27,8,2", "28,14,4,2;24,8,1,16",
+  "16,4,2,2;23,16,28,9", "11,11,2,6;62,11,16,17", "22,11,11,0;11,40,3,15",
+  # 2 x 4, another table at 1 - (2e-07, 3e-07]
+  "1,1,10,19;4,16,58,6", "16,2,0,9;48,35,16,0", "18,17,1,12;34,5,4,6",
+  "5,2,12,5;34,18,18,6", "19,1,8,2;54,21,10,21", "14,8,14,8;19,43,0,7",
+  # 2 x 4, another table at 1 + (3e-07, 3.4e-07]
+  "18,10,30,1;0,3,56,16", "17,30,1,9;3,10,4,56", "9,5,0,12;29,56,8,10",
+  "10,6,10,2;29,56,2,16", "8,5,7,29;9,12,1,56", "24,12,12,2;30,29,23,4",
+  # 2 x 4, another table at 1 - (3e-07, 3.4e-07]
+  "18,0,39,2;0,13,47,15", "7,1,2,47;13,39,3,18", "0,14,3,9;38,47,5,13",
+  "0,15,8,5;39,47,4,13", "18,13,16,3;36,28,19,3", "18,13,15,4;36,28,20,2",
+  # 2 x 4, another table at 1 + (3.4e-07, 3.45e-07]
+  "13,7,15,5;3,17,23,53",
+  # 2 x 4, another table at 1 + (3.5e-07, 1e-06]
+  "25,2,15,9;3,1,61,5", "0,10,4,9;61,2,20,12", "6,20,3,0;12,9,3,61",
+  "12,13,21,14;2,0,6,61", "9,18,3,0;11,8,61,5", "10,2,21,0;11,4,10,61",
+  # 2 x 4, another table at 1 - (3.5e-07, 1e-06]
+  "25,3,23,0;3,0,53,14", "4,2,0,17;57,10,24,4", "0,23,2,4;18,6,4,57",
+  "14,0,24,22;0,13,3,53", "18,3,8,1;2,23,56,4", "0,4,24,5;21,2,7,56",
+  # 2 x 4, another table at 1 + (1e-06, 1e-05]
+  "2,4,4,21;54,1,1,6", "0,5,27,0;22,1,13,5", "46,3,2,0;14,15,2,27",
+  "0,0,2,31;34,3,36,19", "1,27,0,2;12,13,19,1", "0,1,20,0;11,29,14,27",
+  # 2 x 4, another table at 1 - (1e-06, 1e-05]
+  "6,0,0,25;50,5,5,2", "18,4,5,5;4,2,35,0", "22,0,2,27;38,18,2,0",
+  "24,0,9,0;10,3,29,50", "4,6,17,3;9,34,2,0", "3,1,0,17;8,29,34,10",
+  # 3 x 3, another table at 1 + (1e-08, 1e-07]
+  "0,1,5;16,2,25;11,22,21",
+  # 3 x 3, another table at 1 - (1e-08, 1e-07]
+  "0,3,3;9,3,31;18,19,17",
+  # 3 x 3, another table at 1 + (2e-07, 3e-07]
+  "14,1,0;4,8,28;14,0,24",
+  # 3 x 3, another table at 1 - (2e-07, 3e-07]
+  "12,3,0;17,5,18;3,1,34",
+  # 3 x 3, another table at 1 + (3.5e-07, 1e-06]
+  "1,2,9;0,61,15;3,5,8",
+  # 3 x 3, another table at 1 - (3.5e-07, 1e-06]
+  "2,1,9;0,53,23;2,14,0",
+  # 3 x 3, another table at 1 + (1e-06, 1e-05]
+  "54,19,0;0,1,2;6,22,1",
+  # 3 x 3, another table at 1 - (1e-06, 1e-05]
+  "29,42,2;3,0,0;28,0,1"
+)
+FISHER_TIE_PAIRS <- c(
+  # The reviewer's first table; one whose other table lies at 1 + 3.42e-7 (p 0.134).
+  "13,18,60;15,13,14", "29,21,60;39,16,96"
+)
+fisher_tie_table <- function(text) {
+  rows <- lapply(strsplit(strsplit(text, ";", fixed = TRUE)[[1L]], ",", fixed = TRUE), as.numeric)
+  matrix(unlist(rows), nrow = length(rows), byrow = TRUE)
+}
+fisherties_probe <- function() {
+  p_fields <- function(r) {
+    list(
+      p_value_hex = hex(r$p.value), p_value_17 = sprintf("%.17g", r$p.value),
+      method = r$method
+    )
+  }
+  rows_of <- function(m) lapply(seq_len(nrow(m)), function(i) as.list(m[i, ]))
+  tables <- lapply(FISHER_TIE_TABLES, function(text) {
+    m <- fisher_tie_table(text)
+    list(
+      table = rows_of(m),
+      default = attempt_fields(stats::fisher.test(m), p_fields),
+      exact_workspace = attempt_fields(
+        stats::fisher.test(m, workspace = 2e7, hybrid = FALSE), p_fields
+      )
+    )
+  })
+  pairs <- lapply(FISHER_TIE_PAIRS, function(text) {
+    m <- fisher_tie_table(text)
+    if (!identical(dim(m), c(2L, 3L))) stop("probe-fisherties: a pair table must be 2 x 3")
+    frame <- data.frame(
+      x = rep(c("a", "b", "c"), each = 3L), y = rep(c("p", "q", "r"), times = 3L),
+      n = c(m[1L, ], m[2L, ], 7, 9, 11)
+    )
+    HIDDEN$log <- list()
+    HIDDEN$values <- list()
+    set.seed(CASE_SEED)
+    c(
+      list(table = rows_of(m), third = list(7, 9, 11)),
+      attempt_fields(
+        ggstatsplot::ggbarstats(data = frame, x = x, y = y, counts = n, type = "parametric"),
+        function(plot) {
+          rows <- ggstatsplot::extract_stats(plot)$pairwise_comparisons_data
+          if (is.null(rows)) {
+            return(list(pairwise = NULL))
+          }
+          list(pairwise = lapply(seq_len(nrow(rows)), function(j) {
+            list(
+              group1 = as.character(rows$group1[[j]]), group2 = as.character(rows$group2[[j]]),
+              p_value_hex = hex(rows$p.value[[j]]), p_value_17 = sprintf("%.17g", rows$p.value[[j]]),
+              test = rows$test[[j]]
+            )
+          }))
+        }
+      )
+    )
+  })
+  probe_file(
+    "probe-fisherties",
+    paste(
+      "fisher.test's two-sided p on 2 x 3, 2 x 4 and 3 x 3 tables with a near tie of",
+      "probabilities, and ggbarstats' pairwise Fisher p on two of them"
+    ),
+    list(tables = tables, pairs = pairs)
+  )
+}
+
+# probe-roundbig: R's round(x, d) for x from 1e6 to 1e17 and d from 1 to 8, where x
+# may already have more significant digits than a double holds: the reviewer's two
+# examples, then for each d values around 10^(15 - d) (times 2^(k / 8), k = -8 to 8,
+# 0.12 and 7.7, plus a third and a half of the d-th decimal), around the powers of two
+# next to 10^(15 - d) (the largest double below, the power, and +-0.37 of the d-th
+# decimal), and 80 values spread evenly in log10 from 1e6 to 1e17.
+roundbig_probe <- function() {
+  xs <- numeric()
+  ds <- integer()
+  add <- function(x, d) {
+    xs <<- c(xs, x)
+    ds <<- c(ds, rep(as.integer(d), length(x)))
+  }
+  add(1000000999.9999999, 6L)
+  add(100000099999.99998, 4L)
+  for (d in 1:8) {
+    edge <- 10^(15 - d)
+    for (f in c(0.12, 2^((-8:8) / 8), 7.7)) {
+      add(edge * f + c(1 / 3, 0.5) * 10^-d, d)
+    }
+    for (e in floor(log2(edge)) + (-1:1)) {
+      add(c(2^e * (1 - 2^-53), 2^e, 2^e - 0.37 * 10^-d, 2^e + 0.37 * 10^-d), d)
+    }
+  }
+  for (i in 0:79) add(10^(6 + 11 * i / 79) * (1 + 1 / 7), 1L + i %% 8L)
+  rows <- lapply(seq_along(xs), function(i) {
+    list(x_hex = hex(xs[[i]]), digits = ds[[i]], rounded_hex = hex(round(xs[[i]], ds[[i]])))
+  })
+  probe_file(
+    "probe-roundbig",
+    "round(x, d) for x from 1e6 to 1e17 and d from 1 to 8",
+    list(values = rows)
+  )
+}
+
 # Main ------------------------------------------------------------------------------
 
 # The probes first: they draw no random numbers that a case could see (every case
@@ -6015,7 +6254,10 @@ PROBE_BUILDERS <- list(
   "probe-nearzero" = nearzero_probe,
   "probe-trimcibt" = trimcibt_probe,
   "probe-bartables" = bartables_probe,
-  "probe-round" = round_probe
+  "probe-round" = round_probe,
+  # Review round 4, last for the same reason.
+  "probe-fisherties" = fisherties_probe,
+  "probe-roundbig" = roundbig_probe
 )
 
 # Local debugging only: ORACLE_SUBSET, a regular expression, limits the run to the

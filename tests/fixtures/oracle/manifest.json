@@ -3,15 +3,15 @@
   "generator": "oracle/generate.R",
   "parity_target": "ggstatsplot 1.1.4",
   "generator_files": {
-    "oracle/generate.R": "514c0a73cb970cf1f8e0c4deb70c6583d6c3cf0983f0f1f79349c3f1341111c8",
+    "oracle/generate.R": "cb4761012662da341eeb78d22e8d7bc4fce5f92a7b463d1fd80d440816674f79",
     "oracle/export_datasets.R": "602e2771a16f122af88a23751c75da49c3020e693dcf39e6ce8f122e18c2e5bd",
     ".github/workflows/oracle.yml": "147f49ef8704a295673354a3043a32fcf90a365f0a811ce168b823ffe0d29918"
   },
   "run": {
     "repository": "sinkomr/inferplot",
-    "run_id": "42949626258",
+    "run_id": "42981115556",
     "run_attempt": "1",
-    "commit": "3f00aa4427d571cb4940b9a9603b239d36c5ac7c"
+    "commit": "65744b4bb0edb3bd923d26ee84de05f6fcf709ae"
   },
   "R": "4.5.3",
   "rng_kind": [
@@ -353,7 +353,7 @@
     "ggbetweenstats-edge_k5-parametric.json": "ae87967ae4f4ce75fe2eda3e90dd9b1c3c7d8766e8b1ce030a60bf33550f8b71",
     "ggbetweenstats-edge_k5-robust.json": "6172078a2ffc8376e718b7fb7bcd5cddd8cdeddb48ae6ce2f5d6a6eff138d77a",
     "ggbetweenstats-edge_k9-robust.json": "e9a06551b4e11aff5782694e3527ad5d936f497a2b72cdc37ed6c155da598157",
-    "ggbetweenstats-edge_large_n-bayes.json": "f806bcf45e830248d05898ba1cab42e844e1f76231442a9e980827297a5e8a45",
+    "ggbetweenstats-edge_large_n-bayes.json": "9d3b037406f77095ef93bd02707d392bc923bb6cbcb48e942717dde7c0cc8b9a",
     "ggbetweenstats-edge_large_n-nonparametric.json": "7a3d628109fe324433f48e27e6c0d1de80c04549e322c05d9c847a97318a9afc",
     "ggbetweenstats-edge_large_n-parametric.json": "91ce2f4a7f83119fce526c957048ee8573c30ea8206d2fcd89a9b0f63708f43a",
     "ggbetweenstats-edge_large_n-robust.json": "0d55d057801b3cec81a2328ece0eb625b9dded908f1e40c7bbfc9b07b7f0c13a",
@@ -686,7 +686,7 @@
     "ggwithinstats-edge_within_k5-nonparametric.json": "c20080d282611679c2b02b7b1107cc98a60363ed4c896a1cf15f6728a7543fff",
     "ggwithinstats-edge_within_k5-parametric.json": "a5bce7f6103493704103c3069f104090d5aa68c472d813a3377d8969b908a8aa",
     "ggwithinstats-edge_within_k5-robust.json": "5ed25d95f139e144fe1835fc23aa2eb147a371e6fa0ba250c39bc9dc0bf26ff9",
-    "ggwithinstats-edge_within_large_n-bayes.json": "ff422638d2dbe7eb7fb6ecdf7377460ae49839ddbe0acb55b976bd2c8380d03e",
+    "ggwithinstats-edge_within_large_n-bayes.json": "34a1682dbf841600a95681e14a5827c21d699a4f94f8d8a8b5e3f62684024637",
     "ggwithinstats-edge_within_large_n-nonparametric.json": "349551d93447ffb0f45329e3f51181d8aedbb47470b05b53fc704dfa1a4ffd86",
     "ggwithinstats-edge_within_large_n-parametric.json": "150a2fb13abfde88e0b8c4a83074699b00d34d16d052f4f9d81d1c56b148882f",
     "ggwithinstats-edge_within_large_n-robust.json": "887068526800e8a26503193878385a1ceff4f2b6918b4a360b15421ea16eb94a",
@@ -760,6 +760,7 @@
     "probe-bootrules.json": "909b0751df443c7ad58c5c73a9c60c79b3ba2b3a97c4a1166f3cfe26676840af",
     "probe-contingency.json": "e924687560e7d726538847d95e3fe9f9bb7482dc75d2c8598e2823321038e295",
     "probe-corr.json": "dc4baffb3026707d159520d46d69b3ad65c76af3a38258be76b9b61a039240bd",
+    "probe-fisherties.json": "346e4922e1440e980fe0a8f629312f5840fa3f9484c8c6cef6ef7c4d93fe05c1",
     "probe-format.json": "f3a5976c5b02995a03be8ca9b367dc026ab678d99caafc45855f97e339000884",
     "probe-friedman.json": "8e5f08573c7457541666d24fff41b491220da2886860cb717000226d18f00a04",
     "probe-heldout.json": "a27000f991b6f52989cf5f39e1812dbec4a4db8bf34f4e31863044df2c0382bd",
@@ -773,6 +774,7 @@
     "probe-ranks.json": "24ee3e68e8a284c5069f0e73df226afecb7ec9e2a104d93c5eb67895bfddbea4",
     "probe-rmanova.json": "aec35469e84c04e8b74716d7249d596be2ea8beed6fdade48b69ca3145f1a172",
     "probe-round.json": "260cc132a6528aa000155ba9a4e44469570ac9c5c0886778c0f8ba5b2b5ffd60",
+    "probe-roundbig.json": "b6309e8a1135af10fbfb7aa0df18cd85c215574c8d65a0a67a4e71f26eecc979",
     "probe-signrank.json": "8839b892061814bfd5381075358ea08489be5a680604996eb293fe8f2849dd28",
     "probe-smm.json": "2b7bc5940ef822d3173210a6b67244a77564a0f2b5711a4167ce72c62cf785a1",
     "probe-trimcibt.json": "72082e06450ea6975a8785ecfb3c7185dfb943a12b87e2815f85fb49634f4c17",

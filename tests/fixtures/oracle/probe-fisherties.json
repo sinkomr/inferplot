@@ -1,0 +1,5766 @@
+{
+  "schema_version": 2,
+  "name": "probe-fisherties",
+  "kind": "probe",
+  "description": "fisher.test's two-sided p on 2 x 3, 2 x 4 and 3 x 3 tables with a near tie of probabilities, and ggbarstats' pairwise Fisher p on two of them",
+  "datasets": [],
+  "tables": [
+    {
+      "table": [
+        [
+          13,
+          18,
+          60
+        ],
+        [
+          15,
+          13,
+          14
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.565ad375ce4adp-10",
+        "p_value_17": "0.0013059798779535934",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.565ad375ce4aep-10",
+        "p_value_17": "0.0013059798779535936",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          35,
+          25,
+          45
+        ],
+        [
+          1,
+          29,
+          12
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.8b1e19292909ap-24",
+        "p_value_17": "9.1995478473387614e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.8b1e192929096p-24",
+        "p_value_17": "9.1995478473387561e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          34,
+          54,
+          17
+        ],
+        [
+          23,
+          29,
+          71
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.728fd2ef2c00cp-32",
+        "p_value_17": "3.370240050130255e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.728fd2ef2c00dp-32",
+        "p_value_17": "3.3702400501302556e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          43,
+          38
+        ],
+        [
+          35,
+          23,
+          34
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.80b2e8f060cdep-21",
+        "p_value_17": "7.1655747828393472e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.80b2e8f060ce2p-21",
+        "p_value_17": "7.1655747828393515e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          49,
+          23
+        ],
+        [
+          26,
+          17,
+          49
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.80b2e8f060cdep-21",
+        "p_value_17": "7.1655747828393472e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.80b2e8f060ce2p-21",
+        "p_value_17": "7.1655747828393515e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          27,
+          28,
+          5
+        ],
+        [
+          27,
+          10,
+          27
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.259ad661755bp-18",
+        "p_value_17": "4.3750529541050474e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.259ad661755b3p-18",
+        "p_value_17": "4.3750529541050499e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          17,
+          123
+        ],
+        [
+          38,
+          24,
+          83
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.11de9ebe59b78p-29",
+        "p_value_17": "1.9926636722407653e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.11de9ebe59b72p-29",
+        "p_value_17": "1.9926636722407628e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          20,
+          52,
+          33
+        ],
+        [
+          17,
+          27,
+          80
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b33be2ed6f2b3p-20",
+        "p_value_17": "1.6213727421630636e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b33be2ed6f2abp-20",
+        "p_value_17": "1.621372742163062e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          60,
+          4,
+          49
+        ],
+        [
+          68,
+          50,
+          45
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5a50edc15318p-27",
+        "p_value_17": "1.0079125869555021e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5a50edc153186p-27",
+        "p_value_17": "1.0079125869555031e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          33,
+          6,
+          21
+        ],
+        [
+          21,
+          32,
+          11
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.259ad661755bp-18",
+        "p_value_17": "4.3750529541050474e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.259ad661755b3p-18",
+        "p_value_17": "4.3750529541050499e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          21,
+          3,
+          120
+        ],
+        [
+          21,
+          38,
+          86
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.11de9ebe59b78p-29",
+        "p_value_17": "1.9926636722407653e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.11de9ebe59b72p-29",
+        "p_value_17": "1.9926636722407628e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          31,
+          29,
+          45
+        ],
+        [
+          6,
+          50,
+          68
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b33be2ed6f2b3p-20",
+        "p_value_17": "1.6213727421630636e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b33be2ed6f2abp-20",
+        "p_value_17": "1.621372742163062e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          37,
+          14,
+          62
+        ],
+        [
+          91,
+          40,
+          32
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5a50edc15318p-27",
+        "p_value_17": "1.0079125869555021e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5a50edc153186p-27",
+        "p_value_17": "1.0079125869555031e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          93,
+          12,
+          1
+        ],
+        [
+          155,
+          3,
+          34
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b75bce8385177p-26",
+        "p_value_17": "2.5574037566533262e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b75bce8385178p-26",
+        "p_value_17": "2.5574037566533265e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          10,
+          67
+        ],
+        [
+          10,
+          13,
+          173
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f6d864e7e5eb5p-6",
+        "p_value_17": "0.030691240826483852",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f6d864e7e5eb5p-6",
+        "p_value_17": "0.030691240826483852",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          10,
+          65,
+          3
+        ],
+        [
+          72,
+          70,
+          10
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d9a1b0f9eb621p-25",
+        "p_value_17": "5.5137975920601275e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d9a1b0f9eb622p-25",
+        "p_value_17": "5.5137975920601282e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          5,
+          20,
+          33
+        ],
+        [
+          113,
+          38,
+          30
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0abf8879678a9p-45",
+        "p_value_17": "2.9614996697356021e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0abf8879678abp-45",
+        "p_value_17": "2.9614996697356034e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          40,
+          6,
+          5
+        ],
+        [
+          58,
+          19,
+          106
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f9e812bef9aadp-33",
+        "p_value_17": "2.3005965706089037e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f9e812bef9aadp-33",
+        "p_value_17": "2.3005965706089037e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          29,
+          10
+        ],
+        [
+          23,
+          43,
+          141
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4ac04cbb2cc55p-33",
+        "p_value_17": "1.5040821873502015e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4ac04cbb2cc4fp-33",
+        "p_value_17": "1.5040821873501999e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          85,
+          15,
+          6
+        ],
+        [
+          163,
+          0,
+          29
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b75bce8385177p-26",
+        "p_value_17": "2.5574037566533262e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b75bce8385178p-26",
+        "p_value_17": "2.5574037566533265e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          2,
+          74
+        ],
+        [
+          9,
+          21,
+          166
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f6d864e7e5eb5p-6",
+        "p_value_17": "0.030691240826483852",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f6d864e7e5eb5p-6",
+        "p_value_17": "0.030691240826483852",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          17,
+          48,
+          13
+        ],
+        [
+          65,
+          87,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d9a1b0f9eb621p-25",
+        "p_value_17": "5.5137975920601275e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d9a1b0f9eb622p-25",
+        "p_value_17": "5.5137975920601282e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          17,
+          37,
+          4
+        ],
+        [
+          101,
+          21,
+          59
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0abf8879678a9p-45",
+        "p_value_17": "2.9614996697356021e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0abf8879678abp-45",
+        "p_value_17": "2.9614996697356034e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          24,
+          18,
+          9
+        ],
+        [
+          74,
+          7,
+          102
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f9e812bef9aadp-33",
+        "p_value_17": "2.3005965706089037e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f9e812bef9aadp-33",
+        "p_value_17": "2.3005965706089037e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          0,
+          50
+        ],
+        [
+          34,
+          72,
+          101
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4ac04cbb2cc55p-33",
+        "p_value_17": "1.5040821873502015e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4ac04cbb2cc4fp-33",
+        "p_value_17": "1.5040821873501999e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          49,
+          36
+        ],
+        [
+          15,
+          15,
+          120
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.8c883005d322ap-45",
+        "p_value_17": "4.402389372704729e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.8c883005d322fp-45",
+        "p_value_17": "4.4023893727047321e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          31,
+          0
+        ],
+        [
+          15,
+          93,
+          31
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0c783807b684ap-10",
+        "p_value_17": "0.0010241302679134972",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0c783807b684ap-10",
+        "p_value_17": "0.0010241302679134972",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          12,
+          22,
+          22
+        ],
+        [
+          41,
+          58,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.501eb4ed855a3p-36",
+        "p_value_17": "1.9106207005244219e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.501eb4ed855a8p-36",
+        "p_value_17": "1.9106207005244235e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          29,
+          55,
+          0
+        ],
+        [
+          37,
+          165,
+          9
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b27275c775fbcp-10",
+        "p_value_17": "0.0016572842013058272",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b27275c775fc1p-10",
+        "p_value_17": "0.0016572842013058283",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          27,
+          49,
+          5
+        ],
+        [
+          56,
+          14,
+          13
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.94520a1010775p-26",
+        "p_value_17": "2.3534548587945683e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.94520a1010775p-26",
+        "p_value_17": "2.3534548587945683e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          86,
+          7
+        ],
+        [
+          25,
+          83,
+          3
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6660220f76108p-10",
+        "p_value_17": "0.0013670941151442979",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6660220f76109p-10",
+        "p_value_17": "0.0013670941151442981",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          2,
+          82
+        ],
+        [
+          14,
+          62,
+          74
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.8c883005d322ap-45",
+        "p_value_17": "4.402389372704729e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.8c883005d322fp-45",
+        "p_value_17": "4.4023893727047321e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          17,
+          11
+        ],
+        [
+          12,
+          107,
+          20
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0c783807b684ap-10",
+        "p_value_17": "0.0010241302679134972",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0c783807b684ap-10",
+        "p_value_17": "0.0010241302679134972",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          49,
+          1
+        ],
+        [
+          47,
+          31,
+          21
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.501eb4ed855a3p-36",
+        "p_value_17": "1.9106207005244219e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.501eb4ed855a8p-36",
+        "p_value_17": "1.9106207005244235e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          28,
+          51,
+          5
+        ],
+        [
+          38,
+          169,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b27275c775fbcp-10",
+        "p_value_17": "0.0016572842013058272",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b27275c775fc1p-10",
+        "p_value_17": "0.0016572842013058283",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          45,
+          18,
+          18
+        ],
+        [
+          38,
+          45,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.94520a1010775p-26",
+        "p_value_17": "2.3534548587945683e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.94520a1010775p-26",
+        "p_value_17": "2.3534548587945683e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          76,
+          1
+        ],
+        [
+          9,
+          93,
+          9
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6660220f76108p-10",
+        "p_value_17": "0.0013670941151442979",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6660220f76109p-10",
+        "p_value_17": "0.0013670941151442981",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          19,
+          7,
+          21
+        ],
+        [
+          103,
+          3,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4cb613d107ef7p-20",
+        "p_value_17": "1.2394459541000818e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4cb613d107ef7p-20",
+        "p_value_17": "1.2394459541000818e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          19,
+          27,
+          13
+        ],
+        [
+          23,
+          113,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.414fad4d60b3cp-25",
+        "p_value_17": "3.740555119381527e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.414fad4d60b42p-25",
+        "p_value_17": "3.740555119381531e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          17,
+          24
+        ],
+        [
+          3,
+          81,
+          98
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.7f9d5e0e02886p-8",
+        "p_value_17": "0.0058534960389896636",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.7f9d5e0e02886p-8",
+        "p_value_17": "0.0058534960389896636",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          20,
+          15,
+          10
+        ],
+        [
+          40,
+          0,
+          27
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.34f8a671056c4p-21",
+        "p_value_17": "5.7550387400308967e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.34f8a671056cp-21",
+        "p_value_17": "5.7550387400308924e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          20,
+          6
+        ],
+        [
+          10,
+          40,
+          28
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1520fc167acc7p-3",
+        "p_value_17": "0.13531681960680528",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1520fc167acc7p-3",
+        "p_value_17": "0.13531681960680528",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          28,
+          7,
+          20
+        ],
+        [
+          71,
+          69,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.006ef4658242cp-35",
+        "p_value_17": "2.9153104230195943e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.006ef46582431p-35",
+        "p_value_17": "2.9153104230195976e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          37,
+          8,
+          2
+        ],
+        [
+          85,
+          2,
+          41
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4cb613d107ef7p-20",
+        "p_value_17": "1.2394459541000818e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4cb613d107ef7p-20",
+        "p_value_17": "1.2394459541000818e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          56,
+          3
+        ],
+        [
+          42,
+          84,
+          12
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.414fad4d60b3cp-25",
+        "p_value_17": "3.740555119381527e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.414fad4d60b42p-25",
+        "p_value_17": "3.740555119381531e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          11,
+          33
+        ],
+        [
+          6,
+          87,
+          89
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.7f9d5e0e02886p-8",
+        "p_value_17": "0.0058534960389896636",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.7f9d5e0e02886p-8",
+        "p_value_17": "0.0058534960389896636",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          11,
+          12,
+          22
+        ],
+        [
+          49,
+          3,
+          15
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.34f8a671056c4p-21",
+        "p_value_17": "5.7550387400308967e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.34f8a671056cp-21",
+        "p_value_17": "5.7550387400308924e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          11,
+          12
+        ],
+        [
+          7,
+          49,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1520fc167acc7p-3",
+        "p_value_17": "0.13531681960680528",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1520fc167acc7p-3",
+        "p_value_17": "0.13531681960680528",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          42,
+          4
+        ],
+        [
+          90,
+          34,
+          20
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.006ef4658242cp-35",
+        "p_value_17": "2.9153104230195943e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.006ef46582431p-35",
+        "p_value_17": "2.9153104230195976e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          13,
+          2,
+          26
+        ],
+        [
+          112,
+          23,
+          11
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.80042fd63881cp-40",
+        "p_value_17": "1.364300157048733e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.80042fd63881bp-40",
+        "p_value_17": "1.3643001570487328e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          27,
+          7,
+          39
+        ],
+        [
+          23,
+          1,
+          122
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.31206cab8c043p-19",
+        "p_value_17": "2.2733707589970015e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.31206cab8c047p-19",
+        "p_value_17": "2.2733707589970032e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          59,
+          3
+        ],
+        [
+          5,
+          85,
+          24
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.aab7045de8ac2p-8",
+        "p_value_17": "0.0065111528073510967",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.aab7045de8abfp-8",
+        "p_value_17": "0.0065111528073510941",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          13,
+          8,
+          30
+        ],
+        [
+          1,
+          9,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.38a04445c379dp-13",
+        "p_value_17": "0.00014907171333116985",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.38a04445c37a1p-13",
+        "p_value_17": "0.00014907171333116995",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          14,
+          8,
+          30
+        ],
+        [
+          2,
+          9,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.7136a9ad44d17p-12",
+        "p_value_17": "0.00035210945755288894",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.7136a9ad44d14p-12",
+        "p_value_17": "0.00035210945755288878",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          16,
+          29,
+          5
+        ],
+        [
+          9,
+          23,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.bb1de1ca047f9p-31",
+        "p_value_17": "8.0602463007148735e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.bb1de1ca047fap-31",
+        "p_value_17": "8.0602463007148745e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          17,
+          21,
+          3
+        ],
+        [
+          108,
+          4,
+          34
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.80042fd63881cp-40",
+        "p_value_17": "1.364300157048733e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.80042fd63881bp-40",
+        "p_value_17": "1.3643001570487328e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          8,
+          58
+        ],
+        [
+          43,
+          0,
+          103
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.31206cab8c043p-19",
+        "p_value_17": "2.2733707589970015e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.31206cab8c047p-19",
+        "p_value_17": "2.2733707589970032e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          47,
+          11
+        ],
+        [
+          1,
+          97,
+          16
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.aab7045de8ac2p-8",
+        "p_value_17": "0.0065111528073510967",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.aab7045de8abfp-8",
+        "p_value_17": "0.0065111528073510941",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          3,
+          47
+        ],
+        [
+          13,
+          14,
+          39
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.38a04445c379dp-13",
+        "p_value_17": "0.00014907171333116985",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.38a04445c37a1p-13",
+        "p_value_17": "0.00014907171333116995",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          3,
+          47
+        ],
+        [
+          14,
+          14,
+          39
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.7136a9ad44d17p-12",
+        "p_value_17": "0.00035210945755288894",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.7136a9ad44d14p-12",
+        "p_value_17": "0.00035210945755288878",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          23,
+          13,
+          14
+        ],
+        [
+          2,
+          39,
+          47
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.bb1de1ca047f9p-31",
+        "p_value_17": "8.0602463007148735e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.bb1de1ca047fap-31",
+        "p_value_17": "8.0602463007148745e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          44,
+          8,
+          8
+        ],
+        [
+          115,
+          95,
+          9
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0dbcc5aa15a2fp-17",
+        "p_value_17": "8.0388006901524233e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0dbcc5aa15a2dp-17",
+        "p_value_17": "8.03880069015242e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          93,
+          11,
+          11
+        ],
+        [
+          100,
+          5,
+          42
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.3686ad0a799bfp-13",
+        "p_value_17": "0.00014807037253135137",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.3686ad0a799bdp-13",
+        "p_value_17": "0.00014807037253135132",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          34,
+          9,
+          67
+        ],
+        [
+          80,
+          17,
+          43
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2b4c447b6b226p-17",
+        "p_value_17": "8.9197731004348904e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2b4c447b6b226p-17",
+        "p_value_17": "8.9197731004348904e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          82,
+          35,
+          7
+        ],
+        [
+          72,
+          11,
+          52
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.e545d996af1cep-38",
+        "p_value_17": "6.8961419883165562e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.e545d996af1c4p-38",
+        "p_value_17": "6.8961419883165481e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          29,
+          21,
+          60
+        ],
+        [
+          39,
+          16,
+          96
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.12a8027102758p-3",
+        "p_value_17": "0.13410951526048609",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.12a802710275bp-3",
+        "p_value_17": "0.13410951526048617",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          36,
+          6
+        ],
+        [
+          141,
+          67,
+          11
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0dbcc5aa15a2fp-17",
+        "p_value_17": "8.0388006901524233e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0dbcc5aa15a2dp-17",
+        "p_value_17": "8.03880069015242e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          71,
+          13,
+          31
+        ],
+        [
+          122,
+          3,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.3686ad0a799bfp-13",
+        "p_value_17": "0.00014807037253135137",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.3686ad0a799bdp-13",
+        "p_value_17": "0.00014807037253135132",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          55,
+          21,
+          34
+        ],
+        [
+          59,
+          5,
+          76
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2b4c447b6b226p-17",
+        "p_value_17": "8.9197731004348904e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2b4c447b6b226p-17",
+        "p_value_17": "8.9197731004348904e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          92,
+          2,
+          30
+        ],
+        [
+          62,
+          44,
+          29
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.e545d996af1cep-38",
+        "p_value_17": "6.8961419883165562e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.e545d996af1c4p-38",
+        "p_value_17": "6.8961419883165481e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          30,
+          10,
+          70
+        ],
+        [
+          38,
+          27,
+          86
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.12a8027102758p-3",
+        "p_value_17": "0.13410951526048609",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.12a802710275bp-3",
+        "p_value_17": "0.13410951526048617",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          20,
+          48,
+          28
+        ],
+        [
+          47,
+          33,
+          57
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0445e61e7048bp-12",
+        "p_value_17": "0.000248215715966956",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0445e61e70487p-12",
+        "p_value_17": "0.00024821571596695579",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          26,
+          47,
+          23
+        ],
+        [
+          41,
+          34,
+          62
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0818d56f6f082p-12",
+        "p_value_17": "0.00025186253239063022",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0818d56f6f07ep-12",
+        "p_value_17": "0.00025186253239063",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          30,
+          53
+        ],
+        [
+          19,
+          3,
+          143
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2885933c29755p-38",
+        "p_value_17": "4.2138279053165721e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2885933c29757p-38",
+        "p_value_17": "4.2138279053165738e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          38,
+          79
+        ],
+        [
+          32,
+          11,
+          95
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.024b2d90520fap-41",
+        "p_value_17": "4.5882171661603441e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.024b2d90520f9p-41",
+        "p_value_17": "4.5882171661603431e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          60,
+          44
+        ],
+        [
+          12,
+          47,
+          78
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.42018942a07f5p-7",
+        "p_value_17": "0.0098268432823296146",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.42018942a07f9p-7",
+        "p_value_17": "0.0098268432823296215",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          20,
+          34,
+          75
+        ],
+        [
+          51,
+          65,
+          25
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.7fdcc23e2e998p-36",
+        "p_value_17": "2.1820047715631058e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.7fdcc23e2e991p-36",
+        "p_value_17": "2.1820047715631035e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          0,
+          95
+        ],
+        [
+          31,
+          33,
+          101
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.38d4421c827f9p-38",
+        "p_value_17": "4.4455693708214338e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.38d4421c827fcp-38",
+        "p_value_17": "4.4455693708214362e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          12,
+          2,
+          103
+        ],
+        [
+          20,
+          47,
+          71
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0ba3effd19531p-41",
+        "p_value_17": "4.7542482073207526e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0ba3effd1953p-41",
+        "p_value_17": "4.7542482073207516e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          5,
+          42,
+          66
+        ],
+        [
+          16,
+          65,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.483c70413584p-7",
+        "p_value_17": "0.010016970455051788",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.483c704135843p-7",
+        "p_value_17": "0.010016970455051793",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          49,
+          59,
+          21
+        ],
+        [
+          22,
+          40,
+          79
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.8515e50510f11p-36",
+        "p_value_17": "2.2116951516560623e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.8515e50510f09p-36",
+        "p_value_17": "2.2116951516560597e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          10,
+          5
+        ],
+        [
+          13,
+          5,
+          61
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.778e03c7f044ap-27",
+        "p_value_17": "1.0930081631337329e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.778e03c7f044ap-27",
+        "p_value_17": "1.0930081631337329e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          75,
+          1
+        ],
+        [
+          6,
+          56,
+          51
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.296dcd84ee068p-44",
+        "p_value_17": "6.6042486418502861e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.296dcd84ee067p-44",
+        "p_value_17": "6.6042486418502848e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          21,
+          4,
+          12
+        ],
+        [
+          5,
+          61,
+          10
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.15b1aea78732dp-42",
+        "p_value_17": "2.4664188137602041e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.15b1aea78732ep-42",
+        "p_value_17": "2.4664188137602046e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          5,
+          5
+        ],
+        [
+          61,
+          10,
+          3
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5f0373dfffa8dp-6",
+        "p_value_17": "0.021424163016485798",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5f0373dfffa8ep-6",
+        "p_value_17": "0.021424163016485802",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          5,
+          46
+        ],
+        [
+          5,
+          37,
+          28
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.45cbf28dae598p-23",
+        "p_value_17": "1.5171089666979479e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.45cbf28dae593p-23",
+        "p_value_17": "1.5171089666979466e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          10,
+          19,
+          33
+        ],
+        [
+          11,
+          61,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.277e86ea269bap-44",
+        "p_value_17": "6.5612903140490699e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.277e86ea269b9p-44",
+        "p_value_17": "6.5612903140490686e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          14,
+          13
+        ],
+        [
+          25,
+          1,
+          53
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b04cbaeb8755fp-27",
+        "p_value_17": "1.2581577966145922e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b04cbaeb8755fp-27",
+        "p_value_17": "1.2581577966145922e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          8,
+          30,
+          40
+        ],
+        [
+          0,
+          101,
+          12
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5476f895fa4e8p-44",
+        "p_value_17": "7.5598356601216083e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5476f895fa4e7p-44",
+        "p_value_17": "7.559835660121607e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          24,
+          12,
+          1
+        ],
+        [
+          2,
+          53,
+          21
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.3b68684fc58a6p-42",
+        "p_value_17": "2.8013843837444246e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.3b68684fc58a6p-42",
+        "p_value_17": "2.8013843837444246e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          23,
+          0,
+          2
+        ],
+        [
+          53,
+          15,
+          6
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.8a0b4732882ffp-6",
+        "p_value_17": "0.024050540474607193",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.8a0b4732883p-6",
+        "p_value_17": "0.024050540474607196",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          27,
+          19
+        ],
+        [
+          0,
+          15,
+          55
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6a754d320fa64p-23",
+        "p_value_17": "1.6878275627299851e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6a754d320fa5fp-23",
+        "p_value_17": "1.6878275627299837e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          57,
+          1
+        ],
+        [
+          17,
+          23,
+          33
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.483a0b82dcee2p-44",
+        "p_value_17": "7.2880976397620772e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.483a0b82dcee2p-44",
+        "p_value_17": "7.2880976397620772e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          40,
+          0
+        ],
+        [
+          0,
+          60,
+          13
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.612d849437aap-20",
+        "p_value_17": "1.3156898477845042e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.612d849437aap-20",
+        "p_value_17": "1.3156898477845042e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          51,
+          29
+        ],
+        [
+          3,
+          45,
+          150
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.9ec56820f472cp-32",
+        "p_value_17": "3.7723213620513541e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.9ec56820f473p-32",
+        "p_value_17": "3.7723213620513561e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          62,
+          12,
+          3
+        ],
+        [
+          33,
+          68,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.29f54a5b6c9fdp-39",
+        "p_value_17": "2.1171201030491059e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.29f54a5b6c9fdp-39",
+        "p_value_17": "2.1171201030491059e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          49,
+          46
+        ],
+        [
+          2,
+          8,
+          96
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.965ce166ca9b9p-39",
+        "p_value_17": "2.8873814582253921e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.965ce166ca9bap-39",
+        "p_value_17": "2.8873814582253925e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          13,
+          25
+        ],
+        [
+          91,
+          0,
+          28
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b6865594de809p-47",
+        "p_value_17": "1.2171506673940376e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b6865594de80cp-47",
+        "p_value_17": "1.2171506673940381e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          31,
+          2,
+          9
+        ],
+        [
+          13,
+          2,
+          46
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.104e936c8cb57p-24",
+        "p_value_17": "6.340139941593053e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.104e936c8cb57p-24",
+        "p_value_17": "6.340139941593053e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          30,
+          12
+        ],
+        [
+          2,
+          70,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.c6c806219887fp-20",
+        "p_value_17": "1.694192527067667e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.c6c806219887fp-20",
+        "p_value_17": "1.694192527067667e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          7,
+          71
+        ],
+        [
+          1,
+          89,
+          108
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.012e9580f322p-31",
+        "p_value_17": "4.6781127593126005e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.012e9580f3222p-31",
+        "p_value_17": "4.6781127593126026e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          57,
+          2
+        ],
+        [
+          77,
+          23,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.704ea63ca01e3p-39",
+        "p_value_17": "2.6169802259271323e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.704ea63ca01e3p-39",
+        "p_value_17": "2.6169802259271323e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          6,
+          90
+        ],
+        [
+          3,
+          51,
+          52
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f3f828107e8aep-39",
+        "p_value_17": "3.5524959779898764e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f3f828107e8bp-39",
+        "p_value_17": "3.5524959779898772e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          8,
+          3,
+          36
+        ],
+        [
+          92,
+          10,
+          17
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0cdcd62fb1542p-46",
+        "p_value_17": "1.4924874848419046e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0cdcd62fb1545p-46",
+        "p_value_17": "1.4924874848419055e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          0,
+          36
+        ],
+        [
+          38,
+          4,
+          19
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4d9128ef5d208p-24",
+        "p_value_17": "7.7664626498882521e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4d9128ef5d208p-24",
+        "p_value_17": "7.7664626498882521e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          16,
+          4,
+          29,
+          1
+        ],
+        [
+          16,
+          0,
+          41,
+          24
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1199b0676c59ap-16",
+        "p_value_17": "1.6307851550661363e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1199b0676c5a1p-16",
+        "p_value_17": "1.6307851550661387e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          27,
+          28,
+          1,
+          5
+        ],
+        [
+          10,
+          27,
+          27,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.48e35a12f0e77p-25",
+        "p_value_17": "3.82876132114312e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.48e35a12f0e6ep-25",
+        "p_value_17": "3.8287613211431141e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          18,
+          17,
+          0
+        ],
+        [
+          16,
+          12,
+          17,
+          48
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6ef8ee02000b9p-34",
+        "p_value_17": "8.3439859215790575e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6ef8ee02000b6p-34",
+        "p_value_17": "8.3439859215790536e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          27,
+          3,
+          13,
+          25
+        ],
+        [
+          28,
+          11,
+          28,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.a3b45597b46eap-18",
+        "p_value_17": "6.2540833806899459e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.a3b45597b46cfp-18",
+        "p_value_17": "6.254083380689923e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          3,
+          15,
+          10
+        ],
+        [
+          10,
+          1,
+          55,
+          15
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1199b0676c59ap-16",
+        "p_value_17": "1.6307851550661363e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1199b0676c5a1p-16",
+        "p_value_17": "1.6307851550661387e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          31,
+          22,
+          8,
+          0
+        ],
+        [
+          6,
+          33,
+          20,
+          10
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.48e35a12f0e77p-25",
+        "p_value_17": "3.82876132114312e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.48e35a12f0e6ep-25",
+        "p_value_17": "3.8287613211431141e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          4,
+          3,
+          15
+        ],
+        [
+          3,
+          26,
+          31,
+          33
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6ef8ee02000b9p-34",
+        "p_value_17": "8.3439859215790575e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6ef8ee02000b6p-34",
+        "p_value_17": "8.3439859215790536e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          6,
+          33,
+          7
+        ],
+        [
+          33,
+          8,
+          8,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.a3b45597b46eap-18",
+        "p_value_17": "6.2540833806899459e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.a3b45597b46cfp-18",
+        "p_value_17": "6.254083380689923e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          4,
+          53,
+          1
+        ],
+        [
+          6,
+          20,
+          34,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0c2d80b9648bfp-12",
+        "p_value_17": "0.00025575422804381334",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0c2d80b9648b9p-12",
+        "p_value_17": "0.00025575422804381302",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          20,
+          34,
+          4
+        ],
+        [
+          6,
+          4,
+          53,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.62a92636256c7p-11",
+        "p_value_17": "0.00067646167623777113",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.62a92636256c8p-11",
+        "p_value_17": "0.00067646167623777124",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          8,
+          0,
+          25,
+          5
+        ],
+        [
+          2,
+          22,
+          12,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.33f0509879099p-30",
+        "p_value_17": "1.1202745728631715e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.33f0509879094p-30",
+        "p_value_17": "1.1202745728631705e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          53,
+          3,
+          5,
+          2
+        ],
+        [
+          34,
+          13,
+          20,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.62a51aece4a2p-14",
+        "p_value_17": "8.4553943180667047e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.62a51aece4a21p-14",
+        "p_value_17": "8.455394318066706e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          29,
+          0,
+          5
+        ],
+        [
+          25,
+          21,
+          29,
+          11
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.557ea99c2997ep-24",
+        "p_value_17": "7.9510448394194323e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.557ea99c29988p-24",
+        "p_value_17": "7.9510448394194455e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          27,
+          11,
+          3
+        ],
+        [
+          14,
+          25,
+          14,
+          23
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.cb60aae40a276p-16",
+        "p_value_17": "2.7381039117954001e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.cb60aae40a282p-16",
+        "p_value_17": "2.7381039117954042e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          12,
+          9,
+          42,
+          1
+        ],
+        [
+          0,
+          15,
+          45,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0c2d80b9648bfp-12",
+        "p_value_17": "0.00025575422804381334",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0c2d80b9648b9p-12",
+        "p_value_17": "0.00025575422804381302",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          15,
+          45,
+          4
+        ],
+        [
+          12,
+          9,
+          42,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.62a92636256c7p-11",
+        "p_value_17": "0.00067646167623777113",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.62a92636256c8p-11",
+        "p_value_17": "0.00067646167623777124",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          19,
+          3,
+          9
+        ],
+        [
+          3,
+          3,
+          34,
+          18
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.33f0509879099p-30",
+        "p_value_17": "1.1202745728631715e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.33f0509879094p-30",
+        "p_value_17": "1.1202745728631705e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          42,
+          1,
+          13,
+          7
+        ],
+        [
+          45,
+          15,
+          12,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.62a51aece4a2p-14",
+        "p_value_17": "8.4553943180667047e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.62a51aece4a21p-14",
+        "p_value_17": "8.455394318066706e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          26,
+          13,
+          2
+        ],
+        [
+          32,
+          24,
+          16,
+          14
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.557ea99c2997ep-24",
+        "p_value_17": "7.9510448394194323e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.557ea99c29988p-24",
+        "p_value_17": "7.9510448394194455e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          10,
+          6,
+          19
+        ],
+        [
+          8,
+          42,
+          19,
+          7
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.cb60aae40a276p-16",
+        "p_value_17": "2.7381039117954001e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.cb60aae40a282p-16",
+        "p_value_17": "2.7381039117954042e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          15,
+          7,
+          5
+        ],
+        [
+          33,
+          42,
+          15,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.89b51dd611049p-18",
+        "p_value_17": "5.8666987197732786e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.89b51dd61104ap-18",
+        "p_value_17": "5.8666987197732795e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          20,
+          5,
+          1
+        ],
+        [
+          4,
+          62,
+          2,
+          27
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.99430f55e1803p-27",
+        "p_value_17": "1.1911090485249129e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.99430f55e1801p-27",
+        "p_value_17": "1.1911090485249125e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          15,
+          0,
+          12,
+          0
+        ],
+        [
+          7,
+          12,
+          42,
+          31
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.045eb3add5757p-26",
+        "p_value_17": "1.5155524550037544e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.045eb3add575ap-26",
+        "p_value_17": "1.5155524550037554e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          8,
+          38,
+          6
+        ],
+        [
+          47,
+          2,
+          29,
+          7
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.05bbf980b5bd6p-34",
+        "p_value_17": "5.9511484291803225e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.05bbf980b5bd6p-34",
+        "p_value_17": "5.9511484291803225e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          15,
+          11,
+          0
+        ],
+        [
+          1,
+          42,
+          11,
+          31
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2be15b0435daep-27",
+        "p_value_17": "8.7276652644726668e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2be15b0435db1p-27",
+        "p_value_17": "8.7276652644726718e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          25,
+          4,
+          6,
+          5
+        ],
+        [
+          53,
+          4,
+          10,
+          30
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.3295c90cfac57p-4",
+        "p_value_17": "0.074849877695372199",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.3295c90cfac58p-4",
+        "p_value_17": "0.074849877695372213",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          17,
+          5,
+          2,
+          3
+        ],
+        [
+          16,
+          52,
+          20,
+          3
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.89b51dd611049p-18",
+        "p_value_17": "5.8666987197732786e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.89b51dd61104ap-18",
+        "p_value_17": "5.8666987197732795e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          10,
+          2,
+          11
+        ],
+        [
+          18,
+          2,
+          52,
+          20
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.045eb3add5757p-26",
+        "p_value_17": "1.5155524550037544e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.045eb3add575ap-26",
+        "p_value_17": "1.5155524550037554e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          5,
+          32,
+          13
+        ],
+        [
+          45,
+          5,
+          35,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.05bbf980b5bd6p-34",
+        "p_value_17": "5.9511484291803225e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.05bbf980b5bd6p-34",
+        "p_value_17": "5.9511484291803225e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          5,
+          17,
+          12
+        ],
+        [
+          9,
+          52,
+          5,
+          19
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2be15b0435daep-27",
+        "p_value_17": "8.7276652644726668e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2be15b0435db1p-27",
+        "p_value_17": "8.7276652644726718e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          19,
+          5,
+          3,
+          13
+        ],
+        [
+          59,
+          3,
+          13,
+          22
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.3295c90cfac57p-4",
+        "p_value_17": "0.074849877695372199",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.3295c90cfac58p-4",
+        "p_value_17": "0.074849877695372213",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          0,
+          3,
+          36
+        ],
+        [
+          15,
+          21,
+          13,
+          48
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.bf67b70faf195p-19",
+        "p_value_17": "3.3334280330183841e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.bf67b70faf19ep-19",
+        "p_value_17": "3.3334280330183879e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          5,
+          0,
+          26,
+          0
+        ],
+        [
+          0,
+          17,
+          42,
+          25
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.375a26a0bf0ccp-26",
+        "p_value_17": "1.8123080483358923e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.375a26a0bf0c9p-26",
+        "p_value_17": "1.8123080483358913e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          10,
+          8,
+          7
+        ],
+        [
+          62,
+          27,
+          8,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.611e671ef1e45p-27",
+        "p_value_17": "1.0277108551228088e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.611e671ef1e46p-27",
+        "p_value_17": "1.0277108551228089e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          28,
+          14,
+          4,
+          2
+        ],
+        [
+          24,
+          8,
+          1,
+          16
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.18b6f24d01932p-10",
+        "p_value_17": "0.001070841349475393",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.18b6f24d0192ep-10",
+        "p_value_17": "0.0010708413494753921",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          16,
+          4,
+          2,
+          2
+        ],
+        [
+          23,
+          16,
+          28,
+          9
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f1872c90dc1dbp-8",
+        "p_value_17": "0.0075916751674047446",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f1872c90dc1d7p-8",
+        "p_value_17": "0.0075916751674047411",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          11,
+          11,
+          2,
+          6
+        ],
+        [
+          62,
+          11,
+          16,
+          17
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.831147ba86fbp-8",
+        "p_value_17": "0.0059061813467699426",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.831147ba86fb5p-8",
+        "p_value_17": "0.0059061813467699469",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          11,
+          11,
+          0
+        ],
+        [
+          11,
+          40,
+          3,
+          15
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.ccac8f7534a2p-27",
+        "p_value_17": "1.3407379854261931e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.ccac8f7534a1ep-27",
+        "p_value_17": "1.3407379854261927e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          1,
+          10,
+          19
+        ],
+        [
+          4,
+          16,
+          58,
+          6
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.375a26a0bf0ccp-26",
+        "p_value_17": "1.8123080483358923e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.375a26a0bf0c9p-26",
+        "p_value_17": "1.8123080483358913e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          16,
+          2,
+          0,
+          9
+        ],
+        [
+          48,
+          35,
+          16,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.611e671ef1e45p-27",
+        "p_value_17": "1.0277108551228088e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.611e671ef1e46p-27",
+        "p_value_17": "1.0277108551228089e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          17,
+          1,
+          12
+        ],
+        [
+          34,
+          5,
+          4,
+          6
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.18b6f24d01932p-10",
+        "p_value_17": "0.001070841349475393",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.18b6f24d0192ep-10",
+        "p_value_17": "0.0010708413494753921",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          5,
+          2,
+          12,
+          5
+        ],
+        [
+          34,
+          18,
+          18,
+          6
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f1872c90dc1dbp-8",
+        "p_value_17": "0.0075916751674047446",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f1872c90dc1d7p-8",
+        "p_value_17": "0.0075916751674047411",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          19,
+          1,
+          8,
+          2
+        ],
+        [
+          54,
+          21,
+          10,
+          21
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.831147ba86fbp-8",
+        "p_value_17": "0.0059061813467699426",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.831147ba86fb5p-8",
+        "p_value_17": "0.0059061813467699469",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          14,
+          8,
+          14,
+          8
+        ],
+        [
+          19,
+          43,
+          0,
+          7
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.ccac8f7534a2p-27",
+        "p_value_17": "1.3407379854261931e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.ccac8f7534a1ep-27",
+        "p_value_17": "1.3407379854261927e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          10,
+          30,
+          1
+        ],
+        [
+          0,
+          3,
+          56,
+          16
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1b0dc8e61c27fp-34",
+        "p_value_17": "6.4358993477852978e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1b0dc8e61c281p-34",
+        "p_value_17": "6.4358993477853003e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          17,
+          30,
+          1,
+          9
+        ],
+        [
+          3,
+          10,
+          4,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.660354d91e243p-42",
+        "p_value_17": "3.1797943249989924e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.660354d91e23ep-42",
+        "p_value_17": "3.1797943249989899e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          5,
+          0,
+          12
+        ],
+        [
+          29,
+          56,
+          8,
+          10
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d045de117a57p-15",
+        "p_value_17": "5.5345644920222199e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d045de117a57p-15",
+        "p_value_17": "5.5345644920222199e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          10,
+          6,
+          10,
+          2
+        ],
+        [
+          29,
+          56,
+          2,
+          16
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d5b2e0ef8dac6p-20",
+        "p_value_17": "1.7497641770066544e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d5b2e0ef8dad1p-20",
+        "p_value_17": "1.7497641770066568e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          8,
+          5,
+          7,
+          29
+        ],
+        [
+          9,
+          12,
+          1,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4b337ec4e514ap-6",
+        "p_value_17": "0.020214914129227858",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4b337ec4e514cp-6",
+        "p_value_17": "0.020214914129227865",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          24,
+          12,
+          12,
+          2
+        ],
+        [
+          30,
+          29,
+          23,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f79346e3b4bdep-2",
+        "p_value_17": "0.49177275433356538",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f79346e3b4bddp-2",
+        "p_value_17": "0.49177275433356532",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          0,
+          39,
+          2
+        ],
+        [
+          0,
+          13,
+          47,
+          15
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1b0dc8e61c27fp-34",
+        "p_value_17": "6.4358993477852978e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1b0dc8e61c281p-34",
+        "p_value_17": "6.4358993477853003e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          7,
+          1,
+          2,
+          47
+        ],
+        [
+          13,
+          39,
+          3,
+          18
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.660354d91e243p-42",
+        "p_value_17": "3.1797943249989924e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.660354d91e23ep-42",
+        "p_value_17": "3.1797943249989899e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          14,
+          3,
+          9
+        ],
+        [
+          38,
+          47,
+          5,
+          13
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d045de117a57p-15",
+        "p_value_17": "5.5345644920222199e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d045de117a57p-15",
+        "p_value_17": "5.5345644920222199e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          15,
+          8,
+          5
+        ],
+        [
+          39,
+          47,
+          4,
+          13
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d5b2e0ef8dac6p-20",
+        "p_value_17": "1.7497641770066544e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d5b2e0ef8dad1p-20",
+        "p_value_17": "1.7497641770066568e-06",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          13,
+          16,
+          3
+        ],
+        [
+          36,
+          28,
+          19,
+          3
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.f79346e3b4bdep-2",
+        "p_value_17": "0.49177275433356538",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.f79346e3b4bddp-2",
+        "p_value_17": "0.49177275433356532",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          13,
+          15,
+          4
+        ],
+        [
+          36,
+          28,
+          20,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4dc8a09c34dc3p-2",
+        "p_value_17": "0.32596064523133012",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4dc8a09c34dcap-2",
+        "p_value_17": "0.3259606452313305",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          13,
+          7,
+          15,
+          5
+        ],
+        [
+          3,
+          17,
+          23,
+          53
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.53be4d7b85d76p-24",
+        "p_value_17": "7.910266746517538e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.53be4d7b85d83p-24",
+        "p_value_17": "7.9102667465175552e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          25,
+          2,
+          15,
+          9
+        ],
+        [
+          3,
+          1,
+          61,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.19270f748d306p-35",
+        "p_value_17": "3.1963347689594212e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.19270f748d304p-35",
+        "p_value_17": "3.1963347689594199e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          10,
+          4,
+          9
+        ],
+        [
+          61,
+          2,
+          20,
+          12
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.13aa8572d9124p-38",
+        "p_value_17": "3.9174508794476376e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.13aa8572d9121p-38",
+        "p_value_17": "3.9174508794476352e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          20,
+          3,
+          0
+        ],
+        [
+          12,
+          9,
+          3,
+          61
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2692bf11fa8b9p-43",
+        "p_value_17": "1.3081679206564644e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2692bf11fa8b9p-43",
+        "p_value_17": "1.3081679206564644e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          12,
+          13,
+          21,
+          14
+        ],
+        [
+          2,
+          0,
+          6,
+          61
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4109ecac5d585p-46",
+        "p_value_17": "1.7821231579226505e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4109ecac5d582p-46",
+        "p_value_17": "1.7821231579226496e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          9,
+          18,
+          3,
+          0
+        ],
+        [
+          11,
+          8,
+          61,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.0f86f389bb6a4p-33",
+        "p_value_17": "1.2347625379116584e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.0f86f389bb6a2p-33",
+        "p_value_17": "1.2347625379116579e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          10,
+          2,
+          21,
+          0
+        ],
+        [
+          11,
+          4,
+          10,
+          61
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.789eac3144906p-45",
+        "p_value_17": "4.1813199008567962e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.789eac3144906p-45",
+        "p_value_17": "4.1813199008567962e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          25,
+          3,
+          23,
+          0
+        ],
+        [
+          3,
+          0,
+          53,
+          14
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2470159ffe2d6p-35",
+        "p_value_17": "3.3246332119562008e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2470159ffe2d4p-35",
+        "p_value_17": "3.3246332119561995e-11",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          2,
+          0,
+          17
+        ],
+        [
+          57,
+          10,
+          24,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1bef72cbe5c6dp-38",
+        "p_value_17": "4.0349639420639257e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1bef72cbe5c6ap-38",
+        "p_value_17": "4.0349639420639232e-12",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          23,
+          2,
+          4
+        ],
+        [
+          18,
+          6,
+          4,
+          57
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2ec5cb8ca3ee4p-43",
+        "p_value_17": "1.3445806120371186e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2ec5cb8ca3ee4p-43",
+        "p_value_17": "1.3445806120371186e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          14,
+          0,
+          24,
+          22
+        ],
+        [
+          0,
+          13,
+          3,
+          53
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.48d386d8ab8bfp-46",
+        "p_value_17": "1.8253525154847625e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.48d386d8ab8bcp-46",
+        "p_value_17": "1.8253525154847616e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          3,
+          8,
+          1
+        ],
+        [
+          2,
+          23,
+          56,
+          4
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.15ab2fcc4a74fp-33",
+        "p_value_17": "1.2626910488041599e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.15ab2fcc4a751p-33",
+        "p_value_17": "1.2626910488041604e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          4,
+          24,
+          5
+        ],
+        [
+          21,
+          2,
+          7,
+          56
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.809894106dac6p-45",
+        "p_value_17": "4.2698734468159625e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.809894106dac5p-45",
+        "p_value_17": "4.2698734468159619e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          4,
+          4,
+          21
+        ],
+        [
+          54,
+          1,
+          1,
+          6
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1f276972fbdbp-45",
+        "p_value_17": "3.188049299845072e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1f276972fbdbp-45",
+        "p_value_17": "3.188049299845072e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          5,
+          27,
+          0
+        ],
+        [
+          22,
+          1,
+          13,
+          5
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2012cb44a9f64p-29",
+        "p_value_17": "2.0960099509601996e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2012cb44a9f62p-29",
+        "p_value_17": "2.0960099509601988e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          46,
+          3,
+          2,
+          0
+        ],
+        [
+          14,
+          15,
+          2,
+          27
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2d151774e291cp-45",
+        "p_value_17": "3.3426860076461952e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2d151774e292p-45",
+        "p_value_17": "3.3426860076461978e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          0,
+          2,
+          31
+        ],
+        [
+          34,
+          3,
+          36,
+          19
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.1eac9e9dc46bp-42",
+        "p_value_17": "2.5461792256139158e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.1eac9e9dc46bp-42",
+        "p_value_17": "2.5461792256139158e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          27,
+          0,
+          2
+        ],
+        [
+          12,
+          13,
+          19,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d00be5be5a783p-27",
+        "p_value_17": "1.3505529913778937e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d00be5be5a783p-27",
+        "p_value_17": "1.3505529913778937e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          1,
+          20,
+          0
+        ],
+        [
+          11,
+          29,
+          14,
+          27
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.612555d37573p-32",
+        "p_value_17": "3.2118427120712671e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.612555d37572fp-32",
+        "p_value_17": "3.2118427120712666e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          6,
+          0,
+          0,
+          25
+        ],
+        [
+          50,
+          5,
+          5,
+          2
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.361deff96f5d4p-45",
+        "p_value_17": "3.4429897040951951e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.361deff96f5d7p-45",
+        "p_value_17": "3.442989704095197e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          18,
+          4,
+          5,
+          5
+        ],
+        [
+          4,
+          2,
+          35,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.339d146d703b2p-29",
+        "p_value_17": "2.2381834638422758e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.339d146d703bp-29",
+        "p_value_17": "2.238183463842275e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          22,
+          0,
+          2,
+          27
+        ],
+        [
+          38,
+          18,
+          2,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.4066066a10195p-45",
+        "p_value_17": "3.5571383102903091e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.4066066a10199p-45",
+        "p_value_17": "3.5571383102903116e-14",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          24,
+          0,
+          9,
+          0
+        ],
+        [
+          10,
+          3,
+          29,
+          50
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.2c7b20f29b1f7p-42",
+        "p_value_17": "2.6688071440944883e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.2c7b20f29b1f6p-42",
+        "p_value_17": "2.6688071440944878e-13",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          4,
+          6,
+          17,
+          3
+        ],
+        [
+          9,
+          34,
+          2,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.e4ab7c9f08c55p-27",
+        "p_value_17": "1.4105749733251996e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.e4ab7c9f08c57p-27",
+        "p_value_17": "1.4105749733251999e-08",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          3,
+          1,
+          0,
+          17
+        ],
+        [
+          8,
+          29,
+          34,
+          10
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6f4a54095e8bfp-32",
+        "p_value_17": "3.3404862260498376e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6f4a54095e8bfp-32",
+        "p_value_17": "3.3404862260498376e-10",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          16,
+          2,
+          25
+        ],
+        [
+          11,
+          22,
+          21
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.a0a7c0adbf3cbp-14",
+        "p_value_17": "9.9338360737235402e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.a0a7c0adbf3e1p-14",
+        "p_value_17": "9.93383607372357e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          0,
+          3,
+          3
+        ],
+        [
+          9,
+          3,
+          31
+        ],
+        [
+          18,
+          19,
+          17
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.a0a7c0adbf3cbp-14",
+        "p_value_17": "9.9338360737235402e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.a0a7c0adbf3e1p-14",
+        "p_value_17": "9.93383607372357e-05",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          14,
+          1,
+          0
+        ],
+        [
+          4,
+          8,
+          28
+        ],
+        [
+          14,
+          0,
+          24
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5e780ce05149ep-30",
+        "p_value_17": "1.27499859982285e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5e780ce05149cp-30",
+        "p_value_17": "1.2749985998228496e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          12,
+          3,
+          0
+        ],
+        [
+          17,
+          5,
+          18
+        ],
+        [
+          3,
+          1,
+          34
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.5e780ce05149ep-30",
+        "p_value_17": "1.27499859982285e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.5e780ce05149cp-30",
+        "p_value_17": "1.2749985998228496e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          1,
+          2,
+          9
+        ],
+        [
+          0,
+          61,
+          15
+        ],
+        [
+          3,
+          5,
+          8
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.6da31e9ce27fp-23",
+        "p_value_17": "1.7026308265735008e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.6da31e9ce27e5p-23",
+        "p_value_17": "1.7026308265734979e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          2,
+          1,
+          9
+        ],
+        [
+          0,
+          53,
+          23
+        ],
+        [
+          2,
+          14,
+          0
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.720cc6eb0e72cp-23",
+        "p_value_17": "1.7231791757544963e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.720cc6eb0e71fp-23",
+        "p_value_17": "1.7231791757544929e-07",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          54,
+          19,
+          0
+        ],
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          6,
+          22,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.b9783552a0cbbp-28",
+        "p_value_17": "6.424227666005599e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.b9783552a0cbfp-28",
+        "p_value_17": "6.4242276660056023e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    },
+    {
+      "table": [
+        [
+          29,
+          42,
+          2
+        ],
+        [
+          3,
+          0,
+          0
+        ],
+        [
+          28,
+          0,
+          1
+        ]
+      ],
+      "default": {
+        "p_value_hex": "0x1.d0ba351b36b81p-28",
+        "p_value_17": "6.7626733338385526e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      },
+      "exact_workspace": {
+        "p_value_hex": "0x1.d0ba351b36b84p-28",
+        "p_value_17": "6.7626733338385551e-09",
+        "method": "Fisher's Exact Test for Count Data",
+        "error": null,
+        "warnings": []
+      }
+    }
+  ],
+  "pairs": [
+    {
+      "table": [
+        [
+          13,
+          18,
+          60
+        ],
+        [
+          15,
+          13,
+          14
+        ]
+      ],
+      "third": [
+        7,
+        9,
+        11
+      ],
+      "pairwise": [
+        {
+          "group1": "a",
+          "group2": "b",
+          "p_value_hex": "0x1.565ad375ce4adp-10",
+          "p_value_17": "0.0013059798779535934",
+          "test": "Fisher's exact test"
+        },
+        {
+          "group1": "a",
+          "group2": "c",
+          "p_value_hex": "0x1.e9b445ee710c5p-5",
+          "p_value_17": "0.059778343758382792",
+          "test": "Fisher's exact test"
+        },
+        {
+          "group1": "b",
+          "group2": "c",
+          "p_value_hex": "0x1.7db9a4d9b8db1p-1",
+          "p_value_17": "0.74555697591534031",
+          "test": "Fisher's exact test"
+        }
+      ],
+      "error": null,
+      "warnings": []
+    },
+    {
+      "table": [
+        [
+          29,
+          21,
+          60
+        ],
+        [
+          39,
+          16,
+          96
+        ]
+      ],
+      "third": [
+        7,
+        9,
+        11
+      ],
+      "pairwise": [
+        {
+          "group1": "a",
+          "group2": "b",
+          "p_value_hex": "0x1.12a8027102758p-3",
+          "p_value_17": "0.13410951526048609",
+          "test": "Fisher's exact test"
+        },
+        {
+          "group1": "a",
+          "group2": "c",
+          "p_value_hex": "0x1.d57d7b6d2fa65p-3",
+          "p_value_17": "0.22924324442824964",
+          "test": "Fisher's exact test"
+        },
+        {
+          "group1": "b",
+          "group2": "c",
+          "p_value_hex": "0x1.240ac1a3da58dp-7",
+          "p_value_17": "0.0089124150760706792",
+          "test": "Fisher's exact test"
+        }
+      ],
+      "error": null,
+      "warnings": []
+    }
+  ],
+  "versions": {
+    "R": "4.5.3",
+    "platform": "x86_64-pc-linux-gnu",
+    "os": "Ubuntu 24.04.5 LTS",
+    "collate": "C",
+    "rng_kind": [
+      "Mersenne-Twister",
+      "Inversion",
+      "Rejection"
+    ],
+    "repos": {
+      "RSPM": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23",
+      "CRAN": "https://packagemanager.posit.co/cran/__linux__/noble/2026-10-23"
+    },
+    "packages": {
+      "ggstatsplot": "1.1.4",
+      "statsExpressions": "2.2.1",
+      "effectsize": "1.0.3",
+      "parameters": "0.30.0",
+      "bayestestR": "0.20.0",
+      "insight": "1.6.0",
+      "datawizard": "1.4.1",
+      "correlation": "0.8.8",
+      "performance": "0.19.0",
+      "WRS2": "1.1.7",
+      "BayesFactor": "0.9.12.4.8",
+      "PMCMRplus": "1.9.12",
+      "afex": "1.5.1",
+      "ggplot2": "4.0.3",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39"
+    }
+  }
+}
