@@ -37,9 +37,10 @@ whose output every number is tested.
   test, the effect size and its interval, Bayes factors, every pair, descriptives,
   the observations used, notes in `warnings`, and an APA-style sentence and alt
   text. `to_json()`, `from_json()` and `to_frame()` (pandas or polars).
-- `fig.check()` and `result.check()`: 25 kinds of statistical and drawing problems
+- `fig.check()` and `result.check()`: 29 kinds of statistical and drawing problems
   (small samples, heavy ties, small expected counts, overlapping or clipped text,
-  low contrast, missing glyphs and others), each with a fix.
+  level names or colours that read alike, low contrast, missing glyphs and others),
+  each with a fix.
 - `fig.save()` to SVG, PDF or PNG with editable text and the result's JSON embedded
   in the file; saving twice gives identical bytes.
 - pandas, polars and pyarrow data frames as input (optional extras); missing values
@@ -63,6 +64,12 @@ These are deliberate; each is recorded in `docs/design/DECISIONS.md`.
   give r = 1 or -1 and an infinite t (D85).
 - Fewer subjects than conditions: the repeated-measures ANOVA keeps its
   Greenhouse-Geisser correction where ggstatsplot prints the uncorrected F (D62).
+- Counts that fit exactly print as 0 (chi-square, Cramér's V, Pearson's C) where R's
+  arithmetic leaves rounding noise such as "V = 5.59e-09" (D118).
+- Pairwise Fisher tests are exact and held to about two seconds per table; a pair
+  too large to compute is named, not approximated, and still counts in the
+  adjustment for multiple comparisons (D120). ggstatsplot computes every pair or
+  fails.
 - Nothing is ignored silently. Unknown arguments raise an error; settings that would
   change nothing raise or add a note; where ggstatsplot drops its subtitle without a
   word (for example a table with one category), inferplot raises an error that says
