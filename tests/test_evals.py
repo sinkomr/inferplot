@@ -50,6 +50,8 @@ def _load_harness() -> Any:
 run = _load_harness()
 TASKS = run.load_tasks()
 BY_ID = {task.id: task for task in TASKS}
+# Where a Python environment keeps its executables (as evals/run.py names it).
+ENV_BIN = "Scripts" if os.name == "nt" else "bin"
 
 
 def _forbid_model(*_args: object, **_kwargs: object) -> Any:
@@ -348,7 +350,7 @@ def test_agents_environment_names_neither_the_repository_nor_the_results(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     options = run.Options(workdir=tmp_path / "w", results=tmp_path / "r")
-    venv_bin = str(ROOT / ".venv" / "bin")
+    venv_bin = str(ROOT / ".venv" / ENV_BIN)
     monkeypatch.setenv("PATH", os.pathsep.join([venv_bin, "/usr/bin", "/bin"]))
     monkeypatch.setenv("VIRTUAL_ENV", str(ROOT / ".venv"))
     monkeypatch.setenv("SOME_TOOL_HOME", str(ROOT / "tools"))
@@ -361,7 +363,7 @@ def test_agents_environment_names_neither_the_repository_nor_the_results(
     assert str(tmp_path / "r") not in text
     assert "PYTHONPATH" not in env
     assert env["PATH"].split(os.pathsep)[0] == str(
-        run.env_dir(options, "baseline") / "bin"
+        run.env_dir(options, "baseline") / ENV_BIN
     )
     assert env["VIRTUAL_ENV"] == str(run.env_dir(options, "baseline"))
     assert env["PWD"] == str(cwd)
@@ -983,7 +985,8 @@ def test_real_run_with_a_fake_model(
         command: Any, cwd: Path, env: Any, timeout: int
     ) -> tuple[int, str, bool]:
         calls.append(tuple(command))
-        assert env["PATH"].split(os.pathsep)[0].endswith(os.path.join("env", "bin"))
+        first = env["PATH"].split(os.pathsep)[0]
+        assert first.endswith(os.path.join("env", ENV_BIN))
         assert str(ROOT) not in json.dumps(env)
         assert timeout == 300
         # No earlier run's directory is left next to this one.
