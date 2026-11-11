@@ -39,8 +39,10 @@ from inferplot.stats import (
     pearsons_c,
     proportion_tests,
 )
+from inferplot.text import r_round
 from tests.oracle_fixtures import (
     CHISQ_ROOT_MISSES,
+    EXACT_ZEROS,
     OracleCase,
     Row,
     cases_for,
@@ -220,6 +222,18 @@ PRINTED_DIFFERENTLY: Final = {
 }
 
 
+def _exact_zeros(case: OracleCase, row: Row) -> set[str]:
+    """The subtitle columns R reports as rounding noise of an exact zero, where
+    inferplot reports 0 (D118, EXACT_ZEROS); R's value is checked here."""
+    out: set[str] = set()
+    for (name, column), (r_value, _, _) in EXACT_ZEROS.items():
+        if name == case.name:
+            assert math.isclose(value(row, column), r_value, rel_tol=1e-13)
+            assert 0.0 < abs(r_value) < 1e-15
+            out.add(column)
+    return out
+
+
 def _check_printed(
     case: OracleCase,
     row: Row,
@@ -235,7 +249,12 @@ def _check_printed(
     pinned bound (D99) prints as inferplot's accurate value, which differs from R's
     text only in PRINTED_DIFFERENTLY. ``digits``: the case's unless given."""
     digits = _digits(case) if digits is None else digits
-    quoted, bounds = _printed(str(row["expression"]))
+    expression = str(row["expression"])
+    for (name, _), (_, r_text, our_text) in EXACT_ZEROS.items():
+        if name == case.name:  # R prints the noise, inferplot the exact 0 (D118)
+            assert f'"{r_text}"' in expression
+            expression = expression.replace(f'"{r_text}"', f'"{our_text}"')
+    quoted, bounds = _printed(expression)
     assert quoted[0] == _format_value(statistic, digits), (quoted, statistic)
     assert quoted[1] == _format_value(p, digits), (quoted, p)
     assert quoted[2] == _format_value(ours.estimate, digits), (quoted, ours)
@@ -305,6 +324,9 @@ def test_goodness_of_fit_and_pearsons_c(case: OracleCase) -> None:
     counts = _table(case)[:, 0]  # every level, a declared empty one as a zero
     test = goodness_of_fit(counts, _ratio(case))
     assert row["method"] == "Chi-squared test for given probabilities"
+    zeros = _exact_zeros(case, row)
+    if zeros:
+        row = {**row, **dict.fromkeys(zeros, 0.0)}
     assert_close("closed_form", test.statistic, value(row, "statistic"), what="chi2")
     assert test.df == value(row, "df")
     assert_close("closed_form", test.p_value, value(row, "p.value"), what="p")
@@ -549,7 +571,7 @@ def test_every_fixture_is_covered() -> None:
     # the Bayes subtitles are v0.2.
     designs = {_design(c) for c in CASES}
     assert designs == {"one-way", "paired", "independence"}
-    assert len(CASES) == 89
+    assert len(CASES) == 89 + 10  # 10 from review round 3
     assert len(FAILED) == 1
 
 
@@ -759,12 +781,13 @@ def test_probe_fisher() -> None:
 
 
 def test_probe_percent_labels() -> None:
-    # ggbarstats' share of a bar, bit for bit, and R's round() as Python's.
+    # ggbarstats' share of a bar, bit for bit, and R's round() as inferplot's
+    # r_round (on these 927 Python's round() agrees as well).
     rows = PROBE.rows("percent_labels")
     for row in rows:
         k, n = int(row["k"]), int(row["n"])
         share = column_percentages([[k], [n - k]])[0][0]
         assert share is not None
         assert share == _hex(row["perc_hex"]), row
-        assert round(share, int(row["digits"])) == _hex(row["rounded_hex"]), row
+        assert r_round(share, int(row["digits"])) == _hex(row["rounded_hex"]), row
     assert len(rows) == 927

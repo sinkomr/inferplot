@@ -70,9 +70,22 @@ def result_of(name: str) -> StatsResult:
     return bc.assembled(bc.BY_NAME[name])
 
 
+# inferplot's own figure holds at most this many bars (DECISIONS.md D123).
+OWN_FIGURE_BARS = 37
+
+
 @functools.cache
 def figure(name: str) -> StatsFigure:
-    return ip.render.barstats(result_of(name))
+    """The fixture's figure. A table with more bars than inferplot's own figure
+    holds (the 40 and 61 bars of oracle round 3) is refused there, and drawn the
+    way the refusal says: into an Axes of a figure of the caller's size."""
+    result = result_of(name)
+    if len(result.bars) <= OWN_FIGURE_BARS:
+        return ip.render.barstats(result)
+    with pytest.raises(ValueError, match="bars do not fit inferplot's own figure"):
+        ip.render.barstats(result)
+    wide = Figure(figsize=(1.0 * len(result.bars) + 4.0, 6.0))
+    return ip.render.barstats(result, ax=wide.add_subplot())
 
 
 def figure_codes(fig: StatsFigure) -> list[str]:
@@ -169,8 +182,8 @@ def built_texts(case: OracleCase) -> tuple[dict[int, str], dict[int, str]]:
 def test_every_answerable_fixture_is_drawn() -> None:
     # (edge_bar_paired_agree left the answerable set when the analysis joined:
     # no changing pair, refused; D113.)
-    assert len(bc.ANSWERED) == 67
-    assert len(BAR_CASES) == 64  # and 3 of the 5 ggpiestats cross-checks
+    assert len(bc.ANSWERED) == 67 + 10  # 10 from review round 3
+    assert len(BAR_CASES) == 64 + 10  # and 3 of the 5 ggpiestats cross-checks
 
 
 @pytest.mark.parametrize("name", [pytest.param(c.name, id=c.name) for c in bc.ANSWERED])

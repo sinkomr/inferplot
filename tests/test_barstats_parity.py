@@ -56,6 +56,8 @@ from tests.oracle_fixtures import (
     CHISQ_ROOT_MISSES,
     Backend,
     OracleCase,
+    exact_zero,
+    expected_value,
     number,
     read_dataset,
 )
@@ -172,12 +174,15 @@ def check_bounds(
 
 
 def test_fixture_counts() -> None:
-    assert len(bc.CASES) == 89
-    assert len(bc.ANSWERED) == 67
+    # 89, and 10 from review round 3 (edge_bar_wide20, 40, 61 and 61r,
+    # edge_bar_exact_fit, edge_bar_ties-digitsperc0 and 2, edge_bar_reduced in three
+    # alternatives), all answered.
+    assert len(bc.CASES) == 89 + 10
+    assert len(bc.ANSWERED) == 67 + 10
     assert len(bc.REFUSALS) == 22
     # 7 robust replays and the rescaled ratio.
     assert len(REPLAYED) == 8
-    assert len(PARAMS) == 75 * 3
+    assert len(PARAMS) == (75 + 10) * 3
     assert not [c.name for c in bc.CASES if c.error is not None]
 
 
@@ -241,7 +246,9 @@ def check_main(name: str, backend: Backend) -> Pins:
         None,
         "two-sided",
     )
-    assert_close("closed_form", test.statistic, number(row["statistic"]), what="chi2")
+    # An exact zero R prints as rounding noise is 0 in inferplot (D118, EXACT_ZEROS).
+    chi2 = expected_value(number(row["statistic"]))
+    assert_close("closed_form", test.statistic, chi2, what="chi2")
     assert test.df_error == number(row["df"])
     assert_close("closed_form", test.p_value, number(row["p.value"]), what="p")
     assert int(number(row["n.obs"])) == result.n_obs
@@ -250,7 +257,8 @@ def check_main(name: str, backend: Backend) -> Pins:
     assert row["effectsize"] == bc.R_EFFECTS[design]
     assert es.conf_level == number(row["conf.level"]) == result.settings.conf_level
     assert es.sidedness == _side(case) == result.settings.alternative
-    assert_close("closed_form", es.estimate, number(row["estimate"]), what="estimate")
+    estimate = expected_value(number(row["estimate"]))
+    assert_close("closed_form", es.estimate, estimate, what="estimate")
     if design == "paired":
         assert_close("closed_form", es.conf_low, number(row["conf.low"]), what="low")
         assert_close("closed_form", es.conf_high, number(row["conf.high"]), what="high")
@@ -386,9 +394,11 @@ def check_pairs(name: str, backend: Backend) -> Pins:
 
 
 def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
-    # D99: the 9 distinct fixture bounds where effectsize's root search stops
+    # D99: the 14 distinct fixture bounds where effectsize's root search stops
     # short (the subtitle of mtcars-cyl-both and -digits3; the bars of
-    # paired-cl90, paired_small and mtcars-am-cyl; the pairs of edge_bar_large,
+    # paired-cl90, paired_small and mtcars-am-cyl, of the round-3 wide tables at
+    # chi-squared 0.6, 1.6 and 6.4, and of edge_bar_ties at 1.27 and 5.16 (a lower
+    # bound 0.0115 for 0.0116); the pairs of edge_bar_large,
     # mtcars-cyl-am-cl90 and edge_bar_rounding-both) are all reached by the
     # analysis, which reports the accurate root for each.
     met: Pins = set()
@@ -396,7 +406,7 @@ def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
         met |= check_main(name, "pandas")
         met |= check_bars(name, "pandas")
         met |= check_pairs(name, "pandas")
-    assert len(met) == 9
+    assert len(met) == 14
     assert met <= set(CHISQ_ROOT_MISSES)
 
 
@@ -438,6 +448,9 @@ def _same(kind: str, mine: object, theirs: object, what: str) -> None:
     """Strings, ints, bools and None exactly; floats under ``kind``, or a bound
     R stopped short on against the accurate root."""
     if isinstance(theirs, float) and isinstance(mine, float):
+        if exact_zero(theirs):  # R's noise for an exact zero (D118, EXACT_ZEROS)
+            assert mine == 0.0, what
+            return
         accurate = _r_pinned(theirs) if kind == "noncentral_ci" else None
         if accurate is not None and not is_close(kind, mine, theirs):
             assert math.isclose(mine, accurate, rel_tol=1e-9), what
@@ -733,6 +746,7 @@ def test_checks_on_the_fixtures() -> None:
         "rows_dropped",
         "pairs_without_test",
         "empty_level_tested",
+        "estimate_outside_interval",
     }
     assert set().union(*codes.values()) <= allowed
     assert [n for n, c in codes.items() if "pairs_without_test" in c] == [SINGLE_X]
@@ -746,6 +760,11 @@ def test_checks_on_the_fixtures() -> None:
         "ggbarstats-edge_bar_missing-counts-parametric",
         "ggbarstats-edge_bar_missing-oneway-parametric",
         "ggbarstats-edge_bar_missing-parametric",
+    ]
+    # The round-3 wide tables (2 x 20 to 2 x 61): Cramer's V lies above its own
+    # upper bound, in R's subtitle as in inferplot's (review B5).
+    assert sorted(n for n, c in codes.items() if "estimate_outside_interval" in c) == [
+        f"ggbarstats-edge_bar_wide{w}-parametric" for w in ("20", "40", "61", "61r")
     ]
 
 

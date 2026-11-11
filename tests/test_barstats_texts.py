@@ -49,6 +49,7 @@ from tests.oracle_fixtures import (
     CHISQ_ROOT_MISSES,
     FIXTURE_DIR,
     OracleCase,
+    expected_value,
     number,
     read_csv,
 )
@@ -273,8 +274,10 @@ def test_the_fixtures_cover_every_label() -> None:
         n += len(case.one_sample) or (case.function == "ggbarstats")
         cells += sum(1 for theirs, _ in _cell_labels_from(case) if theirs)
         pairs += len(case.pairwise)
-    assert len(CASES) == 89
-    assert (subtitles, bar_p, n, cells, pairs) == (71, 158, 175, 485, 152)
+    # 89, and 10 from review round 3: 10 subtitles, 219 bar tests, 220 n labels,
+    # 441 cell labels and 18 pairs more.
+    assert len(CASES) == 89 + 10
+    assert (subtitles, bar_p, n, cells, pairs) == (81, 377, 395, 926, 170)
     # A bar whose test fails (one level of x: refused by inferplot, D101) has an
     # empty p in ggstatsplot (format_value(NA) is ""), not "NA".
     assert empty_p == 3
@@ -282,10 +285,12 @@ def test_the_fixtures_cover_every_label() -> None:
 
 def test_percent_formula_and_rounding_on_the_probe() -> None:
     """probe-contingency's 927 labels (k of n at digits 0 to 2): the percent is
-    (k / n) * 100 bit for bit, R's round() gives Python's round() on that double,
-    and the label is the rounded double as R prints it. 100 * k / n would give
-    another double in 81 of them and another label in 3, the ties 57.5 (23 of
-    40, 115 of 200) and 54.5 (109 of 200), which R's double lies below or above."""
+    (k / n) * 100 bit for bit, R's round() is ``tx.r_round`` of that double (on
+    these 927 Python's round() agrees too; on probe-round's k / 2000 it does not,
+    tests/test_probe_round3.py), and the label is the rounded double as R prints
+    it. 100 * k / n would give another double in 81 of them and another label in
+    3, the ties 57.5 (23 of 40, 115 of 200) and 54.5 (109 of 200), which R's
+    double lies below or above."""
     probe = json.loads((FIXTURE_DIR / "probe-contingency.json").read_text())
     rows = probe["percent_labels"]
     assert len(rows) == 927
@@ -294,7 +299,7 @@ def test_percent_formula_and_rounding_on_the_probe() -> None:
         k, n, digits = int(row["k"]), int(row["n"]), int(row["digits"])
         percent = k / n * 100
         assert percent == float.fromhex(row["perc_hex"])
-        assert round(percent, digits) == float.fromhex(row["rounded_hex"])
+        assert tx.r_round(percent, digits) == float.fromhex(row["rounded_hex"])
         assert tx.percent_text(percent, digits) + "%" == row["label"]
         assert (
             tx.cell_label(k, percent, label="percentage", digits_perc=digits)
@@ -387,6 +392,18 @@ def fixture_result_for(name: str) -> StatsResult:
     table, args, digits = bc.prepared(case, "pandas", changes)
     parts = bc.parts(case, table, args)
     parts = dataclasses.replace(parts, effect_size=_accurate(parts.effect_size))
+    if parts.test is not None and parts.effect_size is not None:
+        # R's rounding noise of an exact zero is inferplot's 0 (D118, EXACT_ZEROS).
+        parts = dataclasses.replace(
+            parts,
+            test=dataclasses.replace(
+                parts.test, statistic=expected_value(parts.test.statistic)
+            ),
+            effect_size=dataclasses.replace(
+                parts.effect_size,
+                estimate=expected_value(parts.effect_size.estimate),
+            ),
+        )
     return module._assemble(table, args, parts, digits=digits)  # pyright: ignore[reportPrivateUsage]
 
 
@@ -395,8 +412,20 @@ _D99 = (
     "the noncentral chi-square equation is 0.498397 (CHISQ_ROOT_MISSES, "
     "mtcars-cyl C); at 3 digits ggstatsplot prints 0.499 and inferplot 0.498"
 )
+_D118 = (
+    "D118: the counts 8, 2, 7, 8 fit the ratio 0.32, 0.08, 0.28, 0.32 exactly; R's "
+    "doubles give chi-squared 1.13e-31 and C 6.71e-17 (EXACT_ZEROS), inferplot "
+    "reports the exact 0"
+)
 # case -> (ggstatsplot's subtitle, inferplot's, why), as plain text.
 DIFFERING_SUBTITLES: Mapping[str, tuple[str, str, str]] = {
+    "ggbarstats-edge_bar_exact_fit-parametric": (
+        "χ_gof^2(3) = 1.13e-31, p = 1.00, C_Pearson = 6.71e-17, "
+        "CI_95% [0.00, 0.00], n_obs = 25",
+        "χ_gof^2(3) = 0.00, p = 1.00, C_Pearson = 0.00, "
+        "CI_95% [0.00, 0.00], n_obs = 25",
+        _D118,
+    ),
     "ggbarstats-mtcars-cyl-digits3-parametric": (
         "χ_gof^2(2) = 2.312, p = 0.315, C_Pearson = 0.260, "
         "CI_95% [0.000, 0.499], n_obs = 32",
@@ -420,9 +449,9 @@ def _own_subtitle(result: StatsResult) -> tx.Node | None:
 
 
 def test_every_fixture_is_covered() -> None:
-    assert len(bc.ANSWERED) == 67
+    assert len(bc.ANSWERED) == 67 + 10  # 10 from review round 3
     assert len(_REPLAYED) == 7
-    assert len(ANSWERED_NAMES) == 74
+    assert len(ANSWERED_NAMES) == 74 + 10
     (agree,) = (bc.BY_NAME[name] for name in REFUSED_BY_STATISTICS)
     assert agree.name in bc.REFUSALS
     assert agree.subtitle is None
@@ -534,12 +563,14 @@ def test_how_many_texts_equal_ggstatsplots() -> None:
                 cells[1] += 1
                 cells[0] += label == theirs[(cell.bar, cell.level)]
     # edge_bar_degenerate-single-x is answered by the analysis: 1 subtitle, 2
-    # bars and 3 cells more than when it was set aside.
+    # bars and 3 cells more than when it was set aside. Review round 3 adds 10
+    # subtitles (9 equal; edge_bar_exact_fit's exact zeros, D118), 219 bar p labels,
+    # 220 n labels and 441 cell labels, all equal.
     assert (subtitles, bar_labels, n_labels, cells) == (
-        [70, 71],
-        [138, 138],
-        [151, 151],
-        [431, 431],
+        [79, 81],
+        [357, 357],
+        [371, 371],
+        [872, 872],
     )
 
 
@@ -647,16 +678,18 @@ def _render_items() -> tuple[
 
 
 _PAGE = 50
+# The pages below render items [0, _RENDERED); every item must fall in one.
+_RENDERED = 400
 
 
 def test_every_expression_is_rendered() -> None:
     items, _, where = _render_items()
-    assert 100 < len(items) <= 200
+    assert 100 < len(items) <= _RENDERED
     assert any(w.startswith("[inferplot]") for w in where.values())
     assert any(w.startswith("list(~italic(p)") for w in where.values())
 
 
-@pytest.mark.parametrize("start", range(0, 200, _PAGE))
+@pytest.mark.parametrize("start", range(0, _RENDERED, _PAGE))
 def test_mathtext_renders_with_plotmath_glyphs(start: int) -> None:
     items, expected, where = _render_items()
     page = items[start : start + _PAGE]
@@ -766,8 +799,14 @@ def test_apa_sentence_and_alt_text_form(name: str) -> None:
         compact=True,
     )
     assert alt.endswith(" " + compact)
-    for bar in result.bars:
-        assert tx.n_label(bar.n) in alt
+    # Every bar's n, unless the text had to shorten to its last form, the head and
+    # the result alone (figure_alt_text: many bars, as the round-3 wide tables).
+    if "(n = " in alt:
+        for bar in result.bars:
+            assert tx.n_label(bar.n) in alt
+    else:
+        assert _sentences(alt) == 2
+        assert len(result.bars) > 10
     assert alt == tx.figure_alt_text(result)
 
 

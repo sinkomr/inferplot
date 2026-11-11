@@ -210,8 +210,9 @@ def test_fixture_figure(name: str) -> None:
 
 def test_fixtures_include_both_test_value_marks() -> None:
     names = [p.values[0] for p in drawn_cases()]
-    # 76, and 10 of the 16 from the barstats oracle run (the 6 refused not drawn).
-    assert len(names) == 86
+    # 76, and 10 of the 16 from the barstats oracle run (the 6 refused not drawn),
+    # and edge_one_near_mu-literal from review round 3.
+    assert len(names) == 87
     marks = {by_gid(figure(n), "test-value-line") is None for n in names}
     assert marks == {True, False}
 

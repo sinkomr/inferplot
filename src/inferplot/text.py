@@ -122,6 +122,7 @@ __all__ = [
     "pairwise_p_expression",
     "percent_text",
     "r_number_text",
+    "r_round",
     "results_sentence",
     "shown_test_value",
     "subtitle_expression",
@@ -2884,18 +2885,55 @@ def n_label(n: int) -> str:
     return f"(n = {format_n(n)})"
 
 
+def r_round(x: float, digits: int) -> float:
+    """R's ``round(x, digits)`` (R >= 4.0.0) for ``digits >= 0``.
+
+    As R's documentation (``?Round``) describes it: at 0 digits, rounding to the
+    nearest integer with halves to even (IEC 60559); at ``digits >= 1``, a choice
+    between the two candidates, x rounded down and x rounded up to that decimal
+    digit (each the double nearest the decimal), of the one nearer to x as the
+    distances come out in double precision, and of the one whose last digit is
+    even when the two distances are equal. Where x already has more than 15
+    significant digits before that digit, x itself.
+
+    This is not Python's ``round()``, which decides on the exact binary value: for
+    (1 / 2000) x 100 = 0.05000000000000000277, Python gives 0.1 and R 0 (both
+    candidates are 0.05 away in doubles, and 0 is even). The oracle probe
+    ``probe-round`` pins it: R's ``round()`` of (k / n) x 100 at every near-tie
+    of n = 40, 200, 1,000 and 2,000 (3,960 values at 0, 1 and 2 digits, 98 of
+    them where Python's ``round()`` differs) and ggbarstats' own cell labels.
+    """
+    if digits < 0:
+        raise ValueError(f"digits must be >= 0, got {digits}")
+    if not math.isfinite(x) or x == 0.0:
+        return x
+    if digits == 0:
+        return float(round(x))  # Python rounds halves to even, as R does here
+    sign = -1.0 if x < 0 else 1.0
+    magnitude = abs(x)
+    if digits + math.log10(magnitude) > 15:
+        return x
+    scale = 10.0**digits
+    scaled = magnitude * scale
+    down = math.floor(scaled)
+    low, high = down / scale, math.ceil(scaled) / scale
+    to_high, to_low = high - magnitude, magnitude - low
+    if to_high < to_low or (to_high == to_low and down % 2 == 1):
+        return sign * high
+    return sign * low
+
+
 def percent_text(percent: float, digits_perc: int) -> str:
     """A cell's percentage as ggbarstats prints it, without the "%":
     ``round(perc, digits.perc)`` pasted as R prints a double ("62" for 62.5 at 0
     digits, "6.2" for 6.25 at 1, "33.33" for 100 / 3 at 2, "50" for 50).
 
-    R's ``round()`` agrees with Python's on the same double (the nearest
-    representable result; an exact binary tie goes to even), on all 927 percent
-    labels of the oracle probe ``probe-contingency``.
+    The rounding is R's (``r_round``), not Python's: they differ on 98 of the
+    1,000 one-digit ties of k / 2000 (0.05% prints "0%"; probe-round).
     """
     if digits_perc < 0:
         raise ValueError(f"digits_perc must be >= 0, got {digits_perc}")
-    return r_number_text(round(percent, digits_perc))
+    return r_number_text(r_round(percent, digits_perc))
 
 
 def cell_label(count: int, percent: float, *, label: str, digits_perc: int) -> str:

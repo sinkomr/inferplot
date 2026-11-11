@@ -107,8 +107,9 @@ def test_case_counts() -> None:
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
     # 16 from the barstats oracle run (edge_one_n2, edge_one_n3, edge_one_constant
-    # and edge_one_constant-binwidth1, four types each).
-    assert counts == {"parametric": 26, "nonparametric": 22, "robust": 22, "bayes": 22}
+    # and edge_one_constant-binwidth1, four types each); edge_one_near_mu-literal
+    # (nonparametric) from review round 3.
+    assert counts == {"parametric": 26, "nonparametric": 23, "robust": 22, "bayes": 22}
     assert {c.name for c in CASES} >= CONSTANT
 
 

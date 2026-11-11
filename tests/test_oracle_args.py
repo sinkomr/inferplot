@@ -146,7 +146,7 @@ def test_every_bar_fixture_splits_into_barstats_keywords() -> None:
         *cases_for("ggpiestats"),
         *cases_for("ggbarstats", failed=True),
     ]
-    assert len(cases) == 90
+    assert len(cases) == 90 + 10  # 10 from review round 3
     for case in cases:
         call = split(case.function, case.args)
         assert call.function == "barstats"

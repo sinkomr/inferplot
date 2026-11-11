@@ -120,13 +120,14 @@ def _close_or_r_miss(
 
 def test_fixture_counts() -> None:
     # 76, and 16 from the barstats oracle run: edge_one_n2, edge_one_n3,
-    # edge_one_constant and edge_one_constant-binwidth1, each in four types.
-    assert len(CASES) == 92
+    # edge_one_constant and edge_one_constant-binwidth1, each in four types; and
+    # edge_one_near_mu-literal (nonparametric) from review round 3.
+    assert len(CASES) == 93
     counts = {
         t: sum(c.type == t for c in CASES)
         for t in ("parametric", "nonparametric", "robust", "bayes")
     }
-    assert counts == {"parametric": 26, "nonparametric": 22, "robust": 22, "bayes": 22}
+    assert counts == {"parametric": 26, "nonparametric": 23, "robust": 22, "bayes": 22}
     assert REFUSED == [
         "gghistostats-ToothGrowth-greater-bayes",
         "gghistostats-ToothGrowth-greater-robust",
@@ -140,9 +141,9 @@ def test_fixture_counts() -> None:
         == CONSTANT
     )
     assert not [c.name for c in CASES if c.error is not None]
-    # Every answered case on three backends: 84 + 2 replays, times 3 (the 6
+    # Every answered case on three backends: 85 + 2 replays, times 3 (the 6
     # constant-data refusals have no replay).
-    assert len(nl.params(CASES)) == 86 * 3
+    assert len(nl.params(CASES)) == 87 * 3
 
 
 @pytest.mark.parametrize("name", CONSTANT)

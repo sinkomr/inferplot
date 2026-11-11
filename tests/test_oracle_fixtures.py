@@ -16,6 +16,7 @@ import pytest
 from scipy import stats as sp_stats
 
 from inferplot.stats import histogram_bins, marginal_bins, ols_band
+from inferplot.text import r_round
 from tests.oracle_args import translate
 from tests.oracle_fixtures import (
     ACCURATE_BAYES_FACTORS,
@@ -198,6 +199,24 @@ HELD_OUT_CASES = frozenset(
     {
         "ggbetweenstats-edge_akp_undefined-robust",
         "ggwithinstats-edge_rm_n3k4-parametric",
+        # Review round 3: a value equal to the test value 0.3 as written but not in
+        # binary (D105); ratings whose bootstrap-t resamples are 0/0 (D65); an exact
+        # zero printed as rounding noise (C3); percent labels at one-digit ties (D108);
+        *(
+            f"gghistostats-edge_one_near_mu-{column}-nonparametric"
+            for column in ("sum", "below", "both", "sum_ties")
+        ),
+        *(
+            f"gghistostats-edge_one_ratings-{column}-robust"
+            for column in ("whole", "tenths", "centred_whole", "centred_tenths")
+        ),
+        "ggbarstats-edge_bar_zero_v-parametric",
+        "ggbarstats-edge_bar_ties-digitsperc1-parametric",
+        # and Fisher pairs listed sorted as text where inferplot keeps level order.
+        *(
+            f"ggbarstats-edge_bar_reduced-declared-{side}-parametric"
+            for side in ("two.sided", "greater", "less")
+        ),
     }
 )
 # Phase 4 (histostats): gghistostats cases, label -> types (see generate.R).
@@ -280,6 +299,12 @@ SCATTER_LABELS.update(
         "edge_corr_label_missing": ("parametric",),
     }
 )
+# Review round 3 (generate.R's ROUND3_CASES): the test value 0.3 written as a literal
+# in the data (an exact zero of x - 0.3).
+ROUND3_HISTO_LABELS: dict[str, tuple[str, ...]] = {
+    "edge_one_near_mu-literal": ("nonparametric",),
+}
+HISTO_LABELS.update(ROUND3_HISTO_LABELS)
 # Phase 4 (barstats): ggbarstats cases, label -> types (see generate.R).
 P_ADJUST_LABELS = tuple(f"Titanic_full-class-padj-{m}" for m in P_ADJUST_METHODS)
 BAR_LABELS: dict[str, tuple[str, ...]] = {
@@ -365,6 +390,22 @@ BAR_LABELS: dict[str, tuple[str, ...]] = {
         ("parametric",),
     ),
 }
+# Review round 3 (generate.R's ROUND3_CASES): wide tables, exact zeros, percent labels
+# at rounding ties, one-sided Fisher pairs on reduced pair tables.
+ROUND3_BAR_LABELS: dict[str, tuple[str, ...]] = dict.fromkeys(
+    (
+        "edge_bar_wide20",
+        "edge_bar_wide40",
+        "edge_bar_wide61",
+        "edge_bar_wide61r",
+        "edge_bar_exact_fit",
+        "edge_bar_ties-digitsperc0",
+        "edge_bar_ties-digitsperc2",
+        *(f"edge_bar_reduced-{side}" for side in ("two.sided", "greater", "less")),
+    ),
+    ("parametric",),
+)
+BAR_LABELS.update(ROUND3_BAR_LABELS)
 # ggpiestats: the one-way design, to show it computes what ggbarstats computes.
 PIE_LABELS: dict[str, tuple[str, ...]] = {
     "mtcars-cyl": TYPES,
@@ -443,6 +484,11 @@ EXPECTED_PROBES = frozenset(
         "probe-onesamplebf",
         "probe-heldout",
         "probe-contingency",
+        # Review round 3 (tests/test_probe_round3.py).
+        "probe-nearzero",
+        "probe-trimcibt",
+        "probe-bartables",
+        "probe-round",
     }
 )
 
@@ -461,9 +507,9 @@ def test_case_list_is_what_the_generator_writes() -> None:
     assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
     assert sum(len(types) for types in WITHIN_LABELS.values()) == 159
     assert len(T7_CASES) == 6
-    assert len(HISTO_CASES) == 76 + 16
+    assert len(HISTO_CASES) == 76 + 16 + 1
     assert len(SCATTER_CASES) == 64 + 9
-    assert len(BAR_CASES) == 90
+    assert len(BAR_CASES) == 90 + 10
 
 
 ALL_CASES = [
@@ -1956,10 +2002,12 @@ def test_backends_see_the_table_r_analyzed(case: OracleCase, backend: Backend) -
 
 
 def _r_round_text(value: float, digits: int) -> str:
-    """paste0(round(value, digits)): R's round() (probe-contingency's 927 labels:
-    Python's round() on the same double, ties to even on the exact binary value)
-    printed with up to 15 significant digits, no trailing zeros."""
-    return format(round(value, digits), ".15g")
+    """paste0(round(value, digits)): R's round() (R >= 4.0.0, ``?Round``: the
+    nearer of the two decimal candidates in double arithmetic, the even one on
+    equal distances; tests/test_probe_round3.py pins it on probe-round's 3,960
+    values, 98 of which Python's round() gets wrong) printed with up to 15
+    significant digits, no trailing zeros."""
+    return format(r_round(value, digits), ".15g")
 
 
 @pytest.mark.parametrize("case", _bar_completed())
@@ -2044,9 +2092,9 @@ def test_bar_failed_case(case: OracleCase) -> None:
 
 def test_probe_contingency_covers_its_grid() -> None:
     # The rules are tested in tests/test_reference_vs_oracle.py; the percent labels
-    # here: paste0(round(perc, d), "%") is Python's round() on the same double
-    # (ties to even on the exact binary value: 12.5 -> 12, 6.25 -> 6.2, 31.25 ->
-    # 31.2), printed with up to 15 significant digits.
+    # here: paste0(round(perc, d), "%") is R's round() of the double (12.5 -> 12,
+    # 6.25 -> 6.2, 31.25 -> 31.2; on these 927 Python's round() happens to agree,
+    # not on probe-round's k / 2000), printed with up to 15 significant digits.
     contingency = probe("probe-contingency")
     assert len(contingency.rows("chisq")) == 22
     assert len(contingency.rows("goodness_of_fit")) == 13
@@ -2060,7 +2108,7 @@ def test_probe_contingency_covers_its_grid() -> None:
         perc = r_double(str(row["perc_hex"]))
         assert perc is not None
         assert perc == (row["k"] / row["n"]) * 100
-        rounded = round(perc, row["digits"])
+        rounded = r_round(perc, row["digits"])
         assert r_double(str(row["rounded_hex"])) == rounded
         assert row["label"] == f"{_r_round_text(perc, row['digits'])}%"
     ties = {row["label"] for row in labels if row["n"] in (8, 16)}

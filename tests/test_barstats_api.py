@@ -585,8 +585,9 @@ def test_refusals(case: OracleCase) -> None:
 def test_the_answered_and_refused_fixtures() -> None:
     # 22 refused: 7 robust, 7 bayes, 4 degenerate tables, paired with different
     # levels, paired without a changing pair, 2 wrong ratios.
-    assert len(bc.CASES) == 89
-    assert len(bc.ANSWERED) == 67
+    # Review round 3 added 10, all answered.
+    assert len(bc.CASES) == 89 + 10
+    assert len(bc.ANSWERED) == 67 + 10
     assert len(bc.REFUSALS) == 22
 
 

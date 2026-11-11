@@ -32,7 +32,7 @@ PAIRED_UNEQUAL = "ggbarstats-edge_bar_paired_unequal-parametric"
 
 
 def test_every_bar_fixture_is_read() -> None:
-    assert len(CASES) == 90
+    assert len(CASES) == 90 + 10  # 10 from review round 3
 
 
 def _read_case(case: OracleCase, backend: Backend) -> TableData:
