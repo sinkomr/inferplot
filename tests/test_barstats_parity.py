@@ -811,8 +811,10 @@ def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
         sub = np.array(table)[rows]
         expected = stats.fisher_exact(sub[:, sub.sum(axis=0) > 0]).p_value
         assert pair.p_value == expected
-    holm = stats.p_adjust([ac.p_value, bc_.p_value], "holm")
-    assert (ac.p_adjusted, bc_.p_adjusted) == tuple(holm)
+    # The pair too large to compute still counts in the adjustment, with p = 1.
+    holm = stats.p_adjust([ac.p_value, bc_.p_value, 1.0], "holm")
+    assert (ac.p_adjusted, bc_.p_adjusted) == tuple(holm[:2])
+    assert holm[0] >= stats.p_adjust([ac.p_value, bc_.p_value], "holm")[0]
     first = next(
         i for i, w in enumerate(result.warnings) if w.startswith("Fisher's exact")
     )
@@ -828,9 +830,11 @@ def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
     assert result.warnings[first + 1] == (
         "1 of the 3 pairwise Fisher tests has no p-value (above); it stays in "
         "result.pairwise without one, and p_adjust_method='holm' adjusts the other "
-        "2 among themselves."
+        "2 as 3 comparisons: a pair too large to compute counts as a test with "
+        "p = 1, so leaving it out makes no computed pair look more significant."
     )
     (issue,) = [i for i in result.check() if i.code == "pairs_without_test"]
+    assert "The other 2 are adjusted as 3 comparisons" in issue.message
     assert issue.message.startswith(
         "1 of the 3 pairwise comparisons of 'x' has no p-value: 'x0' and 'x1' (too "
         "large to compute exactly"

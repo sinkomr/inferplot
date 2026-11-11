@@ -30,9 +30,10 @@ Where ggstatsplot drops a result silently, inferplot raises plainly (D101): no
 pair of units that changes level, or two levels between which none changes
 (McNemar's and Bowker's tests are 0/0). A Fisher pair without a test (its table
 has one column; its exact test is beyond the cost limit) does not fail the
-analysis: it stays in ``pairwise`` with p None and ``no_test_reason``, and the
-other pairs are adjusted among themselves (ggstatsplot loses the whole pairwise
-table there).
+analysis: it stays in ``pairwise`` with p None and ``no_test_reason``
+(ggstatsplot loses the whole pairwise table there). The other pairs are adjusted
+among themselves, except that a pair too large to compute still counts in the
+adjustment, as a test with p = 1 (``stats.pairwise_fisher``).
 """
 
 from __future__ import annotations
@@ -568,12 +569,21 @@ def _fisher_pairs(
             if single
             else ""
         )
+        # A pair too large to compute is still a comparison: it is counted with
+        # p = 1 (stats.pairwise_fisher); a single-column pair is none.
+        family = (
+            f"adjusts the other {rest} as {rest + len(costly)} comparisons: a pair "
+            "too large to compute counts as a test with p = 1, so leaving it out "
+            "makes no computed pair look more significant"
+            if costly
+            else f"adjusts the other {rest} among themselves"
+        )
         warnings.append(
             f"{missing} of the {len(found)} pairwise Fisher tests "
             f"{'has' if missing == 1 else 'have'} no p-value (above); "
             f"{'it stays' if missing == 1 else 'they stay'} in result.pairwise "
-            f"without one, and p_adjust_method={args.p_adjust_method!r} adjusts the "
-            f"other {rest} among themselves.{lost}"
+            f"without one, and p_adjust_method={args.p_adjust_method!r} {family}."
+            f"{lost}"
             if rest
             else f"None of the {len(found)} pairwise Fisher tests has a p-value "
             f"(above); the pairs stay in result.pairwise without one.{lost}"

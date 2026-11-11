@@ -29,6 +29,7 @@ from numpy.typing import NDArray
 
 from inferplot.stats import contingency as C
 from inferplot.stats import fisher_exact, pairwise_fisher
+from inferplot.stats.padjust import p_adjust
 from tests.tolerances import is_close
 
 IntArray = NDArray[np.int64]
@@ -385,7 +386,8 @@ def test_pairwise_tests_share_one_budget(limit: float) -> None:
     # A 10 x 7 table (45 pairs, about 3e8 units in all): whatever the budget, the
     # work spent on all the pairs stays within it; each tested pair has exactly
     # fisher_exact's p, and the others say why they have none. The adjustment
-    # runs over the tested pairs. The default budget tests them all.
+    # counts every pair: one too large to compute enters with p = 1 (lead's
+    # review). The default budget tests them all.
     table = _survey(10, 7, 600, seed=3)
     budget = C._Budget(limit)  # pyright: ignore[reportPrivateUsage]
     pairs = C._pairwise_fisher(  # pyright: ignore[reportPrivateUsage]
@@ -406,7 +408,10 @@ def test_pairwise_tests_share_one_budget(limit: float) -> None:
     low, high = expected[limit]
     assert low <= len(tested) <= high
     raw = [p.p_value for p in tested if p.p_value is not None]
-    assert [p.p_adjusted for p in tested] == list(C.p_adjust(raw, "holm"))
+    family = [*raw, *[1.0] * (len(pairs) - len(tested))]
+    assert [p.p_adjusted for p in tested] == list(
+        C.p_adjust(family, "holm")[: len(raw)]
+    )
 
 
 def test_pairwise_result_does_not_depend_on_the_order_of_the_rows() -> None:
@@ -436,3 +441,56 @@ def test_pairwise_default_budget_on_the_reviewers_tables() -> None:
     table = rng.integers(1, 30, size=(3, 8))
     pairs = pairwise_fisher(table)
     assert all(p.p_value is not None for p in pairs)
+
+
+def test_uncomputed_pairs_count_in_the_adjustment() -> None:
+    # Lead's review: which pairs fit the budget depends on the data, so a pair too
+    # large to compute stays in the family with p = 1. The computed pairs are
+    # adjusted as p.adjust(p, n = <pairs with a test, computed or not>) adjusts
+    # them, never as if the uncomputed comparisons had not been made.
+    table = [
+        [3, 9, 1, 0, 2, 6, 1, 4],
+        [8, 2, 5, 1, 0, 3, 2, 1],
+        [1, 4, 6, 3, 2, 0, 5, 2],
+        [4, 4, 0, 6, 3, 1, 2, 7],
+    ]
+    full = C.pairwise_fisher(table)
+    assert all(pair.p_value is not None for pair in full)
+    raw = [pair.p_value for pair in full]
+    for method in ("holm", "hochberg", "bonferroni", "BH", "BY", "hommel", "none"):
+        complete = C.pairwise_fisher(table, p_adjust_method=method)
+        # A budget that pays for the three cheapest tests only.
+        spent = sorted(_work_of_each_pair(table))
+        budget = C._Budget(sum(spent[:3]) + 1)
+        partial = C._pairwise_fisher(table, method, 0.95, "two-sided", budget)
+        computed = [
+            (pair, pair.p_value, pair.p_adjusted)
+            for pair in partial
+            if pair.p_value is not None and pair.p_adjusted is not None
+        ]
+        skipped = [pair for pair in partial if pair.p_value is None]
+        assert computed
+        assert skipped
+        assert len(computed) + len(skipped) == len(partial)
+        assert all(pair.reason == C._TOO_LARGE_REASON for pair in skipped)
+        assert all(pair.p_adjusted is None for pair in skipped)
+        want = p_adjust([*[p for _, p, _ in computed], *[1.0] * len(skipped)], method)
+        assert [adjusted for _, _, adjusted in computed] == list(want[: len(computed)])
+        by_rows = {(pair.row1, pair.row2): pair.p_adjusted for pair in complete}
+        for pair, p_value, adjusted in computed:
+            every = by_rows[(pair.row1, pair.row2)]
+            assert every is not None
+            # Never smaller than with every pair computed.
+            assert adjusted >= every, method
+            assert adjusted >= p_value
+    assert len(raw) == 6
+
+
+def _work_of_each_pair(table: list[list[int]]) -> list[float]:
+    work = []
+    for i in range(len(table)):
+        for j in range(i + 1, len(table)):
+            budget = C._Budget(C._FISHER_WORK_LIMIT)
+            C._pairwise_fisher([table[i], table[j]], "none", 0.95, "two-sided", budget)
+            work.append(budget.spent)
+    return work

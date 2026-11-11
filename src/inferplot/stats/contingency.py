@@ -214,7 +214,8 @@ class PairComparison:
     ``columns`` are the indices of the columns the pair holds (its own 2 x c'
     table). ``p_value`` is Fisher's exact p of that table (``alternative`` as used:
     one-sided only where the pair's table is 2 x 2), ``p_adjusted`` the adjusted p
-    over the pairs that have a test; ``effect`` the pair's Cramer's V (adjusted)
+    over the family (the pairs with a test; one too large to compute counts with
+    p = 1); ``effect`` the pair's Cramer's V (adjusted)
     with its interval. Where a number is not defined it is None and ``reason`` (for
     the test) or ``effect_reason`` (for V) says why.
     """
@@ -2465,7 +2466,15 @@ def _pairwise_fisher(
     side = check_alternative(alternative)
     pairs = _pairwise(counts, level, side, budget)
     raw = [pair.p_value for pair in pairs if pair.p_value is not None]
-    adjusted = iter(p_adjust(raw, p_adjust_method) if raw else ())
+    # A pair too large to compute is still a comparison of the family: it enters
+    # the adjustment as p = 1, so that leaving it out never makes a computed pair
+    # look more significant (pairwise_fisher's docstring).
+    uncomputed = sum(1 for pair in pairs if pair.reason == _TOO_LARGE_REASON)
+    adjusted = iter(
+        p_adjust([*raw, *[1.0] * uncomputed], p_adjust_method)[: len(raw)]
+        if raw
+        else ()
+    )
     out = [
         pair
         if pair.p_value is None
@@ -2492,7 +2501,9 @@ def pairwise_fisher(
     ``alternative`` reaches the test only where that table is 2 x 2 (as
     ``fisher.test``; the pair records the alternative used) and reaches every
     pair's V interval, at ``conf_level``. ``p_adjust_method`` adjusts the p-values
-    of the pairs that have a test (``p_adjust``).
+    of the pairs that have a test (``p_adjust``); a pair whose test is too large
+    to compute (below) counts in that family with p = 1 (as ``p.adjust(p, n =)``
+    allows for comparisons whose p is not at hand).
 
     Cost. The tests of one table share a budget of 1.6e9 work units (about two
     seconds; fisher_exact describes the units), and each test is also held to
@@ -2510,7 +2521,12 @@ def pairwise_fisher(
     loses the whole pairwise table silently, edge_bar_degenerate-single-x), and a
     pair whose test does not fit the budget has none either (``reason`` "too large
     to compute exactly"): both are returned with ``p_value`` None and a
-    ``reason``, and the adjustment runs over the others. A pair whose V is not
+    ``reason``. A single-column pair is no comparison and is left out of the
+    adjustment. A pair too large to compute is one: the adjustment counts it with
+    p = 1, the cautious choice, because which pairs fit the budget depends on the
+    data (for Holm, Hochberg, Bonferroni and the false-discovery methods no
+    computed pair then has a smaller adjusted p than it would have with every pair
+    computed). A pair whose V is not
     defined (no more counts than columns) has ``effect`` None and an
     ``effect_reason``.
 

@@ -690,11 +690,24 @@ def _pairs_without_test(result: StatsResult) -> Issue | None:
         f"{pair.group1!r} and {pair.group2!r} ({pair.no_test_reason})"
         for pair in missing
     )
-    adjusted = (
-        f" The other {rest} {'is' if rest == 1 else 'are'} adjusted among themselves."
-        if rest
-        else ""
+    # A pair too large to compute counts in the adjustment with p = 1
+    # (stats.pairwise_fisher); a pair whose table has a single column is none.
+    costly = sum(
+        1 for pair in missing if str(pair.no_test_reason).startswith("too large")
     )
+    if not rest:
+        adjusted = ""
+    elif costly:
+        adjusted = (
+            f" The other {rest} {'is' if rest == 1 else 'are'} adjusted as "
+            f"{rest + costly} comparisons: a pair too large to compute counts as a "
+            "test with p = 1."
+        )
+    else:
+        adjusted = (
+            f" The other {rest} {'is' if rest == 1 else 'are'} adjusted among "
+            "themselves."
+        )
     return Issue(
         code="pairs_without_test",
         severity="info",

@@ -347,7 +347,8 @@ class PairwiseComparison(_Plain):
       draws them). A pair without a test (its table has a single column, or
       its exact test would take too long) keeps its place with ``p_value``,
       ``p_adjusted`` and ``significant`` None and ``no_test_reason`` saying
-      why; the other pairs are adjusted among themselves.
+      why; the other pairs are adjusted among themselves, a pair too large to
+      compute counting in that adjustment as a test with p = 1.
 
     ``no_test_reason`` is None for every pair that has a p-value.
     """
