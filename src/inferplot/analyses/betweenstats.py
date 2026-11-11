@@ -1522,6 +1522,18 @@ def betweenstats(
             caption or subtitle for three or more groups (a Bayesian ANOVA), and
             the robust pairwise comparisons when a pair has fewer than 2 degrees of
             freedom (where WRS2's lincon stops).
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "group": ["a"] * 5 + ["b"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9, 7.1, 6.6],
+        ... })
+        >>> result = ip.analyze.betweenstats(df, "group", "score", type="nonparametric")
+        >>> print(result.text.apa)
+        Mann-Whitney U test: W = 1.00, p = .022, rank-biserial r = -.92, 95% CI [-.98,
+        -.68], n = 10.
     """
     type_name = canonical_type(type)
     display = canonical_pairwise_display(pairwise_display)

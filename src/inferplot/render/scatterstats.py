@@ -191,6 +191,20 @@ def scatterstats(
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
         rendering warnings to ``result.warnings``.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "x": [1.0, 2, 3, 4, 5, 6, 7, 8],
+        ...     "y": [2.1, 2.9, 3.2, 4.8, 5.1, 5.0, 7.2, 7.9],
+        ... })
+        >>> result = ip.analyze.scatterstats(df, "x", "y")
+        >>> fig = ip.render.scatterstats(result, marginal=False)
+        >>> sorted(fig.axes)
+        ['main']
+        >>> fig.check()
+        ()
     """
     base.check_drawable(
         result, "scatterstats", "ip.analyze.scatterstats(data, x, y, ...)"

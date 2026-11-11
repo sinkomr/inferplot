@@ -69,6 +69,20 @@ def betweenstats(
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
         rendering warnings to ``result.warnings``.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "group": ["a"] * 5 + ["b"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9, 7.1, 6.6],
+        ... })
+        >>> result = ip.analyze.betweenstats(df, "group", "score")
+        >>> fig = ip.render.betweenstats(result, layers=("box", "points"))
+        >>> fig.result.text.apa == result.text.apa
+        True
+        >>> fig.check()
+        ()
     """
     comparison.checked_result(
         result, "betweenstats", "ip.analyze.betweenstats(data, x, y, ...)"

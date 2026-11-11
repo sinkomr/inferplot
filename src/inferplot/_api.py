@@ -80,6 +80,20 @@ def betweenstats(
         A ``StatsFigure``: ``fig.result`` holds every number (``fig.result.to_json()``,
         ``fig.result.text.apa``), ``fig.check()`` lists statistical and rendering
         problems, and ``fig.save("plot.svg")`` writes an editable vector file.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "group": ["a"] * 5 + ["b"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9, 7.1, 6.6],
+        ... })
+        >>> fig = ip.betweenstats(df, "group", "score", type="parametric")
+        >>> print(fig.result.text.apa)
+        Welch's t-test: t(7.98) = -4.20, p = .003, Hedges' g = -2.40, 95% CI [-3.97,
+        -0.76], n = 10.
+        >>> fig.check()
+        ()
     """
     from inferplot import render  # imports matplotlib
 
@@ -186,6 +200,21 @@ def withinstats(
 
     Returns:
         A ``StatsFigure``, as :func:`betweenstats` returns.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "subject": ["s1", "s2", "s3", "s4", "s5"] * 2,
+        ...     "time": ["pre"] * 5 + ["post"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 5.9, 6.4, 6.8, 5.6],
+        ... })
+        >>> fig = ip.withinstats(df, "time", "score", subject_id="subject")
+        >>> print(fig.result.text.apa)
+        Paired t-test: t(4) = 4.43, p = .011, Hedges' g = 1.58, 95% CI [0.30, 2.82], n =
+        5 pairs.
+        >>> fig.check()
+        ()
     """
     from inferplot import render  # imports matplotlib
 
@@ -265,8 +294,22 @@ def histostats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
-        NotImplementedError: the statistics of the given type are not in this
-            version yet.
+        TypeError, ValueError, KeyError: as :func:`inferplot.analyze.histostats`
+            raises them, and for drawing arguments that cannot be used; the
+            message says how to fix the call.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9],
+        ... })
+        >>> fig = ip.histostats(df, "score", test_value=5)
+        >>> print(fig.result.text.apa)
+        One-sample t-test against 5: t(7) = 2.90, p = .023, Hedges' g = 0.91, 95% CI
+        [0.12, 1.66], n = 8.
+        >>> fig.check()
+        ()
     """
     from inferplot import render  # imports matplotlib
     from inferplot.render.base import check_given_axes, check_one_call_subtitle
@@ -354,8 +397,23 @@ def scatterstats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
-        NotImplementedError: the statistics of the given type are not in this
-            version yet.
+        TypeError, ValueError, KeyError: as :func:`inferplot.analyze.scatterstats`
+            raises them, and for drawing arguments that cannot be used; the
+            message says how to fix the call.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "x": [1.0, 2, 3, 4, 5, 6, 7, 8],
+        ...     "y": [2.1, 2.9, 3.2, 4.8, 5.1, 5.0, 7.2, 7.9],
+        ... })
+        >>> fig = ip.scatterstats(df, "x", "y")
+        >>> print(fig.result.text.apa)
+        Pearson correlation: t(6) = 10.15, p < .001, Pearson's r = .97, 95% CI [.85,
+        1.00], n = 8 pairs.
+        >>> fig.check()
+        ()
     """
     from inferplot import render  # imports matplotlib
     from inferplot.render.base import check_given_axes, check_one_call_subtitle
@@ -449,8 +507,25 @@ def barstats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
-        NotImplementedError: the statistics and the drawing are not in this
-            version yet.
+        NotImplementedError: type "bayes" and ``bf_message=True`` arrive in
+            inferplot 0.2.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "answer": ["yes", "no", "yes", "no"],
+        ...     "group": ["a", "a", "b", "b"],
+        ...     "n": [12, 8, 5, 15],
+        ... })
+        >>> fig = ip.barstats(df, "answer", "group", counts="n")
+        >>> print(fig.result.text.apa)
+        Pearson's chi-square test (shares of answer across the levels of group): chi2(1,
+        N = 40) = 5.01, p = .025, Cramer's V = .32, 95% CI [.00, .65]. Goodness-of-fit
+        tests within each level of group (shares of answer against equal shares,
+        unadjusted): p < .05 in 1 of 2 bars.
+        >>> fig.check()
+        ()
     """
     from inferplot import render  # imports matplotlib
     from inferplot.render.barstats import check_axes, check_drawing

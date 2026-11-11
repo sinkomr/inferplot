@@ -295,6 +295,20 @@ class StatsFigure:
         own figure far larger than its plotting area, or than any of its layouts
         needs, is ``figure_oversized``. For barstats, a cell label left out or
         drawn where it does not read as its cell's is ``cell_labels_hidden``.
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> fig = ip.render.betweenstats(result)
+            >>> for issue in fig.check():
+            ...     print(issue.severity, issue.code)
+            warning small_n
+            info pairs_hidden
         """
         from inferplot.render.checks import figure_issues
 
@@ -319,6 +333,21 @@ class StatsFigure:
         ``fig.save(path)``; the
         figure's own ``fig.figure.savefig(path)`` also works, but writes text as
         paths and embeds no result.
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> import os, tempfile
+            >>> fig = ip.render.betweenstats(result)
+            >>> with tempfile.TemporaryDirectory() as folder:
+            ...     fig.save(os.path.join(folder, "score.svg"))
+            ...     print(os.listdir(folder))
+            ['score.svg']
         """
         from inferplot.export import save
 

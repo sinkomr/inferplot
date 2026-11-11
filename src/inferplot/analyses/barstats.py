@@ -1444,6 +1444,19 @@ def barstats(
         KeyError: a column that the data frame does not have.
         NotImplementedError: type "bayes" and ``bf_message=True`` arrive in
             inferplot 0.2.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "answer": ["yes", "no", "yes", "no"],
+        ...     "group": ["a", "a", "b", "b"],
+        ...     "n": [12, 8, 5, 15],
+        ... })
+        >>> result = ip.analyze.barstats(df, "answer", counts="n")
+        >>> print(result.text.apa)
+        Chi-square goodness-of-fit test (shares of answer against equal shares): chi2(1,
+        N = 40) = 0.90, p = .343, Pearson's C = .15, 95% CI [.00, .42].
     """
     table, args, n_digits = _prepare(
         data,

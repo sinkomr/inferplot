@@ -661,6 +661,18 @@ def scatterstats(
             winsorizing at ``tr`` leaves as one number); the message says how to
             fix the call.
         KeyError: a column that the data frame does not have.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "x": [1.0, 2, 3, 4, 5, 6, 7, 8],
+        ...     "y": [2.1, 2.9, 3.2, 4.8, 5.1, 5.0, 7.2, 7.9],
+        ... })
+        >>> result = ip.analyze.scatterstats(df, "x", "y", type="nonparametric")
+        >>> print(result.text.apa)
+        Spearman correlation: S = 2.00, p < .001, Spearman's rho = .98, 95% CI [.86,
+        1.00], n = 8 pairs.
     """
     pair, args, n_digits = _prepare(
         data,
