@@ -541,10 +541,10 @@ def test_single_x_keeps_the_pairs_r_loses(backend: Backend) -> None:
         "'p' of 'y2', so their table has a single column, and their shares cannot "
         "differ across the levels of 'y2'. Nothing needs fixing unless you need "
         "that comparison.",
-        "1 of the 3 pairwise Fisher tests has no p-value (above); it stays in "
-        "result.pairwise without one, and p_adjust_method='holm' adjusts the other 2 "
-        "among themselves. ggstatsplot loses the whole pairwise table here, "
-        "silently.",
+        "1 of the 3 pairs of levels of 'x3' has no Fisher test p-value (above); it "
+        "stays in result.pairwise without one, and p_adjust_method='holm' adjusts "
+        "the other 2 among themselves. ggstatsplot loses the whole pairwise table "
+        "here, silently.",
     )
     (issue,) = [i for i in result.check() if i.code == "pairs_without_test"]
     assert issue.severity == "info"
@@ -865,15 +865,15 @@ def test_a_fisher_pair_beyond_the_cost_limit_keeps_the_others() -> None:
         "the other 1 ('x0' and 'x1') is too large to compute exactly within "
         "inferplot's limits (about a second of work for one test and two seconds "
         "for all the pairs of one table, the cheapest computed first), and "
-        "inferplot does not approximate them. Their Cramér's V is reported. To "
-        "test them, merge sparse levels of 'y' (levels with few observations), or "
-        "compare two levels of 'x' in a call of their own."
+        "inferplot does not approximate it. Its Cramér's V is reported. To test "
+        "it, merge sparse levels of 'y' (levels with few observations), or compare "
+        "two levels of 'x' in a call of their own."
     )
     assert result.warnings[first + 1] == (
-        "1 of the 3 pairwise Fisher tests has no p-value (above); it stays in "
-        "result.pairwise without one, and p_adjust_method='holm' adjusts the other "
-        "2 as 3 comparisons: a pair too large to compute counts as a test with "
-        "p = 1, so leaving it out makes no computed pair look more significant."
+        "1 of the 3 pairs of levels of 'x' has no Fisher test p-value (above); it "
+        "stays in result.pairwise without one, and p_adjust_method='holm' adjusts "
+        "the other 2 as 3 comparisons: a pair too large to compute counts as a test "
+        "with p = 1, so leaving it out makes no computed pair look more significant."
     )
     (issue,) = [i for i in result.check() if i.code == "pairs_without_test"]
     assert "The other 2 are adjusted as 3 comparisons" in issue.message

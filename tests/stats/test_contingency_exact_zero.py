@@ -241,6 +241,49 @@ def test_shares_as_written_that_do_not_fit() -> None:
     assert goodness_of_fit([8, 2, 7, 9], [0.32, 0.08, 0.28, 0.32]).statistic > 0.0
 
 
+def test_single_precision_shares_are_read_as_written() -> None:
+    # A float32 share is the decimal it prints as (0.2), as the analysis layer
+    # reads every float32 argument, not its binary value 0.20000000298023224
+    # (which gave chi2 = 5.2e-15 for an exact fit). Also half precision, a
+    # float32 scalar among Python floats, and the per-bar tests.
+    for ratio in (
+        np.array([0.2, 0.3, 0.5], dtype=np.float32),
+        np.array([0.2, 0.3, 0.5], dtype=np.float16),
+        [np.float32(0.2), 0.3, 0.5],
+    ):
+        _assert_exact_fit([2, 3, 5], ratio)  # pyright: ignore[reportArgumentType]
+        test = goodness_of_fit([2, 3, 5], ratio)
+        assert test.ratio == (0.2, 0.3, 0.5)
+        assert test.expected == (2.0, 3.0, 5.0)
+    shares = np.array([0.32, 0.08, 0.28, 0.32], dtype=np.float32)
+    _assert_exact_fit([8, 2, 7, 8], shares)  # pyright: ignore[reportArgumentType]
+    single = np.array([0.2, 0.3, 0.5], dtype=np.float32)
+    bars = proportion_tests(np.array([[2, 4], [3, 6], [5, 11]]), single)
+    assert bars[0].test is not None
+    assert (bars[0].test.statistic, bars[0].test.p_value) == (0.0, 1.0)
+    assert bars[1].test is not None
+    assert bars[1].test.statistic > 0.0
+    # Not a fit: the same statistic as the shares given as doubles.
+    as_double = goodness_of_fit([2, 3, 6], [0.2, 0.3, 0.5]).statistic
+    assert goodness_of_fit([2, 3, 6], single).statistic == as_double
+
+
+def test_a_statistic_below_the_smallest_double_is_reported_as_0() -> None:
+    # The other way a chi-square of 0 arises (the docstring of
+    # chisq_independence): R's order of operations rounds every expected count
+    # to its observed count, while the exact statistic is 6.2e-42, far below
+    # what a double near these counts resolves.
+    table = [
+        [60000000000001, 119999999999998],
+        [60000000000002, 120000000000000],
+    ]
+    exact = _exact_chi2(table)
+    assert exact > 0
+    assert float(exact) == pytest.approx(6.17283950617e-42, rel=1e-10)
+    test = chisq_independence(table)
+    assert (test.statistic, test.p_value) == (0.0, 1.0)
+
+
 def test_bar_tests_use_the_exact_fit() -> None:
     # The bar u fits 0.32, 0.08, 0.28, 0.32 exactly; the bar v does not.
     table = np.array([[8, 2], [2, 7], [7, 8], [8, 8]])

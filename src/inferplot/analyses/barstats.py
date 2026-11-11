@@ -543,6 +543,7 @@ def _fisher_pairs(
     warnings: list[str] = []
     single = 0
     costly: list[stats.PairComparison] = []
+    unreached: list[stats.PairComparison] = []
     for pair in found:
         name = f"{levels[pair.row1]!r} and {levels[pair.row2]!r}"
         reason = None
@@ -565,13 +566,16 @@ def _fisher_pairs(
                 "too large to compute exactly within inferplot's limits (a 2 x "
                 f"{len(pair.columns)} table of {pair.n:,}), not approximated"
             )
-        elif pair.effect is None:
-            warnings.append(
-                f"The pair {name} of {args.x!r} has no Cramér's V: its 2 x "
-                f"{len(pair.columns)} table holds {pair.n} observations, and the "
-                "bias-corrected V needs more than the number of its columns (R gives "
-                "NaN). Its Fisher test is reported."
-            )
+        if pair.effect is None and len(pair.columns) > 1:
+            if pair.n > max(2, len(pair.columns)):
+                unreached.append(pair)
+            elif pair.p_value is not None:
+                warnings.append(
+                    f"The pair {name} of {args.x!r} has no Cramér's V: its 2 x "
+                    f"{len(pair.columns)} table holds {pair.n} observations, and the "
+                    "bias-corrected V needs more than the number of its columns (R "
+                    "gives NaN). Its Fisher test is reported."
+                )
         effect = pair.effect
         out.append(
             PairwiseComparison(
@@ -597,50 +601,49 @@ def _fisher_pairs(
             )
         )
     if costly:
-        warnings.append(_costly_pairs_warning(costly, len(found), levels, args))
-    missing = single + len(costly)
-    if missing:
-        rest = len(found) - missing
-        lost = (
-            " ggstatsplot loses the whole pairwise table here, silently."
-            if single
-            else ""
-        )
-        # A pair too large to compute is still a comparison: it is counted with
-        # p = 1 (stats.pairwise_fisher); a single-column pair is none.
-        family = (
-            f"adjusts the other {rest} as {rest + len(costly)} comparisons: a pair "
-            "too large to compute counts as a test with p = 1, so leaving it out "
-            "makes no computed pair look more significant"
-            if costly
-            else f"adjusts the other {rest} among themselves"
-        )
-        warnings.append(
-            f"{missing} of the {len(found)} pairwise Fisher tests "
-            f"{'has' if missing == 1 else 'have'} no p-value (above); "
-            f"{'it stays' if missing == 1 else 'they stay'} in result.pairwise "
-            f"without one, and p_adjust_method={args.p_adjust_method!r} {family}."
-            f"{lost}"
-            if rest
-            else f"None of the {len(found)} pairwise Fisher tests has a p-value "
-            f"(above); the pairs stay in result.pairwise without one.{lost}"
-        )
+        warnings.append(_costly_pairs_warning(costly, found, levels, args))
+    if single or costly:
+        warnings.append(_missing_pairs_warning(len(found), single, len(costly), args))
+    if unreached:
+        warnings.append(_unreached_effects_warning(unreached, found, levels, args))
     return tuple(out), warnings
+
+
+def _names(pairs: Sequence[stats.PairComparison], levels: tuple[str, ...]) -> str:
+    """The first pairs by name (and how many more)."""
+    names = [f"{levels[p.row1]!r} and {levels[p.row2]!r}" for p in pairs]
+    shown = "; ".join(names[:_SHOWN_PAIRS])
+    if len(names) > _SHOWN_PAIRS:
+        shown += f"; and {len(names) - _SHOWN_PAIRS} more"
+    return shown
 
 
 def _costly_pairs_warning(
     costly: list[stats.PairComparison],
-    total: int,
+    found: Sequence[stats.PairComparison],
     levels: tuple[str, ...],
     args: _Args,
 ) -> str:
     """The pairs whose exact test was too large to compute: how many, which, why,
-    and what would give them a test."""
-    names = [f"{levels[p.row1]!r} and {levels[p.row2]!r}" for p in costly]
-    shown = "; ".join(names[:_SHOWN_PAIRS])
-    if len(names) > _SHOWN_PAIRS:
-        shown += f"; and {len(names) - _SHOWN_PAIRS} more"
-    tested = total - len(costly)
+    and what would give them a test. Counted among the pairs that have a test to
+    compute (a pair whose table has a single column has none)."""
+    comparable = sum(1 for p in found if len(p.columns) > 1)
+    tested = comparable - len(costly)
+    one = len(costly) == 1
+    among = (
+        f"the {comparable} pairs of levels of {args.x!r} whose table has two or more "
+        "columns"
+        if comparable < len(found)
+        else f"the {comparable} pairs of levels of {args.x!r}"
+    )
+    done = (
+        f"Fisher's exact test was computed for {tested} of {among}; the other "
+        f"{len(costly)} ({_names(costly, levels)}) {'is' if one else 'are'}"
+        if tested
+        else f"Fisher's exact test was computed for none of {among}: "
+        f"{'it' if one else 'they'} ({_names(costly, levels)}) "
+        f"{'is' if one else 'are'}"
+    )
     dense = all(p.n >= 50 * len(p.columns) ** 2 for p in costly)
     advice = (
         f"with this many observations the chi-square test answers the same "
@@ -650,14 +653,90 @@ def _costly_pairs_warning(
         else f"merge sparse levels of {args.y!r} (levels with few observations), or "
         f"compare two levels of {args.x!r} in a call of their own"
     )
+    with_v = sum(1 for p in costly if p.effect is not None)
+    if with_v == len(costly):
+        effect = f"{'Its' if one else 'Their'} Cramér's V is reported. "
+    elif with_v:
+        effect = f"Cramér's V is reported for {with_v} of them. "
+    else:
+        effect = ""
     return (
-        f"Fisher's exact test was computed for {tested} of the {total} pairs of "
-        f"levels of {args.x!r}; the other {len(costly)} ({shown}) "
-        f"{'is' if len(costly) == 1 else 'are'} too large to compute exactly within "
-        "inferplot's limits (about a second of work for one test and two seconds "
-        "for all the pairs of one table, the cheapest computed first), and "
-        "inferplot does not approximate them. Their Cramér's V is reported. To "
-        f"test them, {advice}."
+        f"{done} too large to compute exactly within inferplot's limits (about a "
+        "second of work for one test and two seconds for all the pairs of one "
+        "table, the cheapest computed first), and inferplot does not approximate "
+        f"{'it' if one else 'them'}. {effect}To test "
+        f"{'it' if one else 'them'}, {advice}."
+    )
+
+
+def _missing_pairs_warning(total: int, single: int, costly: int, args: _Args) -> str:
+    """How many pairs have no p-value, that they stay in the result, and what the
+    adjustment did with the others: a pair too large to compute counts in the
+    family as a test with p = 1 (stats.pairwise_fisher); a pair whose table has a
+    single column is no comparison; p_adjust_method='none' adjusts nothing."""
+    missing = single + costly
+    tested = total - missing
+    lost = (
+        " ggstatsplot loses the whole pairwise table here, silently." if single else ""
+    )
+    stays = (
+        f"{missing} of the {total} pairs of levels of {args.x!r} "
+        f"{'has' if missing == 1 else 'have'} no Fisher test p-value (above); "
+        f"{'it stays' if missing == 1 else 'they stay'} in result.pairwise without "
+        "one"
+        if tested
+        else f"None of the {total} pairs of levels of {args.x!r} has a Fisher test "
+        "p-value (above); the pairs stay in result.pairwise without one"
+    )
+    method = f"p_adjust_method={args.p_adjust_method!r}"
+    other = "other one" if tested == 1 else f"other {tested}"
+    if not tested:
+        family = ""
+    elif args.p_adjust_method == "none":
+        family = (
+            f", and {method} leaves the p-value of the other one unadjusted"
+            if tested == 1
+            else f", and {method} leaves the p-values of the other {tested} unadjusted"
+        )
+    elif costly:
+        family = (
+            f", and {method} adjusts the {other} as {tested + costly} comparisons: a "
+            "pair too large to compute counts as a test with p = 1, so leaving "
+            f"{'it' if costly == 1 else 'them'} out makes no computed pair look more "
+            "significant"
+        )
+    elif tested == 1:
+        family = (
+            ", and the other one is the only test, so its p-value is its own "
+            f"adjusted p-value under {method}"
+        )
+    else:
+        family = f", and {method} adjusts the {other} among themselves"
+    return f"{stays}{family}.{lost}"
+
+
+def _unreached_effects_warning(
+    unreached: list[stats.PairComparison],
+    found: Sequence[stats.PairComparison],
+    levels: tuple[str, ...],
+    args: _Args,
+) -> str:
+    """The pairs whose Cramér's V the limit for the pairs' intervals did not reach
+    (stats.pairwise_fisher: the smallest tables first)."""
+    defined = sum(
+        1 for p in found if len(p.columns) > 1 and p.n > max(2, len(p.columns))
+    )
+    one = len(unreached) == 1
+    return (
+        f"Cramér's V was computed for {defined - len(unreached)} of the {defined} "
+        f"pairs of levels of {args.x!r} whose V is defined; the other "
+        f"{len(unreached)} ({_names(unreached, levels)}) "
+        f"{'has' if one else 'have'} none (estimate None): the V intervals of all "
+        "the pairs of one table share a limit of work (about half a second, more "
+        "when the Fisher tests leave some), the smallest tables first, and "
+        "inferplot does not approximate them. "
+        f"{'Its' if one else 'Their'} Fisher test is not affected. To get every V, "
+        f"compare fewer levels of {args.x!r} in one call."
     )
 
 
@@ -893,7 +972,13 @@ def _p_adjust_note(table: TableData, args: _Args, parts: _Parts) -> str | None:
             )
         return f"{head}{why}."
     tested = [pair for pair in parts.pairwise if pair.p_value is not None]
-    if len(tested) > 1:
+    # A pair too large to compute counts in the family with p = 1, so with one
+    # the method changes the adjusted p of a single tested pair too.
+    costly = any(
+        pair.no_test_reason is not None and pair.no_test_reason.startswith("too large")
+        for pair in parts.pairwise
+    )
+    if len(tested) > 1 or (tested and costly):
         return None
     if not tested:
         why = "none of the pairs has a test"
@@ -1570,5 +1655,21 @@ def barstats(
         results_subtitle=results_subtitle,
         seed=seed,
     )
+    return analyze_table(table, args, n_digits)
+
+
+def analyze_table(table: TableData, args: _Args, digits: int) -> StatsResult:
+    """The design's analysis of a table read and checked by ``_prepare``: what
+    ``barstats`` returns. ``ip.barstats`` calls it after checking that the bars
+    fit its figure (``bar_count``), so a figure that cannot be drawn is refused
+    before the tests run."""
     parts = _ANALYSES[args.design](table, args)
-    return _assemble(table, args, parts, digits=n_digits)
+    return _assemble(table, args, parts, digits=digits)
+
+
+def bar_count(table: TableData) -> int:
+    """The bars a result of this table holds (``_bars_and_cells``): one per level
+    of y with observations, one without y."""
+    if table.y_levels is None:
+        return 1
+    return sum(1 for total in table.column_totals() if total > 0)

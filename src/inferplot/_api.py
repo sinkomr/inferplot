@@ -501,7 +501,9 @@ def barstats(
     The Python counterpart of ggstatsplot's ``ggbarstats()``. The analysis
     arguments are those of :func:`inferplot.analyze.barstats`; the drawing
     arguments those of :func:`inferplot.render.barstats`. The drawing arguments
-    are checked first, then the analysis runs, then the figure is drawn.
+    are checked first, then the data are read; more bars than inferplot's own
+    figure holds (without ``ax=``) are refused before the tests run; then the
+    analysis runs and the figure is drawn.
 
     Returns:
         A ``StatsFigure``, as :func:`betweenstats` returns.
@@ -509,9 +511,9 @@ def barstats(
     Raises:
         TypeError, ValueError, KeyError: as :func:`inferplot.analyze.barstats`
             raises them, and for drawing arguments that cannot be used or a
-            figure larger than inferplot's own figure holds (more than 43 bars,
-            or a legend of more levels than fit); the message says how to fix
-            the call.
+            figure larger than inferplot's own figure holds (more than 37 bars,
+            refused before the tests run, or a legend of more levels than
+            fit); the message says how to fix the call.
         NotImplementedError: type "bayes" and ``bf_message=True`` arrive in
             inferplot 0.2.
 
@@ -533,7 +535,18 @@ def barstats(
         ()
     """
     from inferplot import render  # imports matplotlib
-    from inferplot.render.barstats import check_axes, check_drawing
+    from inferplot.analyses.barstats import (
+        _prepare,  # pyright: ignore[reportPrivateUsage]
+        analyze_table,
+        bar_count,
+    )
+    from inferplot.render.barstats import (
+        MAX_BARS,
+        MAX_PLOT_IN,
+        MIN_SLOT_IN,
+        check_axes,
+        check_drawing,
+    )
     from inferplot.render.base import check_one_call_subtitle
 
     check_one_call_subtitle(subtitle, results_subtitle)
@@ -547,7 +560,10 @@ def barstats(
         bar_args=bar_args,
     )
     check_axes(ax)
-    result = analyze.barstats(
+    # The data are read and every argument checked first; inferplot's own figure
+    # (no ax=) holds at most MAX_BARS bars, so more are refused before the tests
+    # run, with the message ip.render.barstats gives (DECISIONS D123).
+    table, checked, n_digits = _prepare(
         data,
         x,
         y,
@@ -566,6 +582,18 @@ def barstats(
         results_subtitle=results_subtitle,
         seed=seed,
     )
+    bars = bar_count(table)
+    if ax is None and bars > MAX_BARS:
+        raise ValueError(
+            f"{bars} bars do not fit inferplot's own figure, whose plotting area is "
+            f"at most {MAX_PLOT_IN:g} in wide with at least {MIN_SLOT_IN:g} in a bar: "
+            f"at most {MAX_BARS} bars fit. Draw fewer levels of {y!r} (filter the "
+            "data or merge levels), or draw into an Axes of a figure of your own "
+            "size with ax=, for example ax=Figure(figsize=(40, 6)).add_subplot() "
+            "(from matplotlib.figure import Figure); fig.check() then reports what "
+            "does not fit."
+        )
+    result = analyze_table(table, checked, n_digits)
     return render.barstats(
         result,
         xlab=xlab,
