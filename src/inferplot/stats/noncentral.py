@@ -184,6 +184,11 @@ _TIGHT_BRACKET_FROM: Final = 1e4
 _T_MAX: Final = 1e300
 # Root finding: absolute tolerance on the noncentrality parameter.
 _XTOL: Final = 1e-13
+# From this chi-square on, chi2_ncp_bound solves the Cornish-Fisher expansion of
+# the noncentral chi-square quantile to its lambda^-1/2 term instead of searching
+# (_chi2_ncp_expansion): what it leaves out is of order z^4 / lambda, below a unit
+# in the last place of lambda here (measured: at most 0.5 units from 1.4e9 on).
+_CHI2_EXPANSION_FROM: Final = 1e9
 _MAX_EXPANSIONS: Final = 2000
 
 
@@ -1066,6 +1071,50 @@ def _chi2_ncp_start(x: float, df: float, prob: float) -> float:
     return centre - root if z > 0.0 else centre + root
 
 
+def _chi2_ncp_expansion(x: float, df: float, prob: float) -> float:
+    """The noncentrality lambda with P(chi'^2(df, lambda) <= x) = prob for a large
+    x (at least ``_CHI2_EXPANSION_FROM``), from the Cornish-Fisher expansion of the
+    prob-quantile (Cornish & Fisher 1937; Johnson, Kotz & Balakrishnan 1994, vol. 1,
+    ch. 12) in the cumulants of chi'^2, k_r = 2^(r - 1) (r - 1)! (df + r lambda)
+    (Johnson, Kotz & Balakrishnan 1995, vol. 2, ch. 29). With s = sqrt(k_2),
+    g_1 = k_3 / s^3, g_2 = k_4 / s^4 and z = Phi^-1(prob):
+
+        x = k_1 + s (z + g_1 (z^2 - 1) / 6
+                     + g_2 (z^3 - 3 z) / 24 - g_1^2 (2 z^3 - 5 z) / 36)
+            + O(z^4 / lambda),
+
+    the last two terms of order lambda^-1/2. The solution in lambda, by fixed-point
+    steps lambda <- x - (everything else), which contract by about |z| /
+    sqrt(lambda), is the root to the rounding of x: against 50-digit roots for
+    df = 1 and 3 (exact representations; tools/reference/ncx2_large_mpmath.py) at
+    most 0.5 units in its last place from x = 1e9 to 1.7e308 (1.7 units at 1.4e8,
+    316 at 1.4e7, where the search is used). The search it replaces is off there:
+    from x of about 1e7 to 1e12 by up to 3e10 units in the last place (5e-11
+    relative at prob 0.025, 3e-9 at 0.001; noncentral_chi2_logcdf's tails above
+    x), and from about 1e31 on it did not converge.
+    """
+    z = float(special.ndtri(prob))
+    z2 = z * z
+    root = x
+    for _ in range(8):
+        # Every cumulant ratio in r = df / lambda, so that nothing overflows up to
+        # the largest double: s = sqrt(2 lambda (r + 2)), s g_1 = 4 (r + 3) /
+        # (r + 2), s g_2 = 24 (r + 4) / ((r + 2) s), s g_1^2 = 16 (r + 3)^2 /
+        # ((r + 2)^2 s).
+        r = df / root
+        s = math.sqrt(2.0 * (r + 2.0)) * math.sqrt(root)
+        skew = (2.0 / 3.0) * (z2 - 1.0) * (r + 3.0) / (r + 2.0)
+        second = (
+            (r + 4.0) / (r + 2.0) * (z2 - 3.0) * z
+            - 4.0 / 9.0 * ((r + 3.0) / (r + 2.0)) ** 2 * (2.0 * z2 - 5.0) * z
+        ) / s
+        step = x - (df + z * s + skew + second)
+        if step == root:
+            break
+        root = step
+    return root
+
+
 def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
     """Noncentrality lambda >= 0 with P(chi'^2(df, lambda) <= x) = ``prob``.
 
@@ -1082,7 +1131,12 @@ def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
     When the normal approximation of the root (``_chi2_ncp_start``) is at least 1e4
     the bracket is that value +/- 4 sqrt(value), widened four-fold until it holds the
     root; otherwise it runs from 0 to max(1, 2 x), doubled until it holds the root.
-    Returns ``math.inf`` when the root lies beyond the largest double.
+    Returns ``math.inf`` when the root lies beyond the largest double. From x =
+    1e9 on (``_CHI2_EXPANSION_FROM``, with df at most 1e-6 x, so that the root is
+    near x) the root is the solution of the Cornish-Fisher expansion
+    (``_chi2_ncp_expansion``), accurate to the rounding of x there, so every finite
+    x has its bounds at once (the search's incomplete gamma series stopped
+    converging from about 1e31 on, after about 5 seconds).
 
     Raises:
         ValueError: an argument is not finite, x < 0, df is not positive, or
@@ -1092,6 +1146,8 @@ def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
     _check_chi2_args(x, df, 0.0)
     if not 0.0 < prob < 1.0:
         raise ValueError(f"prob must lie strictly between 0 and 1; got {prob!r}")
+    if x >= _CHI2_EXPANSION_FROM and df <= 1e-6 * x:
+        return _chi2_ncp_expansion(x, df, prob)
     upper = prob > 0.5
     log_target = math.log1p(-prob) if upper else math.log(prob)
     if upper:

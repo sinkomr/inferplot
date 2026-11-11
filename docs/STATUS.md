@@ -401,17 +401,25 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     the user is not told what the bar's test counts.
   - [ ] C2 (high): the Fisher cost again, measured independently (5 x 10 with 1,000
     rows: 27.8 s, 4.6 GB, 0 of 10 pairs tested); the 2 x 2 path has no limit either.
-  - [ ] C3: rounding noise printed where the exact value is 0 ("V = 3.95e-09",
-    "chi2 = 1.13e-31, C = 6.71e-17" for an exact fit): 32 of 206 small 2 x 2 tables
-    whose corrected V is exactly 0.
+  - [x] C3: fixed (D118). Exact zeros are 0, decided in rational arithmetic on the
+    counts and on `ratio` as written. Reviewer's counts 32 of 206, 283 of 4,000 and
+    127 of 400 are now 0; the lead's comparison of main and branch on 6,732 tables
+    found every change an exact zero and nothing else moved. R prints the noise
+    (oracle round 3), so this is a deliberate difference for the owner to confirm.
   - [ ] C4: the refusal for a paired table with an unused category advises merging
     levels instead of removing the unused one.
-  - [ ] C5: two planted bugs no test notices (a declared level empty in both paired
-    measurements dropped; a wrong df from 7 categories up).
+  - [x] C5 (statistics level): df at 8 to 12 and 50 categories against exact
+    rationals; McNemar with an empty row and column refused. The analysis-level
+    paired case is with the analysis fixes (fix G).
   - [ ] C6: a pandas object column of booleans is refused.
-  - [ ] C7 (low): check wording for these intervals; raw errors for absurd `ratio`
-    shares; D107's accuracy figure optimistic (1.3e-10 at 1e9 per cell, not 1.2e-11);
-    small wording; unreachable code.
+  - [x] C7 (statistics): every finite chi-square has its interval (D119; within 0.5
+    units in the last place of the lead's independent 40-digit roots); a statistic
+    beyond the doubles raises naming `ratio`; D107's accuracy figure corrected (1.3e-10
+    at 1e9 per cell); R's order kept. Check wording and small items: with fix G.
+  - [ ] C7, open (low): noncentral chi-square bounds for a chi-square between 1e7 and
+    1e9 are off by up to 5e-11 relative at 95% (2.8e-9 at prob 0.001); the Poisson
+    sum's tails above x are inaccurate from about 1e7. Not visible in any printed
+    number.
   - Oracle probes wanted: R's `round()` on percent values such as (1/2000) x 100 at
     one digit (Python's rule and R 4's may differ for 98 values of k/2000); one-sided
     Fisher pairs on reduced pair tables; what R prints for the exact-zero cases;

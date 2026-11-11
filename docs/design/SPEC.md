@@ -630,6 +630,17 @@ treats it as parametric, as it does nonparametric).
   labels read `<level>\n(n = <n>)`. ggstatsplot also bootstraps a 95% CI for each
   centrality value (100 replicates) but never displays it; inferplot does not compute it.
 
+barstats, exact zeros and large statistics (D118, D119): chi^2 (independence or fit)
+and the corrected phi^2 are 0 when exactly 0 on the counts and on `ratio` as written
+(`None` is 1/k each; a share is its decimal reading, D105; else the fraction with the
+smallest denominator up to 10^6 within 2 units in its last place; else the double
+itself; never 0); elsewhere R's order of operations. Where only phi^2 vanishes, V is
+0 and its interval still inverts chi^2. Intervals of V and C exist for every finite
+chi^2: from 1e9 (with df at most 1e-6 chi^2) the noncentrality bound is the solution
+of the Cornish-Fisher expansion of the noncentral chi-square quantile to its
+lambda^-1/2 term. A goodness-of-fit statistic beyond the largest double is refused,
+naming `ratio`.
+
 ## 5. Deliberate differences from ggstatsplot
 
 Statistical and behavioral differences are exactly these:
@@ -745,6 +756,17 @@ Statistical and behavioral differences are exactly these:
     its counts of undefined and infinite resamples, and with them p and the bounds,
     can differ between the two writings. A value equal to `test_value` as written is
     a zero of the signed-rank test (R ranks 0.1 + 0.2 against 0.3).
+22. Exact zeros in count tables (D118): where Pearson's chi-square, the
+    goodness-of-fit chi-square or the bias-corrected phi^2 is exactly 0 on the counts
+    and on `ratio` as written, inferplot reports 0 (chi^2 = 0, p = 1, V or C = 0);
+    R's order of floating-point operations leaves rounding noise there, which
+    ggstatsplot prints ("V = 5.59e-09" for the table [[0, 1], [5, 4]]; "chi2 =
+    1.13e-31, C = 6.71e-17" for counts 8, 2, 7, 8 against shares 0.32, 0.08, 0.28,
+    0.32). Every value that is not exactly 0 keeps R's order.
+23. Very large chi-squares (D119): for a `ratio` share so small that R's statistic
+    is Inf, inferplot raises an error that names `ratio`; for very large finite
+    statistics (from 1e9) it reports accurate interval bounds, where effectsize's
+    search is untested.
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -1260,8 +1282,10 @@ every fixture and of the generator files (`generator_files`: `oracle/generate.R`
 (`probes`), the GitHub Actions run that produced them (`run`: repository, run id, attempt, commit), R's version and RNG kind,
 and every installed R package with its version (`r_library`). On every test run the
 loader (`tests/oracle_fixtures.py`) refuses fixtures whose own hash, whose dataset's
-hash or whose generator files' hashes differ from the manifest. On every push and pull
-request `.github/workflows/fixtures.yml` verifies the manifest's attestation (signed by
+hash or whose generator files' hashes differ from the manifest. On every push to main
+and every pull request (and by hand on a fixtures branch before it is merged; a
+branch that is still changing the generator fails by design, so pushes to other
+branches do not start it) `.github/workflows/fixtures.yml` verifies the manifest's attestation (signed by
 `oracle.yml` in this repository as that file stood at the commit the manifest names,
 by the run it names), that this commit is in the branch's history, and that its
 generator files equal the committed ones. Together these catch a hand edit, even with
