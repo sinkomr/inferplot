@@ -773,7 +773,11 @@ def recipe_wilcoxon_signed_rank(
         }
     if method != "approx":
         raise TaskError(f"wilcoxon_signed_rank: method {method!r}")
-    res = stats.wilcoxon(d, method="approx", correction=correction)
+    # SciPy 1.11 warns below ten pairs ("Sample size too small for normal
+    # approximation"); the number is still the approximation an analyst gets.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        res = stats.wilcoxon(d, method="approx", correction=correction)
     stat = float(res.statistic)
     alt = [total - stat]
     z = getattr(res, "zstatistic", None)
