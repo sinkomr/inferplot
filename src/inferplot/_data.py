@@ -2068,6 +2068,9 @@ class TableData:
     (``tidyr::uncount``)."""
     library: Library = "pandas"
     """The library of the user's frame, for recipes written in it."""
+    possible_counts: tuple[str, ...] = ()
+    """Without ``counts``: the columns that may be counts the call left out,
+    where every cell holds at most one row (review B10)."""
 
     @property
     def n(self) -> int:
@@ -2536,6 +2539,99 @@ def long_paired_recipe(
     )
 
 
+# Names a column of counts commonly has (review B10).
+_COUNT_NAMES: Final = frozenset(
+    {"n", "count", "counts", "freq", "frequency", "frequencies", "weight", "weights"}
+)
+
+
+def _whole_counts(series: nw.Series[Any]) -> bool:
+    """Whether a column holds whole numbers >= 0, some above 1 (counts)."""
+    dtype = series.dtype
+    if not dtype.is_numeric() or isinstance(dtype, nw.Boolean):
+        return False
+    values = _float_values(series)[~_missing(series)]
+    if values.size == 0 or not bool(np.isfinite(values).all()):
+        return False
+    whole = bool((values == np.round(values)).all()) and bool((values >= 0).all())
+    return whole and bool((values > 1).any())
+
+
+def _possible_counts(
+    frame: nw.DataFrame[Any], used: tuple[str, str | None], rows: IntArray
+) -> tuple[str, ...]:
+    """The other columns of ``frame`` that may be counts left out of the call:
+    whole numbers >= 0 with some above 1, or a usual name of counts."""
+    found: list[str] = []
+    for name in frame.columns:
+        if name in used:
+            continue
+        try:
+            series = frame[name][rows.tolist()]
+            if _whole_counts(series) or str(name).lower() in _COUNT_NAMES:
+                found.append(str(name))
+        except Exception:  # a column narwhals cannot read: not counts
+            continue
+    return tuple(found)
+
+
+def _long_from_wide(
+    frame: nw.DataFrame[Any], key: str, values: Sequence[str]
+) -> str:
+    """The code that reshapes a wide table of counts (one row per level of
+    ``key``, one column of counts per category, ``values``) to one row per
+    combination with a column of counts, in the frame's own library."""
+    shown = list(values)
+    if frame.implementation.is_polars():
+        return (
+            f"long = data.unpivot(index=[{key!r}], on={shown!r}, "
+            "variable_name='category', value_name='n')"
+        )
+    start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+    return (
+        f"{start}long = data.melt(id_vars=[{key!r}], value_vars={shown!r}, "
+        "var_name='category', value_name='n')"
+    )
+
+
+def _check_wide(
+    frame: nw.DataFrame[Any],
+    x: tuple[_Grouping, nw.Series[Any]],
+    y: tuple[_Grouping, nw.Series[Any]],
+    used: IntArray,
+) -> None:
+    """Without ``counts``: one column of whole-number counts (``x`` or ``y``)
+    beside a column whose every level occupies one row looks like a wide table
+    of counts (one column per category); refused with the reshape (review
+    B10), since every row would be counted as one observation."""
+    if used.size < 2:
+        return
+    for (group, series), (other_group, other) in ((y, x), (x, y)):
+        if group.kind not in ("integer", "float"):
+            continue
+        if not _whole_counts(series[used.tolist()]):
+            continue
+        labels = _grouping_labels(other_group, other, used)
+        if len(set(labels)) != len(labels):
+            continue
+        key = other_group.name
+        values = [
+            str(name)
+            for name in frame.columns
+            if name != key and _whole_counts(frame[name][used.tolist()])
+        ]
+        recipe = _long_from_wide(frame, key, values)
+        raise ValueError(
+            f"{group.role.arg}={group.name!r} holds whole numbers and each level of "
+            f"{key!r} occupies one row, so the data look like a wide table of counts "
+            f"(one column of counts per category, one row per level of {key!r}); "
+            "as given, each row would be counted as one observation. barstats "
+            "needs one row per combination of categories and a column of counts: "
+            f"reshape the table and pass counts=: {recipe}; ip.barstats(long, "
+            f"x='category', y={key!r}, counts='n')."
+        )
+
+
 def _sum(values: Any) -> int:
     """The exact total of an int64 or object array of whole counts."""
     if values.dtype == object:
@@ -2620,6 +2716,8 @@ def read_table(
     used, used_weights = rows[positive], weights[positive]
     n_total = _sum(used_weights)
 
+    if counts is None and y_group is not None and y_col is not None and y is not None:
+        _check_wide(frame, (x_group, x_col), (y_group, y_col), used)
     _check_codes(x_group, x_col, used, n_total, _measurement_advice("x", x, y, y_col))
     if y_group is not None and y_col is not None:
         advice = _measurement_advice("y", x, y, x_col)
@@ -2684,6 +2782,11 @@ def read_table(
         n_missing_counts=int(missing_counts.sum()),
         n_zero_rows=int(rows.size - used.size),
         library=_library(x_raw),
+        possible_counts=(
+            _possible_counts(frame, (x, y), rows)
+            if counts is None and rows.size > 1 and max(flat.tolist()) <= 1
+            else ()
+        ),
     )
 
 
@@ -2728,6 +2831,7 @@ def table_notes(data: TableData) -> list[str]:
         if column is None:
             continue
         notes.extend(_table_level_notes(data, column))
+    notes.extend(_counts_notes(data))
     names = [("x", data.x)]
     if data.y is not None:
         names.append(("y", data.y))
@@ -2738,6 +2842,40 @@ def table_notes(data: TableData) -> list[str]:
                 f"The column name {arg}={name!r} holds control characters {drawn} "
                 "in the figure's labels; the result keeps the name as given."
             )
+    return notes
+
+
+def _counts_notes(data: TableData) -> list[str]:
+    """Counts left out of the call (every cell holds at most one row, and a
+    column holds whole numbers or has a usual name of counts), and counts that
+    sum to exactly 100, as percentages do (review B10)."""
+    notes: list[str] = []
+    if data.possible_counts:
+        column = data.possible_counts[0]
+        where = (
+            f"Each combination of {data.x!r} and {data.y!r}"
+            if data.y is not None
+            else f"Each level of {data.x!r}"
+        )
+        call = (
+            f"barstats(data, {data.x!r}, {data.y!r}, counts={column!r})"
+            if data.y is not None
+            else f"barstats(data, {data.x!r}, counts={column!r})"
+        )
+        notes.append(
+            f"{where} occurs in one row only, and {column!r} holds whole numbers: "
+            "if each row stands for several observations (a table of counts), pass "
+            f"counts={column!r}: {call}. As called, each row counts as one "
+            f"observation (n = {data.n:,})."
+        )
+    if data.counts_var is not None and data.n == 100 and data.n_rows > 1:
+        notes.append(
+            f"The counts in {data.counts_var!r} sum to exactly 100. If they are "
+            "percentages, they are not counts: the tests need the numbers of "
+            "observations behind them (with percentages as counts every p-value "
+            "is that of 100 observations). Pass the numbers of observations as "
+            "counts=."
+        )
     return notes
 
 

@@ -110,3 +110,76 @@ def test_counts_stored_as_text(backend: str, counts: list[str]) -> None:
     data = _run(_statement(text, "convert it first:"), frame)
     result = ip.analyze.barstats(data, "x", "y", counts="n", bf_message=False)
     assert result.n_obs == sum(int(c.replace(",", "")) for c in counts)
+
+
+# -- B10: tables of counts given without counts= -----------------------------------
+
+AGGREGATED = {
+    "smoke": ["never", "former", "current"] * 2,
+    "sex": ["F"] * 3 + ["M"] * 3,
+    "n": [34, 18, 9, 28, 18, 13],
+}
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_a_table_without_counts_is_named(backend: str) -> None:
+    frame = _frame(backend, AGGREGATED)
+    result = ip.analyze.barstats(frame, "smoke", "sex", bf_message=False)
+    assert result.n_obs == 6
+    (note,) = [w for w in result.warnings if "occurs in one row only" in w]
+    assert "pass counts='n'" in note
+    assert "(n = 6)" in note
+    found = re.search(r": (barstats\(data, .*?\))\.", note)
+    assert found is not None, note
+    fig = eval(found.group(1), {"barstats": ip.barstats, "data": frame})
+    assert fig.result.n_obs == 120
+
+
+def test_raw_data_get_no_counts_note() -> None:
+    rng = np.random.default_rng(4)
+    frame = pd.DataFrame(
+        {
+            "x": rng.choice(["a", "b"], 50),
+            "y": rng.choice(["u", "v"], 50),
+            "age": rng.integers(20, 60, 50),
+        }
+    )
+    result = ip.analyze.barstats(frame, "x", "y", bf_message=False)
+    assert not [w for w in result.warnings if "occurs in one row only" in w]
+
+
+WIDE = {
+    "region": [f"r{i}" for i in range(8)],
+    "yes": [12, 30, 22, 12, 30, 41, 22, 9],
+    "no": [20, 20, 31, 20, 9, 31, 12, 30],
+}
+LONG_RECIPE = re.compile(
+    r": ((?:data = data\.to_pandas\(\); )?long = .*?); (ip\..*)\.$"
+)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(("x", "y"), [("region", "yes"), ("yes", "region")])
+def test_a_wide_table_of_counts_is_shown_the_reshape(
+    backend: str, x: str, y: str
+) -> None:
+    frame = _frame(backend, WIDE)
+    with pytest.raises(ValueError, match="wide table of counts") as caught:
+        ip.analyze.barstats(frame, x, y)
+    text = str(caught.value)
+    found = LONG_RECIPE.search(text)
+    assert found is not None, text
+    space: dict[str, Any] = {"data": frame, "ip": ip, "pd": pd, "pl": pl}
+    exec(found.group(1), space)
+    fig = eval(found.group(2), space)
+    assert fig.result.n_obs == sum(WIDE["yes"]) + sum(WIDE["no"])
+    assert set(fig.result.levels) == {"yes", "no"}
+
+
+def test_counts_that_sum_to_100_are_noted() -> None:
+    frame = pd.DataFrame(
+        {"x": ["a", "b", "a", "b"], "y": ["u", "u", "v", "v"], "pct": [30, 20, 15, 35]}
+    )
+    result = ip.analyze.barstats(frame, "x", "y", counts="pct", bf_message=False)
+    (note,) = [w for w in result.warnings if "sum to exactly 100" in w]
+    assert "percentages" in note
