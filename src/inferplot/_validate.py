@@ -1235,8 +1235,9 @@ def _bar_targeted(
     if key in {"subject", "id", "subject_id"}:
         return no(
             "with paired=True each row holds one unit's two measurements, x and y "
-            "(McNemar's test), so there are no subjects to name. For a measurement "
-            "repeated over conditions use withinstats(data, x, y, subject_id=...)."
+            "(McNemar's test), so there are no subjects to name. For a numeric "
+            "measurement repeated over conditions use withinstats(data, x, y, "
+            "subject_id=...)."
         )
     if key in {"test_value", "mu"}:
         return no(
@@ -1301,6 +1302,40 @@ def _bar_targeted(
             f"barstats counts categories and has no centrality. Remove {arg}=."
         )
     return None
+
+
+def _with_long_recipe(
+    problem: TypeError | NotImplementedError,
+    arg: str,
+    value: object,
+    args: Sequence[object],
+    kwargs: Mapping[str, object],
+) -> TypeError | NotImplementedError:
+    """barstats given a subject column (``subject_id=`` and its other names):
+    the data are very likely long, one row per unit and occasion; the message
+    then shows the reshape to one row per unit and the paired call, in the
+    frame's own library (review B6). The message as it was where the call
+    gives no data, x and y to build it from."""
+    if _snake(arg) not in {"subject", "id", "subject_id"} or not isinstance(value, str):
+        return problem
+    given = dict(zip(("data", "x", "y"), args, strict=False)) | dict(kwargs)
+    data, x, y = given.get("data"), given.get("x"), given.get("y")
+    if not isinstance(x, str) or not isinstance(y, str):
+        return problem
+    from inferplot._data import long_paired_recipe, to_frame
+
+    try:
+        frame = to_frame(data)
+        occasions = [str(v) for v in frame[y].drop_nulls().unique().to_list()]
+        recipe = long_paired_recipe(data, x, y, value, sorted(occasions))
+    except Exception:  # whatever is wrong with the data is reported later
+        return problem
+    return TypeError(
+        f"{problem} If the data are long, one row per unit and occasion with "
+        f"{value!r} naming the unit and {y!r} the occasion, reshape them to one row "
+        "per unit with one column per occasion, and compare two occasions with "
+        f"McNemar's test: {recipe}."
+    )
 
 
 # Functions whose analysis takes subject_id (their drawing functions share the name).
@@ -1520,6 +1555,8 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
         for arg, value in kwargs.items():
             if arg not in valid:
                 problem = _keyword_problem(arg, value, name, valid, order, filled)
+                if name == "barstats" and not draws_result:
+                    problem = _with_long_recipe(problem, arg, value, args, kwargs)
                 raise _render_named(problem, name) if draws_result else problem
         if len(args) > len(positional):
             problem = _positional_problem(

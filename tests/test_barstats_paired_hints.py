@@ -87,3 +87,60 @@ def test_a_pandas_integer_column_with_a_missing_value() -> None:
     data = _run(found.group(1), frame)
     result = ip.analyze.barstats(data, "x", "y", paired=True, bf_message=False)
     assert result.n_obs == 7
+
+
+# -- B6: paired=True on long data -------------------------------------------------
+
+RESHAPE = re.compile(
+    r": ((?:data = data\.to_pandas\(\); )?wide = .*?); (ip\.barstats\(wide, .*?\))\."
+)
+
+
+def _long(backend: str) -> Any:
+    rng = np.random.default_rng(1)
+    ids = np.arange(60)
+    first = rng.choice(["yes", "no"], 60, p=[0.4, 0.6])
+    second = rng.choice(["yes", "no"], 60, p=[0.6, 0.4])
+    columns = {
+        "id": np.r_[ids, ids].tolist(),
+        "wave": ["w1"] * 60 + ["w2"] * 60,
+        "ans": np.r_[first, second].tolist(),
+    }
+    if backend == "pandas":
+        return pd.DataFrame(columns)
+    if backend == "polars":
+        return pl.DataFrame(columns)
+    return pa.table(columns)
+
+
+def _follow(message: str, frame: Any) -> Any:
+    found = RESHAPE.search(message)
+    assert found is not None, message
+    space: dict[str, Any] = {"data": frame, "pd": pd, "pl": pl, "pa": pa, "ip": ip}
+    exec(found.group(1), space)
+    return eval(found.group(2), space)
+
+
+@pytest.mark.parametrize("backend", ["pandas", "polars", "pyarrow"])
+def test_long_paired_data_are_shown_the_reshape(backend: str) -> None:
+    frame = _long(backend)
+    text = _refusal(lambda: ip.barstats(frame, "ans", "wave", paired=True))
+    assert "The data look long" in text
+    assert "share no category" in text
+    fig = _follow(text, frame)
+    result = fig.result
+    assert result.n_obs == 60  # one pair per unit
+    assert result.test is not None
+    assert result.test.name == "mcnemar"
+
+
+@pytest.mark.parametrize("backend", ["pandas", "polars", "pyarrow"])
+def test_subject_id_is_shown_the_reshape(backend: str) -> None:
+    frame = _long(backend)
+    call: Any = ip.barstats
+    with pytest.raises(TypeError) as caught:
+        call(frame, "ans", "wave", paired=True, subject_id="id")
+    text = str(caught.value)
+    assert "subject_id= is not an argument of barstats()" in text
+    assert "If the data are long" in text
+    assert _follow(text, frame).result.n_obs == 60

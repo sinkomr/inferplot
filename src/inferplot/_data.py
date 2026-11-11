@@ -2408,6 +2408,18 @@ def _check_paired_levels(
     if xs == ys:
         return
     x, y = x_levels.name, y_levels.name
+    if not set(xs) & set(ys):
+        recipe = long_paired_recipe(frame.to_native(), x, y, None, ys)
+        raise ValueError(
+            f"paired=True: x={x!r} and y={y!r} share no category ({x!r}: "
+            f"{_listed(xs)}; {y!r}: {_listed(ys)}). paired=True reads each row as "
+            "one unit measured twice, x the first measurement and y the second, "
+            f"both on the same categories. The data look long (one row per unit "
+            f"and occasion, with {y!r} naming the occasion): reshape them to one "
+            "row per unit, with one column per occasion, and pass two occasions as "
+            f"x and y: {recipe}. If {x!r} and {y!r} are two measurements coded "
+            "differently, recode one to the other's categories first."
+        )
     start = (
         f"paired=True: x={x!r} and y={y!r} are two measurements of the same units, "
         "so they need the same categories in the same order, and they differ"
@@ -2437,6 +2449,43 @@ def _check_paired_levels(
         categories = _paired_categories(x_levels, y_levels, numeric)
     example = _declare_example(frame, (x, y), categories, numeric)
     raise ValueError(f"{start}{detail}: {example}.")
+
+
+def _unit_column(frame: nw.DataFrame[Any], x: str, y: str) -> str | None:
+    """The column that names each unit in long data (one row per unit and
+    occasion ``y``): another column whose values repeat, and that holds each
+    occasion at most once per value; None where no column does."""
+    for name in frame.columns:
+        if name in (x, y):
+            continue
+        try:
+            pair = frame.select(name, y).drop_nulls()
+            repeats = pair[name].n_unique() < pair.shape[0]
+            if repeats and not bool(pair.is_duplicated().any()):
+                return name
+        except Exception:  # a column narwhals cannot compare: not a unit column
+            continue
+    return None
+
+
+def long_paired_recipe(
+    data: object, x: str, y: str, unit: str | None, occasions: Sequence[str]
+) -> str:
+    """The code that reshapes long data (one row per unit and occasion, ``y``
+    naming the occasion and ``x`` holding the answer) to one row per unit, and
+    the paired call on two occasions, in the frame's own library. ``unit`` names
+    the unit column (found in the frame when None; '<unit>' where none is)."""
+    frame = to_frame(data)
+    unit = unit or _unit_column(frame, x, y) or "<column naming each unit>"
+    first, second = occasions[0], occasions[1] if len(occasions) > 1 else "..."
+    call = f"ip.barstats(wide, x={first!r}, y={second!r}, paired=True)"
+    if frame.implementation.is_polars():
+        return f"wide = data.pivot(on={y!r}, index={unit!r}, values={x!r}); {call}"
+    start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+    return (
+        f"{start}wide = data.pivot(index={unit!r}, columns={y!r}, values={x!r})"
+        f".rename(columns=str).reset_index(); {call}"
+    )
 
 
 def _sum(values: Any) -> int:
