@@ -3,7 +3,7 @@
 Read this at the start of every session; update it at the end of every slice.
 A slice is done only when its definition of done in `CLAUDE.md` is met.
 
-Current phase: **4 — histostats, scatterstats, barstats** (Phase 3 closed 2026-11-10)
+Current phase: **5 — documentation, evaluation, release 0.1.0** (Phase 4 closed 2026-11-11: all five functions work end to end and are reviewed)
 
 ## Phase 0 — Scaffold
 
@@ -235,15 +235,13 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   - [ ] W9 (owner's call): the signed-rank test ranks R's rounded differences (D64), so
     differences equal as written but different in binary (0.1 stored two ways) get
     different ranks, as in R. D74's rule would tie them and differ from R.
-  - [ ] W10 (found with oracle round 3; lead to decide with W9): a value that equals
-    another only as written (0.1 + 0.2 against 0.3) is a zero in the one-sample
-    signed-rank test (D105) but a nonzero difference in the paired test (V 43 against
-    35 on the lead's ten pairs), and is not tied in the Mann-Whitney, Kruskal-Wallis
-    and Friedman tests; R treats the two doubles as different everywhere (probe:
-    one-sample V 49 against inferplot's 41; paired V 35.5, equal). One rule is wanted.
-    Candidate: read every stored value as the decimal it stands for (D105's reading)
-    once, where the data are read, so that all methods see the same number; values
-    parsed from text are already that decimal, so no fixture would move.
+  - [x] W10: fixed (D126). Every rank test ranks the values as written, so a value
+    computed as 0.1 + 0.2 and a typed 0.3 are one value everywhere: a zero difference
+    in the paired test as in the one-sample test, a tie between groups, within
+    subjects and in Spearman's ranks. Six designs through the public API give
+    identical results in both writings; no fixture moves. R ranks the doubles (probe:
+    one sample V 49 against 41; paired V 35.5), pinned beside inferplot's numbers.
+    For the owner to confirm together with D105.
   - Leads: what WRS2 does with 0/0 resamples within subjects and with two subjects;
     seeded intervals depend on NumPy's `Generator.integers` stream across versions.
   Second half (data, arguments, texts, checks, drawing; 2026-11-10; scripts and images
@@ -435,10 +433,15 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     1e9 are off by up to 5e-11 relative at 95% (2.8e-9 at prob 0.001); the Poisson
     sum's tails above x are inaccurate from about 1e7. Not visible in any printed
     number.
-  - Oracle probes wanted: R's `round()` on percent values such as (1/2000) x 100 at
-    one digit (Python's rule and R 4's may differ for 98 values of k/2000); one-sided
-    Fisher pairs on reduced pair tables; what R prints for the exact-zero cases;
-    Cramér's V interval at df 20 to 60; `wilcox.test` with a difference of 5.6e-17.
+- [x] oracle round 3 (attested run 42949626258): 594 fixtures, 23 probes, 15 held-out
+  cases. The five questions of the barstats review and the two of the Phase 4 review
+  answered by R: percent labels follow R's `round()`, now implemented (D127; 98 of
+  1,000 one-digit ties of k/2000 differed); R prints rounding noise for exact zeros
+  (inferplot prints 0, D118, pinned); V above its upper bound at large df is R's
+  too; one-sided Fisher pairs equal R's pair by pair (rows in level order, D128); R
+  ranks a difference of 2^-54 (inferplot ranks as written, D126); trimcibt's result
+  does not depend on the writing in R either, and its interval is NA on rating data
+  where inferplot gives one (D65).
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under

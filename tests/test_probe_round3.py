@@ -5,11 +5,11 @@ HELD_OUT_CASES, and four probes). Each test states an answer as a fact about R 4
 with ggstatsplot 1.1.4 and its packages, and re-computes it independently where a
 method exists. Where inferplot differs by a deliberate rule the case is held out
 (probe-heldout), not marked as failing, and the difference is pinned here with R's
-numbers beside inferplot's: the one-sample signed-rank test near the test value
-(D105), trimcibt's 0/0 resamples (D65), exact zeros (D118), the order of the
-Fisher pair rows. inferplot agrees with R on the paired signed-rank test, Cramer's
-V at large df, the percent labels (``inferplot.text.r_round``) and every Fisher
-pair's numbers.
+numbers beside inferplot's: the signed-rank tests, one-sample and paired, on a
+value equal to another only as written (D105, D126), trimcibt's 0/0 resamples
+(D65), exact zeros (D118), the order of the Fisher pair rows. inferplot agrees
+with R on Cramer's V at large df, the percent labels (``inferplot.text.r_round``)
+and every Fisher pair's numbers.
 
 1. Signed-rank test, a value equal to the test value only as written (W9, D88,
    D105; probe-nearzero). ``wilcox.test`` drops a difference only when it is
@@ -263,25 +263,35 @@ def test_paired_signed_rank_ranks_a_difference_of_2_to_the_minus_54() -> None:
     assert _hex(row["wilcox"]["statistic_hex"]) == 35.5
 
 
-def test_withinstats_agrees_with_the_paired_probe() -> None:
-    # inferplot ranks a paired difference unless it is exactly 0, as R does (D64).
+def test_withinstats_reads_the_paired_probe_as_written() -> None:
+    # R ranks the difference of 2^-54 between 0.30000000000000004 and 0.3
+    # (V 35.5). inferplot reads both as 0.3, a zero difference, as it reads a
+    # value equal to the test value in the one-sample test (D105, D126): the
+    # signed-rank test of the same pairs with that difference exactly 0.
     row = probe("probe-nearzero").section("paired")
     frame = _read_exact("edge_paired_near_zero.csv", value=float)
     result = ip.analyze.withinstats(
         frame, "condition", "value", subject_id="subject", type="nonparametric"
     )
+    d = _hexes(row["differences_hex"])
+    assert d[0] == TINY
+    as_written = [0.0, *d[1:]]
+    v, p, _, r, low, high = _signed_rank(as_written, paired=True)
     shown = row["ggwithinstats"]
     test = result.test
     assert test is not None
-    assert test.statistic == _hex(shown["statistic_hex"])
-    assert math.isclose(test.p_value, _hex(shown["p_value_hex"]), rel_tol=1e-13)
+    assert test.statistic == v
+    assert test.statistic != _hex(shown["statistic_hex"])  # R: 35.5
+    assert math.isclose(test.p_value, p, rel_tol=1e-13)
+    assert not math.isclose(test.p_value, _hex(shown["p_value_hex"]), rel_tol=1e-6)
     effect = result.effect_size
     assert effect is not None
-    assert math.isclose(effect.estimate, _hex(shown["estimate_hex"]), rel_tol=1e-13)
+    assert math.isclose(effect.estimate, r, rel_tol=1e-13)
     assert effect.conf_low is not None
     assert effect.conf_high is not None
-    assert math.isclose(effect.conf_low, _hex(shown["conf_low_hex"]), rel_tol=1e-12)
-    assert math.isclose(effect.conf_high, _hex(shown["conf_high_hex"]), rel_tol=1e-12)
+    assert math.isclose(effect.conf_low, low, rel_tol=1e-12)
+    assert math.isclose(effect.conf_high, high, rel_tol=1e-12)
+    assert result.n_obs == len(d)
 
 
 # 2. The bootstrap-t test in three writings ---

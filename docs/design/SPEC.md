@@ -549,7 +549,9 @@ pie). Their rows in `one_sample_data` come in the reverse order of y's levels.
 
 **Pairwise comparisons** (present in `extract_stats()` since 1.0.0, never drawn):
 Fisher's exact test (`fisher.test`) between every two levels of `x` that hold data
-(level order; rows sorted as text, "group1" the earlier level), each on its own 2 x
+(inferplot lists the pairs in level order; ggbarstats sorts its rows as text by
+group1, then group2, which differs when the levels are declared in another order;
+"group1" is the earlier level in both, so every pair's numbers are equal: D128), each on its own 2 x
 (levels of y the pair holds) table: two-sided p sums the tables at most as probable
 as the observed one times 1 + 1e-7; `alternative` "greater"/"less" changes only 2 x 2
 tables. `p_adjust_method` over all k(k - 1)/2 pairs; labels as betweenstats' (`p_Holm-adj.`,
@@ -574,8 +576,12 @@ about n = 1e13, one-sided up to about 1e14.
 
 **Labels and texts.** Inside each cell: `label` "percentage" (default) the cell's
 share of its bar, (count / bar total) x 100, rounded to `digits_perc` by R's
-`round()` (Python's `round()` on the same double, ties to even on the binary value:
-12.5% -> "12%", 6.25 -> "6.2" at 1 digit) and printed without trailing zeros
+`round()` (R >= 4.0.0, `?Round`: at 0 digits halves to even; at 1 digit or more the
+nearer of the two decimal candidates as their distances come out in doubles, the
+even one on equal distances: 12.5% -> "12%", 6.25 -> "6.2" at 1 digit, (1/2000) x 100
+-> "0" at 1 digit. Not Python's `round()`, which decides on the exact binary value
+and differs on 98 of the 1,000 one-digit ties of k/2000; `inferplot.text.r_round`,
+probe-round, D127) and printed without trailing zeros
 ("50%", "33.3%"); "counts" the count with a thousands comma; "both" `"<count>\n(<p>%)"`.
 Percentages of a bar need not sum to 100 (three thirds: 33% each). A zero cell has
 no label (NA, not drawn). Under each bar `"(n = <n>)"` (comma from 1,000; one-way:
@@ -776,7 +782,13 @@ Statistical and behavioral differences are exactly these:
     of the same ratings written as 1 to 5; WRS2 classifies on rounded doubles, so
     its counts of undefined and infinite resamples, and with them p and the bounds,
     can differ between the two writings. A value equal to `test_value` as written is
-    a zero of the signed-rank test (R ranks 0.1 + 0.2 against 0.3).
+    a zero of the signed-rank test (R ranks 0.1 + 0.2 against 0.3). Every rank test
+    ranks the values as written (D126): the Mann-Whitney, Kruskal-Wallis and Dunn
+    tests, the paired signed-rank test (a pair of 0.1 + 0.2 and 0.3 is a zero
+    difference), Friedman's test with Durbin-Conover and Kendall's W, and Spearman's
+    correlation. R ranks the doubles (probe-nearzero: one sample V 49 where
+    inferplot gives 41; paired V 35.5 where inferplot drops the pair). Values
+    converted from text are unchanged, so every fixture is.
 22. Exact zeros in count tables (D118): where Pearson's chi-square, the
     goodness-of-fit chi-square or the bias-corrected phi^2 is exactly 0 on the counts
     and on `ratio` as written, inferplot reports 0 (chi^2 = 0, p = 1, V or C = 0);
@@ -784,10 +796,20 @@ Statistical and behavioral differences are exactly these:
     ggstatsplot prints ("V = 5.59e-09" for the table [[0, 1], [5, 4]]; "chi2 =
     1.13e-31, C = 6.71e-17" for counts 8, 2, 7, 8 against shares 0.32, 0.08, 0.28,
     0.32). Every value that is not exactly 0 keeps R's order.
+    Oracle round 3: edge_bar_exact_fit (R chi2 1.13e-31, C 6.71e-17; inferplot 0
+    and 0) and edge_bar_zero_v (R V 5.59e-09; inferplot 0) are pinned by name.
 23. Very large chi-squares (D119): for a `ratio` share so small that R's statistic
     is Inf, inferplot raises an error that names `ratio`; for very large finite
     statistics (from 1e9) it reports accurate interval bounds, where effectsize's
     search is untested.
+
+24. barstats refuses nothing ggbarstats answers for size alone, and answers two
+    cases where ggbarstats stops: more than 24 levels of x ("`n` must be a whole
+    number between 1 and 24", after computing its subtitle) and counts beyond R's
+    integer range (tidyr::uncount). The bootstrap-t test on rating data: R's
+    trimcibt counts 0/0 resamples in p's denominator and in the bound's position,
+    so its interval is NA where inferplot's item 17 gives one (probe-trimcibt: R p
+    0.12 with [NA, NA]; inferplot p 0.117 with [2.35, 3.65]).
 
 Visual styling is not a parity target: same semantic layers (points, box, violin,
 centrality label, brackets, subtitle content, caption content), our own look. Default
@@ -1256,7 +1278,12 @@ in plain words, never mathtext source.
   Durbin-Conover and Kendall's W on 11 tables. `probe-rmanova`: afex with no,
   Greenhouse-Geisser and Huynh-Feldt correction, the error strata and omega squared.
   `probe-wrs2within`: yuend and rmanova p-values against 1 - cdf and the exact tail,
-  the rmmcp table, dep.effect and wmcpAKP. They are hashed in the
+  the rmmcp table, dep.effect and wmcpAKP. Review round 3 (run 42949626258):
+  `probe-nearzero` (`wilcox.test`, `rank_biserial`, gghistostats and ggwithinstats at
+  differences of 2^-54), `probe-trimcibt` (trimcibt in three writings at 200, 2,000
+  and 20,000 resamples, with the traced T*), `probe-bartables` (Cramér's V at 19 to
+  60 df; exact zeros), `probe-round` (R's `round()` at decimal ties and ggbarstats'
+  cell labels). They are hashed in the
   manifest (`probes`) and checked like the fixtures; tests read them with
   `load_probes()` / `probe()` and `OracleProbe.section()` / `rows()`.
 - Both sides read CSVs the same way: only empty fields are missing, and R sorts strings

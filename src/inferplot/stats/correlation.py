@@ -54,7 +54,7 @@ from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.parametric import t_p_value
 from inferplot.stats.robust import check_trim, trim_count
 from inferplot.stats.srange import stirlerr
-from inferplot.stats.written import written_values
+from inferplot.stats.written import as_written, written_values
 
 __all__ = [
     "Correlation",
@@ -459,7 +459,8 @@ def spearman(x: SampleLike, y: SampleLike, *, conf_level: float = 0.95) -> Corre
     for name, values in (("x", a), ("y", b)):
         if differences_same_within_rounding(values, np.zeros_like(values)):
             raise _constant_error(name, "")
-    m = _moments(_mid_ranks(a), _mid_ranks(b))
+    # Ranked as written (D126): 0.1 + 0.2 and 0.3 share a mid-rank.
+    m = _moments(_mid_ranks(as_written(a)), _mid_ranks(as_written(b)))
     t = _t(m)
     df = float(m.n - 2)
     rho = m.r

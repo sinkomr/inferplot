@@ -54,6 +54,7 @@ from inferplot.stats.descriptive import FloatArray, rounding_tolerance
 __all__ = [
     "READ_ULPS",
     "all_equal_as_written",
+    "as_written",
     "equal_as_written",
     "written_trim",
     "written_value",
@@ -153,6 +154,20 @@ def equal_as_written(values: FloatArray, value: float) -> NDArray[np.bool_]:
     0.2 equals 0.3, as 3 x 0.3 equals 0.9."""
     target = written_value(value)
     return np.array([r == target for r in written_values(values)], dtype=bool)
+
+
+def as_written(values: FloatArray) -> FloatArray:
+    """Each value as the double nearest the decimal it stands for
+    (``written_values``): 0.1 + 0.2 becomes the double 0.3, so that two values
+    that are the same number as written are the same double.
+
+    The rank tests rank these (DECISIONS.md D126): a tie, an order and a zero
+    difference are then what the data say, not what the rounding of a computed
+    column says. A value converted from text is already that double and is
+    returned unchanged, as is every value without a short decimal reading; a
+    changed value moves by at most ``READ_ULPS`` units in its last place.
+    """
+    return np.array([float(r) for r in written_values(values)], dtype=np.float64)
 
 
 def all_equal_as_written(values: FloatArray, value: float) -> bool:

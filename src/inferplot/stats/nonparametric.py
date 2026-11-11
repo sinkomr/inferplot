@@ -34,6 +34,7 @@ from inferplot.stats.descriptive import FloatArray, SampleLike, as_sample
 from inferplot.stats.effect_sizes import EffectSizeCI
 from inferplot.stats.noncentral import check_conf_level
 from inferplot.stats.parametric import Alternative, check_alternative
+from inferplot.stats.written import as_written
 
 __all__ = [
     "BOOTSTRAP_RESAMPLES",
@@ -164,7 +165,10 @@ class _Ranked:
 def _samples(groups: Sequence[SampleLike], method: str) -> list[FloatArray]:
     if len(groups) < 2:
         raise ValueError(f"{method} needs at least two groups; got {len(groups)}")
-    return [as_sample(g, name=f"group {i + 1}") for i, g in enumerate(groups)]
+    # Ranked as written (D126): 0.1 + 0.2 in one group ties 0.3 in another.
+    return [
+        as_written(as_sample(g, name=f"group {i + 1}")) for i, g in enumerate(groups)
+    ]
 
 
 def _codes(samples: Sequence[FloatArray]) -> tuple[IntArray, IntArray]:
@@ -233,8 +237,8 @@ def mann_whitney(
             tied (sigma = 0), or ``alternative`` is unknown.
     """
     side = check_alternative(alternative)
-    x = as_sample(a, name="a")
-    y = as_sample(b, name="b")
+    x = as_written(as_sample(a, name="a"))  # ranked as written (D126)
+    y = as_written(as_sample(b, name="b"))
     ranked = _rank([x, y], "the Mann-Whitney test")
     n_a, n_b, n = x.size, y.size, ranked.n
     # 2 W = 2 R_a - n_a (n_a + 1); 2 d = 2 W - n_a n_b, both integers.
@@ -283,8 +287,8 @@ def rank_biserial(
     """
     side = check_alternative(alternative)
     level = check_conf_level(conf_level)
-    x = as_sample(a, name="a")
-    y = as_sample(b, name="b")
+    x = as_written(as_sample(a, name="a"))  # ranked as written (D126)
+    y = as_written(as_sample(b, name="b"))
     n_a, n_b = x.size, y.size
     codes, counts = _codes([x, y])
     mid2 = 2 * np.cumsum(counts) - counts + 1

@@ -20,6 +20,7 @@ from inferplot.stats import (
     paired_rank_biserial,
     signed_rank,
 )
+from inferplot.stats.written import as_written
 from tests.tolerances import assert_close
 
 FloatArray = np.ndarray[Any, np.dtype[np.float64]]
@@ -113,13 +114,19 @@ def test_scale_invariance(factor: float) -> None:
 @pytest.mark.parametrize("side", SIDES)
 def test_extreme_scales(factor: float, side: Any) -> None:
     # Multiplying by 1e+-150 rounds every value, which can break ties among the
-    # one-decimal differences (R does the same with these data): the test is the
-    # one of the scaled data, as SciPy computes it, and no square under- or
-    # overflows.
+    # one-decimal differences: the test is the one of the scaled data, and no
+    # square under- or overflows. inferplot ranks the values as written (D126:
+    # 1.3 x 1e150 is read as the decimal 1.3e150, up to two units in the last
+    # place away), so SciPy is given the same values.
     a, b = A * factor, B * factor
     ours = signed_rank(a, b, alternative=side)
     theirs = scipy_stats.wilcoxon(
-        a, b, zero_method="wilcox", correction=True, alternative=side, method="approx"
+        as_written(a),
+        as_written(b),
+        zero_method="wilcox",
+        correction=True,
+        alternative=side,
+        method="approx",
     )
     assert_close("closed_form", ours.p_value, float(theirs.pvalue), what="p")
     es = paired_rank_biserial(a, b, alternative=side)

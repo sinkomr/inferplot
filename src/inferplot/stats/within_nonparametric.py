@@ -38,6 +38,7 @@ from inferplot.stats.nonparametric import (
 )
 from inferplot.stats.padjust import PAdjustMethod, p_adjust
 from inferplot.stats.parametric import Alternative, check_alternative
+from inferplot.stats.written import as_written
 
 __all__ = [
     "DurbinConoverPair",
@@ -108,8 +109,10 @@ class DurbinConoverPair:
 
 
 def _paired_samples(a: SampleLike, b: SampleLike) -> tuple[FloatArray, FloatArray]:
-    x = as_sample(a, name="a")
-    y = as_sample(b, name="b")
+    # As written (D126): a pair of 0.1 + 0.2 and 0.3 is a zero difference, as a
+    # value equal to the test value as written is in the one-sample test (D105).
+    x = as_written(as_sample(a, name="a"))
+    y = as_written(as_sample(b, name="b"))
     if x.size != y.size:
         raise ValueError(
             f"paired samples need the same number of values; got {x.size} and {y.size}"
@@ -316,8 +319,9 @@ def _table(conditions: Sequence[SampleLike], method: str) -> FloatArray:
         raise ValueError(
             f"{method} needs at least two conditions; got {len(conditions)}"
         )
+    # Ranked within each subject as written (D126).
     columns = [
-        as_sample(c, name=f"condition {i + 1}", min_size=2)
+        as_written(as_sample(c, name=f"condition {i + 1}", min_size=2))
         for i, c in enumerate(conditions)
     ]
     sizes = {c.size for c in columns}
