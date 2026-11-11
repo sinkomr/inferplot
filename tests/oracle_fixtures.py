@@ -864,10 +864,25 @@ CHISQ_ROOT_MISSES: Mapping[
             0.09332768209432078,
             0.09332239655103432,
         ),
+        # edge_bar_wide61 bar y61 C; edge_bar_wide61r bar y16
+        ("pearsons_c", "0.6", 1, 15, 2, 1, "0.025"): (
+            0.576257689330081,
+            0.5762327695363352,
+        ),
         # probe-contingency [11.0, 7.0, 14.0] two.sided 0.95
         ("pearsons_c", "1.5", 2, 32, 3, 1, "0.025"): (
             0.45758495024971,
             0.45770178962145786,
+        ),
+        # edge_bar_ties-digitsperc0 and -digitsperc2 bar n2000k089 C (ratio 0.05, 0.95)
+        ("pearsons_c", "1.273684211", 1, 2000, 2, 1, "0.025"): (
+            0.0688928538346059,
+            0.06889304457566349,
+        ),
+        # edge_bar_wide20 bar y15 C; edge_bar_wide40 bar y13; edge_bar_wide61 y13, y51
+        ("pearsons_c", "1.6", 1, 10, 2, 1, "0.025"): (
+            0.714020323568415,
+            0.7139958815740848,
         ),
         # mtcars-cyl-both C
         ("pearsons_c", "2.3125", 2, 32, 3, 1, "0.025"): (
@@ -879,7 +894,7 @@ CHISQ_ROOT_MISSES: Mapping[
             0.689654356864838,
             0.6896598585701019,
         ),
-        # edge_bar_paired_small bar yes C
+        # edge_bar_paired_small bar yes C; edge_bar_wide61r bars y22, y25
         ("pearsons_c", "4", 1, 4, 2, 1, "0.025"): (
             0.892604325331052,
             0.8926150029188886,
@@ -888,6 +903,16 @@ CHISQ_ROOT_MISSES: Mapping[
         ("pearsons_c", "6.1875", 2, 32, 3, 1, "0.95"): (
             0.04536280151024879,
             0.04536288991437883,
+        ),
+        # edge_bar_ties-digitsperc0 and -digitsperc2 bar n0200k003 C (ratio 0.05, 0.95)
+        ("pearsons_c", "5.157894737", 1, 200, 2, 1, "0.975"): (
+            0.0115129128413609,
+            0.011601050520475982,
+        ),
+        # edge_bar_wide40 bar y07 C; edge_bar_wide61 y07; edge_bar_wide61r y23, y48
+        ("pearsons_c", "6.4", 1, 10, 2, 1, "0.025"): (
+            0.817128028755992,
+            0.8175665089385317,
         ),
         # mtcars-am-cyl bar 8 C
         ("pearsons_c", "7.142857143", 1, 14, 2, 1, "0.025"): (

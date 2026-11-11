@@ -198,8 +198,9 @@ def _v01(node: tx.Node) -> tx.Node:
 def test_every_fixture_is_covered() -> None:
     # 76 and 64, and 16 and 9 from the barstats oracle run (edge_one_n2,
     # edge_one_n3, edge_one_constant, edge_one_constant-binwidth1; edge_corr_n3,
-    # edge_corr_n4, edge_corr_label_missing).
-    assert (len(nl.HISTO), len(nl.SCATTER)) == (92, 73)
+    # edge_corr_n4, edge_corr_label_missing); edge_one_near_mu-literal from review
+    # round 3.
+    assert (len(nl.HISTO), len(nl.SCATTER)) == (93, 73)
     refused = sorted(c.name for c in CASES if analyzed(c.name) is None)
     assert refused == sorted(
         [
@@ -216,7 +217,7 @@ def test_every_fixture_is_covered() -> None:
             for t in ("nonparametric", "parametric", "robust")
         ]
     )
-    assert len(_answered()) == 152
+    assert len(_answered()) == 153
 
 
 # --------------------------------------------------------------------------- #

@@ -172,12 +172,15 @@ def check_bounds(
 
 
 def test_fixture_counts() -> None:
-    assert len(bc.CASES) == 89
-    assert len(bc.ANSWERED) == 67
+    # 89, and 10 from review round 3 (edge_bar_wide20, 40, 61 and 61r,
+    # edge_bar_exact_fit, edge_bar_ties-digitsperc0 and 2, edge_bar_reduced in three
+    # alternatives), all answered.
+    assert len(bc.CASES) == 89 + 10
+    assert len(bc.ANSWERED) == 67 + 10
     assert len(bc.REFUSALS) == 22
     # 7 robust replays and the rescaled ratio.
     assert len(REPLAYED) == 8
-    assert len(PARAMS) == 75 * 3
+    assert len(PARAMS) == (75 + 10) * 3
     assert not [c.name for c in bc.CASES if c.error is not None]
 
 
@@ -386,9 +389,11 @@ def check_pairs(name: str, backend: Backend) -> Pins:
 
 
 def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
-    # D99: the 9 distinct fixture bounds where effectsize's root search stops
+    # D99: the 14 distinct fixture bounds where effectsize's root search stops
     # short (the subtitle of mtcars-cyl-both and -digits3; the bars of
-    # paired-cl90, paired_small and mtcars-am-cyl; the pairs of edge_bar_large,
+    # paired-cl90, paired_small and mtcars-am-cyl, of the round-3 wide tables at
+    # chi-squared 0.6, 1.6 and 6.4, and of edge_bar_ties at 1.27 and 5.16 (a lower
+    # bound 0.0115 for 0.0116); the pairs of edge_bar_large,
     # mtcars-cyl-am-cl90 and edge_bar_rounding-both) are all reached by the
     # analysis, which reports the accurate root for each.
     met: Pins = set()
@@ -396,7 +401,7 @@ def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
         met |= check_main(name, "pandas")
         met |= check_bars(name, "pandas")
         met |= check_pairs(name, "pandas")
-    assert len(met) == 9
+    assert len(met) == 14
     assert met <= set(CHISQ_ROOT_MISSES)
 
 
@@ -716,13 +721,23 @@ def test_round_trips_frames_and_printing(name: str) -> None:
 
 def test_checks_on_the_fixtures() -> None:
     codes = {name: sorted({i.code for i in result_of(name).check()}) for name in NAMES}
-    allowed = {"small_expected", "rows_dropped", "pairs_without_test"}
+    allowed = {
+        "small_expected",
+        "rows_dropped",
+        "pairs_without_test",
+        "estimate_outside_interval",
+    }
     assert set().union(*codes.values()) <= allowed
     assert [n for n, c in codes.items() if "pairs_without_test" in c] == [SINGLE_X]
     assert sorted(n for n, c in codes.items() if "rows_dropped" in c) == [
         "ggbarstats-edge_bar_missing-counts-parametric",
         "ggbarstats-edge_bar_missing-oneway-parametric",
         "ggbarstats-edge_bar_missing-parametric",
+    ]
+    # The round-3 wide tables (2 x 20 to 2 x 61): Cramer's V lies above its own
+    # upper bound, in R's subtitle as in inferplot's (review B5).
+    assert sorted(n for n, c in codes.items() if "estimate_outside_interval" in c) == [
+        f"ggbarstats-edge_bar_wide{w}-parametric" for w in ("20", "40", "61", "61r")
     ]
 
 

@@ -549,7 +549,7 @@ def test_every_fixture_is_covered() -> None:
     # the Bayes subtitles are v0.2.
     designs = {_design(c) for c in CASES}
     assert designs == {"one-way", "paired", "independence"}
-    assert len(CASES) == 89
+    assert len(CASES) == 89 + 10  # 10 from review round 3
     assert len(FAILED) == 1
 
 

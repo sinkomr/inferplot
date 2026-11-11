@@ -198,6 +198,24 @@ HELD_OUT_CASES = frozenset(
     {
         "ggbetweenstats-edge_akp_undefined-robust",
         "ggwithinstats-edge_rm_n3k4-parametric",
+        # Review round 3: a value equal to the test value 0.3 as written but not in
+        # binary (D105); ratings whose bootstrap-t resamples are 0/0 (D65); an exact
+        # zero printed as rounding noise (C3); percent labels at one-digit ties (D108);
+        *(
+            f"gghistostats-edge_one_near_mu-{column}-nonparametric"
+            for column in ("sum", "below", "both", "sum_ties")
+        ),
+        *(
+            f"gghistostats-edge_one_ratings-{column}-robust"
+            for column in ("whole", "tenths", "centred_whole", "centred_tenths")
+        ),
+        "ggbarstats-edge_bar_zero_v-parametric",
+        "ggbarstats-edge_bar_ties-digitsperc1-parametric",
+        # and Fisher pairs listed sorted as text where inferplot keeps level order.
+        *(
+            f"ggbarstats-edge_bar_reduced-declared-{side}-parametric"
+            for side in ("two.sided", "greater", "less")
+        ),
     }
 )
 # Phase 4 (histostats): gghistostats cases, label -> types (see generate.R).
@@ -280,6 +298,12 @@ SCATTER_LABELS.update(
         "edge_corr_label_missing": ("parametric",),
     }
 )
+# Review round 3 (generate.R's ROUND3_CASES): the test value 0.3 written as a literal
+# in the data (an exact zero of x - 0.3).
+ROUND3_HISTO_LABELS: dict[str, tuple[str, ...]] = {
+    "edge_one_near_mu-literal": ("nonparametric",),
+}
+HISTO_LABELS.update(ROUND3_HISTO_LABELS)
 # Phase 4 (barstats): ggbarstats cases, label -> types (see generate.R).
 P_ADJUST_LABELS = tuple(f"Titanic_full-class-padj-{m}" for m in P_ADJUST_METHODS)
 BAR_LABELS: dict[str, tuple[str, ...]] = {
@@ -365,6 +389,22 @@ BAR_LABELS: dict[str, tuple[str, ...]] = {
         ("parametric",),
     ),
 }
+# Review round 3 (generate.R's ROUND3_CASES): wide tables, exact zeros, percent labels
+# at rounding ties, one-sided Fisher pairs on reduced pair tables.
+ROUND3_BAR_LABELS: dict[str, tuple[str, ...]] = dict.fromkeys(
+    (
+        "edge_bar_wide20",
+        "edge_bar_wide40",
+        "edge_bar_wide61",
+        "edge_bar_wide61r",
+        "edge_bar_exact_fit",
+        "edge_bar_ties-digitsperc0",
+        "edge_bar_ties-digitsperc2",
+        *(f"edge_bar_reduced-{side}" for side in ("two.sided", "greater", "less")),
+    ),
+    ("parametric",),
+)
+BAR_LABELS.update(ROUND3_BAR_LABELS)
 # ggpiestats: the one-way design, to show it computes what ggbarstats computes.
 PIE_LABELS: dict[str, tuple[str, ...]] = {
     "mtcars-cyl": TYPES,
@@ -443,6 +483,11 @@ EXPECTED_PROBES = frozenset(
         "probe-onesamplebf",
         "probe-heldout",
         "probe-contingency",
+        # Review round 3 (tests/test_probe_round3.py).
+        "probe-nearzero",
+        "probe-trimcibt",
+        "probe-bartables",
+        "probe-round",
     }
 )
 
@@ -461,9 +506,9 @@ def test_case_list_is_what_the_generator_writes() -> None:
     assert sum(len(types) for types in PHASE2_LABELS.values()) == 88
     assert sum(len(types) for types in WITHIN_LABELS.values()) == 159
     assert len(T7_CASES) == 6
-    assert len(HISTO_CASES) == 76 + 16
+    assert len(HISTO_CASES) == 76 + 16 + 1
     assert len(SCATTER_CASES) == 64 + 9
-    assert len(BAR_CASES) == 90
+    assert len(BAR_CASES) == 90 + 10
 
 
 ALL_CASES = [
