@@ -21,6 +21,7 @@ import pytest
 from inferplot.stats import (
     chi2_ncp_interval,
     chisq_independence,
+    contingency,
     cramers_v,
     goodness_of_fit,
     pairwise_fisher,
@@ -254,3 +255,32 @@ def test_bar_tests_use_the_exact_fit() -> None:
     equal = proportion_tests(np.array([[5, 1], [5, 2], [5, 3]]))
     assert equal[0].test is not None
     assert equal[0].test.statistic == 0.0
+
+
+def test_the_reading_of_ratio() -> None:
+    # The rule for "as written" (_shares_as_written): a decimal as D105 reads it;
+    # else the fraction with the smallest denominator up to 1e6 within 2 units in
+    # the last place; else the double. None is exactly 1 / k.
+    def read(values: list[float]) -> list[Fraction]:
+        p = np.array(values, dtype=np.float64)
+        return contingency._shares_as_written(values, p)  # pyright: ignore[reportPrivateUsage]
+
+    assert read([0.32, 0.68]) == [Fraction(8, 25), Fraction(17, 25)]
+    assert read([1 / 3, 2 / 3]) == [Fraction(1, 3), Fraction(2, 3)]
+    assert read([2 / 7, 5 / 7]) == [Fraction(2, 7), Fraction(5, 7)]
+    assert read([1 / 999_983, 1 - 1 / 999_983]) == [
+        Fraction(1, 999_983),
+        Fraction(999_982, 999_983),
+    ]
+    assert read([0.333333333, 0.666666667]) == [
+        Fraction("0.333333333"),
+        Fraction("0.666666667"),
+    ]
+    tenth_pi = math.pi / 10
+    assert read([tenth_pi, 1 - tenth_pi]) == [
+        Fraction(tenth_pi),
+        Fraction(1 - tenth_pi),
+    ]
+    assert read([5e-324, 1.0]) == [Fraction(5e-324), Fraction(1)]
+    p = np.full(7, 1 / 7)
+    assert contingency._shares_as_written(None, p) == [Fraction(1, 7)] * 7  # pyright: ignore[reportPrivateUsage]

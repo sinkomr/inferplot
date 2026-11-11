@@ -26,11 +26,16 @@ Large counts. Counts are held as Python integers wherever they are multiplied
 must stay below 2^53 so that every margin is an exact double. The chi-square
 statistics follow R's order of floating-point operations (expected counts as
 outer(row sums, column sums) / n or n p, each term (x - E)^2 / E, the terms summed
-exactly rounded, as R's long-double sum does): their relative error is a few units
-of 2^-53 except near independence, where it is at most about 2^-52 sum |x - E| /
-chi^2 (absolute error about 2^-51 n), far below every printed digit; R's order is
-kept so that a statistic on a decimal tie prints as R prints it (edge_bar_rounding,
-bar g16: 7.625 + 1 ulp, printed 7.63). Where the exact value is 0, decided in
+exactly rounded, as R's long-double sum does): their absolute error is at most
+about 2^-51 sqrt(chi^2 n) + 2^-50 chi^2 (the rounding of the expected counts times
+sum |x - E| <= sqrt(chi^2 n)), so the relative error grows with the counts near
+independence: worst over 200 random tables near independence, 5.5e-14 at 1e3
+counts per cell, 1.4e-11 at 1e6, 1.3e-10 at 1e9, 3.4e-9 at 1e12, 9.4e-8 at 5e14
+(at most 0.39 of the bound), far below the printed digits except at a decimal
+tie. R's order is kept so that a statistic on a decimal tie prints as R prints it
+(edge_bar_rounding, bar g16: 7.625 + 1 ulp, printed 7.63; an exactly rounded
+statistic would print 7.62 there and change no other printed number in the
+fixtures, DECISIONS D107). Where the exact value is 0, decided in
 rational arithmetic on the counts and on ``ratio`` as written, it is 0: an exactly
 independent table, an exact fit, a bias-corrected phi^2 of 0 or below (R's order
 leaves noise there: "V = 3.95e-09" for [[0, 1], [5, 4]]).
@@ -677,7 +682,8 @@ def _shares_as_written(ratio: Probabilities | None, p: FloatArray) -> list[Fract
             simple = Fraction(value).limit_denominator(_MAX_SHARE_DENOMINATOR)
             if abs(simple - reading) <= READ_ULPS * Fraction(math.ulp(value)):
                 reading = simple
-        out.append(reading)
+        # A positive share is never read as 0 (a subnormal within 2 units of it).
+        out.append(reading if reading > 0 else Fraction(value))
     return out
 
 
