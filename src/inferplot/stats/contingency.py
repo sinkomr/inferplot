@@ -745,24 +745,26 @@ def column_percentages(table: CountTable) -> tuple[tuple[float | None, ...], ...
 # computation processes, each weighted by the passes made over it (the weights
 # below), so that a unit is about a nanosecond on the build machine (an Apple
 # M-series laptop) and the count does not depend on the machine or its load.
-_UNIT_GRID: Final = 35.0  # one child of one node in a column's grid
-_UNIT_STEP: Final = 12.0  # one bisection step of one partial table
+_UNIT_GRID: Final = 50.0  # one child of one node in a column's grid
+_UNIT_STEP: Final = 18.0  # one bisection step of one partial table
 _UNIT_CHILD: Final = 40.0  # one partial table carried to the next column
 _UNIT_LIST: Final = 6.0  # one placement of one completion of the list
 _UNIT_BOUND: Final = 10.0  # one element of a column's bound arrays
 _UNIT_VERTEX: Final = 3_000.0  # one vertex of the box (smallest completion)
 _UNIT_PMF: Final = 40.0  # one hypergeometric log probability (2 x 2)
 _UNIT_QUERY: Final = 40.0  # one partial table joined with the list
+_UNIT_PIECE: Final = 800.0  # one block of a row of the list (a pass of Python)
 _UNIT_CALL: Final = 20_000.0  # one pass of Python over a chunk
 # One test may spend this much (about a second here) ...
 _FISHER_WORK_LIMIT: Final = 1.0e9
 # ... and the pairwise tests of one table this much in all (about two seconds).
 _PAIRWISE_WORK_LIMIT: Final = 1.6e9
-# A pairwise test whose work estimate without pruning (an upper bound) is above
-# this is not attempted: pruning cuts the work by up to about 2e4 times in the
-# tables measured, never by 1e4 times the limit of a test, so the attempt would
-# only spend the budget the other pairs need.
+# A pairwise test whose estimated work (_fisher_work) is above this is not
+# attempted: the estimate exceeds the work spent by at most 3e3 times (largest
+# answered estimate 7.7e11) on the tables of tests/data and the grids measured,
+# so the attempt would only spend the budget the other pairs need.
 _PAIRWISE_ESTIMATE_LIMIT: Final = 1e4 * _FISHER_WORK_LIMIT
+_SPAN_SD: Final = 8.0
 # Memory: the arrays of one test, counted in bytes before any is allocated, stay
 # below this (every array the search allocates, temporaries included).
 _FISHER_MEMORY_LIMIT: Final = 160 * 2**20
@@ -771,6 +773,10 @@ _FISHER_LIST_MEMORY: Final = 112 * 2**20
 # The grids of the network side are built in chunks of at most this many cells
 # (a node's row is never split, so a chunk holds at least one row).
 _FISHER_GRID_CHUNK: Final = 1 << 16
+# A column whose children per node outnumber this is searched without a grid.
+_WIDE_ROW: Final = 4096
+# ... whose rows keep the children with masses within 2^-1100 of the largest.
+_WINDOW_DROP: Final = 1100.0 * math.log(2.0)
 # The partial tables carried from one column to the next are handed on in chunks
 # whose total over the columns of the search is at most this many.
 _FISHER_PATH_TOTAL: Final = 1 << 17
@@ -1209,6 +1215,11 @@ class _Plan:
     memory: float
 
 
+def _fits(plan: _Plan) -> bool:
+    """Whether a plan's certain work and memory fit the limits of one test."""
+    return plan.certain <= _FISHER_WORK_LIMIT and plan.memory <= _FISHER_MEMORY_LIMIT
+
+
 def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
     """The list of the completions over columns with these numbers of values: its
     size, its longest row (one row per total), and the bytes it takes at most
@@ -1218,7 +1229,7 @@ def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
     is then given as its size)."""
     size = math.prod(sizes)
     rows = sum(sizes) - len(sizes) + 1
-    if _rowwise(size, rows):
+    if _rowwise(sizes):
         # row by row: the values and running sums, an array object per row
         nbytes = size * _BYTES_LIST + rows * 4 * 256.0
     else:
@@ -1286,7 +1297,7 @@ def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
             + 8.0 * sum(sizes)  # the columns' log probabilities
             + 24.0 * bound_cells  # the bounds
             + 64.0 * (total + 1.0)  # the greedy maximum's temporaries
-            + max(_FISHER_GRID_CHUNK, max(net, default=1)) * _BYTES_GRID
+            + 4 * max(_FISHER_GRID_CHUNK, max(net, default=1)) * _BYTES_GRID
             + float(_FISHER_PATH_TOTAL * _BYTES_PATH)
         )
         plan = _Plan(
@@ -1298,15 +1309,11 @@ def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
             certain=certain,
             memory=memory,
         )
-        # The lowest estimate among the plans whose certain work fits a test.
-        fits = plan.certain <= _FISHER_WORK_LIMIT
-        if (
-            best is None
-            or (fits and best.certain > _FISHER_WORK_LIMIT)
-            or (
-                (fits == (best.certain <= _FISHER_WORK_LIMIT))
-                and plan.estimate < best.estimate
-            )
+        # The lowest estimate among the plans whose certain work and memory fit
+        # a test (if none fits, the lowest estimate: it is refused).
+        if best is None or (_fits(plan), -plan.estimate) > (
+            _fits(best),
+            -best.estimate,
         ):
             best = plan
     assert best is not None
@@ -1336,11 +1343,13 @@ class _CompletionList:
         budget.charge(_list_work(sizes, size, longest, count))
         logs = sorted(logs, key=lambda v: -v.size)
         self.longest = longest
-        self.rowwise = _rowwise(size, count)
+        self.rowwise = _rowwise(sizes)
         if self.rowwise:
             rows = _build_rows(logs)
-            self.rows = rows
-            self.cums = [_prefix_rows(np.exp(r - r[-1])[None, :])[0, 1:] for r in rows]
+            self.rows: list[FloatArray] = rows
+            self.cums: list[FloatArray] = [
+                _prefix_rows(np.exp(r - r[-1])[None, :])[0, 1:] for r in rows
+            ]
             self.best = np.array([float(r[-1]) for r in rows])
             self.worst = np.array([float(r[0]) for r in rows])
             totals = np.array([float(c[-1]) for c in self.cums])
@@ -1360,10 +1369,29 @@ class _CompletionList:
         self.mass = self.best + np.log(self.cum[off[1:] - 1])
 
 
-def _rowwise(size: int, rows: int) -> bool:
-    """Whether a list of ``size`` completions over ``rows`` totals is kept row by
-    row: few rows, long on average (short rows make a small flat array)."""
-    return rows <= _ROWWISE_ROWS and size >= _ROW_LENGTH * rows
+def _blocks(sizes: list[int]) -> float:
+    """The blocks the list of columns with these numbers of values is built from
+    row by row (widest column first): one per row and value of each next column."""
+    order = sorted(sizes, reverse=True)
+    blocks = 0.0
+    totals = order[0]
+    for s in order[1:]:
+        blocks += (totals + s - 1) * s
+        totals += s - 1
+    return blocks
+
+
+def _rowwise(sizes: list[int]) -> bool:
+    """Whether the list of the columns with these numbers of values is kept row by
+    row: few rows, long on average, built from long blocks (short rows make a
+    small flat array, and short blocks cost a pass of Python each)."""
+    size = math.prod(sizes)
+    rows = sum(sizes) - len(sizes) + 1
+    return (
+        rows <= _ROWWISE_ROWS
+        and size >= _ROW_LENGTH * rows
+        and size >= _ROW_LENGTH * _blocks(sizes)
+    )
 
 
 def _build_rows(logs: list[FloatArray]) -> list[FloatArray]:
@@ -1460,19 +1488,57 @@ def _list_work(sizes: list[int], size: int, longest: int, rows: int) -> float:
     order = sorted(sizes, reverse=True)
     placements = 0.0
     built = float(order[0])
-    blocks = 0.0
-    totals = order[0]
     for s in order[1:]:
         built *= s
         placements += built * _bits(s)
-        blocks += (totals + s - 1) * s
-        totals += s - 1
+    blocks = _blocks(sizes)
     python = (
-        blocks * _UNIT_CALL / 4.0 + rows * _UNIT_CALL / 4.0
-        if _rowwise(size, rows)
+        blocks * _UNIT_PIECE + rows * _UNIT_CALL / 4.0
+        if _rowwise(sizes)
         else min(rows, size / _SHORT_ROW + 1.0) * len(sizes) * _UNIT_CALL
     )
     return (placements + size) * _UNIT_LIST + python
+
+
+def _concave_peak(
+    at: Callable[[IntArray, IntArray], FloatArray], ids: IntArray, length: IntArray
+) -> IntArray:
+    """Per id, the first x in [0, length) where the concave sequence at(id, .)
+    stops rising (at(x + 1) <= at(x)), length - 1 if it never does; by
+    bisection on the sign of the differences."""
+    lo = np.zeros_like(length)
+    hi = length - 1
+    active = lo < hi
+    while bool(active.any()):
+        mid = (lo + hi) // 2
+        hit = at(ids, mid + 1) <= at(ids, mid)
+        hi = np.where(active & hit, mid, hi)
+        lo = np.where(active & ~hit, mid + 1, lo)
+        active = lo < hi
+    return lo
+
+
+def _first_where(
+    at: Callable[[IntArray, IntArray], FloatArray],
+    ids: IntArray,
+    lo: IntArray,
+    hi: IntArray,
+    threshold: FloatArray,
+    *,
+    above: bool,
+) -> IntArray:
+    """_bsearch with the values read by ``at`` instead of from a grid."""
+    lo = lo.copy()
+    hi = hi.copy()
+    active = lo < hi
+    while bool(active.any()):
+        mid = (lo + hi) // 2
+        values = at(ids, mid)
+        hit = values > threshold if above else values <= threshold
+        hi = np.where(active & hit, mid, hi)
+        lo = np.where(active & ~hit, mid + 1, lo)
+        active = lo < hi
+    return lo
 
 
 class _Network:
@@ -1495,6 +1561,12 @@ class _Network:
         self.logs = logs
         self.m = m
         self.threshold = threshold
+        # Per column: the low ends of the ranges and the totals of the columns
+        # from it on (the closed-form mass of the completions from column j).
+        self.lows = [sum(lows[j:]) for j in range(k)]
+        self.cols = [sum(cols[j:]) for j in range(k)]
+        self.num = num
+        self.den = den
         self.margin = _FISHER_MARGIN * (1.0 + abs(threshold))
         self.budget = budget
         widths = [v.size - 1 for v in logs]
@@ -1538,7 +1610,7 @@ class _Network:
         sorted by remaining total."""
         here = self.logs[j]
         width = here.size - 1
-        best, worst, mass = self.bounds[j]
+        _, worst, _ = self.bounds[j]
         last = j + 1 == self.m
         nodes, node_of = np.unique(rem, return_inverse=True)
         node_of = node_of.reshape(-1)
@@ -1546,7 +1618,12 @@ class _Network:
         a_hi = np.minimum(width, nodes)
         length = a_hi - a_lo + 1
         longest = int(length.max())
-        per_chunk = max(1, _FISHER_GRID_CHUNK // longest)
+        wide = longest > _WIDE_ROW
+        if wide:
+            start, window = self._windows(j, nodes, a_lo, length)
+        else:
+            start, window = np.zeros_like(length), length
+        per_chunk = max(1, _FISHER_GRID_CHUNK // int(window.max()))
         cut = self.threshold - self.margin
         keep_below = self.threshold + self.margin
         for first in range(0, nodes.size, per_chunk):
@@ -1555,56 +1632,19 @@ class _Network:
             chunk_nodes = nodes[first:stop]
             chunk_lo = a_lo[first:stop]
             chunk_len = length[first:stop]
-            span = int(chunk_len.max())
-            paths = hi_path - lo_path
-            self.budget.request(chunk_nodes.size * span * _BYTES_GRID)
-            self.budget.charge(
-                chunk_nodes.size * span * _UNIT_GRID
-                + paths * 2.0 * _bits(span) * _UNIT_STEP
-                + _UNIT_CALL
-            )
-            offsets = np.arange(span)
-            a = chunk_lo[:, None] + offsets[None, :]
-            valid = offsets[None, :] < chunk_len[:, None]
-            a = np.where(valid, a, chunk_lo[:, None])
-            rest = chunk_nodes[:, None] - a
-            here_grid = here[a]
-            bound = np.where(valid, here_grid + best[rest], -math.inf)
-            weight = np.where(valid, here_grid + mass[rest], -math.inf)
-            del rest, here_grid, a, valid, offsets
-            top = weight.max(axis=1)
-            e = np.exp(weight - top[:, None])
-            prefix = _prefix_rows(e)
-            suffix = _prefix_rows(e[:, ::-1])
-            del e
-            peak_node = np.argmax(bound, axis=1)
             row = node_of[lo_path:hi_path] - first
             v = vals[lo_path:hi_path]
-            peak = peak_node[row]
-            size = chunk_len[row]
-            limit = cut - v
-            x1 = _bsearch(bound, row, np.zeros_like(peak), peak + 1, limit, above=True)
-            x2 = _bsearch(bound, row, peak, size, limit, above=False) - 1
-            closed = x1 > peak
-            whole = prefix[row, size]
-            left = np.where(closed, whole, prefix[row, np.minimum(x1, size)])
-            right = np.where(closed, 0.0, suffix[row, np.maximum(span - 1 - x2, 0)])
-            tail = left + right
-            with np.errstate(divide="ignore"):
-                counted = v + top[row] + np.log(tail)
-            some = closed | (x1 > 0) | (x2 + 1 < size)
-            for i in np.flatnonzero((tail < _TINY) & some).tolist():
-                # The terms of this tail may have underflowed: sum it in log space.
-                w = weight[int(row[i])]
-                if bool(closed[i]):
-                    pieces = w[: int(size[i])]
-                else:
-                    pieces = np.concatenate(
-                        (w[: int(x1[i])], w[int(x2[i]) + 1 : int(size[i])])
-                    )
-                counted[i] = float(v[i]) + _log_sum(pieces)
+            x1, x2, closed, counted = self._grid_tails(
+                j,
+                chunk_nodes,
+                chunk_lo,
+                chunk_len,
+                (start[first:stop], window[first:stop], wide),
+                row,
+                v,
+                cut - v,
+            )
             self.parts.append(_log_sum(counted))
-            del prefix, suffix, weight, bound
             # The children between the two counted ends are carried on (those
             # whose every completion is more probable are dropped).
             spans = np.where(closed, 0, x2 - x1 + 1)
@@ -1635,6 +1675,112 @@ class _Network:
                 else:
                     order = _order_of(child_rem)
                     self._descend(j + 1, child_rem[order], child_val[order])
+
+    def _windows(
+        self, j: int, nodes: IntArray, a_lo: IntArray, length: IntArray
+    ) -> tuple[IntArray, IntArray]:
+        """In a wide column (more than ``_WIDE_ROW`` children per node), each
+        node's window: the children whose mass (log-concave in the child) is
+        within 2^-1100 of the node's largest, found by bisection (its first child
+        and its length). The mass left out is below 2^-1100 of the node's, so
+        under 1e-320 of the total in all."""
+        here = self.logs[j]
+        _, _, mass = self.bounds[j]
+        self.budget.charge(nodes.size * 8.0 * _bits(float(length.max())) * _UNIT_STEP)
+
+        def weight_at(ids: IntArray, x: IntArray) -> FloatArray:
+            a = a_lo[ids] + np.minimum(np.maximum(x, 0), length[ids] - 1)
+            return here[a] + mass[nodes[ids] - a]
+
+        every = np.arange(nodes.size)
+        mode = _concave_peak(weight_at, every, length)
+        low = weight_at(every, mode) - _WINDOW_DROP
+        start = _first_where(
+            weight_at, every, np.zeros_like(mode), mode, low, above=True
+        )
+        stop = _first_where(weight_at, every, mode, length, low, above=False)
+        return start, stop - start
+
+    def _grid_tails(
+        self,
+        j: int,
+        chunk_nodes: IntArray,
+        chunk_lo: IntArray,
+        chunk_len: IntArray,
+        windows: tuple[IntArray, IntArray, bool],
+        row: IntArray,
+        v: FloatArray,
+        limit: FloatArray,
+    ) -> tuple[IntArray, IntArray, NDArray[np.bool_], FloatArray]:
+        """For the partial tables (node ``row``, log mass ``v``) at a chunk of
+        nodes of column j: the children x1..x2 still open, whether none is
+        (``closed``), and ``v`` plus the log mass counted at once (the children
+        whose every completion counts: both ends of the concave bound, found by
+        bisection). The masses of each node's children are summed along a row of
+        a grid, over the node's window (``windows``: its first child and length,
+        and whether the column is wide; see _windows); in a wide column the bound
+        is read at the children the bisections need."""
+        here = self.logs[j]
+        best, _, mass = self.bounds[j]
+        paths = row.size
+        longest = int(chunk_len.max())
+        start, width, wide = windows
+
+        def bound_at(ids: IntArray, x: IntArray) -> FloatArray:
+            a = chunk_lo[ids] + np.minimum(np.maximum(x, 0), chunk_len[ids] - 1)
+            return here[a] + best[chunk_nodes[ids] - a]
+
+        span = int(width.max())
+        self.budget.request(chunk_nodes.size * span * _BYTES_GRID)
+        self.budget.charge(
+            chunk_nodes.size * span * _UNIT_GRID
+            + paths * 2.0 * _bits(longest) * _UNIT_STEP
+            + _UNIT_CALL
+        )
+        offsets = np.arange(span)
+        valid = offsets[None, :] < width[:, None]
+        a = chunk_lo[:, None] + start[:, None] + np.where(valid, offsets[None, :], 0)
+        rest = chunk_nodes[:, None] - a
+        weight = np.where(valid, here[a] + mass[rest], -math.inf)
+        bound = None if wide else np.where(valid, here[a] + best[rest], -math.inf)
+        del rest, a, valid, offsets
+        top = weight.max(axis=1)
+        e = np.exp(weight - top[:, None])
+        prefix = _prefix_rows(e)
+        suffix = _prefix_rows(e[:, ::-1])
+        del e
+        size = chunk_len[row]
+        if bound is None:
+            peak = _concave_peak(bound_at, row, size)
+            zeros = np.zeros_like(peak)
+            x1 = _first_where(bound_at, row, zeros, peak + 1, limit, above=True)
+            x2 = _first_where(bound_at, row, peak, size, limit, above=False) - 1
+        else:
+            peak = np.argmax(bound, axis=1)[row]
+            zeros = np.zeros_like(peak)
+            x1 = _bsearch(bound, row, zeros, peak + 1, limit, above=True)
+            x2 = _bsearch(bound, row, peak, size, limit, above=False) - 1
+        closed = x1 > peak
+        # The counted ends in the window's coordinates.
+        lo = start[row]
+        room = width[row]
+        left_end = np.where(closed, room, np.clip(x1 - lo, 0, room))
+        right_from = np.where(closed, room, np.clip(x2 + 1 - lo, 0, room))
+        left = prefix[row, left_end]
+        right = suffix[row, np.clip(span - right_from, 0, span)]
+        right = np.where(right_from < room, right, 0.0)
+        tail = left + right
+        with np.errstate(divide="ignore"):
+            counted = v + top[row] + np.log(tail)
+        some = (left_end > 0) | (right_from < room)
+        for i in np.flatnonzero((tail < _TINY) & some).tolist():
+            # The terms of this tail may have underflowed: sum it in log space.
+            w = weight[int(row[i])]
+            pieces = np.concatenate(
+                (w[: int(left_end[i])], w[int(right_from[i]) : int(room[i])])
+            )
+            counted[i] = float(v[i]) + _log_sum(pieces)
+        return x1, x2, closed, counted
 
     def _final(self, rem: IntArray, vals: FloatArray) -> None:
         """The exact comparison: for each partial table, the completions in the
@@ -1699,9 +1845,9 @@ class _Network:
             # Within a row only the sum matters: by decreasing value, the limits
             # come in increasing order, and a sorted search reuses its last place.
             v = np.sort(vals[a:b])[::-1]
-            row = lst.rows[t]
+            row: FloatArray = lst.rows[int(t)]
             count = np.searchsorted(row, self.threshold - v, "right")
-            cum = lst.cums[t]
+            cum: FloatArray = lst.cums[int(t)]
             tail = np.where(count > 0, cum[np.maximum(count - 1, 0)], 0.0)
             with np.errstate(divide="ignore"):
                 part = v + float(lst.best[t]) + np.log(tail)
@@ -1773,8 +1919,11 @@ def _canonical(first: list[int], second: list[int]) -> tuple[list[int], list[int
 
 
 def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float]:
-    """(estimate, certain) work units of fisher_exact on a 2 x c table: an upper
-    bound if nothing is pruned, and the work spent whatever is pruned."""
+    """(estimate, certain) work units of fisher_exact on a 2 x c table, from the
+    margins: an estimate of the work after pruning (the plan's estimate with
+    each column's range cut to 8 standard deviations either side of its mean,
+    where the tables a search cannot settle in bulk lie, for ordering the
+    pairwise tests), and the work spent whatever is pruned."""
     rows = table.tolist()
     first = [int(v) for v in rows[0]]
     cols = [int(a) + int(b) for a, b in zip(rows[0], rows[1], strict=True)]
@@ -1788,8 +1937,12 @@ def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float]:
         return estimate, 0.0
     r2 = n - r1
     widths = [min(cols[j], r1) - max(0, cols[j] - r2) for j in kept]
-    plan = _fisher_plan(widths)
-    return plan.estimate, plan.certain
+    spans: list[int] = []
+    for j, w in zip(kept, widths, strict=True):
+        c = cols[j]
+        sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
+        spans.append(min(w, 2 * math.ceil(_SPAN_SD * sd)))
+    return _fisher_plan(spans).estimate, _fisher_plan(widths).certain
 
 
 def _fisher(table: IntArray, side: Alternative, budget: _Budget) -> FisherExact:
