@@ -279,7 +279,7 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `rows_dropped` | info | Rows or subjects were dropped for missing values; a warning when over half were. |
 | `pairs_hidden` | info | Some computed pairs have no bracket (`pairwise_display`). |
 | `infinite_effect_size` | warning | Robust: the effect size or some bootstrap resamples are infinite; a bound may be Inf. |
-| `estimate_outside_interval` | warning | The effect size lies outside its own bootstrap interval; the p-value is unaffected. |
+| `estimate_outside_interval` | warning | The effect size lies outside its own interval (a bootstrap one, or C: the noncentral chi-square interval of V or C); the p-value is unaffected. |
 | `pairwise_conf_level` | info | The pairwise (or robust within) intervals are 95% whatever `conf_level` says. |
 | `label_overlap` | warning | Two texts overlap, or a bracket label crosses another bracket. |
 | `text_clipped` | warning | A text extends outside the figure or its Axes. |

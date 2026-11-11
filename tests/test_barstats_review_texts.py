@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 import inferplot as ip
@@ -78,6 +79,63 @@ def test_no_pair_tested_says_so() -> None:
     assert sentence.endswith(
         "Fisher's exact tests between the levels of x: none of the 3 pairs has a test."
     )
+
+
+# -- B5: an effect size outside its noncentral chi-square interval ---------------
+
+
+def _outside(result: StatsResult) -> str:
+    (issue,) = [i for i in result.check() if i.code == "estimate_outside_interval"]
+    assert "bootstrap" not in issue.message + issue.fix
+    assert "unaffected" in issue.fix
+    return issue.message
+
+
+def test_cramers_v_above_its_interval_is_explained() -> None:
+    # A 2 x 35 table of few observations per cell (the reviewer's c02 case):
+    # V = 0.236 with CI [0.000, 0.201].
+    rng = np.random.default_rng(7)
+    found = None
+    for trial in range(40):
+        cols = int(rng.integers(10, 100)) if trial % 2 else int(rng.integers(3, 12))
+        counts = rng.integers(0, 9, size=(2, cols))
+        counts[:, 0] += 1
+        counts[0, :] += 1
+        frame = pd.DataFrame(
+            [
+                (f"x{i}", f"y{j:03d}", int(counts[i, j]))
+                for i in range(2)
+                for j in range(cols)
+            ],
+            columns=["x", "y", "n"],
+        )
+        result = ip.analyze.barstats(
+            frame, "x", "y", counts="n", bf_message=False, proportion_test=False
+        )
+        es = result.effect_size
+        assert es is not None
+        if es.estimate > es.conf_high > 0:
+            found = result
+            break
+    assert found is not None
+    message = _outside(found)
+    assert "property of the method" in message
+    assert "noncentrality" in message
+    assert "few observations per cell" in message
+
+
+def test_pearsons_c_beside_a_zero_interval_is_explained() -> None:
+    # A fit closer than chance (chi-square 0.58 on 9 df, n = 1,000): C = 0.024
+    # with CI [0, 0].
+    counts = [100, 104, 96, 100, 102, 98, 100, 103, 97, 100]
+    frame = pd.DataFrame({"x": [f"c{i}" for i in range(10)], "w": counts})
+    result = ip.analyze.barstats(frame, "x", counts="w", bf_message=False)
+    es = result.effect_size
+    assert es is not None
+    assert es.conf_low == es.conf_high == 0.0 < es.estimate
+    message = _outside(result)
+    assert "both bounds are 0" in message
+    assert "about 2.5% of tables" in message
 
 
 # -- B16: expected shares print by a stated rule ---------------------------------

@@ -449,8 +449,11 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
     """An effect size outside its own CI. Percentile bootstrap intervals (rank
     epsilon squared, the explanatory effect size xi) are read off the resampled
     values, which a small effect's bootstrap bias can shift past the estimate
-    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]). Read
-    from stored fields only, so the copy without values reports it too."""
+    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]); and
+    the noncentral chi-square intervals of barstats' Cramér's V and Pearson's
+    C, which bracket the noncentrality while the estimate comes from the
+    statistic (:func:`_noncentral_why`). Read from stored fields only, so the
+    copy without values reports it too."""
     es = result.effect_size
     if es is None:
         return None
@@ -494,6 +497,19 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             f"own bias ({shift}), the whole interval can lie on one side of the "
             "estimate."
         )
+    elif es.ci_method == "noncentral chi-square" and result.test is not None:
+        return Issue(
+            code="estimate_outside_interval",
+            severity="warning",
+            message=head + _noncentral_why(result),
+            fix=(
+                "Nothing is wrong with the data or the computation, and the numbers "
+                "are ggstatsplot's: report the estimate and the interval as they "
+                "are, and say that the interval is one for the noncentrality of the "
+                "chi-square, which can exclude the estimate. The test's p-value is "
+                "unaffected."
+            ),
+        )
     else:
         why = f" The CI ({es.ci_method}) should contain its estimate."
     return Issue(
@@ -505,6 +521,50 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             "plausible values (say that it does not contain the estimate); the "
             "test's p-value does not come from the bootstrap and is unaffected."
         ),
+    )
+
+
+def _noncentral_why(result: StatsResult) -> str:
+    """Why a Cramér's V or Pearson's C lies outside its noncentral chi-square
+    interval (barstats; review B5): the estimate comes from the chi-square
+    statistic, the bounds from the noncentrality lambda of the noncentral
+    chi-square distribution, whose mean is df + lambda. Each goes through the
+    same formula (for V with the bias correction, which subtracts df / (n - 1)
+    from each), but the statistic carries the df on average and lambda does
+    not, so with many categories and few observations per cell the statistic
+    can exceed the noncentrality of the upper bound; and where the statistic
+    lies in the lower tail of the chi-square distribution without association
+    the interval is [0, 0], beside an estimate that is positive whenever the
+    statistic is (one-way C; about (1 - conf_level) / 2 of tables without
+    association for a two-sided interval)."""
+    es, test = result.effect_size, result.test
+    assert es is not None
+    assert test is not None
+    df = test.df_error if test.df_error is not None else test.df
+    dfs = "" if df is None else f" on {df:g} df"
+    statistic = f"{test.statistic:.2f}"
+    if es.conf_high <= 0.0:
+        tail = (1.0 - es.conf_level) / (2.0 if es.sidedness == "two-sided" else 1.0)
+        return (
+            f" This is a property of the interval, not an error: the interval "
+            f"brackets the noncentrality of the chi-square statistic, and the "
+            f"statistic, {statistic}{dfs}, is smaller than "
+            f"{1.0 - tail:.1%} of the values the chi-square distribution gives "
+            "without any association, so no positive noncentrality is plausible "
+            "and both bounds are 0. The estimate is computed from the statistic "
+            "itself and is positive whenever the statistic is. Without any "
+            f"association this happens in about {tail:.1%} of tables."
+        )
+    return (
+        " This is a property of the method, as ggstatsplot computes it, not an "
+        "error: the estimate is computed from the chi-square statistic, "
+        f"{statistic}{dfs}, and the bounds from the noncentrality of the "
+        "chi-square, which leaves out the degrees of freedom the statistic carries "
+        "on average (its mean is df plus the noncentrality); for Cramér's V the "
+        "bias correction then subtracts the same amount from each. With many "
+        "categories and few observations per cell the statistic can exceed the "
+        "noncentrality of the upper bound, and the estimate then lies above the "
+        "interval."
     )
 
 
