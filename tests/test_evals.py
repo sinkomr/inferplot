@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.util
+import itertools
 import json
 import math
 import os
 import subprocess
 import sys
 import time
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -1399,6 +1401,16 @@ def _a_reaction_and_yield() -> list[tuple[str, dict[str, Any]]]:
     ]
 
 
+def _scipy_default_wilcoxon(*samples: Any) -> Any:
+    """``scipy.stats.wilcoxon`` with its defaults, whatever they are in the
+    installed SciPy: the exact p given the ties or the normal approximation in
+    current versions, the normal approximation (with a warning, silenced here)
+    in SciPy 1.11 when there are ties or zeros. Each is an accepted variant."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        return stats.wilcoxon(*samples)
+
+
 def _a_paired() -> list[tuple[str, dict[str, Any]]]:
     out: list[tuple[str, dict[str, Any]]] = []
     sleep = _data("sleep-two-drugs").pivot_table(
@@ -1406,7 +1418,7 @@ def _a_paired() -> list[tuple[str, dict[str, Any]]]:
     )
     a, b = sleep["drug_A"].to_numpy(float), sleep["drug_B"].to_numpy(float)
     t = stats.ttest_rel(a, b)
-    w = stats.wilcoxon(a, b)
+    w = _scipy_default_wilcoxon(a, b)
     d = a - b
     sign = stats.binomtest(int((d[d != 0] > 0).sum()), int((d != 0).sum()))
     out += [
@@ -1447,7 +1459,7 @@ def _a_paired() -> list[tuple[str, dict[str, Any]]]:
         ("anxiety-ratings-before-after", "session", "anxiety", "child"),
     ):
         before, after = _paired(task_id, x, y, subject)
-        w = stats.wilcoxon(before, after)
+        w = _scipy_default_wilcoxon(before, after)
         out.append(
             (
                 task_id,
@@ -1526,7 +1538,7 @@ def _a_one_sample() -> list[tuple[str, dict[str, Any]]]:
         ("sensor-calibration-outlier", "reading", 10.0),
     ):
         x = _data(task_id)[column].dropna().to_numpy(float)
-        w = stats.wilcoxon(x - mu)
+        w = _scipy_default_wilcoxon(x - mu)
         out.append(
             (
                 task_id,
@@ -1845,3 +1857,81 @@ def test_inferplots_own_answer_scores_as_correct(
         assert score.trap is None
         if "estimate" in block.numbers:
             assert score.effect_ok, (key, score.numbers)
+
+
+# --- the exact signed-rank p does not depend on the installed SciPy -----------------
+
+
+def _signed_rank_by_enumeration(d: list[float], *, ties: bool) -> float:
+    """Every assignment of signs to the ranks of the nonzero differences, one by
+    one: 2 P(W <= w), with mid-ranks (ties) or with the ranks 1 to n and the
+    statistic rounded down toward the positive rank sum's floor (no ties)."""
+    values = [v for v in d if v != 0]
+    n = len(values)
+    mid = stats.rankdata([abs(v) for v in values]).tolist()
+    positive = sum(r for r, v in zip(mid, values, strict=True) if v > 0)
+    ranks = mid if ties else [float(r) for r in range(1, n + 1)]
+    sums = [
+        sum(r for r, keep in zip(ranks, signs, strict=True) if keep)
+        for signs in itertools.product((False, True), repeat=n)
+    ]
+    if ties:
+        smaller = min(positive, sum(mid) - positive)
+        return min(1.0, 2 * sum(s <= smaller for s in sums) / len(sums))
+    floor = math.floor(positive)
+    lower = sum(s <= floor for s in sums)
+    upper = sum(s >= floor for s in sums)
+    return min(1.0, 2 * min(lower, upper) / len(sums))
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_exact_signed_rank_against_enumeration(seed: int) -> None:
+    rng = np.random.Generator(np.random.PCG64(seed))
+    n = int(rng.integers(4, 12))
+    # Ratings: many ties and some zeros.
+    d = rng.integers(-3, 5, n).astype(float).tolist()
+    if not any(d):
+        d[0] = 1.0
+    for ties in (True, False):
+        statistic, p, others = run.exact_signed_rank(d, ties=ties)
+        assert p == _signed_rank_by_enumeration(d, ties=ties), (d, ties)
+        assert statistic >= 0
+        assert all(0 <= other <= 1 for other in others)
+    # Without ties among the nonzero sizes the two variants are one test.
+    distinct = [float(v) for v in rng.permutation(np.arange(1, n + 1))]
+    signed = [v * rng.choice([-1.0, 1.0]) for v in distinct]
+    assert (
+        run.exact_signed_rank(signed, ties=True)[:2]
+        == run.exact_signed_rank(signed, ties=False)[:2]
+    )
+    assert run.exact_signed_rank(signed, ties=False)[2] == []
+
+
+def test_exact_signed_rank_is_scipys_where_scipy_computes_it() -> None:
+    # Current SciPy returns these numbers; SciPy 1.11 warns and approximates on
+    # ties or zeros, which is why the recipe computes them itself. Compared only
+    # where the installed SciPy gives an exact answer without a warning.
+    checked = 0
+    for task in TASKS:
+        for block in task.accepted:
+            if block.recipe != "wilcoxon_signed_rank":
+                continue
+            if block.recipe_args.get("method") != "exact":
+                continue
+            design = {
+                k: v
+                for k, v in block.recipe_args.items()
+                if k not in ("method", "correction")
+            }
+            d = run._differences(pd.read_csv(task.data_file), **design)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                try:
+                    explicit = float(stats.wilcoxon(d, method="exact").pvalue)
+                except UserWarning:
+                    continue
+            assert run.exact_signed_rank(d, ties=False)[1] == explicit, task.id
+            checked += 1
+    # Every task on a SciPy that computes it; the ones without ties or zeros on
+    # any SciPy.
+    assert checked >= 3

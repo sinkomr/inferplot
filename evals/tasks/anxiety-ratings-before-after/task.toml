@@ -53,7 +53,19 @@ recipe_args = { x = "session", y = "anxiety", subject = "child", levels = ["afte
 n_also = ["observations", "nonzero_differences"]
 [accepted.numbers]
 statistic = { value = 27.5, alt = [77.5] }
-p_value = { value = 0.13525390625 }
+p_value = { value = 0.13525390625, alt = [0.118896484375] }
+n = { value = 16.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, exact p given the ties"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "session", y = "anxiety", subject = "child", levels = ["after", "before"], method = "exact_ties", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 27.5, alt = [77.5] }
+p_value = { value = 0.1343994140625 }
 n = { value = 16.0 }
 
 [[accepted]]

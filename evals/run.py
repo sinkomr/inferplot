@@ -696,24 +696,88 @@ def recipe_kruskal_untied(df: Any, *, x: str, y: str) -> dict[str, Any]:
     }
 
 
+def exact_signed_rank(d: Any, *, ties: bool) -> tuple[float, float, list[float]]:
+    """The signed-rank test's exact two-sided p for the differences ``d``: its
+    statistic (the smaller rank sum, with mid-ranks), p, and other values of p an
+    analyst may get for the same variant. Zeros are dropped and every assignment
+    of signs is equally likely.
+
+    ``ties=True``: the positive rank sum W is a sum of the mid-ranks, each taken
+    with probability 1/2, and p = min(1, 2 P(W <= w)) (the exact test given the
+    ties: current SciPy's default up to 50 pairs when no difference is 0, and R's
+    coin package).
+    ``ties=False``: W is a sum of the ranks 1 to n as if nothing tied (what
+    ``scipy.stats.wilcoxon(method="exact")`` uses in current SciPy, ties or not).
+    A statistic that ends in a half then falls between two values of W, and SciPy
+    counts from the whole number below the positive rank sum on both sides:
+    p = 2 min(P(W <= floor(w+)), P(W >= floor(w+))). That is the p returned; the
+    rounding the other way is the alternative. Without ties the variants agree.
+
+    Both are computed here, not by SciPy, because the answer must not depend on
+    the installed SciPy: 1.11 falls back to the normal approximation, with a
+    warning, when there are ties or zeros."""
+    import numpy as np
+    from scipy import stats
+
+    values = np.asarray(d, dtype=float)
+    nonzero = values[values != 0]
+    n = int(nonzero.size)
+    mid2 = np.rint(2 * stats.rankdata(np.abs(nonzero))).astype(int)  # whole numbers
+    positive2 = int(mid2[nonzero > 0].sum())
+    all2 = int(mid2.sum())  # n (n + 1), twice the sum of the ranks
+    smaller2 = min(positive2, all2 - positive2)
+    steps = mid2.tolist() if ties else [2 * r for r in range(1, n + 1)]
+    ways = [0] * (all2 + 1)  # sign assignments by twice the positive rank sum
+    ways[0] = 1
+    for r in steps:
+        for s in range(all2, r - 1, -1):
+            ways[s] += ways[s - r]
+
+    def two_sided(at_most2: int) -> float:
+        return min(1.0, 2.0 * sum(ways[: at_most2 + 1]) / 2**n)
+
+    if ties:
+        return smaller2 / 2.0, two_sided(smaller2), []
+    floor2 = 2 * (positive2 // 2)  # twice floor(w+)
+    lower, upper = sum(ways[: floor2 + 1]), sum(ways[floor2:])
+    p = min(1.0, 2.0 * min(lower, upper) / 2**n)
+    others = {two_sided(2 * (smaller2 // 2)), two_sided(2 * ((smaller2 + 1) // 2))}
+    return smaller2 / 2.0, p, sorted(others - {p})
+
+
 def recipe_wilcoxon_signed_rank(
     df: Any, *, method: str, correction: bool = False, **design: Any
 ) -> dict[str, Any]:
-    """scipy.stats.wilcoxon on the differences (zeros dropped, as R and SciPy do
-    by default): ``method`` "exact" or "approx", with or without the continuity
-    correction. The statistic is SciPy's (the smaller rank sum); the larger one and,
-    for the normal approximation, z are its other forms."""
+    """The signed-rank test on the differences (zeros dropped, as R and SciPy do
+    by default). ``method`` "exact" is the exact p as if nothing tied
+    (``scipy.stats.wilcoxon(method="exact")``), "exact_ties" the exact p given the
+    ties (current SciPy's default without zero differences), both from
+    ``exact_signed_rank``; "approx" is scipy.stats.wilcoxon's normal
+    approximation, with or without the continuity correction (SciPy's default
+    when a difference is 0, and older SciPy's whenever there are ties). The
+    statistic is SciPy's (the smaller rank sum); the larger one and, for the
+    normal approximation, z are its other forms."""
     from scipy import stats
 
     d = _differences(df, **design)
-    options: dict[str, Any] = {"method": method, "correction": correction}
-    res = stats.wilcoxon(d, **options)
     nonzero = int((d != 0).sum())
     total = nonzero * (nonzero + 1) / 2.0
+    if method in ("exact", "exact_ties"):
+        stat, p_value, others = exact_signed_rank(d, ties=method == "exact_ties")
+        return {
+            "statistic": stat,
+            "statistic_alt": [total - stat],
+            "p_value": p_value,
+            "p_value_alt": others,
+            "n": float(len(d)),
+        }
+    if method != "approx":
+        raise TaskError(f"wilcoxon_signed_rank: method {method!r}")
+    res = stats.wilcoxon(d, method="approx", correction=correction)
     stat = float(res.statistic)
     alt = [total - stat]
     z = getattr(res, "zstatistic", None)
-    if method == "approx" and z is not None:
+    if z is not None:
         alt.append(float(z))
     return {
         "statistic": stat,

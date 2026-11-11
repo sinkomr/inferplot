@@ -80,6 +80,18 @@ n = { value = 12.0 }
 
 [[accepted]]
 family = "wilcoxon_signed_rank"
+label = "Wilcoxon signed-rank test, exact p given the ties"
+source = "recipe"
+recipe = "wilcoxon_signed_rank"
+recipe_args = { x = "visit", y = "grip_kg", subject = "patient", levels = ["after", "before"], method = "exact_ties", correction = false }
+n_also = ["observations", "nonzero_differences"]
+[accepted.numbers]
+statistic = { value = 5.0, alt = [73.0] }
+p_value = { value = 0.00439453125 }
+n = { value = 12.0 }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
 label = "Wilcoxon signed-rank test, normal approximation"
 source = "recipe"
 recipe = "wilcoxon_signed_rank"
