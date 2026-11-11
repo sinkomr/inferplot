@@ -1,0 +1,71 @@
+# Evaluation task supplement-registered-direction (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "supplement-registered-direction"
+function = "betweenstats"
+trap = "a one-sided hypothesis registered before the data were collected"
+request = """
+Before running this experiment we predicted, and pre-registered, that guinea
+pigs given vitamin C as orange juice grow longer teeth than those given it as
+ascorbic acid; the three doses were balanced across the two supplements.
+data.csv has one row per animal (tooth_length, supplement, dose_mg). Test our
+registered prediction and make the figure.
+"""
+design = "two independent groups, one-sided hypothesis stated in advance"
+correct_rule = "A one-sided test in the registered direction (orange juice greater): Welch's t-test or the Mann-Whitney test. A two-sided test is the right family but gives the wrong p and is flagged as a trap."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/ToothGrowth.csv"
+columns = { len = "tooth_length", supp = "supplement", dose = "dose_mg" }
+levels = { supplement = { OJ = "orange_juice", VC = "ascorbic_acid" } }
+note = "R datasets::ToothGrowth; supplement names spelled out"
+
+[reference]
+args = ["supplement", "tooth_length"]
+kwargs = { type = "parametric", alternative = "greater", order = ["orange_juice", "ascorbic_acid"] }
+check_codes = []
+
+[[accepted]]
+family = "welch_t"
+source = "fixture"
+fixture = "ggbetweenstats-ToothGrowth-greater-parametric"
+kwargs = { type = "parametric", alternative = "greater", order = ["orange_juice", "ascorbic_acid"] }
+[accepted.numbers]
+statistic = { value = 1.91526826869527, key = "stats/subtitle_data/0/statistic" }
+df = { value = 55.3094326826406, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.030317253940467, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.487778845179192, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.05985175309001, key = "stats/subtitle_data/0/conf.low" }
+n = { value = 60.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "mann_whitney"
+source = "fixture"
+fixture = "ggbetweenstats-ToothGrowth-greater-nonparametric"
+kwargs = { type = "nonparametric", alternative = "greater", order = ["orange_juice", "ascorbic_acid"] }
+[accepted.numbers]
+statistic = { value = 575.5, key = "stats/subtitle_data/0/statistic", alt = [324.5] }
+p_value = { value = 0.0322453360669178, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.278888888888889, key = "stats/subtitle_data/0/estimate" }
+n = { value = 60.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_t"
+label = "two-sided Welch's t-test"
+source = "fixture"
+fixture = "ggbetweenstats-ToothGrowth-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = 1.91526826869527, key = "stats/subtitle_data/0/statistic" }
+p_value = { value = 0.0606345078809341, key = "stats/subtitle_data/0/p.value" }
+
+[[traps]]
+family = "mann_whitney"
+label = "two-sided Mann-Whitney test"
+source = "fixture"
+fixture = "ggbetweenstats-ToothGrowth-nonparametric"
+kwargs = { type = "nonparametric" }
+[traps.numbers]
+statistic = { value = 575.5, key = "stats/subtitle_data/0/statistic", alt = [324.5] }
+p_value = { value = 0.0644906721338357, key = "stats/subtitle_data/0/p.value" }

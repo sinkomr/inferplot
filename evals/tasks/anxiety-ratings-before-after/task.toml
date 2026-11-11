@@ -1,0 +1,48 @@
+# Evaluation task anxiety-ratings-before-after (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "anxiety-ratings-before-after"
+function = "withinstats"
+trap = "paired ordinal ratings (1 to 9) with many tied differences"
+request = """
+Sixteen children rated their anxiety on a 1-to-9 scale before and after a
+story-telling session (data.csv: child, session, anxiety; one row per child and
+session). Did their anxiety ratings change?
+"""
+design = "two sessions on the same 16 children, ordinal ratings with ties"
+correct_rule = "The Wilcoxon signed-rank test (R's default normal approximation with continuity correction gives the expected p; other tie handling gives a different p and fails the numbers, not the test). The paired t-test is rejected for ordinal ratings."
+rejected = ["paired_t", "welch_t", "student_t", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_within2_ties.csv"
+columns = { subject = "child", condition = "session", value = "anxiety" }
+levels = { session = { pre = "before", post = "after" } }
+note = "inferplot oracle dataset edge_within2_ties (hand-made); renamed"
+
+[reference]
+args = ["session", "anxiety"]
+kwargs = { subject_id = "child", type = "nonparametric" }
+check_codes = ["heavy_ties"]
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_ties-nonparametric"
+kwargs = { subject_id = "child", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 77.5, key = "stats/subtitle_data/0/statistic", alt = [27.5] }
+p_value = { value = 0.119487316048556, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.476190476190476, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.0393440015074896, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.791508032641745, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 16.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "welch_t"
+label = "unpaired Welch's t-test"
+source = "recipe"
+recipe = "welch_t"
+recipe_args = { x = "session", y = "anxiety", levels = ["after", "before"] }
+[traps.numbers]
+statistic = { value = 1.5105390338608538 }
+p_value = { value = 0.14526159704201735 }

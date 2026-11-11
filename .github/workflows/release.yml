@@ -1,0 +1,196 @@
+name: Release
+
+# Builds, checks and publishes inferplot. Read docs/RELEASING.md first.
+#
+# Nothing here runs on an ordinary push or pull request. It starts only when:
+# - the owner pushes a version tag (v0.1.0): build, check, publish to TestPyPI,
+#   then wait for an approval in the protected `pypi` environment before PyPI;
+# - the owner starts it by hand (Actions > Release > Run workflow) and picks a
+#   target: `build-only` (the default: build and check, publish nothing),
+#   `testpypi`, or `pypi` (TestPyPI, then PyPI after the same approval; only from
+#   a version tag).
+#
+# Publishing uses PyPI trusted publishing (OpenID Connect): no token is stored in
+# the repository. Only the two publishing jobs may request an identity token, and
+# each runs in its own GitHub environment, which PyPI's trusted-publisher entry
+# names. Actions are pinned by commit SHA; the comment gives the version.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: >-
+          Where to publish. build-only publishes nothing; pypi needs a version tag
+          as the ref and an approval in the pypi environment.
+        type: choice
+        options: [build-only, testpypi, pypi]
+        default: build-only
+
+permissions:
+  contents: read
+
+# One release at a time: a second run waits for the first instead of racing it.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  build:
+    name: Build and check the packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no major tags are published)
+        with:
+          python-version: "3.15"
+      - name: Refuse PyPI from a ref that is not a version tag
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/tags/v*) echo "publishing $REF" ;;
+            *) echo "::error::target pypi needs a version tag as the ref, not $REF"; exit 1 ;;
+          esac
+      - name: Build the sdist and the wheel
+        run: uv build --out-dir dist
+      - name: Check what the packages contain and their metadata
+        run: uv run --no-project python -I tools/release_check.py dists dist
+      - name: Check the version against the tag and the CHANGELOG
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            uv run --no-project python -I tools/release_check.py version dist --tag "$REF_NAME"
+          else
+            uv run --no-project python -I tools/release_check.py version dist
+          fi
+      - name: List the packages
+        run: ls -l dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  install:
+    # The wheel in a clean environment, without the repository's sources, on the
+    # oldest and the newest supported Python: import it and run the README's quick
+    # start exactly as written.
+    name: Install the wheel (Python ${{ matrix.python }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python: ["3.11", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no major tags are published)
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - name: Install the wheel with the pandas extra into a new environment
+        run: |
+          uv venv --python "${{ matrix.python }}" "$RUNNER_TEMP/venv"
+          wheel=$(ls dist/*.whl)
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" "inferplot[pandas] @ file://$PWD/$wheel"
+          uv run --no-project python -I tools/release_check.py quickstart README.md > "$RUNNER_TEMP/quickstart.py"
+      - name: Import it and run the README quick start
+        working-directory: ${{ runner.temp }}
+        run: |
+          ./venv/bin/python -I -c "import inferplot, sys; print(inferplot.__version__, inferplot.__file__); assert 'site-packages' in inferplot.__file__"
+          ./venv/bin/python -I quickstart.py
+          test -s weight.svg
+
+  sdist:
+    # A downstream packager builds and tests from the sdist: unpack it and run the
+    # test suite there (the slow simulations excepted, as in ci.yml).
+    name: Test from the sdist
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no major tags are published)
+        with:
+          python-version: "3.15"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - name: Unpack the sdist
+        run: |
+          mkdir sdist
+          tar -xzf dist/*.tar.gz -C sdist --strip-components=1
+      - name: Tests
+        working-directory: sdist
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: |
+          uv sync --all-extras
+          uv run pytest -m "not slow" -q -p no:cacheprovider
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [build, install, sdist]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target != 'build-only')
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/inferplot/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no major tags are published)
+      - name: Upload with trusted publishing
+        # --check-url skips files TestPyPI already has with the same contents, so a
+        # re-run after a later job failed does not stop here.
+        run: >-
+          uv publish --trusted-publishing always
+          --publish-url https://test.pypi.org/legacy/
+          --check-url https://test.pypi.org/simple/
+          dist/*
+
+  publish-pypi:
+    # Runs only after TestPyPI succeeded, and waits for a required reviewer to
+    # approve the `pypi` environment (docs/RELEASING.md, step 2).
+    name: Publish to PyPI
+    needs: publish-testpypi
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'))
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/inferplot/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no major tags are published)
+      - name: Upload with trusted publishing
+        run: uv publish --trusted-publishing always dist/*

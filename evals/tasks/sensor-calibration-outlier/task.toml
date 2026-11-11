@@ -1,0 +1,59 @@
+# Evaluation task sensor-calibration-outlier (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "sensor-calibration-outlier"
+function = "histostats"
+trap = "one extreme reading that is real: the t-test is not significant only because of it"
+request = """
+Twenty sensors were calibrated to read 10.0 units in a reference chamber;
+data.csv has their readings (sensor, reading). One sensor read 60, and the
+technician confirmed that the reading is genuine (that unit is faulty, which is
+part of what we want to know). Do the sensors typically read differently from
+10.0?
+"""
+design = "one sample against 10 with one real extreme value"
+correct_rule = "A test that resists the extreme value: the Wilcoxon signed-rank test, or the bootstrap-t test of the trimmed mean (statistic and trimmed mean scored; its p is a bootstrap value). The one-sample t-test is rejected and flagged as a trap."
+rejected = ["one_sample_t"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_one_outlier.csv"
+columns = { id = "sensor", value = "reading" }
+note = "inferplot oracle dataset edge_one_outlier (hand-made); renamed"
+
+[reference]
+args = ["reading"]
+kwargs = { test_value = 10, type = "nonparametric" }
+check_codes = ["heavy_ties"]
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "gghistostats-edge_one_outlier-nonparametric"
+kwargs = { test_value = 10, type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 151.5, key = "stats/subtitle_data/0/statistic", alt = [38.5] }
+p_value = { value = 0.0241519448494696, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.594736842105263, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.170603040372547, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.832933240343065, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "trimmed_bootstrap"
+source = "fixture"
+fixture = "gghistostats-edge_one_outlier-robust"
+kwargs = { test_value = 10, type = "robust" }
+[accepted.numbers]
+statistic = { value = 2.11541895010673, key = "stats/subtitle_data/0/statistic" }
+estimate = { value = 10.3916666666667, key = "stats/subtitle_data/0/estimate" }
+n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "one_sample_t"
+label = "one-sample t-test driven by the extreme reading"
+source = "fixture"
+fixture = "gghistostats-edge_one_outlier-parametric"
+kwargs = { test_value = 10, type = "parametric" }
+[traps.numbers]
+statistic = { value = 1.14649915823181, key = "stats/subtitle_data/0/statistic" }
+p_value = { value = 0.265822848622834, key = "stats/subtitle_data/0/p.value" }

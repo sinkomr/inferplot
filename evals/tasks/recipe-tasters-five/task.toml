@@ -1,0 +1,51 @@
+# Evaluation task recipe-tasters-five (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "recipe-tasters-five"
+function = "histostats"
+trap = "a very small sample (5 tasters)"
+request = """
+Five tasters scored a new recipe on a scale where 3 means "as good as the old
+recipe" (data.csv: taster, score; each score is the average of three tastings).
+Do the tasters rate the new recipe differently from the old one?
+"""
+design = "one sample of 5 against the value 3"
+correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 3; five values call for caution in the report (inferplot's small_n check fires only below 5, so it is silent here)."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_one_small.csv"
+columns = { id = "taster", value = "score" }
+note = "inferplot oracle dataset edge_one_small (hand-made); renamed"
+
+[reference]
+args = ["score"]
+kwargs = { test_value = 3, type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "one_sample_t"
+source = "fixture"
+fixture = "gghistostats-edge_one_small-parametric"
+kwargs = { test_value = 3, type = "parametric" }
+[accepted.numbers]
+statistic = { value = 1.64623267090454, key = "stats/subtitle_data/0/statistic" }
+df = { value = 4.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.175061222957652, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.587416681791876, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.240633431616365, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 1.36359000624088, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "gghistostats-edge_one_small-nonparametric"
+kwargs = { test_value = 3, type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 13.0, key = "stats/subtitle_data/0/statistic", alt = [2.0] }
+p_value = { value = 0.177529852412153, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.733333333333333, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.0331189237258056, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.956657804188121, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 5.0, key = "stats/subtitle_data/0/n.obs" }

@@ -1,0 +1,76 @@
+# Evaluation task training-before-after-shuffled (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "training-before-after-shuffled"
+function = "withinstats"
+trap = "pairs must come from the subject column: the rows are not in subject order"
+request = """
+Did students' test scores improve from before to after the training course?
+Each row of data.csv is one student at one time point (columns student, time and
+score).
+"""
+design = "two time points on the same 20 students, rows in no particular order"
+correct_rule = "A paired analysis with pairs matched by student: the paired t-test or the Wilcoxon signed-rank test. Pairing by row order and independent-samples tests are flagged as traps."
+rejected = ["welch_t", "student_t", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_within2_shuffled.csv"
+columns = { subject = "student", condition = "time", value = "score" }
+levels = { time = { pre = "before", post = "after" } }
+note = "inferplot oracle dataset edge_within2_shuffled (hand-made, rows shuffled); renamed"
+
+[reference]
+args = ["time", "score"]
+kwargs = { subject_id = "student", type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "paired_t"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_shuffled-parametric"
+kwargs = { subject_id = "student", type = "parametric" }
+[accepted.numbers]
+statistic = { value = 0.552304296024387, key = "stats/subtitle_data/0/statistic" }
+df = { value = 19.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.58717884750518, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.118547963893106, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.305343040904962, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.539364943868909, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "ggwithinstats-edge_within2_shuffled-nonparametric"
+kwargs = { subject_id = "student", type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 161.0, key = "stats/subtitle_data/0/statistic", alt = [49.0] }
+p_value = { value = 0.0382688764522297, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.533333333333333, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.0945094276297188, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.798620390501539, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 20.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "paired_t"
+label = "paired t-test with pairs taken from row order"
+source = "recipe"
+recipe = "paired_by_row_order"
+recipe_args = { x = "time", y = "score", levels = ["after", "before"] }
+[traps.numbers]
+statistic = { value = 0.5403909430477392 }
+df = { value = 19.0 }
+p_value = { value = 0.5952060085030385 }
+n = { value = 20.0 }
+
+[[traps]]
+family = "welch_t"
+label = "unpaired Welch's t-test"
+source = "recipe"
+recipe = "welch_t"
+recipe_args = { x = "time", y = "score", levels = ["after", "before"] }
+[traps.numbers]
+statistic = { value = 0.5093495371366561 }
+df = { value = 26.657423567618338 }
+p_value = { value = 0.6146980010764131 }
+n = { value = 40.0 }

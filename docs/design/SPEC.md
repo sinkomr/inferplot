@@ -1327,8 +1327,8 @@ Every other subtitle number is compared as the exact string inferplot produces.
   production code must agree with it too.
 - **Simulation (marker `slow`; `tests/test_simulation*.py`, settings in
   `tests/simulation_settings.py`):** every test, pairwise family and interval that
-  betweenstats, withinstats, histostats and scatterstats report is simulated under
-  the null and, for intervals, at a nonzero true value (57 settings, 89 rates). Data
+  the five functions report is simulated under
+  the null and, for intervals, at a nonzero true value (77 settings, 148 rates). Data
   come from `numpy.random.Generator(numpy.random.PCG64(seed))`; 2,000 replications
   (1,000 or 400 for the bootstrap methods, which keep their 2,000 resamples). Each
   rate is one of two kinds, set from theory before any run. Kind 1, exact or
@@ -1347,7 +1347,33 @@ Every other subtitle number is compared as the exact string inferplot produces.
   winsorized correlation and xi of normal data by quadrature), confirmed by Monte
   Carlo in the reference file. Bayes factors have no error rate; one sanity rate each
   is pinned. The measured rates of the methods that do not hold their level are in
-  the user documentation (`docs/intervals.md`).
+  the user documentation (`docs/intervals.md`). barstats' settings (D115) draw tables
+  from a multinomial distribution and read them as plain text columns, so an empty
+  level is not a level. A sample barstats refuses counts as no rejection and no
+  coverage, and its refusal rate is pinned where it is not negligible. Every
+  chi-square-type test on a table is kind 2 (a discrete statistic). Its rate is exact
+  by enumeration where the tables can be listed (2 x 2 tables, one-way counts, McNemar
+  by summing over the number of discordant pairs, the per-bar tests, and the V, C and
+  g intervals through the monotone link between each interval and its test), and
+  otherwise comes from the reference script. True values: Cramér's V of the cell
+  probabilities (the limit of the bias-corrected estimate), Pearson's C as
+  sqrt(phi^2 / (1 + phi^2)), Cohen's g folded as its estimate is. Except for the 2 x 2
+  API setting they run through `inferplot.stats`;
+  `tests/test_simulation_barstats_settings.py` ties those shortcuts to
+  `ip.analyze.barstats` table by table, refusals included. A seed is changed after a
+  failure only when the failing quantity does not pass through inferplot's statistics
+  and its distribution over seeds is shown to be the expected one; the old seed and
+  the evidence stay beside the new one (D115).
+- **Packaging (`tests/test_packaging.py`, `tools/release_check.py`; D116):** the
+  version has one source (`__version__`); the CHANGELOG's latest entry names it; the
+  release workflow starts only by a version tag or by hand, pins every action by
+  commit, gives an identity token to the two publishing jobs only, and publishes to
+  PyPI only from a version tag, after TestPyPI, through the `pypi` environment. The
+  wheel holds the package and its metadata only (runtime dependencies exactly rule
+  5's); the sdist holds what the tests need.
+- **Agent evaluation (`evals/`, `tests/test_evals.py`; D117):** 32 tasks with a trap
+  each; the dry run (the default, no model call) recomputes every expected number.
+  A real run needs the owner's flag and is refused in CI.
 - **Scale:** the data times 2^k give bit-identical statistics, intervals, Bayes factors
   and Games-Howell rows for every k that keeps them normal doubles; times 10^k (k =
   -300..300) they agree within `closed_form` (`noncentral_ci` for interval bounds)

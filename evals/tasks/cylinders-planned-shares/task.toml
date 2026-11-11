@@ -1,0 +1,46 @@
+# Evaluation task cylinders-planned-shares (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "cylinders-planned-shares"
+function = "barstats"
+trap = "a goodness-of-fit test against stated shares (1/2, 1/4, 1/4), not equal shares"
+request = """
+Our fleet plan assumed that half of the car models would have 4 cylinders and
+a quarter each would have 6 and 8 cylinders. Do the 32 models in data.csv (car,
+cyl) match the plan?
+"""
+design = "one categorical variable against stated proportions"
+correct_rule = "The chi-square goodness-of-fit test against 0.5, 0.25, 0.25. The test against equal shares is flagged as a trap."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", cyl = "cyl" }
+note = "R datasets::mtcars"
+
+[reference]
+args = ["cyl"]
+kwargs = { ratio = [0.5, 0.25, 0.25] }
+check_codes = []
+
+[[accepted]]
+family = "chi_square_gof"
+source = "fixture"
+fixture = "ggbarstats-mtcars-cyl-ratio-parametric"
+kwargs = { ratio = [0.5, 0.25, 0.25] }
+[accepted.numbers]
+statistic = { value = 6.1875, key = "stats/subtitle_data/0/statistic" }
+df = { value = 2.0, key = "stats/subtitle_data/0/df" }
+p_value = { value = 0.0453316416116763, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.40252883114356, key = "stats/subtitle_data/0/estimate" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "chi_square_gof"
+label = "goodness of fit against equal shares"
+source = "fixture"
+fixture = "ggbarstats-mtcars-cyl-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = 2.3125, key = "stats/subtitle_data/0/statistic" }
+p_value = { value = 0.314663961018459, key = "stats/subtitle_data/0/p.value" }

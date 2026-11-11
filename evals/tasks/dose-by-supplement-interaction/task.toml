@@ -1,0 +1,50 @@
+# Evaluation task dose-by-supplement-interaction (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "dose-by-supplement-interaction"
+function = "betweenstats"
+trap = "a two-factor design v0.1 does not support: redirect to a two-way ANOVA"
+request = """
+Does the effect of the vitamin C dose on tooth length depend on how it is given
+(orange juice or ascorbic acid)? data.csv has tooth_length, supplement and dose_mg
+(0.5, 1 or 2 mg per day) for 60 guinea pigs, 10 for each combination.
+"""
+design = "two crossed between-subject factors (2 x 3), question about their interaction"
+correct_rule = "A two-way ANOVA (or a linear model with the interaction term); scored on the F-test of the supplement x dose interaction. One-factor comparisons are rejected. In the inferplot arm the agent should say that inferplot v0.1 does not test interactions and use another tool."
+rejected = ["welch_t", "student_t", "welch_anova", "kruskal_wallis", "mann_whitney"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/ToothGrowth.csv"
+columns = { len = "tooth_length", supp = "supplement", dose = "dose_mg" }
+levels = { supplement = { OJ = "orange_juice", VC = "ascorbic_acid" } }
+note = "R datasets::ToothGrowth; supplement names spelled out"
+
+[reference]
+args = ["supplement", "tooth_length"]
+kwargs = { type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "two_way_anova"
+source = "recipe"
+recipe = "two_way_interaction"
+recipe_args = { y = "tooth_length", a = "supplement", b = "dose_mg" }
+[accepted.numbers]
+statistic = { value = 4.106991094022522 }
+df = { value = 2.0 }
+df_error = { value = 54.0 }
+p_value = { value = 0.021860268964790947 }
+n = { value = 60.0 }
+
+[[accepted]]
+family = "regression"
+label = "linear model with the interaction term"
+source = "recipe"
+recipe = "two_way_interaction"
+recipe_args = { y = "tooth_length", a = "supplement", b = "dose_mg" }
+[accepted.numbers]
+statistic = { value = 4.106991094022522 }
+df = { value = 2.0 }
+df_error = { value = 54.0 }
+p_value = { value = 0.021860268964790947 }
+n = { value = 60.0 }

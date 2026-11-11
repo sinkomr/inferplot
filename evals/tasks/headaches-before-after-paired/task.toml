@@ -1,0 +1,72 @@
+# Evaluation task headaches-before-after-paired (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "headaches-before-after-paired"
+function = "barstats"
+trap = "paired yes/no answers from the same patients: McNemar's test, not a test of independence"
+request = """
+Forty patients were asked whether they had frequent headaches (yes or no)
+before, and again after, a month on a new medication. data.csv has one row per
+patient (patient, headache_before, headache_after). Did the share of patients
+with headaches change?
+"""
+design = "two categorical measurements of the same patients (paired 2 x 2)"
+correct_rule = "McNemar's test: R's default (no continuity correction, as ggstatsplot), with Yates' correction, or the exact binomial version, each scored against its own numbers. A chi-square or Fisher test of independence is rejected and flagged as a trap."
+rejected = ["chi_square_independence", "fisher"]
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/edge_bar_paired.csv"
+columns = { subject = "patient", before = "headache_before", after = "headache_after" }
+note = "inferplot oracle dataset edge_bar_paired (hand-made); renamed"
+
+[reference]
+args = ["headache_before", "headache_after"]
+kwargs = { paired = true }
+check_codes = []
+
+[[accepted]]
+family = "mcnemar"
+label = "McNemar's test without continuity correction"
+source = "fixture"
+fixture = "ggbarstats-edge_bar_paired-parametric"
+kwargs = { paired = true }
+[accepted.numbers]
+statistic = { value = 4.0, key = "stats/subtitle_data/0/statistic" }
+df = { value = 1.0, key = "stats/subtitle_data/0/df" }
+p_value = { value = 0.0455002638963585, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.25, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = 0.00501683464491232, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.39817932508787, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 40.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "mcnemar"
+label = "McNemar's test with continuity correction"
+source = "recipe"
+recipe = "mcnemar_corrected"
+recipe_args = { x = "headache_before", y = "headache_after" }
+[accepted.numbers]
+statistic = { value = 3.0625 }
+df = { value = 1.0 }
+p_value = { value = 0.08011831372763438 }
+n = { value = 40.0 }
+
+[[accepted]]
+family = "mcnemar"
+label = "exact McNemar (binomial) test"
+source = "recipe"
+recipe = "mcnemar_exact"
+recipe_args = { x = "headache_before", y = "headache_after" }
+[accepted.numbers]
+p_value = { value = 0.076812744140625 }
+n = { value = 40.0 }
+
+[[traps]]
+family = "chi_square_independence"
+label = "chi-square test of independence on the paired table"
+source = "recipe"
+recipe = "chi2_rows_unweighted"
+recipe_args = { x = "headache_before", y = "headache_after" }
+[traps.numbers]
+statistic = { value = 2.3487623487623495 }
+p_value = { value = 0.12538251813074722 }

@@ -1,0 +1,61 @@
+# Evaluation task fuel-economy-against-20 (evals/README.md). Generated from the oracle
+# fixtures it cites; tests/test_evals.py checks every number against them.
+id = "fuel-economy-against-20"
+function = "histostats"
+trap = "a one-sample test against a stated value (20 mpg), not against 0"
+request = """
+An agency claims that the average car in this sample of 32 models gets 20
+miles per gallon (data.csv: car, mpg). Does the sample's fuel economy differ from
+20 mpg? Please show the distribution in a figure.
+"""
+design = "one sample against the value 20"
+correct_rule = "The one-sample t-test or the Wilcoxon signed-rank test against 20. A test against 0 is flagged as a trap."
+rejected = []
+
+[data]
+file = "data.csv"
+source = "oracle/datasets/mtcars.csv"
+columns = { model = "car", mpg = "mpg" }
+note = "R datasets::mtcars"
+
+[reference]
+args = ["mpg"]
+kwargs = { test_value = 20, type = "parametric" }
+check_codes = []
+
+[[accepted]]
+family = "one_sample_t"
+source = "fixture"
+fixture = "gghistostats-mtcars-tv20-parametric"
+kwargs = { test_value = 20, type = "parametric" }
+[accepted.numbers]
+statistic = { value = 0.0850600356813336, key = "stats/subtitle_data/0/statistic" }
+df = { value = 31.0, key = "stats/subtitle_data/0/df.error" }
+p_value = { value = 0.93276064090939, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = 0.0146693847849236, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.323481778310798, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.352584964653575, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[accepted]]
+family = "wilcoxon_signed_rank"
+source = "fixture"
+fixture = "gghistostats-mtcars-tv20-nonparametric"
+kwargs = { test_value = 20, type = "nonparametric" }
+[accepted.numbers]
+statistic = { value = 249.0, key = "stats/subtitle_data/0/statistic", alt = [279.0] }
+p_value = { value = 0.78625558422634, key = "stats/subtitle_data/0/p.value" }
+estimate = { value = -0.0568181818181818, key = "stats/subtitle_data/0/estimate" }
+conf_low = { value = -0.425110152745393, key = "stats/subtitle_data/0/conf.low" }
+conf_high = { value = 0.32761494710514, key = "stats/subtitle_data/0/conf.high" }
+n = { value = 32.0, key = "stats/subtitle_data/0/n.obs" }
+
+[[traps]]
+family = "one_sample_t"
+label = "one-sample t-test against 0"
+source = "fixture"
+fixture = "gghistostats-mtcars-parametric"
+kwargs = { type = "parametric" }
+[traps.numbers]
+statistic = { value = 18.8569299791482, key = "stats/subtitle_data/0/statistic" }
+p_value = { value = 1.52615082671148e-18, key = "stats/subtitle_data/0/p.value" }
