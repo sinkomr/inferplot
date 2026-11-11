@@ -1292,7 +1292,7 @@ def _prepare(
     n_digits_perc = check_digits(digits_perc, "digits_perc")
     level = check_conf_level(conf_level)
     n_digits = check_digits(digits)
-    side = canonical_alternative(check_alternative(alternative))
+    side = canonical_alternative(check_alternative(alternative, directionless=True))
     show_bf = check_optional_bool(bf_message, "bf_message")
     subtitle_on = check_bool(results_subtitle, "results_subtitle")
     rng_seed = check_seed(seed)

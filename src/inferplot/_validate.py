@@ -1073,6 +1073,19 @@ _OTHER_LAYERS: Final = frozenset(
 )
 
 
+# What a direction means in barstats (review B8): its tests have no direction.
+CONTINGENCY_DIRECTION: Final = (
+    "barstats' tests have no direction: the chi-square and McNemar tests compare "
+    "all the cells at once, so their p-values are the same whatever is asked. "
+    "alternative='greater' or 'less' only makes the effect-size intervals "
+    "one-sided ([low, 1] or [0, high]: the main one and the pairs'; the bars' "
+    "tests stay two-sided) "
+    "and the Fisher test of a pair whose table is 2 x 2; alternative='two-sided' "
+    "is the default. barstats has no order=: the levels follow their declared "
+    "categories, else their sorted values."
+)
+
+
 def _bar_targeted(
     arg: str, key: str, value: object, valid: frozenset[str]
 ) -> TypeError | None:
@@ -1232,6 +1245,8 @@ def _bar_targeted(
             "data['x'] = pd.Categorical(data['x'], categories=['low', 'mid', "
             "'high']), or a polars Enum."
         )
+    if key in _DIRECTION_NAMES:
+        return no(CONTINGENCY_DIRECTION)
     if key in {"subject", "id", "subject_id"}:
         return no(
             "with paired=True each row holds one unit's two measurements, x and y "
@@ -1665,10 +1680,17 @@ _ONE_SIDED: Final = ("one_sided", "onesided", "one_side", "one_tailed", "onetail
 _TWO_TAILED: Final = ("two_tailed", "twotailed")
 
 
-def check_alternative(value: object, name: str = "alternative") -> str:
+def check_alternative(
+    value: object, name: str = "alternative", *, directionless: bool = False
+) -> str:
     """'two-sided', 'less' or 'greater'. R's 'two.sided' and 'two-tailed' are told
-    the spelling; 'one-sided' is told that the direction must be given."""
-    one_sided = f" A one-sided test needs its direction: {direction_note(name)}"
+    the spelling; 'one-sided' is told that the direction must be given, or with
+    ``directionless`` (barstats) what a direction does there."""
+    one_sided = (
+        f" {CONTINGENCY_DIRECTION}"
+        if directionless
+        else f" A one-sided test needs its direction: {direction_note(name)}"
+    )
     two_tailed = f" A two-tailed test is {name}='two-sided': write {name}='two-sided'."
     hints = {
         "two.sided": f" R spells it 'two.sided'; inferplot writes {name}='two-sided'.",
