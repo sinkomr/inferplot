@@ -186,8 +186,9 @@ def test_only_x_y_and_counts_drop_rows(backend: Backend) -> None:
     assert counts_of(weighted) == [[1, 5]]
     notes = table_notes(weighted)
     assert notes[0] == (
-        "3 rows were left out because 'x', 'y' or 'w' is missing (1 without 'x', "
-        "1 without 'y', 1 without 'w'); 6 observations remain."
+        "3 rows (standing for 5 observations) were left out because 'x', 'y' or "
+        "'w' is missing (1 without 'x', 1 without 'y', 1 without 'w'); 6 "
+        "observations remain."
     )
     assert notes[1] == (
         "The levels 'b' and 'c' of 'x' were left out of the analysis: every row of "

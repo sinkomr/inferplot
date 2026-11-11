@@ -2949,6 +2949,27 @@ def _share_text(share: float, digits: int) -> tuple[str, bool]:
     return r_number_text(rounded), abs(rounded - share) > 1e-12
 
 
+# The name written for a level that is empty text (review B17).
+EMPTY_LEVEL_NAME: Final = "(empty)"
+
+
+def _one_line(name: str) -> str:
+    """A name inside a sentence: its line breaks written as spaces (review B17)."""
+    return " ".join(name.splitlines()) if "\n" in name or "\r" in name else name
+
+
+def level_text(level: str) -> str:
+    """A level of barstats as its texts write it: "(empty)" for empty text, line
+    breaks as spaces."""
+    return EMPTY_LEVEL_NAME if level == "" else _one_line(level)
+
+
+def bar_name(level: str) -> str:
+    """A level as barstats draws it in a tick label or a legend entry:
+    "(empty)" for empty text, else as :func:`drawable` draws it."""
+    return EMPTY_LEVEL_NAME if level == "" else drawable(level)
+
+
 def _bars_shares_text(settings: Settings, empty: Sequence[str], k: int) -> str:
     """What the bars' tests compare against (:func:`_shares_text`), naming the
     levels of x without observations that they count as categories (review
@@ -2957,7 +2978,7 @@ def _bars_shares_text(settings: Settings, empty: Sequence[str], k: int) -> str:
     shares = _shares_text(settings)
     if not empty:
         return shares
-    names = _and_join([repr(level) for level in empty])
+    names = _and_join([repr(level_text(level)) for level in empty])
     return f"{shares} of {k} categories ({names} with no observations)"
 
 
@@ -3030,6 +3051,7 @@ def contingency_sentence(
             f"{_CONTINGENCY_NO_TEST[design]} (results_subtitle=False), "
             f"n = {format_n(n_obs)}{pairs}."
         )
+    x, y = _one_line(x), None if y is None else _one_line(y)
     sx = _short(x, name_limit)
     if compact:
         what = f"against {_shares_text(settings)}" if design == "one-way" else ""
@@ -3078,6 +3100,7 @@ def contingency_tests_sentence(
     """
     parts: list[str] = []
     tested = [bar for bar in bars if bar.test is not None]
+    x, y = _one_line(x), None if y is None else _one_line(y)
     sx = _short(x, name_limit)
     if tested and y is not None:
         below = sum(
@@ -3248,9 +3271,15 @@ def contingency_alt_text(
     result = ""
     head = ""
     for limit in (40, 20, 12):
-        sx = _short(x, limit)
-        short = _shortened(list(levels), limit)
-        short_bars = _shortened(bar_names, limit)
+        sx = _short(_one_line(x), limit)
+        written = [level_text(level) for level in levels]
+        by_text = _shortened(written, limit)
+        short = {level: by_text[w] for level, w in zip(levels, written, strict=True)}
+        written_bars = [level_text(level) for level in bar_names]
+        by_bar = _shortened(written_bars, limit)
+        short_bars = {
+            level: by_bar[w] for level, w in zip(bar_names, written_bars, strict=True)
+        }
         result = contingency_sentence(
             test,
             effect_size,
@@ -3265,7 +3294,7 @@ def contingency_alt_text(
             head = f"Stacked bar chart of the shares of {sx} in one bar"
         else:
             assert y is not None
-            sy = _short(y, limit)
+            sy = _short(_one_line(y), limit)
             same = (
                 f" ({format_n(n_obs)} units measured twice)"
                 if design == "paired"
@@ -3408,7 +3437,7 @@ def contingency_texts(
             settings=settings,
         ),
         centrality_labels=(),
-        tick_labels=tuple("" if b.level is None else drawable(b.level) for b in bars),
+        tick_labels=tuple("" if b.level is None else bar_name(b.level) for b in bars),
         pairwise_labels=tuple(to_plain(_pair_label(p, digits)) for p in pairwise),
         bar_labels=tuple(
             "" if node is None else to_plain(node)
@@ -3447,7 +3476,7 @@ def contingency_figure_texts(result: StatsResult) -> FigureTexts:
         caption_lines=(),
         centrality_labels=(),
         tick_labels=tuple(
-            "" if b.level is None else drawable(b.level) for b in result.bars
+            "" if b.level is None else bar_name(b.level) for b in result.bars
         ),
         pairwise_labels=tuple(
             to_mathtext(_pair_label(p, settings.digits)) for p in result.pairwise

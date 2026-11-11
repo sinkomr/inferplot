@@ -68,7 +68,7 @@ from inferplot.render.figure import (
     axes_background,
 )
 from inferplot.result import StatsResult
-from inferplot.text import drawable, figure_alt_text, figure_texts
+from inferplot.text import bar_name, drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -640,7 +640,7 @@ class _BarDrawing(base.BaseDrawing):
         """The levels of x as the legend writes them: wrapped on spaces into lines
         LEGEND_LINE_IN wide, at most three, shortened with an ellipsis."""
         room = LEGEND_LINE_IN * self.dpi
-        return self.wrapped([drawable(level) for level in self.result.levels], room)
+        return self.wrapped([bar_name(level) for level in self.result.levels], room)
 
     def wrapped(
         self, names: Sequence[str], room: float, *, bold: bool = False

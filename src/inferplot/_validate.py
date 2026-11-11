@@ -1266,6 +1266,48 @@ def _bar_targeted(
         )
     if key in _DIRECTION_NAMES:
         return no(CONTINGENCY_DIRECTION)
+    # Review B17: seaborn's and matplotlib's names.
+    if key in {"cmap", "colormap"}:
+        name = shown or "'viridis'"
+        return no(
+            f"a colormap name is passed as palette=, for example palette={name}, "
+            f"{drawing}; the levels of x take colours from it."
+        )
+    if key in {"figsize", "fig_size", "size"}:
+        return no(
+            "inferplot sizes its own figure to its contents (at most 30 in); for a "
+            "figure of your own size, draw into its Axes with ax=, for example "
+            "ax=Figure(figsize=(8, 5)).add_subplot() (from matplotlib.figure "
+            f"import Figure), {drawing}."
+        )
+    if key == "hue_order":
+        return no(
+            "the order of the levels of x (seaborn's hue) follows their declared "
+            "categories, else their sorted values; barstats has no order=. To "
+            "choose it, pass x as a pandas Categorical, for example data['x'] = "
+            "pd.Categorical(data['x'], categories=['low', 'mid', 'high']), or a "
+            "polars Enum."
+        )
+    if key in {"width", "bar_width"}:
+        return no(
+            "the bars' width follows the figure's layout (their slot and their "
+            "labels), so it has no argument; for more room, draw into a wider Axes "
+            f"with ax=, {drawing}."
+        )
+    if key in {"edgecolor", "edgecolors", "linewidth", "linewidths", "hatch"}:
+        prop = {"edgecolors": "edgecolor", "linewidths": "linewidth"}.get(key, key)
+        value_text = _show(value)
+        return no(
+            f"the bar segments are styled with bar_args=, for example "
+            f"bar_args={{{prop!r}: {value_text}}}, {drawing}."
+        )
+    if key == "bayes":
+        return no(
+            "barstats' Bayes factor (ggstatsplot's Bayesian contingency-table "
+            "test) arrives in inferplot 0.2: type='bayes' and bf_message=True are "
+            "refused until then, so there is no call to make for it yet; "
+            "bf_message=False leaves out the note that says so."
+        )
     if key in {"subject", "id", "subject_id"}:
         return no(
             "with paired=True each row holds one unit's two measurements, x and y "

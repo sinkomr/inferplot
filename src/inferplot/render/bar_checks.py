@@ -31,7 +31,12 @@ if TYPE_CHECKING:
 
     from inferplot.render.figure import CellLabel, StatsFigure
 
-__all__ = ["COLOR_DIFFERENCE", "cell_label_issue", "level_color_issue"]
+__all__ = [
+    "COLOR_DIFFERENCE",
+    "cell_label_issue",
+    "legend_issue",
+    "level_color_issue",
+]
 
 # Pixels a label may reach beyond its segment, or into another one, before it
 # counts (anti-aliasing slack).
@@ -165,5 +170,31 @@ def level_color_issue(fig: StatsFigure) -> Issue | None:
             "Pass palette= with clearly different colours, one per level of x (the "
             "default palette, or a qualitative colormap such as 'tab10' or "
             "'Set2'), or merge levels so fewer colours are needed."
+        ),
+    )
+
+
+def legend_issue(fig: StatsFigure) -> Issue | None:
+    """``legend_missing`` (barstats): the legend, the only key to the colours of
+    the levels of x, is not drawn (removed or hidden after drawing; review
+    B17); the alt text, which says a legend names the levels, then no longer
+    describes the figure. None for the other figures."""
+    if not fig.segments:
+        return None
+    legend = fig.axes["main"].get_legend()
+    if legend is not None and legend.get_visible():
+        return None
+    return Issue(
+        code="legend_missing",
+        severity="warning",
+        message=(
+            f"The legend of the levels of {fig.result.x!r} is not drawn (it was "
+            "removed or hidden after drawing), so nothing says which colour is "
+            "which level; the alt text (fig.result.text.alt_text) still says a "
+            "legend names them."
+        ),
+        fix=(
+            "Keep inferplot's legend: draw the figure again and leave the legend in "
+            "place (legend_title= sets its title)."
         ),
     )

@@ -657,7 +657,8 @@ def _fails_cochran(expected: list[float]) -> bool:
 def _small_expected(result: StatsResult) -> Issue | None:
     """Expected counts too small for the chi-square approximation of a barstats
     p-value (Cochran's rule: none below 1 and at most 20% below 5), in the main
-    test or, where the figure labels them, a bar's proportion test. R's
+    test or a bar's proportion test (reported in the APA sentence whenever y is
+    given, drawn above the bar or not). R's
     ``chisq.test`` warns ("Chi-squared approximation may be incorrect") whenever
     an expected count is below 5, which Cochran's rule allows for up to 20% of
     them, and ggstatsplot mutes the warning. R's ``mcnemar.test`` checks
@@ -682,11 +683,14 @@ def _small_expected(result: StatsResult) -> Issue | None:
             test = "the goodness-of-fit test"
         below_one = f", {tiny} below 1" if tiny else ""
         parts.append(
-            f"{small} of the {len(main)} expected counts of {test} are below 5 (the "
+            f"{small} of the {len(main)} expected counts of {test} "
+            f"{'is' if small == 1 else 'are'} below 5 (the "
             f"smallest is {min(main):.2f}{below_one}), so its p-value, a chi-square "
             "approximation, may be inaccurate"
         )
-    if result.settings.proportion_test:
+    # The bars' tests are reported in the APA sentence whenever y is given
+    # (D108), drawn or not, so the rule covers them whenever y is (review B17).
+    if result.y is not None:
         shares = _shares(result)
         bars = [
             bar.level

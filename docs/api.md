@@ -294,6 +294,7 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `cell_labels_hidden` | warning | C: a cell label left out, or drawn where it does not read as its cell's. |
 | `level_labels_alike` | warning | B, W, C: two levels drawn with tick labels or legend entries that read alike. |
 | `level_colors_alike` | warning | C: two levels of x drawn in colours that cannot be told apart (the legend's only key). |
+| `legend_missing` | warning | C: the legend, the only key to the colours, was removed or hidden after drawing. |
 | `line_label_ambiguous` | warning | H: a line's label is nearer the other line or crossed by it. |
 | `low_contrast` | warning | A text or a level colour can hardly be told from its background. |
 | `glyph_missing` | warning | Characters no available font can draw. |

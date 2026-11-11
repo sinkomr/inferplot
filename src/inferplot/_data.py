@@ -597,7 +597,7 @@ def _x_kind(series: nw.Series[Any], name: str, role: _Role = _X_ROLE) -> XKind:
         what = _what_values(_first_value(series))
         if what is not None:
             raise _unusable_values(role, name, what, str(dtype))
-        hint = "convert it to text or to a categorical column first"
+        hint = "Convert it to text or to a categorical column first"
     raise TypeError(
         f"{role.arg}={name!r} must hold text, categories or whole numbers to "
         f"{role.purpose}; its type is {dtype}. {hint}."
@@ -886,6 +886,15 @@ def _lookalikes(levels: Sequence[str]) -> tuple[tuple[str, ...], ...]:
     for level in levels:
         by_core.setdefault(level.strip(), []).append(level)
     return tuple(tuple(same) for same in by_core.values() if len(same) > 1)
+
+
+def _encoding_lookalikes(levels: Sequence[str]) -> tuple[tuple[str, ...], ...]:
+    """Sets of ``levels`` that are equal once their Unicode is normalized (NFC):
+    the same accented letter written precomposed and decomposed (review B17)."""
+    by_form: dict[str, list[str]] = {}
+    for level in levels:
+        by_form.setdefault(unicodedata.normalize("NFC", level), []).append(level)
+    return tuple(tuple(same) for same in by_form.values() if len(same) > 1)
 
 
 def _order_item(item: object) -> object:
@@ -2028,6 +2037,8 @@ class TableLevels:
     """As ``BetweenData.natural_order`` (of the levels that hold a count)."""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """Sets of levels that differ only in leading or trailing whitespace."""
+    encoding_lookalikes: tuple[tuple[str, ...], ...] = ()
+    """Sets of levels that differ only in their Unicode encoding (NFC)."""
 
     @property
     def present(self) -> tuple[str, ...]:
@@ -2068,6 +2079,9 @@ class TableData:
     (``tidyr::uncount``)."""
     library: Library = "pandas"
     """The library of the user's frame, for recipes written in it."""
+    n_dropped_observations: int = 0
+    """With ``counts``: the observations the rows left out for a missing x or
+    y stood for (their counts, where present and whole)."""
     possible_counts: tuple[str, ...] = ()
     """Without ``counts``: the columns that may be counts the call left out,
     where every cell holds at most one row (review B10)."""
@@ -2385,6 +2399,7 @@ def _table_levels(
         dictionary_order=_dictionary_order(dictionary, ordered),
         natural_order=_natural_order(group, ordered),
         lookalike_levels=_lookalikes(levels),
+        encoding_lookalikes=_encoding_lookalikes(levels),
     )
 
 
@@ -2554,10 +2569,23 @@ def long_paired_recipe(
     )
 
 
+# The name drawn for a level that is empty text (review B17).
+EMPTY_NAME: Final = "(empty)"
+
 # Names a column of counts commonly has (review B10).
 _COUNT_NAMES: Final = frozenset(
     {"n", "count", "counts", "freq", "frequency", "frequencies", "weight", "weights"}
 )
+
+
+def _dropped_observations(series: nw.Series[Any], dropped: BoolArray) -> int:
+    """The observations the rows ``dropped`` stood for: their counts, where
+    present, finite, whole and >= 0."""
+    if not series.dtype.is_numeric() or isinstance(series.dtype, nw.Boolean):
+        return 0
+    values = _float_values(series)[dropped & ~_missing(series)]
+    good = np.isfinite(values) & (values == np.round(values)) & (values >= 0)
+    return int(sum(int(v) for v in values[good].tolist()))
 
 
 def _whole_counts(series: nw.Series[Any]) -> bool:
@@ -2797,6 +2825,11 @@ def read_table(
         n_missing_counts=int(missing_counts.sum()),
         n_zero_rows=int(rows.size - used.size),
         library=_library(x_raw),
+        n_dropped_observations=(
+            0
+            if counts_col is None
+            else _dropped_observations(counts_col, missing_x | missing_y)
+        ),
         possible_counts=(
             _possible_counts(frame, (x, y), rows)
             if counts is None and rows.size > 1 and max(flat.tolist()) <= 1
@@ -2837,7 +2870,15 @@ def table_notes(data: TableData) -> list[str]:
                 + ", ".join(f"{count:,} without {name!r}" for name, count in used)
                 + ")"
             )
-        rows = f"{dropped:,} {'row was' if dropped == 1 else 'rows were'}"
+        stood = ""
+        if data.n_dropped_observations:
+            count = data.n_dropped_observations
+            plural = "observation" if count == 1 else "observations"
+            stood = f" (standing for {count:,} {plural})"
+        verb = "row was" if dropped == 1 else "rows were"
+        if stood:
+            verb = f"{'row' if dropped == 1 else 'rows'}{stood} {verb.split()[1]}"
+        rows = f"{dropped:,} {verb}"
         notes.append(
             f"{rows} left out because {_or_listed([name for name, _ in used])} is "
             f"missing{detail}; {data.n:,} observations remain."
@@ -2936,6 +2977,21 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
             "start or end, so they are counted as separate categories whose labels "
             "look alike. If they are the same category, remove the spaces first, "
             "for example with .str.strip() in pandas or .str.strip_chars() in polars."
+        )
+    for same in column.encoding_lookalikes:
+        shown = ", ".join(ascii(level) for level in same)
+        notes.append(
+            f"The levels {shown} of {name!r} differ only in how their characters are "
+            "encoded (an accented letter written as one character or as a letter "
+            "and an accent, as text from different sources can be), so they are "
+            "counted as separate categories whose labels look alike. If they are "
+            "the same category, normalize the text first (Unicode NFC), for "
+            "example with .str.normalize('NFC') in pandas."
+        )
+    if "" in column.levels:
+        notes.append(
+            f"A level of {name!r} is empty text (''); the figure names it "
+            f"{EMPTY_NAME!r}."
         )
     return notes
 

@@ -669,18 +669,16 @@ def test_small_expected_follows_r_warnings(name: str) -> None:
         # McNemar's p: R gives no warning of its own (edge_bar_paired_small's
         # comes from prop.test inside Cohen's g interval: one changing pair).
         assert "R's mcnemar.test does not check this" in message
-    # The bars: flagged where the figure labels them, exactly where R warns.
+    # The bars: flagged exactly where R warns, drawn or not: the APA sentence
+    # reports the bars' tests whenever y is given (D108; review B17).
     match = _BAR_PART.search(message)
     flagged = set() if match is None else set(re.findall(r"'([^']*)'", match.group(1)))
-    if result.settings.proportion_test:
-        r_bars = {
-            bar.level
-            for bar in result.bars
-            if bar.level is not None and _r_warns(case, "proportion_test", bar.level)
-        }
-        assert flagged == r_bars, (name, flagged, r_bars)
-    else:
-        assert not flagged
+    r_bars = {
+        bar.level
+        for bar in result.bars
+        if bar.level is not None and _r_warns(case, "proportion_test", bar.level)
+    }
+    assert flagged == r_bars, (name, flagged, r_bars)
 
 
 def test_where_small_expected_and_r_differ() -> None:

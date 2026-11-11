@@ -507,6 +507,11 @@ def barstats(
         A ``StatsFigure``, as :func:`betweenstats` returns.
 
     Raises:
+        TypeError, ValueError, KeyError: as :func:`inferplot.analyze.barstats`
+            raises them, and for drawing arguments that cannot be used or a
+            figure larger than inferplot's own figure holds (more than 43 bars,
+            or a legend of more levels than fit); the message says how to fix
+            the call.
         NotImplementedError: type "bayes" and ``bf_message=True`` arrive in
             inferplot 0.2.
 
