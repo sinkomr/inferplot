@@ -351,7 +351,13 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   identical JSON across backends; 22 fixtures refused by design, each tested; a pair
   without a Fisher test stays in the result with its reason (D113). Lead's check: 80
   random frames in three designs against pandas and SciPy, 1e-14
-- [ ] barstats figure in progress; then image baselines, end-of-phase review
+- [x] barstats figure: `ip.barstats` works end to end. Stacked bars on the shared
+  machinery; all 67 answerable fixtures drawn with segment heights equal to the shares
+  (1e-12) and every cell, p and n label equal to ggbarstats' built layers; small-cell
+  labels are moved beside their bar, never dropped in the own figure (D114); 120
+  random tables clean in the own figure and in `ax=` at three dpi; the four existing
+  figures byte-identical (492 of 492); four image baselines (18 in all)
+- [ ] end-of-phase review of barstats (two fresh reviewers; in progress)
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
@@ -419,7 +425,8 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     13; largest change V 8.5, p .89 against V 39, p .26). R behaves the same way.
 - [x] histostats, all types: reference data, statistics, analysis, texts, figure
 - [x] scatterstats, all types (line, band, marginals): the same
-- [ ] barstats (independence, McNemar, goodness of fit, proportion tests)
+- [x] barstats (independence, McNemar, goodness of fit, proportion tests): reference
+  data, statistics, analysis, texts, figure; review in progress
 
 ## Phase 5 — documentation, evaluation, release 0.1.0
 
