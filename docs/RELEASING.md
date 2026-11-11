@@ -55,19 +55,20 @@ both; PyPI requires it for publishing.
    ruleset*: target `v*`, restrict creation, updates and deletion to yourself. Then
    nobody else can start a release by pushing a tag.
 
-The workflow's action pins (the long hexadecimal strings after `@` in
-`release.yml`) were written without network access. Before the first run, check
-that each names the version in its comment, with the GitHub CLI:
+The workflow's actions are pinned by commit (the long hexadecimal strings after
+`@` in `release.yml`), so a changed tag cannot change what a release runs. The pins
+are the versions `ci.yml` and `oracle.yml` use by tag, checked against GitHub on
+2026-11-10. To check them again, or after raising one:
 
 ```sh
-gh api repos/actions/checkout/commits/v4.2.2 --jq .sha
-gh api repos/actions/upload-artifact/commits/v4.6.2 --jq .sha
-gh api repos/actions/download-artifact/commits/v4.3.0 --jq .sha
+gh api repos/actions/checkout/commits/v7.0.1 --jq .sha
+gh api repos/actions/upload-artifact/commits/v7.0.2 --jq .sha
+gh api repos/actions/download-artifact/commits/v8.0.2 --jq .sha
+gh api repos/astral-sh/setup-uv/commits/v10.3.3 --jq .sha
 ```
 
-Each must print the SHA used in `release.yml` (`11bd7190...`, `ea165f8d...`,
-`d3f86a10...`). If one differs, replace it with the printed value. `setup-uv`'s pin
-is the one `ci.yml` already uses.
+Each must print the SHA used in `release.yml` (`3d3c42e5...`, `cf430e03...`,
+`9000827c...`, `68559e99...`).
 
 ## 1. Prepare the release commit (on a branch, merged to main)
 
