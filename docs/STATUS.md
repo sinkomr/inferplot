@@ -344,7 +344,14 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   subtitles, 158 bar p labels, 175 n labels, 485 cell labels, 152 pair labels); on
   results, 69 of 70 subtitles (one pinned: D99 at three digits). To do when the
   analysis lands: run the text tests on real results
-- [ ] barstats: analyses and figure in progress
+- [x] barstats analyses: `ip.analyze.barstats` returns complete results for the
+  two-way, paired and one-way designs. 75 fixture calls (67 answered, 8 replays of
+  refused calls) on pandas, polars and pyarrow match R on every number (worst
+  closed-form gap 5.4e-11, R's own Fisher error; interval bounds within 2.6e-7), with
+  identical JSON across backends; 22 fixtures refused by design, each tested; a pair
+  without a Fisher test stays in the result with its reason (D113). Lead's check: 80
+  random frames in three designs against pandas and SciPy, 1e-14
+- [ ] barstats figure in progress; then image baselines, end-of-phase review
 - [x] texts: histostats and scatterstats print ggstatsplot's subtitle, Bayes caption and
   histostats' centrality label: 120 of 128 subtitles, 35 of 37 captions and 75 of 75
   labels equal ggstatsplot's character for character (the 17 robust subtitles under
