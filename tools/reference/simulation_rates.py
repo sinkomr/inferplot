@@ -19,9 +19,11 @@ simulated rate must then agree with it), and the run time.
 ``--true-values`` checks the derived population values the coverage settings use
 against large Monte Carlo samples (one sample of 2,000,000 per value, or 400,000
 subjects): the 20% winsorized correlation and Spearman's rho of a bivariate
-normal, xi, the limit of rank epsilon squared and of Kendall's W, and the 20%
-trimmed mean of a standard lognormal. These estimates are computed with NumPy and
-SciPy, not with inferplot.
+normal, xi, the limit of rank epsilon squared and of Kendall's W, the 20%
+trimmed mean of a standard lognormal, and (from one table of 2,000,000
+observations each) the bias-corrected Cramer's V of barstats' two 2 x 3 designs
+and Pearson's C of its one-way design. These estimates are computed with NumPy
+and SciPy, not with inferplot.
 """
 
 from __future__ import annotations
@@ -137,7 +139,37 @@ def true_values() -> dict[str, Any]:
         "formula": ss.LOGNORMAL_TM,
         "monte_carlo": float(sps.trim_mean(np.exp(rng.standard_normal(big)), 0.2)),
     }
+    # barstats, from a generator of its own (the values above stay as they were).
+    bar_rng = np.random.Generator(np.random.PCG64(4041))
+    for label, cells, true in (
+        ("weak", ss.V_WEAK, ss.V_WEAK_TRUE),
+        ("strong", ss.V_STRONG, ss.V_STRONG_TRUE),
+    ):
+        table = bar_rng.multinomial(big, np.ravel(cells)).reshape(2, 3)
+        out[f"cramers_v_{label}"] = {
+            "formula": true,
+            "monte_carlo": _adjusted_cramers_v(table.astype(np.float64)),
+        }
+    counts = bar_rng.multinomial(big, ss.GOF_C_PROBS).astype(np.float64)
+    expected = big / len(counts)
+    chi2 = float(((counts - expected) ** 2 / expected).sum())
+    out["pearsons_c"] = {
+        "formula": ss.GOF_C_TRUE,
+        "monte_carlo": math.sqrt(chi2 / (chi2 + big)),
+    }
     return out
+
+
+def _adjusted_cramers_v(table: np.ndarray) -> float:
+    """Bergsma's (2013) bias-corrected Cramer's V of a table."""
+    n = float(table.sum())
+    expected = np.outer(table.sum(axis=1), table.sum(axis=0)) / n
+    chi2 = float(((table - expected) ** 2 / expected).sum())
+    r, c = table.shape
+    phi2 = max(0.0, chi2 / n - (r - 1) * (c - 1) / (n - 1))
+    rows = r - (r - 1) ** 2 / (n - 1)
+    cols = c - (c - 1) ** 2 / (n - 1)
+    return math.sqrt(phi2 / (min(rows, cols) - 1.0))
 
 
 def main() -> None:

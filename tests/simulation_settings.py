@@ -61,6 +61,7 @@ converges to (the probability limit), derived below with its citation:
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 from collections.abc import Callable, Sequence
@@ -70,10 +71,11 @@ from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy import integrate, optimize
+from scipy import integrate, optimize, special
 from scipy import stats as sps
 
 import inferplot as ip
+from inferplot import check
 from inferplot import stats as st
 
 REFERENCE_FILE = Path(__file__).resolve().parent / "data" / "simulation_reference.json"
@@ -2282,5 +2284,1057 @@ def _scatter_settings() -> tuple[Setting, ...]:
 
 SCATTERSTATS = _scatter_settings()
 
-ALL: tuple[Setting, ...] = BETWEEN + WITHIN + HISTOSTATS + SCATTERSTATS
+# ------------------------------------------------------------------ barstats
+#
+# barstats tests counts, so its data are tables drawn from a multinomial
+# distribution: n observations (pairs for McNemar's test), each falling in a cell
+# with the cell's probability; the per-bar tests draw each bar's counts with a
+# fixed bar size. The analyses read data whose levels are not declared (plain text
+# columns, the ordinary case): a level without observations is not a level, as in
+# R. The helpers ``two_way_table``, ``paired_table`` and ``one_way_counts`` say what
+# barstats then tests, or None where it refuses (ValueError);
+# tests/test_simulation_barstats_settings.py checks them against
+# ``ip.analyze.barstats`` table by table, refusals included.
+#
+# A replication that barstats refuses has no p-value and no interval: it counts as
+# no rejection and no coverage, and each setting where that is not negligible
+# reports its refusal rate as a quantity of its own. "inside" (the estimate lies in
+# its own interval) counts a refusal as not outside.
+#
+# Every chi-square p-value of a table is a chi-square approximation to a discrete
+# statistic, so its rate at the simulated n is of kind 2 (as the rank tests'): exact
+# where the tables can be enumerated (``exact_two_by_two``, ``exact_paired``,
+# ``exact_one_way``; the per-bar tests from the one-way rate), otherwise from the
+# reference simulation. Population values: Cramer's V of the cell probabilities
+# pi, sqrt(phi^2 / (min(r, c) - 1)) with phi^2 = sum (pi_ij - p_i q_j)^2 / (p_i q_j)
+# (Cramer 1946, 14.3.4), the probability limit of the bias-corrected estimate
+# (chi^2 / n -> phi^2, (r - 1)(c - 1) / (n - 1) -> 0, r~ -> r; Bergsma 2013);
+# Pearson's C of a goodness-of-fit test, sqrt(phi^2 / (1 + phi^2)) with phi^2 = sum
+# (pi_i - p_i)^2 / p_i (the limit of chi^2 / n); Cohen's g, max(pi_ij, pi_ji) / (pi_ij
+# + pi_ji) - 1/2 summed over the discordant cells as the estimate is.
+
+IntTable = NDArray[np.int64]
+Z_ALPHA = {"two-sided": Z975, "one-sided": 1.6448536269514722}
+
+
+def compositions(n: int, m: int) -> IntTable:
+    """Every vector of m non-negative integers summing to n (C(n + m - 1, m - 1)
+    rows), the support of a multinomial distribution."""
+    columns: list[IntTable] = []
+    left = np.array([n], dtype=np.int64)  # what each partial vector leaves
+    for _ in range(m - 1):
+        # Each partial vector with r left extends to r + 1 vectors: 0, 1, ..., r.
+        sizes = left + 1
+        parent = np.repeat(np.arange(left.size), sizes)
+        starts = np.repeat(np.cumsum(sizes) - sizes, sizes)
+        value = np.arange(int(sizes.sum()), dtype=np.int64) - starts
+        columns = [column[parent] for column in columns] + [value]
+        left = left[parent] - value
+    return np.stack([*columns, left], axis=1)
+
+
+def multinomial_pmf(x: IntTable, probs: Sequence[float]) -> Array:
+    """P(X = x) for each row of x under Multinomial(row sum, probs)."""
+    p = np.asarray(probs, dtype=np.float64)
+    n = x.sum(axis=1)
+    safe = np.where(p > 0.0, p, 1.0)
+    log_terms = np.where(x > 0, x * np.log(safe), 0.0)
+    log_pmf = (
+        special.gammaln(n + 1.0)
+        - special.gammaln(x + 1.0).sum(axis=1)
+        + log_terms.sum(axis=1)
+    )
+    impossible = ((x > 0) & (p <= 0.0)).any(axis=1)
+    return np.where(impossible, 0.0, np.exp(log_pmf))
+
+
+def ncx2_cdf(x: Array, df: float, ncp: float) -> Array:
+    """P(chi'^2(df, ncp) <= x), the Poisson mixture of central chi-squares
+    sum_j e^(-ncp/2) (ncp/2)^j / j! P(chi^2_(df + 2j) <= x) (Johnson, Kotz &
+    Balakrishnan 1995, 29.2), summed until the Poisson tail is below 1e-17 (small
+    ncp only)."""
+    half = ncp / 2.0
+    top = int(half + 12.0 * math.sqrt(half + 1.0) + 40.0)
+    j = np.arange(top + 1, dtype=np.float64)
+    if half > 0.0:
+        weights = np.exp(-half + j * math.log(half) - special.gammaln(j + 1.0))
+    else:
+        weights = (j == 0).astype(np.float64)
+    shapes = (df + 2.0 * j) / 2.0
+    values = np.asarray(x, dtype=np.float64)
+    return special.gammainc(shapes[None, :], values.ravel()[:, None] / 2.0) @ weights
+
+
+def wilson(more: Array, d: Array, z: float) -> tuple[Array, Array]:
+    """Wilson's (1927) score interval of more / d without continuity correction
+    (Newcombe 1998, method 3), clipped to [0, 1]; d > 0."""
+    p = more / d
+    centre = p + z * z / (2.0 * d)
+    spread = z * np.sqrt(p * (1.0 - p) / d + z * z / (4.0 * d * d))
+    scale = 1.0 + z * z / d
+    return (
+        np.maximum(0.0, (centre - spread) / scale),
+        np.minimum(1.0, (centre + spread) / scale),
+    )
+
+
+def cochran_fails(expected: Array) -> bool:
+    """Cochran's (1954) rule as ``result.check()`` applies it (small_expected): an
+    expected count below 1, or more than 20% of them below 5."""
+    small = int((expected < check.SMALL_EXPECTED).sum())
+    return bool(
+        expected.min() < check.MIN_EXPECTED
+        or small > check.SMALL_EXPECTED_SHARE * expected.size
+    )
+
+
+# Which table barstats tests, or None where it refuses.
+
+
+def two_way_table(counts: IntTable) -> IntTable | None:
+    """The rows and columns with observations; None where barstats refuses: fewer
+    than two levels of x or of y hold observations, or n is at most the number of
+    rows or columns (the bias-corrected V is not defined)."""
+    kept = counts[counts.sum(axis=1) > 0][:, counts.sum(axis=0) > 0]
+    if min(kept.shape) < 2 or int(kept.sum()) <= max(kept.shape):
+        return None
+    return kept
+
+
+def paired_table(counts: IntTable) -> IntTable | None:
+    """The square table on the levels either measurement holds; None where
+    barstats refuses: a level held by one measurement only (the table is not
+    square), fewer than two levels, or two levels that exchange no pair
+    (McNemar's statistic or a term of Bowker's is 0/0)."""
+    in_x = counts.sum(axis=1) > 0
+    in_y = counts.sum(axis=0) > 0
+    if not np.array_equal(in_x, in_y):
+        return None
+    kept = counts[in_x][:, in_x]
+    k = kept.shape[0]
+    if k < 2:
+        return None
+    exchanged = (kept + kept.T)[np.triu_indices(k, 1)]
+    if bool((exchanged == 0).any()):
+        return None
+    return kept
+
+
+def one_way_counts(
+    counts: IntTable, ratio: Sequence[float] | None
+) -> tuple[IntTable, bool] | None:
+    """The counts of the categories with observations and whether one was
+    dropped; None where barstats refuses: fewer than two categories, or a
+    ``ratio`` with a share for a category that has no observation (wrong
+    length)."""
+    present = counts > 0
+    dropped = not bool(present.all())
+    if (ratio is not None and dropped) or int(present.sum()) < 2:
+        return None
+    return counts[present], dropped
+
+
+def table_frame(counts: IntTable, *, paired: bool = False) -> Any:
+    """A pandas frame of the table, one row per cell with its count in "n"
+    (zero cells included, which barstats drops with their levels when no other
+    row holds them); levels "a0", "a1", ... of x and "b0", ... of y ("a0", ...
+    for both when paired)."""
+    import pandas as pd
+
+    r, c = counts.shape
+    rows = [f"a{i}" for i in range(r)]
+    cols = [f"a{j}" for j in range(c)] if paired else [f"b{j}" for j in range(c)]
+    return pd.DataFrame(
+        {"x": np.repeat(rows, c), "y": np.tile(cols, r), "n": counts.ravel()}
+    )
+
+
+def multinomial_tables(
+    n: int, probs: Sequence[float]
+) -> Callable[[np.random.Generator, int], Array]:
+    """Rows of cell counts (flattened row by row) of n observations."""
+    p = np.asarray(probs, dtype=np.float64)
+    assert abs(math.fsum(p.tolist()) - 1.0) < 1e-12
+
+    def draw(rng: np.random.Generator, reps: int) -> Array:
+        return rng.multinomial(n, p, size=reps).astype(np.float64)
+
+    return draw
+
+
+def outer(p: Sequence[float], q: Sequence[float]) -> tuple[float, ...]:
+    return tuple(float(v) for v in np.outer(p, q).ravel())
+
+
+def cramers_v_of(cells: Sequence[Sequence[float]]) -> float:
+    pi = np.asarray(cells, dtype=np.float64)
+    expected = np.outer(pi.sum(axis=1), pi.sum(axis=0))
+    phi2 = float(((pi - expected) ** 2 / expected).sum())
+    return math.sqrt(phi2 / (min(pi.shape) - 1))
+
+
+def pearsons_c_of(probs: Sequence[float], ratio: Sequence[float]) -> float:
+    pi, p0 = np.asarray(probs), np.asarray(ratio)
+    phi2 = float(((pi - p0) ** 2 / p0).sum())
+    return math.sqrt(phi2 / (1.0 + phi2))
+
+
+def cohens_g_of(cells: Sequence[Sequence[float]]) -> float:
+    pi = np.asarray(cells, dtype=np.float64)
+    upper = pi[np.triu_indices(pi.shape[0], 1)]
+    lower = pi.T[np.triu_indices(pi.shape[0], 1)]
+    return float(np.maximum(upper, lower).sum() / (upper + lower).sum()) - 0.5
+
+
+# Exact rates by enumeration.
+
+
+def exact_two_by_two(
+    n: int, p: Sequence[float], q: Sequence[float]
+) -> dict[str, float]:
+    """Exact rates of the 2 x 2 chi-square test of independence and Cramer's V
+    interval at V = 0 over every table of n observations with cell probabilities
+    p_i q_j (C(n + 3, 3) tables): "p" (p < 0.05), "v0" (the two-sided 95% interval
+    covers 0), "v0_greater" (the one-sided [low, 1] covers 0), "refused" (a row or
+    column without observations), "flagged" (a test whose expected counts fail
+    Cochran's rule, ``result.check()``'s small_expected), "p_flagged" and
+    "p_unflagged" (a rejection with and without that flag).
+
+    The interval covers 0 exactly when its lower bound, V at the lower
+    noncentrality bound lambda_L, is 0: lambda_L / n <= 1 / (n - 1). The
+    noncentral chi-square CDF at x decreases in lambda and lambda_L solves
+    P(chi'^2(1, lambda) <= x) = 0.975 (0.95 one-sided; 0 where no lambda > 0
+    does), so lambda_L <= n / (n - 1) exactly when that CDF at lambda = n / (n - 1)
+    is at most 0.975 (0.95)."""
+    tables = compositions(n, 4)
+    weight = multinomial_pmf(tables, outer(p, q))
+    a, b, c, d = (tables[:, i].astype(np.float64) for i in range(4))
+    r1, r2, c1, c2 = a + b, c + d, a + c, b + d
+    ok = (r1 > 0) & (r2 > 0) & (c1 > 0) & (c2 > 0)
+    denominator = np.where(ok, r1 * r2 * c1 * c2, 1.0)
+    statistic = np.where(ok, n * (a * d - b * c) ** 2 / denominator, 0.0)
+    reject = ok & (sps.chi2.sf(statistic, 1) < ALPHA)
+    cdf = ncx2_cdf(statistic, 1.0, n / (n - 1.0))
+    expected = np.stack([r1 * c1, r1 * c2, r2 * c1, r2 * c2], axis=1) / n
+    small = (expected < check.SMALL_EXPECTED).sum(axis=1)
+    flagged = ok & (
+        (expected.min(axis=1) < check.MIN_EXPECTED)
+        | (small > check.SMALL_EXPECTED_SHARE * 4)
+    )
+    return {
+        "p": float(weight[reject].sum()),
+        "v0": float(weight[ok & (cdf <= 0.975)].sum()),
+        "v0_greater": float(weight[ok & (cdf <= 0.95)].sum()),
+        "refused": float(weight[~ok].sum()),
+        "flagged": float(weight[flagged].sum()),
+        "p_flagged": float(weight[reject & flagged].sum()),
+        "p_unflagged": float(weight[reject & ~flagged].sum()),
+    }
+
+
+def exact_paired(n: int, cells: Sequence[Sequence[float]]) -> dict[str, float]:
+    """Exact rates of McNemar's test and Cohen's g interval for n pairs of a 2 x 2
+    table with cell probabilities ``cells``: the number of discordant pairs D is
+    Binomial(n, pi_01 + pi_10) and, given D = d, the pairs in cell (0, 1) are
+    Binomial(d, pi_01 / (pi_01 + pi_10)). "p" (p < 0.05), "refused" (D = 0),
+    "g_two", "g_greater", "g_less" (the interval covers the true g: two-sided 95%,
+    [low, 0.5] and [-0.5, high] at 95%). Refusals for a level held by one
+    measurement only (with D > 0) are left out: their probability is below 4
+    max(row or column share)^n (below 1e-8 in every setting here; the fast tests
+    check it against the full enumeration)."""
+    pi = np.asarray(cells, dtype=np.float64)
+    disc = float(pi[0, 1] + pi[1, 0])
+    share = float(pi[0, 1]) / disc
+    g_true = cohens_g_of(cells)
+    rates = {"p": 0.0, "g_two": 0.0, "g_greater": 0.0, "g_less": 0.0}
+    for d in range(1, n + 1):
+        weight_d = float(sps.binom.pmf(d, n, disc))
+        b = np.arange(d + 1, dtype=np.float64)
+        weight = sps.binom.pmf(b, d, share) * weight_d
+        statistic = (2.0 * b - d) ** 2 / d
+        rates["p"] += float(weight[sps.chi2.sf(statistic, 1) < ALPHA].sum())
+        more = np.maximum(b, d - b)
+        target = g_true + 0.5
+        low, high = wilson(more, np.full_like(more, d), Z_ALPHA["two-sided"])
+        rates["g_two"] += float(weight[(low <= target) & (target <= high)].sum())
+        low1, high1 = wilson(more, np.full_like(more, d), Z_ALPHA["one-sided"])
+        rates["g_greater"] += float(weight[low1 <= target].sum())
+        rates["g_less"] += float(weight[target <= high1].sum())
+    rates["refused"] = float(sps.binom.pmf(0, n, disc))
+    return rates
+
+
+def exact_one_way(
+    n: int,
+    probs: Sequence[float],
+    ratio: Sequence[float] | None = None,
+) -> dict[str, float]:
+    """Exact rates of the goodness-of-fit test of n observations with category
+    probabilities ``probs`` against ``ratio`` (None: equal shares), over every
+    outcome (C(n + k - 1, k - 1)), as barstats tests data whose levels are not
+    declared (``one_way_counts``: an empty category is dropped, and with a
+    ``ratio`` refused). "p" (p < 0.05), "dropped" (tested without an empty
+    category), "refused", and Pearson's C intervals covering the population C:
+    "c_two" (two-sided 95%), "c_greater" ([low, 1]), "c_less" ([0, high]). C(lambda)
+    = sqrt(lambda / (lambda + n)) increases in the noncentrality, so an interval
+    covers the population C, which is C(lambda_0) with lambda_0 = n phi^2, exactly
+    when its noncentrality interval covers lambda_0: when P(chi'^2(df, lambda_0) <=
+    chi^2) is in [0.025, 0.975] (two-sided), at most 0.95 ("greater") or at least
+    0.05 ("less"); at C = 0 (lambda_0 = 0) the "less" interval always covers."""
+    k = len(probs)
+    outcomes = compositions(n, k)
+    weight = multinomial_pmf(outcomes, probs)
+    p0 = np.full(k, 1.0 / k) if ratio is None else np.asarray(ratio, dtype=np.float64)
+    phi2 = float(((np.asarray(probs) - p0) ** 2 / p0).sum())
+    lam0 = n * phi2
+    present = outcomes > 0
+    kept = present.sum(axis=1)
+    dropped = kept < k
+    if ratio is None:
+        tested = kept >= 2
+        expected = np.where(present, n / np.maximum(kept, 1)[:, None], 1.0)
+        terms = np.where(present, (outcomes - expected) ** 2 / expected, 0.0)
+    else:
+        tested = ~dropped
+        expected = n * p0[None, :]
+        terms = (outcomes - expected) ** 2 / expected
+    statistic = terms.sum(axis=1)
+    df = np.maximum(kept - 1, 1).astype(np.float64)
+    reject = tested & (sps.chi2.sf(statistic, df) < ALPHA)
+    cdf = np.empty(len(outcomes))
+    for value in np.unique(df):
+        rows = df == value
+        cdf[rows] = (
+            sps.chi2.cdf(statistic[rows], value)
+            if lam0 == 0.0
+            else ncx2_cdf(statistic[rows], float(value), lam0)
+        )
+    two = tested & (cdf <= 0.975) & ((cdf >= 0.025) | (lam0 == 0.0))
+    return {
+        "p": float(weight[reject].sum()),
+        "dropped": float(weight[tested & dropped].sum()),
+        "refused": float(weight[~tested].sum()),
+        "c_two": float(weight[two].sum()),
+        "c_greater": float(weight[tested & (cdf <= 0.95)].sum()),
+        "c_less": float(weight[tested & ((cdf >= 0.05) | (lam0 == 0.0))].sum()),
+    }
+
+
+def refusal_some_pair_empty(n: int, cells: Sequence[Sequence[float]]) -> float:
+    """P(some two levels exchange no pair) for n pairs with cell probabilities
+    ``cells`` (inclusion-exclusion over the sets of pairs of levels: all pairs in a
+    set are empty with probability (1 - their mass)^n). barstats' refusal rate
+    differs from it by the rare tables where a level is held by one measurement
+    only, or by neither (then dropped, not refused): the Bowker settings take
+    their refusal rate from the reference simulation, and this value is the
+    report's check of it."""
+    pi = np.asarray(cells, dtype=np.float64)
+    k = pi.shape[0]
+    masses = [float(pi[i, j] + pi[j, i]) for i in range(k) for j in range(i + 1, k)]
+    total = 0.0
+    for size in range(1, len(masses) + 1):
+        for subset in itertools.combinations(masses, size):
+            total += (-1.0) ** (size + 1) * (1.0 - sum(subset)) ** n
+    return total
+
+
+# Outcomes.
+
+
+SIDES: dict[str, st.Alternative] = {
+    "two": "two-sided",
+    "greater": "greater",
+    "less": "less",
+}
+
+
+def _two_way_outcome(
+    shape: tuple[int, int], true_v: float, sides: Sequence[str]
+) -> Callable[[Array, int], Outcome]:
+    """The chi-square test and Cramer's V intervals (``sides``: keys of SIDES)."""
+
+    def outcome(row: Array, _: int) -> Outcome:
+        kept = two_way_table(row.reshape(shape).astype(np.int64))
+        if kept is None:
+            return {"p": False, "inside": True, **dict.fromkeys(sides, False)}
+        out: Outcome = {"p": st.chisq_independence(kept).p_value < ALPHA}
+        for side in sides:
+            es = st.cramers_v(kept, alternative=SIDES[side])
+            out[side] = covers(es.conf_low, es.conf_high, true_v)
+            if side == "two":
+                out["inside"] = covers(es.conf_low, es.conf_high, es.estimate)
+        return out
+
+    return outcome
+
+
+def _two_by_two_api(row: Array, _: int) -> Outcome:
+    counts = row.reshape(2, 2).astype(np.int64)
+    kept = two_way_table(counts)
+    try:
+        result = ip.analyze.barstats(
+            table_frame(counts), "x", "y", counts="n", bf_message=False
+        )
+    except ValueError:
+        assert kept is None, counts
+        return {"p": False, "v0": False, "inside": True, "flagged": False}
+    assert kept is not None, counts
+    assert result.test is not None
+    assert result.effect_size is not None
+    es = result.effect_size
+    reject = result.test.p_value < ALPHA
+    # check()'s small_expected for the main test (its expected counts and rule).
+    flagged = cochran_fails(np.asarray(check.expected_counts(result), dtype=np.float64))
+    return {
+        "p": reject,
+        "v0": covers(es.conf_low, es.conf_high, 0.0),
+        "inside": covers(es.conf_low, es.conf_high, es.estimate),
+        "flagged": flagged,
+        "p_flagged": reject and flagged,
+    }
+
+
+def _sparse_two_by_two(row: Array, _: int) -> Outcome:
+    kept = two_way_table(row.reshape(2, 2).astype(np.int64))
+    if kept is None:
+        return {"p": False, "refused": True}
+    return {"p": st.chisq_independence(kept).p_value < ALPHA, "refused": False}
+
+
+def _paired_stats(
+    size: int, true_g: float, sides: Sequence[str]
+) -> Callable[[Array, int], Outcome]:
+    """McNemar's (Bowker's) test and Cohen's g intervals (``sides``)."""
+
+    def outcome(row: Array, _: int) -> Outcome:
+        kept = paired_table(row.reshape(size, size).astype(np.int64))
+        if kept is None:
+            return {"p": False, "refused": True, **{f"g_{s}": False for s in sides}}
+        out: Outcome = {"p": st.mcnemar(kept).p_value < ALPHA, "refused": False}
+        for side in sides:
+            es = st.cohens_g(kept, alternative=SIDES[side])
+            out[f"g_{side}"] = covers(es.conf_low, es.conf_high, true_g)
+        return out
+
+    return outcome
+
+
+def _one_way(
+    ratio: Sequence[float] | None, true_c: float, sides: Sequence[str]
+) -> Callable[[Array, int], Outcome]:
+    """The goodness-of-fit test and Pearson's C intervals (``sides``)."""
+
+    def outcome(row: Array, _: int) -> Outcome:
+        read = one_way_counts(row.astype(np.int64), ratio)
+        if read is None:
+            return {
+                "p": False,
+                "dropped": False,
+                "refused": True,
+                **{f"c_{s}": False for s in sides},
+            }
+        counts, dropped = read
+        out: Outcome = {
+            "p": st.goodness_of_fit(counts, ratio).p_value < ALPHA,
+            "dropped": dropped,
+            "refused": False,
+        }
+        for side in sides:
+            es = st.pearsons_c(counts, ratio, alternative=SIDES[side])
+            out[f"c_{side}"] = covers(es.conf_low, es.conf_high, true_c)
+        return out
+
+    return outcome
+
+
+BAR_LEVELS, BAR_SIZE, BAR_COUNTS = 3, 20, (2, 4, 8)
+
+
+def _bars_draw(rng: np.random.Generator, reps: int) -> Array:
+    """reps x 3 x 8: each of 8 bars holds 20 observations of x, equal shares."""
+    draws = rng.multinomial(
+        BAR_SIZE, np.full(BAR_LEVELS, 1.0 / BAR_LEVELS), size=(reps, max(BAR_COUNTS))
+    )
+    return np.transpose(draws, (0, 2, 1)).astype(np.float64)
+
+
+def _bars(row: Array, _: int) -> Outcome:
+    """Each bar's goodness-of-fit test, as ``st.proportion_tests`` computes it
+    without Pearson's C (the fast tests check that the p-values are the same)."""
+    counts = row.astype(np.int64)
+    kept = counts[counts.sum(axis=1) > 0]
+    flagged = [
+        st.goodness_of_fit(kept[:, j]).p_value < ALPHA for j in range(kept.shape[1])
+    ]
+    out: Outcome = {"bar1": flagged[0]}
+    for k in BAR_COUNTS:
+        out[f"any{k}"] = any(flagged[:k])
+    return out
+
+
+def fisher_pair_p_values(kept: IntTable) -> list[float | None]:
+    """Fisher's p of every two rows on the columns they hold (None where they hold
+    one column), in ``st.pairwise_fisher``'s order, without its Cramer's V (the
+    fast tests check that the p-values are the same)."""
+    out: list[float | None] = []
+    for i, j in itertools.combinations(range(kept.shape[0]), 2):
+        pair = kept[[i, j]]
+        sub = pair[:, pair.sum(axis=0) > 0]
+        out.append(None if sub.shape[1] < 2 else st.fisher_exact(sub).p_value)
+    return out
+
+
+def _fisher_pairs(shape: tuple[int, int]) -> Callable[[Array, int], Outcome]:
+    def outcome(row: Array, _: int) -> Outcome:
+        counts = row.reshape(shape).astype(np.int64)
+        kept = two_way_table(counts)
+        if kept is None or kept.shape[0] < 3:
+            # barstats refuses, or x has two levels with observations: no pairs.
+            return {"raw": False, "holm": False}
+        tested = [p for p in fisher_pair_p_values(kept) if p is not None]
+        return {
+            "raw": any_below(tested),
+            "holm": any_below(st.p_adjust(tested, "holm")) if tested else False,
+        }
+
+    return outcome
+
+
+# Designs.
+
+TWO_N, TWO_P, TWO_Q = 40, (0.25, 0.75), (0.5, 0.5)
+SPARSE_N, SPARSE_P, SPARSE_Q = 20, (0.1, 0.9), (0.1, 0.9)
+NULL23_N, NULL23_P, NULL23_Q = 90, (0.4, 0.6), (0.2, 0.3, 0.5)
+NULL34_N, NULL34_P, NULL34_Q = 120, (0.2, 0.3, 0.5), (0.25, 0.25, 0.25, 0.25)
+V_N = 100
+V_WEAK = ((0.18, 0.15, 0.17), (0.12, 0.15, 0.23))
+V_STRONG = ((0.24, 0.16, 0.10), (0.06, 0.14, 0.30))
+V_WEAK_TRUE = cramers_v_of(V_WEAK)
+V_STRONG_TRUE = cramers_v_of(V_STRONG)
+
+MC_HOMOGENEOUS = ((0.35, 0.15), (0.15, 0.35))
+MC_FEW = ((0.45, 0.05), (0.05, 0.45))
+MC_LARGE = ((0.4, 0.1), (0.1, 0.4))
+G_CELLS = ((0.35, 0.21), (0.09, 0.35))
+G_TRUE = cohens_g_of(G_CELLS)
+BOWKER = (
+    (0.7 / 3, 0.05, 0.05),
+    (0.05, 0.7 / 3, 0.05),
+    (0.05, 0.05, 0.7 / 3),
+)
+
+GOF_SMALL_N, GOF_SIX_N, GOF_RATIO_N, GOF_C_N = 15, 30, 20, 60
+GOF_RATIO = (0.5, 0.3, 0.2)
+GOF_C_PROBS = (0.45, 0.35, 0.2)
+GOF_C_TRUE = pearsons_c_of(GOF_C_PROBS, (1 / 3, 1 / 3, 1 / 3))
+
+FISHER3_N, FISHER3_P, FISHER3_Q = 60, (1 / 3, 1 / 3, 1 / 3), (0.5, 0.5)
+FISHER4_N, FISHER4_P, FISHER4_Q = 80, (0.25,) * 4, (0.3, 0.3, 0.4)
+
+
+def cells_flat(cells: Sequence[Sequence[float]]) -> tuple[float, ...]:
+    return tuple(float(v) for row in cells for v in row)
+
+
+def _bar_rate() -> float:
+    """Exact rate of one bar's goodness-of-fit test (20 observations, three equal
+    shares; every level kept, empty ones included, as barstats keeps them)."""
+    outcomes = compositions(BAR_SIZE, BAR_LEVELS)
+    weight = multinomial_pmf(outcomes, (1.0 / BAR_LEVELS,) * BAR_LEVELS)
+    expected = BAR_SIZE / BAR_LEVELS
+    statistic = ((outcomes - expected) ** 2 / expected).sum(axis=1)
+    return float(weight[sps.chi2.sf(statistic, BAR_LEVELS - 1) < ALPHA].sum())
+
+
+EXACT_TWO = exact_two_by_two(TWO_N, TWO_P, TWO_Q)
+EXACT_SPARSE = exact_two_by_two(SPARSE_N, SPARSE_P, SPARSE_Q)
+EXACT_MC30 = exact_paired(30, MC_HOMOGENEOUS)
+EXACT_MC_FEW = exact_paired(30, MC_FEW)
+EXACT_MC200 = exact_paired(200, MC_LARGE)
+EXACT_G100 = exact_paired(100, G_CELLS)
+EXACT_G40 = exact_paired(40, G_CELLS)
+EXACT_GOF3 = exact_one_way(GOF_SMALL_N, (1 / 3,) * 3)
+EXACT_GOF6 = exact_one_way(GOF_SIX_N, (1 / 6,) * 6)
+EXACT_GOF_RATIO = exact_one_way(GOF_RATIO_N, GOF_RATIO, GOF_RATIO)
+EXACT_GOF_C = exact_one_way(GOF_C_N, GOF_C_PROBS)
+BAR_RATE = _bar_rate()
+
+_CHI2_DISCRETE = (
+    "chi-square approximation to a discrete statistic of counts: its rate at this n "
+    "is established"
+)
+_EXACT_ENUM = _CHI2_DISCRETE + " exactly, by enumerating every table"
+_REFUSED = "how often barstats refuses such data (exact)"
+_V_NCP = (
+    "noncentral chi-square interval put through the bias correction: the "
+    "correction subtracts (r - 1)(c - 1) / (n - 1) from lambda / n although the "
+    "noncentrality already excludes the central part, so the interval sits low"
+)
+_V_ZERO = (
+    "V cannot be negative; the interval covers 0 whenever its lower bound is 0, "
+    "which the bias correction makes more frequent than the test's non-rejection"
+)
+_WILSON = (
+    "Wilson score interval of a discrete proportion, folded to the more frequent "
+    "side: its coverage oscillates with the number of discordant pairs; exact, "
+    "summed over that number"
+)
+_INSIDE = (
+    "by construction: lambda_L < chi^2 - df <= chi^2 <= lambda_U wherever the "
+    "estimate is above 0 (df <= 6 here), and the bounds are monotone in lambda"
+)
+_GOF_C0 = (
+    "at C = 0 the interval covers 0 exactly when its lower noncentrality bound is "
+    "0, when p >= 0.025: conservative by construction; exact by enumeration"
+)
+
+BARSTATS: tuple[Setting, ...] = (
+    Setting(
+        name="bar_chisq_2x2_null",
+        function="barstats",
+        level="api",
+        params=f"2 x 2, n {TWO_N}, independent, rows {TWO_P}, columns {TWO_Q}",
+        draw=multinomial_tables(TWO_N, outer(TWO_P, TWO_Q)),
+        outcome=_two_by_two_api,
+        quantities=(
+            Quantity(
+                "p",
+                "chi-square test rejects independence (expected counts 5 to 15)",
+                0.05,
+                2,
+                _EXACT_ENUM,
+            ),
+            Quantity(
+                "v0",
+                "Cramer's V two-sided interval covers 0",
+                0.95,
+                2,
+                _V_ZERO + "; exact by enumeration",
+            ),
+            Quantity(
+                "inside",
+                "Cramer's V lies inside its own interval",
+                1.0,
+                1,
+                _INSIDE,
+            ),
+            Quantity(
+                "flagged",
+                "check() reports small_expected for the test (Cochran's rule)",
+                None,
+                2,
+                "how often Cochran's rule fires (exact)",
+            ),
+            Quantity(
+                "p_flagged",
+                "the test rejects and small_expected is reported",
+                None,
+                2,
+                _EXACT_ENUM,
+            ),
+        ),
+        reps=2_000,
+        seed=20261601,
+        exact={key: EXACT_TWO[key] for key in ("p", "v0", "flagged", "p_flagged")},
+    ),
+    Setting(
+        name="bar_chisq_2x2_sparse",
+        function="barstats",
+        level="stats",
+        params=f"2 x 2, n {SPARSE_N}, independent, rows {SPARSE_P}, columns {SPARSE_Q}",
+        draw=multinomial_tables(SPARSE_N, outer(SPARSE_P, SPARSE_Q)),
+        outcome=_sparse_two_by_two,
+        quantities=(
+            Quantity(
+                "p",
+                "chi-square test rejects independence (smallest expected count 0.2)",
+                0.05,
+                2,
+                _EXACT_ENUM,
+            ),
+            Quantity(
+                "refused", "barstats refuses (one level empty)", None, 2, _REFUSED
+            ),
+        ),
+        reps=2_000,
+        seed=20261602,
+        exact={key: EXACT_SPARSE[key] for key in ("p", "refused")},
+    ),
+    Setting(
+        name="bar_chisq_2x3_null",
+        function="barstats",
+        level="stats",
+        params=f"2 x 3, n {NULL23_N}, independent, rows {NULL23_P}, columns {NULL23_Q}",
+        draw=multinomial_tables(NULL23_N, outer(NULL23_P, NULL23_Q)),
+        outcome=_two_way_outcome((2, 3), 0.0, ("two", "greater")),
+        quantities=(
+            Quantity(
+                "p", "chi-square test rejects independence", 0.05, 2, _CHI2_DISCRETE
+            ),
+            Quantity("two", "Cramer's V two-sided interval covers 0", 0.95, 2, _V_ZERO),
+            Quantity(
+                "greater", "Cramer's V interval [low, 1] covers 0", 0.95, 2, _V_ZERO
+            ),
+            Quantity("inside", "V lies inside its own interval", 1.0, 1, _INSIDE),
+        ),
+        reps=2_000,
+        seed=20261603,
+        reference_reps=20_000,
+        reference_seed=30261603,
+    ),
+    Setting(
+        name="bar_chisq_3x4_null",
+        function="barstats",
+        level="stats",
+        params=f"3 x 4, n {NULL34_N}, independent, rows {NULL34_P}, columns {NULL34_Q}",
+        draw=multinomial_tables(NULL34_N, outer(NULL34_P, NULL34_Q)),
+        outcome=_two_way_outcome((3, 4), 0.0, ("two", "greater")),
+        quantities=(
+            Quantity(
+                "p", "chi-square test rejects independence", 0.05, 2, _CHI2_DISCRETE
+            ),
+            Quantity("two", "Cramer's V two-sided interval covers 0", 0.95, 2, _V_ZERO),
+            Quantity(
+                "greater", "Cramer's V interval [low, 1] covers 0", 0.95, 2, _V_ZERO
+            ),
+            Quantity("inside", "V lies inside its own interval", 1.0, 1, _INSIDE),
+        ),
+        reps=2_000,
+        seed=20261604,
+        reference_reps=20_000,
+        reference_seed=30261604,
+    ),
+    *(
+        Setting(
+            name=f"bar_cramers_v_{label}",
+            function="barstats",
+            level="stats",
+            params=f"2 x 3, n {V_N}, cells {cells}; V = {true:.6f}",
+            draw=multinomial_tables(V_N, cells_flat(cells)),
+            outcome=_two_way_outcome((2, 3), true, ("two", "greater", "less")),
+            quantities=(
+                Quantity(
+                    "two",
+                    f"Cramer's V two-sided interval covers the true {true:.2f}",
+                    0.95,
+                    2,
+                    _V_NCP,
+                ),
+                Quantity(
+                    "greater",
+                    f"Cramer's V interval [low, 1] covers the true {true:.2f}",
+                    0.95,
+                    2,
+                    _V_NCP,
+                ),
+                Quantity(
+                    "less",
+                    f"Cramer's V interval [0, high] covers the true {true:.2f}",
+                    0.95,
+                    2,
+                    _V_NCP,
+                ),
+                Quantity("inside", "V lies inside its own interval", 1.0, 1, _INSIDE),
+            ),
+            reps=1_000,
+            seed=seed,
+            reference_reps=10_000,
+            reference_seed=seed + 10_000_000,
+        )
+        for label, cells, true, seed in (
+            ("weak", V_WEAK, V_WEAK_TRUE, 20261605),
+            ("strong", V_STRONG, V_STRONG_TRUE, 20261606),
+        )
+    ),
+    Setting(
+        name="bar_mcnemar_30",
+        function="barstats",
+        level="stats",
+        params=f"paired 2 x 2, 30 pairs, cells {MC_HOMOGENEOUS}",
+        draw=multinomial_tables(30, cells_flat(MC_HOMOGENEOUS)),
+        outcome=_paired_stats(2, 0.0, ("two",)),
+        quantities=(
+            Quantity(
+                "p",
+                "McNemar's test rejects equal margins (9 discordant pairs expected)",
+                0.05,
+                2,
+                _CHI2_DISCRETE + " exactly, from the binomial",
+            ),
+            Quantity(
+                "g_two",
+                "Cohen's g interval covers 0",
+                0.95,
+                2,
+                "at g = 0 the Wilson interval covers 0.5 exactly when the score "
+                "test, McNemar's, does not reject: 1 minus its rate",
+            ),
+        ),
+        reps=2_000,
+        seed=20261607,
+        exact={"p": EXACT_MC30["p"], "g_two": EXACT_MC30["g_two"]},
+    ),
+    Setting(
+        name="bar_mcnemar_few",
+        function="barstats",
+        level="stats",
+        params=f"paired 2 x 2, 30 pairs, cells {MC_FEW}",
+        draw=multinomial_tables(30, cells_flat(MC_FEW)),
+        outcome=_paired_stats(2, 0.0, ()),
+        quantities=(
+            Quantity(
+                "p",
+                "McNemar's test rejects equal margins (3 discordant pairs expected)",
+                0.05,
+                2,
+                _CHI2_DISCRETE + " exactly, from the binomial",
+            ),
+            Quantity(
+                "refused", "barstats refuses (no discordant pair)", None, 2, _REFUSED
+            ),
+        ),
+        reps=2_000,
+        seed=20261608,
+        exact={"p": EXACT_MC_FEW["p"], "refused": EXACT_MC_FEW["refused"]},
+    ),
+    Setting(
+        name="bar_mcnemar_200",
+        function="barstats",
+        level="stats",
+        params=f"paired 2 x 2, 200 pairs, cells {MC_LARGE}",
+        draw=multinomial_tables(200, cells_flat(MC_LARGE)),
+        outcome=_paired_stats(2, 0.0, ("two",)),
+        quantities=(
+            Quantity(
+                "p",
+                "McNemar's test rejects equal margins (40 discordant pairs expected)",
+                0.05,
+                2,
+                _CHI2_DISCRETE + " exactly, from the binomial",
+            ),
+            Quantity("g_two", "Cohen's g interval covers 0", 0.95, 2, _WILSON),
+        ),
+        reps=2_000,
+        seed=20261609,
+        exact={"p": EXACT_MC200["p"], "g_two": EXACT_MC200["g_two"]},
+    ),
+    *(
+        Setting(
+            name=f"bar_cohens_g_{n}",
+            function="barstats",
+            level="stats",
+            params=f"paired 2 x 2, {n} pairs, cells {G_CELLS}; g = {G_TRUE:.6f}",
+            draw=multinomial_tables(n, cells_flat(G_CELLS)),
+            outcome=_paired_stats(2, G_TRUE, ("two", "greater", "less")),
+            quantities=(
+                Quantity("g_two", "Cohen's g interval covers 0.2", 0.95, 2, _WILSON),
+                Quantity(
+                    "g_greater", "Cohen's g [low, 0.5] covers 0.2", 0.95, 2, _WILSON
+                ),
+                Quantity(
+                    "g_less", "Cohen's g [-0.5, high] covers 0.2", 0.95, 2, _WILSON
+                ),
+            ),
+            reps=2_000,
+            seed=seed,
+            exact={key: exact[key] for key in ("g_two", "g_greater", "g_less")},
+        )
+        for n, exact, seed in ((100, EXACT_G100, 20261610), (40, EXACT_G40, 20261611))
+    ),
+    *(
+        Setting(
+            name=f"bar_bowker_{n}",
+            function="barstats",
+            level="stats",
+            params=f"paired 3 x 3, {n} pairs, symmetric cells {BOWKER}",
+            draw=multinomial_tables(n, cells_flat(BOWKER)),
+            outcome=_paired_stats(3, 0.0, ()),
+            quantities=(
+                Quantity(
+                    "p",
+                    "Bowker's test rejects symmetry",
+                    0.05,
+                    2,
+                    _CHI2_DISCRETE,
+                ),
+                Quantity(
+                    "refused",
+                    "barstats refuses (two levels exchange no pair)",
+                    None,
+                    2,
+                    "how often barstats refuses such data (established by the "
+                    "reference; refusal_some_pair_empty gives it to within the rare "
+                    "tables where a level is held by one measurement only)",
+                ),
+            ),
+            reps=2_000,
+            seed=seed,
+            reference_reps=20_000,
+            reference_seed=seed + 10_000_000,
+        )
+        for n, seed in ((60, 20261612), (30, 20261613))
+    ),
+    Setting(
+        name="bar_gof_equal3",
+        function="barstats",
+        level="stats",
+        params=f"one-way, n {GOF_SMALL_N}, 3 equal shares, tested against equal",
+        draw=multinomial_tables(GOF_SMALL_N, (1 / 3, 1 / 3, 1 / 3)),
+        outcome=_one_way(None, 0.0, ("two",)),
+        quantities=(
+            Quantity("p", "goodness-of-fit test rejects", 0.05, 2, _EXACT_ENUM),
+            Quantity("c_two", "Pearson's C interval covers 0", 0.95, 2, _GOF_C0),
+            Quantity(
+                "dropped",
+                "a category has no observation and is left out of the test",
+                None,
+                2,
+                _REFUSED,
+            ),
+        ),
+        reps=2_000,
+        seed=20261614,
+        exact={key: EXACT_GOF3[key] for key in ("p", "c_two", "dropped")},
+    ),
+    Setting(
+        name="bar_gof_equal6",
+        function="barstats",
+        level="stats",
+        params=f"one-way, n {GOF_SIX_N}, 6 equal shares, tested against equal",
+        draw=multinomial_tables(GOF_SIX_N, (1 / 6,) * 6),
+        outcome=_one_way(None, 0.0, ("two",)),
+        quantities=(
+            Quantity("p", "goodness-of-fit test rejects", 0.05, 2, _EXACT_ENUM),
+            Quantity("c_two", "Pearson's C interval covers 0", 0.95, 2, _GOF_C0),
+            Quantity(
+                "dropped",
+                "a category has no observation and is left out of the test",
+                None,
+                2,
+                _REFUSED,
+            ),
+        ),
+        reps=2_000,
+        seed=20261615,
+        exact={key: EXACT_GOF6[key] for key in ("p", "c_two", "dropped")},
+    ),
+    Setting(
+        name="bar_gof_ratio",
+        function="barstats",
+        level="stats",
+        params=f"one-way, n {GOF_RATIO_N}, shares {GOF_RATIO}, ratio {GOF_RATIO}",
+        draw=multinomial_tables(GOF_RATIO_N, GOF_RATIO),
+        outcome=_one_way(GOF_RATIO, 0.0, ()),
+        quantities=(
+            Quantity("p", "goodness-of-fit test rejects", 0.05, 2, _EXACT_ENUM),
+            Quantity(
+                "refused",
+                "barstats refuses (a category with a share has no observation)",
+                None,
+                2,
+                _REFUSED,
+            ),
+        ),
+        reps=2_000,
+        seed=20261616,
+        exact={key: EXACT_GOF_RATIO[key] for key in ("p", "refused")},
+    ),
+    Setting(
+        name="bar_pearsons_c_effect",
+        function="barstats",
+        level="stats",
+        params=(
+            f"one-way, n {GOF_C_N}, shares {GOF_C_PROBS} against equal; "
+            f"C = {GOF_C_TRUE:.6f}"
+        ),
+        draw=multinomial_tables(GOF_C_N, GOF_C_PROBS),
+        outcome=_one_way(None, GOF_C_TRUE, ("two", "greater", "less")),
+        quantities=tuple(
+            Quantity(
+                key,
+                f"Pearson's C {form} covers the true {GOF_C_TRUE:.2f}",
+                0.95,
+                2,
+                "noncentral chi-square approximation to a discrete statistic under "
+                "a fixed alternative; exact by enumeration",
+            )
+            for key, form in (
+                ("c_two", "two-sided interval"),
+                ("c_greater", "interval [low, 1]"),
+                ("c_less", "interval [0, high]"),
+            )
+        ),
+        reps=1_000,
+        seed=20261617,
+        exact={key: EXACT_GOF_C[key] for key in ("c_two", "c_greater", "c_less")},
+    ),
+    Setting(
+        name="bar_per_bar_null",
+        function="barstats",
+        level="stats",
+        params=(
+            f"{max(BAR_COUNTS)} bars of {BAR_SIZE}, x with {BAR_LEVELS} equal shares, "
+            "tested against equal"
+        ),
+        draw=_bars_draw,
+        outcome=_bars,
+        quantities=(
+            Quantity("bar1", "one bar's test rejects", 0.05, 2, _EXACT_ENUM),
+            *(
+                Quantity(
+                    f"any{k}",
+                    f"at least one of {k} bars' unadjusted tests rejects",
+                    0.05,
+                    2,
+                    "the bars' tests are not adjusted (as in ggstatsplot): with k "
+                    "independent bars at rate a, 1 - (1 - a)^k; exact",
+                )
+                for k in BAR_COUNTS
+            ),
+        ),
+        reps=2_000,
+        seed=20261618,
+        exact={
+            "bar1": BAR_RATE,
+            **{f"any{k}": 1.0 - (1.0 - BAR_RATE) ** k for k in BAR_COUNTS},
+        },
+    ),
+    *(
+        Setting(
+            name=f"bar_fisher_holm_{len(p)}",
+            function="barstats",
+            level="stats",
+            params=f"{len(p)} x {len(q)}, n {n}, independent, rows {p}, columns {q}",
+            draw=multinomial_tables(n, outer(p, q)),
+            outcome=_fisher_pairs((len(p), len(q))),
+            quantities=(
+                Quantity(
+                    "raw",
+                    "pairwise Fisher tests before Holm: any false rejection",
+                    0.05,
+                    2,
+                    "unadjusted pairs: above 5% by multiplicity, below by discreteness",
+                ),
+                Quantity(
+                    "holm",
+                    "pairwise Fisher tests after Holm: " + _PAIR_HOLM,
+                    0.05,
+                    2,
+                    "Holm bounds the family-wise error at 5%, and Fisher's exact "
+                    "test is conservative on discrete tables: below 5%",
+                ),
+            ),
+            reps=1_000,
+            seed=seed,
+            reference_reps=10_000,
+            reference_seed=seed + 10_000_000,
+        )
+        for p, q, n, seed in (
+            (FISHER3_P, FISHER3_Q, FISHER3_N, 20261619),
+            (FISHER4_P, FISHER4_Q, FISHER4_N, 20261620),
+        )
+    ),
+)
+
+ALL: tuple[Setting, ...] = BETWEEN + WITHIN + HISTOSTATS + SCATTERSTATS + BARSTATS
 BY_NAME = {s.name: s for s in ALL}
