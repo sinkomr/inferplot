@@ -402,9 +402,23 @@ def test_every_pinned_fixture_bound_is_met_through_the_api() -> None:
 
 @pytest.mark.parametrize("name", NAMES)
 def test_results_do_not_depend_on_the_backend(name: str) -> None:
-    first = result_of(name, "pandas")
+    first = _unlibrary(result_of(name, "pandas"))
     for backend in ("polars", "pyarrow"):
-        assert result_of(name, backend).to_json() == first.to_json()
+        assert _unlibrary(result_of(name, backend)).to_json() == first.to_json()
+
+
+def _unlibrary(result: StatsResult) -> StatsResult:
+    """The result with its recipes cut: they are written in each frame's own
+    library (review B14)."""
+    warnings = tuple(
+        re.sub(
+            r"(leave (?:it|them) out): .*",
+            r"\1: ...",
+            re.sub(r"(in their names), .*", r"\1, ...", w),
+        )
+        for w in result.warnings
+    )
+    return dataclasses.replace(result, warnings=warnings)
 
 
 # --------------------------------------------------------------------------- #
@@ -498,8 +512,8 @@ def test_single_x_keeps_the_pairs_r_loses(backend: Backend) -> None:
         None,
     )
     assert ab.no_test_reason == (
-        "both levels occur only in 'p' of y, so their table has a single column "
-        "and no test; R's fisher.test stops there"
+        "both levels occur only in 'p' of 'y2', so their table has a single "
+        "column and no test; R's fisher.test stops there"
     )
     assert (ab.estimate, ab.conf_low, ab.conf_high) == (None, None, None)
     p_ac = float(scipy_stats.fisher_exact([[3, 0], [0, 5]])[1])
@@ -523,8 +537,8 @@ def test_single_x_keeps_the_pairs_r_loses(backend: Backend) -> None:
     assert issue.severity == "info"
     assert issue.message == (
         "1 of the 3 pairwise comparisons of 'x3' has no p-value: 'a' and 'b' (both "
-        "levels occur only in 'p' of y, so their table has a single column and no "
-        "test; R's fisher.test stops there). The other 2 are adjusted among "
+        "levels occur only in 'p' of 'y2', so their table has a single column and "
+        "no test; R's fisher.test stops there). The other 2 are adjusted among "
         "themselves."
     )
     # The pair stays in the table and the frame, without numbers.
@@ -655,18 +669,16 @@ def test_small_expected_follows_r_warnings(name: str) -> None:
         # McNemar's p: R gives no warning of its own (edge_bar_paired_small's
         # comes from prop.test inside Cohen's g interval: one changing pair).
         assert "R's mcnemar.test does not check this" in message
-    # The bars: flagged where the figure labels them, exactly where R warns.
+    # The bars: flagged exactly where R warns, drawn or not: the APA sentence
+    # reports the bars' tests whenever y is given (D108; review B17).
     match = _BAR_PART.search(message)
     flagged = set() if match is None else set(re.findall(r"'([^']*)'", match.group(1)))
-    if result.settings.proportion_test:
-        r_bars = {
-            bar.level
-            for bar in result.bars
-            if bar.level is not None and _r_warns(case, "proportion_test", bar.level)
-        }
-        assert flagged == r_bars, (name, flagged, r_bars)
-    else:
-        assert not flagged
+    r_bars = {
+        bar.level
+        for bar in result.bars
+        if bar.level is not None and _r_warns(case, "proportion_test", bar.level)
+    }
+    assert flagged == r_bars, (name, flagged, r_bars)
 
 
 def test_where_small_expected_and_r_differ() -> None:
@@ -716,9 +728,20 @@ def test_round_trips_frames_and_printing(name: str) -> None:
 
 def test_checks_on_the_fixtures() -> None:
     codes = {name: sorted({i.code for i in result_of(name).check()}) for name in NAMES}
-    allowed = {"small_expected", "rows_dropped", "pairs_without_test"}
+    allowed = {
+        "small_expected",
+        "rows_dropped",
+        "pairs_without_test",
+        "empty_level_tested",
+    }
     assert set().union(*codes.values()) <= allowed
     assert [n for n, c in codes.items() if "pairs_without_test" in c] == [SINGLE_X]
+    # A declared level of x without observations, counted in the bars' drawn
+    # tests (review B18).
+    assert sorted(n for n, c in codes.items() if "empty_level_tested" in c) == [
+        "ggbarstats-edge_bar_paired_unequal-declared-parametric",
+        "ggbarstats-edge_bar_zero_cell-declared-parametric",
+    ]
     assert sorted(n for n, c in codes.items() if "rows_dropped" in c) == [
         "ggbarstats-edge_bar_missing-counts-parametric",
         "ggbarstats-edge_bar_missing-oneway-parametric",

@@ -186,8 +186,9 @@ def test_only_x_y_and_counts_drop_rows(backend: Backend) -> None:
     assert counts_of(weighted) == [[1, 5]]
     notes = table_notes(weighted)
     assert notes[0] == (
-        "3 rows were left out because 'x', 'y' or 'w' is missing (1 without 'x', "
-        "1 without 'y', 1 without 'w'); 6 observations remain."
+        "3 rows (standing for 5 observations) were left out because 'x', 'y' or "
+        "'w' is missing (1 without 'x', 1 without 'y', 1 without 'w'); 6 "
+        "observations remain."
     )
     assert notes[1] == (
         "The levels 'b' and 'c' of 'x' were left out of the analysis: every row of "
@@ -330,8 +331,8 @@ def test_many_distinct_whole_numbers_are_a_measurement() -> None:
         "a measurement, not a column of categories (most categories would hold a "
         "single observation). To compare 'age' across the groups of 'g' (for "
         "example its mean in each group), use betweenstats(data, x='g', y='age'). "
-        "To count these values as categories anyway, convert them to text first, "
-        "for example data['age'].astype(str) in pandas."
+        "To count these values as categories anyway, convert them to text first: "
+        "data['age'] = data['age'].astype('Int64').astype('string')."
     )
     # Eleven codes over a table with counts are categories: n is the total.
     codes = pd.DataFrame({"code": list(range(11)), "n": [5] * 11})
@@ -432,8 +433,8 @@ def test_numbered_text_levels_get_a_note_without_order() -> None:
         "The levels of 'week' are text, sorted as text (as R sorts them), so 'week "
         "10' comes before 'week 2': 'week 1', 'week 10', 'week 2'. The analysis and "
         "the figure use this order. To order them by the numbers in their names, "
-        "pass the column as a pandas Categorical (pd.Categorical(data['week'], "
-        "categories=['week 1', 'week 2', 'week 10'])) or a polars Enum in that order."
+        "declare the column as a pandas Categorical in that order: data['week'] = "
+        "pd.Categorical(data['week'], categories=['week 1', 'week 2', 'week 10'])."
     ]
 
 

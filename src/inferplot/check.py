@@ -449,8 +449,11 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
     """An effect size outside its own CI. Percentile bootstrap intervals (rank
     epsilon squared, the explanatory effect size xi) are read off the resampled
     values, which a small effect's bootstrap bias can shift past the estimate
-    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]). Read
-    from stored fields only, so the copy without values reports it too."""
+    (12 groups of 6 noise values: epsilon squared 0.074 with [0.107, 1]); and
+    the noncentral chi-square intervals of barstats' Cramér's V and Pearson's
+    C, which bracket the noncentrality while the estimate comes from the
+    statistic (:func:`_noncentral_why`). Read from stored fields only, so the
+    copy without values reports it too."""
     es = result.effect_size
     if es is None:
         return None
@@ -494,6 +497,19 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             f"own bias ({shift}), the whole interval can lie on one side of the "
             "estimate."
         )
+    elif es.ci_method == "noncentral chi-square" and result.test is not None:
+        return Issue(
+            code="estimate_outside_interval",
+            severity="warning",
+            message=head + _noncentral_why(result),
+            fix=(
+                "Nothing is wrong with the data or the computation, and the numbers "
+                "are ggstatsplot's: report the estimate and the interval as they "
+                "are, and say that the interval is one for the noncentrality of the "
+                "chi-square, which can exclude the estimate. The test's p-value is "
+                "unaffected."
+            ),
+        )
     else:
         why = f" The CI ({es.ci_method}) should contain its estimate."
     return Issue(
@@ -505,6 +521,52 @@ def _estimate_outside_interval(result: StatsResult) -> Issue | None:
             "plausible values (say that it does not contain the estimate); the "
             "test's p-value does not come from the bootstrap and is unaffected."
         ),
+    )
+
+
+def _noncentral_why(result: StatsResult) -> str:
+    """Why a Cramér's V or Pearson's C lies outside its noncentral chi-square
+    interval (barstats; review B5): the estimate comes from the chi-square
+    statistic, the bounds from the noncentrality lambda of the noncentral
+    chi-square distribution, whose mean is df + lambda. Each goes through the
+    same formula (for V with the bias correction, which subtracts df / (n - 1)
+    from each), but the statistic carries the df on average and lambda does
+    not, so with many categories and few observations per cell the statistic
+    can exceed the noncentrality of the upper bound; and where the statistic
+    lies in the lower tail of the chi-square distribution without association
+    the interval is [0, 0], beside an estimate that is positive whenever the
+    statistic is (Pearson's C, which has no correction; about
+    (1 - conf_level) / 2 of tables without association for a two-sided
+    interval). A V of [0, 0] comes from the correction and gets the first
+    wording."""
+    es, test = result.effect_size, result.test
+    assert es is not None
+    assert test is not None
+    df = test.df_error if test.df_error is not None else test.df
+    dfs = "" if df is None else f" on {df:g} df"
+    statistic = f"{test.statistic:.2f}"
+    if es.conf_high <= 0.0 and es.name == "pearsons_c":
+        tail = (1.0 - es.conf_level) / (2.0 if es.sidedness == "two-sided" else 1.0)
+        return (
+            f" This is a property of the interval, not an error: the interval "
+            f"brackets the noncentrality of the chi-square statistic, and the "
+            f"statistic, {statistic}{dfs}, is smaller than "
+            f"{1.0 - tail:.1%} of the values the chi-square distribution gives "
+            "without any association, so no positive noncentrality is plausible "
+            "and both bounds are 0. The estimate is computed from the statistic "
+            "itself and is positive whenever the statistic is. Without any "
+            f"association this happens in about {tail:.1%} of tables."
+        )
+    return (
+        " This is a property of the method, as ggstatsplot computes it, not an "
+        "error: the estimate is computed from the chi-square statistic, "
+        f"{statistic}{dfs}, and the bounds from the noncentrality of the "
+        "chi-square, which leaves out the degrees of freedom the statistic carries "
+        "on average (its mean is df plus the noncentrality); for Cramér's V the "
+        "bias correction then subtracts the same amount from each. With many "
+        "categories and few observations per cell the statistic can exceed the "
+        "noncentrality of the upper bound, and the estimate then lies above the "
+        "interval (an upper bound the correction takes to 0 gives [0, 0])."
     )
 
 
@@ -597,7 +659,8 @@ def _fails_cochran(expected: list[float]) -> bool:
 def _small_expected(result: StatsResult) -> Issue | None:
     """Expected counts too small for the chi-square approximation of a barstats
     p-value (Cochran's rule: none below 1 and at most 20% below 5), in the main
-    test or, where the figure labels them, a bar's proportion test. R's
+    test or a bar's proportion test (reported in the APA sentence whenever y is
+    given, drawn above the bar or not). R's
     ``chisq.test`` warns ("Chi-squared approximation may be incorrect") whenever
     an expected count is below 5, which Cochran's rule allows for up to 20% of
     them, and ggstatsplot mutes the warning. R's ``mcnemar.test`` checks
@@ -622,11 +685,14 @@ def _small_expected(result: StatsResult) -> Issue | None:
             test = "the goodness-of-fit test"
         below_one = f", {tiny} below 1" if tiny else ""
         parts.append(
-            f"{small} of the {len(main)} expected counts of {test} are below 5 (the "
+            f"{small} of the {len(main)} expected counts of {test} "
+            f"{'is' if small == 1 else 'are'} below 5 (the "
             f"smallest is {min(main):.2f}{below_one}), so its p-value, a chi-square "
             "approximation, may be inaccurate"
         )
-    if result.settings.proportion_test:
+    # The bars' tests are reported in the APA sentence whenever y is given
+    # (D108), drawn or not, so the rule covers them whenever y is (review B17).
+    if result.y is not None:
         shares = _shares(result)
         bars = [
             bar.level
@@ -722,13 +788,65 @@ def _pairs_without_test(result: StatsResult) -> Issue | None:
     )
 
 
+def _empty_level_tested(result: StatsResult) -> Issue | None:
+    """barstats: a declared level of x without observations counts as a
+    category in each bar's proportion test, whose p is drawn above the bar
+    (review B18): the p can be tiny although the drawn shares are close."""
+    if result.design != "contingency" or result.y is None:
+        return None
+    if not result.settings.proportion_test:
+        return None
+    tested = [bar for bar in result.bars if bar.test is not None]
+    if not tested:
+        return None
+    k = len(result.levels)
+    # result.counts holds a row per level of x.
+    empty = [
+        level for level, row in zip(result.levels, result.counts, strict=True)
+        if sum(row) == 0
+    ]  # fmt: skip
+    if not empty:
+        return None
+    one = len(empty) == 1
+    names = ", ".join(repr(level) for level in empty)
+    labels = ", ".join(
+        f"{bar.level!r}: {text}"
+        for bar, text in zip(result.bars, result.text.bar_labels, strict=True)
+        if bar.test is not None and text
+    )
+    expected = (
+        f"equal shares, 1/{k} of each bar"
+        if result.settings.ratio is None
+        else "the shares ratio= gives"
+    )
+    return Issue(
+        code="empty_level_tested",
+        severity="warning",
+        message=(
+            f"The level{'' if one else 's'} {names} of {result.x!r} "
+            f"{'has' if one else 'have'} no observations, and each bar's proportion "
+            f"test counts {'it' if one else 'them'} as a category expected to hold "
+            f"{expected}: the p-values above the bars ({labels}) test {k} "
+            f"categories, {len(empty)} of them empty, so they can be small although "
+            "the drawn shares are close."
+        ),
+        fix=(
+            "If the empty level is not a possible answer, leave it out of the data "
+            "(pandas: .cat.remove_unused_categories(); result.warnings shows the "
+            "call for your frame) and analyse again; if it is, report the bars' "
+            "tests as tests against all the categories."
+        ),
+    )
+
+
 def result_issues(result: StatsResult) -> tuple[Issue, ...]:
     """The statistical issues of ``result``: small_n, small_expected, heavy_ties,
     infinite_effect_size, estimate_outside_interval, rows_dropped, pairs_hidden,
-    pairs_without_test, pairwise_conf_level."""
+    pairs_without_test, pairwise_conf_level, empty_level_tested."""
     found = (
         _small_n(result),
         _small_expected(result),
+        _empty_level_tested(result),
         _heavy_ties(result),
         _infinite_effect_size(result),
         _estimate_outside_interval(result),

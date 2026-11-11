@@ -192,6 +192,9 @@ class LayerArgs:
     asks: str = ""
     advice: str = "Choose a visible style."
     levels: bool = True  # the layer is coloured by level
+    # Further refusals of the layer (barstats' segments, whose colour is the only
+    # key to the levels): (given name, property, value) to a message, or None.
+    refuse: Callable[[str, str, object], str | None] | None = None
 
 
 # The vector formats a scratch drawing is also written to: matplotlib checks some
@@ -311,6 +314,26 @@ _REFUSED: Final[Mapping[str, str]] = {
 # Properties of the rectangles of a histogram that carry its bins, refused like
 # the positions of the other layers.
 _BAR_DATA: Final = frozenset({"x", "y", "width", "height", "bounds"})
+# What else a figure encodes (review of barstats, B2): the drawing order keeps
+# the labels and lines inferplot draws over a layer readable (every dict); a
+# rectangle is drawn upright (histostats' and barstats' bars, scatterstats'
+# marginal bars); the least-squares line is a straight line.
+_ORDER: Final = (
+    "would change the order in which the {layer} are drawn among inferplot's "
+    "layers, which keeps the labels and lines drawn over them readable"
+)
+_ROTATED: Final = (
+    "would rotate the {layer}, which inferplot draws upright from the result's values"
+)
+_BY_KIND: Final[Mapping[str, Mapping[str, str]]] = {
+    "Rectangle": {"angle": _ROTATED, "rotation_point": _ROTATED},
+    "Line2D": {
+        "drawstyle": (
+            "would draw the {layer} as steps instead of the straight line the "
+            "result's coefficients give"
+        )
+    },
+}
 
 
 def _refuse_moving_args(spec: LayerArgs, args: Mapping[str, object]) -> None:
@@ -328,9 +351,18 @@ def _refuse_moving_args(spec: LayerArgs, args: Mapping[str, object]) -> None:
                 (prop,) = cbook.normalize_kwargs({key: None}, artist)
             except TypeError:
                 continue  # a property of two names at once; Artist.set reports it
+        kind = type(artist).__name__
         why = _REFUSED.get(prop)
-        if why is None and type(artist).__name__ == "Rectangle" and prop in _BAR_DATA:
+        if why is None and kind == "Rectangle" and prop in _BAR_DATA:
             why = _DATA
+        if why is None and prop == "zorder":
+            why = _ORDER
+        if why is None:
+            why = _BY_KIND.get(kind, {}).get(prop)
+        if why is None and spec.refuse is not None:
+            refused = spec.refuse(key, prop, args[key])
+            if refused is not None:
+                raise ValueError(refused)
         if why is not None:
             raise ValueError(
                 f"{name} sets {key!r}, which {why.format(layer=spec.noun)}. "

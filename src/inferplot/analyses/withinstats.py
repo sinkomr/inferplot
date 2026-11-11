@@ -83,7 +83,12 @@ from inferplot.result import (
     current_provenance,
     paired_tied_count,
 )
-from inferplot.text import build_texts, format_value, r_number_text
+from inferplot.text import (
+    build_texts,
+    format_value,
+    r_number_text,
+    with_zero_p_note,
+)
 
 __all__ = ["withinstats"]
 
@@ -1341,7 +1346,11 @@ def _assemble(
         dropped_subjects=len(data.dropped_subjects),
         dropped_subject_rows=data.n_rows_of_dropped_subjects,
         n_tied=paired_tied_count(observations),
-        warnings=(*_data_warnings(data), *parts.warnings),
+        warnings=with_zero_p_note(
+            (*_data_warnings(data), *parts.warnings),
+            parts.test,
+            shown=args.results_subtitle,
+        ),
         provenance=current_provenance(seed=args.seed, citations=parts.citations),
         settings=settings,
         text=texts,

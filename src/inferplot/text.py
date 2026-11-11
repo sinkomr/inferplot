@@ -205,6 +205,35 @@ def format_p_subtitle(p: float, digits: int = 2) -> str:
     return format_value(DOUBLE_XMIN if p == 0.0 else p, digits)
 
 
+def zero_p_note(what: str, where: str = "The subtitle prints") -> str:
+    """The ``warnings`` entry for a p-value of exactly 0 that a text prints as
+    2.23e-308 (``format_p_subtitle``; D108, review B15): ``what`` names the
+    test ("the chi-square test"), ``where`` the text that prints it."""
+    return (
+        f"The p-value of {what} is 0 as computed: it is smaller than the smallest "
+        "number a double can hold (about 2.2e-308), not exactly zero. "
+        f"{where} p = 2.23e-308, as ggstatsplot prints a p-value of 0; report "
+        "p < 1e-300 (in APA style p < .001)."
+    )
+
+
+def with_zero_p_note(
+    warnings: Sequence[str], test: TestResult | None, *, shown: bool
+) -> tuple[str, ...]:
+    """``warnings`` with :func:`zero_p_note` for the main test, where its p is
+    exactly 0 and the subtitle is ``shown``, unless a warning already explains
+    the 2.23e-308 (histostats' bootstrap, scatterstats' exact correlation)."""
+    out = tuple(warnings)
+    if (
+        not shown
+        or test is None
+        or test.p_value != 0.0
+        or any("2.23e-308" in w for w in out)
+    ):
+        return out
+    return (*out, zero_p_note(test.label))
+
+
 def format_bf01_log(bf10: float, digits: int = 2) -> str:
     """Format ``log_e(BF01) = -log(bf10)`` as the caption and pairwise labels do.
 
@@ -2910,13 +2939,64 @@ def _and_join(items: Sequence[str]) -> str:
     return f"{', '.join(items[:-1])} and {items[-1]}"
 
 
+def _share_text(share: float, digits: int) -> tuple[str, bool]:
+    """One expected share rounded to ``digits`` decimals (more where that would
+    print 0), and whether rounding changed it."""
+    places = digits
+    while round(share, places) == 0.0 and places < 15:
+        places += 1
+    rounded = round(share, places)
+    return r_number_text(rounded), abs(rounded - share) > 1e-12
+
+
+# The name written for a level that is empty text (review B17).
+EMPTY_LEVEL_NAME: Final = "(empty)"
+
+
+def _one_line(name: str) -> str:
+    """A name inside a sentence: its line breaks written as spaces (review B17)."""
+    return " ".join(name.splitlines()) if "\n" in name or "\r" in name else name
+
+
+def level_text(level: str) -> str:
+    """A level of barstats as its texts write it: "(empty)" for empty text, line
+    breaks as spaces."""
+    return EMPTY_LEVEL_NAME if level == "" else _one_line(level)
+
+
+def bar_name(level: str) -> str:
+    """A level as barstats draws it in a tick label or a legend entry:
+    "(empty)" for empty text, else as :func:`drawable` draws it."""
+    return EMPTY_LEVEL_NAME if level == "" else drawable(level)
+
+
+def _bars_shares_text(settings: Settings, empty: Sequence[str], k: int) -> str:
+    """What the bars' tests compare against (:func:`_shares_text`), naming the
+    levels of x without observations that they count as categories (review
+    B18): "equal shares of 3 categories, 'waitlist' among them with no
+    observations"."""
+    shares = _shares_text(settings)
+    if not empty:
+        return shares
+    names = _and_join([repr(level_text(level)) for level in empty])
+    return f"{shares} of {k} categories ({names} with no observations)"
+
+
 def _shares_text(settings: Settings) -> str:
     """What the goodness-of-fit tests compare against: "equal shares" or
     "expected shares 0.5, 0.25 and 0.25" (``ratio``, in the order of the
-    levels of x)."""
-    if settings.ratio is None:
+    levels of x).
+
+    Equal shares read "equal shares" however they were written (``ratio=[1/3,
+    1/3, 1/3]``); other shares are rounded to ``settings.digits`` decimals (more
+    where that would print 0), and "of about" marks a rounding that changed one
+    ("expected shares of about 0.17, 0.17, 0.17 and 0.5")."""
+    ratio = settings.ratio
+    if ratio is None or all(abs(r * len(ratio) - 1.0) <= 1e-9 for r in ratio):
         return "equal shares"
-    return "expected shares " + _and_join([r_number_text(r) for r in settings.ratio])
+    shown = [_share_text(r, settings.digits) for r in ratio]
+    about = "of about " if any(changed for _, changed in shown) else ""
+    return f"expected shares {about}" + _and_join([text for text, _ in shown])
 
 
 def _contingency_effect_text(effect_size: EffectSize) -> str:
@@ -2971,6 +3051,7 @@ def contingency_sentence(
             f"{_CONTINGENCY_NO_TEST[design]} (results_subtitle=False), "
             f"n = {format_n(n_obs)}{pairs}."
         )
+    x, y = _one_line(x), None if y is None else _one_line(y)
     sx = _short(x, name_limit)
     if compact:
         what = f"against {_shares_text(settings)}" if design == "one-way" else ""
@@ -3002,6 +3083,8 @@ def contingency_tests_sentence(
     y: str | None,
     settings: Settings,
     name_limit: int = APA_NAME_LIMIT,
+    empty: Sequence[str] = (),
+    k: int = 0,
 ) -> str | None:
     """One sentence on the bars' proportion tests and the pairwise tests, or
     None where there are neither (no y): how many are below .05, the method
@@ -3012,9 +3095,12 @@ def contingency_tests_sentence(
     the levels of cyl (Holm adjusted): adjusted p < .05 in 1 of 3 pairs." The
     bars' tests are never adjusted (ggstatsplot's ``onesample_data()``); the
     pairs follow ``p_adjust_method`` ("unadjusted: p < .05 in ..." for "none").
+    Only the pairs with a test are counted; the others are named ("in 2 of the
+    2 tested pairs; 1 pair has no test", or "none of the 3 pairs has a test").
     """
     parts: list[str] = []
     tested = [bar for bar in bars if bar.test is not None]
+    x, y = _one_line(x), None if y is None else _one_line(y)
     sx = _short(x, name_limit)
     if tested and y is not None:
         below = sum(
@@ -3022,7 +3108,8 @@ def contingency_tests_sentence(
         )
         parts.append(
             f"Goodness-of-fit tests within each level of {_short(y, name_limit)} "
-            f"(shares of {sx} against {_shares_text(settings)}, unadjusted): "
+            f"(shares of {sx} against {_bars_shares_text(settings, empty, k)}, "
+            "unadjusted): "
             f"p < .05 in {below} of {_plural(len(tested), 'bar')}"
         )
     if pairwise:
@@ -3031,11 +3118,24 @@ def contingency_tests_sentence(
             how, p = "unadjusted", "p"
         else:
             how, p = f"{_ADJUST_NAMES.get(method, method)} adjusted", "adjusted p"
-        below = sum(1 for pair in pairwise if pair.significant)
-        parts.append(
-            f"Fisher's exact tests between the levels of {sx} ({how}): {p} < .05 in "
-            f"{below} of {_plural(len(pairwise), 'pair')}"
-        )
+        tested = [pair for pair in pairwise if pair.p_value is not None]
+        untested = len(pairwise) - len(tested)
+        below = sum(1 for pair in tested if pair.significant)
+        head = f"Fisher's exact tests between the levels of {sx}"
+        if not tested:
+            parts.append(f"{head}: none of the {_plural(untested, 'pair')} has a test")
+        elif not untested:
+            parts.append(
+                f"{head} ({how}): {p} < .05 in {below} of "
+                f"{_plural(len(tested), 'pair')}"
+            )
+        else:
+            verb = "has" if untested == 1 else "have"
+            parts.append(
+                f"{head} ({how}): {p} < .05 in {below} of the "
+                f"{_plural(len(tested), 'tested pair')}; "
+                f"{_plural(untested, 'pair')} {verb} no test"
+            )
     if not parts:
         return None
     return "; ".join(parts) + "."
@@ -3051,13 +3151,18 @@ def contingency_apa(
     y: str | None,
     n_obs: int,
     settings: Settings,
+    empty: Sequence[str] = (),
+    k: int = 0,
 ) -> str:
     """``result.text.apa`` of barstats: :func:`contingency_sentence`, then
-    :func:`contingency_tests_sentence` where there are bar or pair tests."""
+    :func:`contingency_tests_sentence` where there are bar or pair tests
+    (``empty``: the levels of x without observations, of ``k``)."""
     main = contingency_sentence(
         test, effect_size, x=x, y=y, n_obs=n_obs, settings=settings
     )
-    tests = contingency_tests_sentence(bars, pairwise, x=x, y=y, settings=settings)
+    tests = contingency_tests_sentence(
+        bars, pairwise, x=x, y=y, settings=settings, empty=empty, k=k
+    )
     return main if tests is None else f"{main} {tests}"
 
 
@@ -3166,9 +3271,15 @@ def contingency_alt_text(
     result = ""
     head = ""
     for limit in (40, 20, 12):
-        sx = _short(x, limit)
-        short = _shortened(list(levels), limit)
-        short_bars = _shortened(bar_names, limit)
+        sx = _short(_one_line(x), limit)
+        written = [level_text(level) for level in levels]
+        by_text = _shortened(written, limit)
+        short = {level: by_text[w] for level, w in zip(levels, written, strict=True)}
+        written_bars = [level_text(level) for level in bar_names]
+        by_bar = _shortened(written_bars, limit)
+        short_bars = {
+            level: by_bar[w] for level, w in zip(bar_names, written_bars, strict=True)
+        }
         result = contingency_sentence(
             test,
             effect_size,
@@ -3183,7 +3294,7 @@ def contingency_alt_text(
             head = f"Stacked bar chart of the shares of {sx} in one bar"
         else:
             assert y is not None
-            sy = _short(y, limit)
+            sy = _short(_one_line(y), limit)
             same = (
                 f" ({format_n(n_obs)} units measured twice)"
                 if design == "paired"
@@ -3225,7 +3336,7 @@ def contingency_alt_text(
         )
         tests_part = (
             "the p-value above each bar tests its shares against "
-            f"{_shares_text(settings)}"
+            f"{_bars_shares_text(settings, _empty_levels(levels, cells), len(levels))}"
             if bar_tests
             else ""
         )
@@ -3253,6 +3364,12 @@ def contingency_alt_text(
                 return text
     # Still too long: the bars and the second sentence go, the result stays whole.
     return f"{head}. {result}"
+
+
+def _empty_levels(levels: Sequence[str], cells: Sequence[Cell]) -> list[str]:
+    """The levels of x without observations (every cell of theirs 0)."""
+    held = {cell.level for cell in cells if cell.count > 0}
+    return [level for level in levels if level not in held]
 
 
 def contingency_texts(
@@ -3305,6 +3422,8 @@ def contingency_texts(
             y=y,
             n_obs=n_obs,
             settings=settings,
+            empty=_empty_levels(levels, cells),
+            k=len(levels),
         ),
         alt_text=contingency_alt_text(
             x=x,
@@ -3318,7 +3437,7 @@ def contingency_texts(
             settings=settings,
         ),
         centrality_labels=(),
-        tick_labels=tuple("" if b.level is None else drawable(b.level) for b in bars),
+        tick_labels=tuple("" if b.level is None else bar_name(b.level) for b in bars),
         pairwise_labels=tuple(to_plain(_pair_label(p, digits)) for p in pairwise),
         bar_labels=tuple(
             "" if node is None else to_plain(node)
@@ -3357,7 +3476,7 @@ def contingency_figure_texts(result: StatsResult) -> FigureTexts:
         caption_lines=(),
         centrality_labels=(),
         tick_labels=tuple(
-            "" if b.level is None else drawable(b.level) for b in result.bars
+            "" if b.level is None else bar_name(b.level) for b in result.bars
         ),
         pairwise_labels=tuple(
             to_mathtext(_pair_label(p, settings.digits)) for p in result.pairwise

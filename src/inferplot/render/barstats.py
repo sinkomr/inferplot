@@ -11,7 +11,8 @@
   written on their segment in the ink that contrasts with it. A label that does
   not fit inside its segment (its height, or with ``ax=`` its width) is moved
   beside its bar, in a column right of the bar, stacked clear of the other
-  moved labels of that bar and joined to its segment by a short line; with
+  moved labels of that bar, joined to its segment by a short line and keyed by
+  a small square of its segment's colour (edged in the ink); with
   ``ax=``, a moved label for which that column has no room is left out.
   inferplot's own figure is made tall enough for every column, so it leaves no
   label out; ``fig.check()`` reports every label that is left out or does not
@@ -59,7 +60,7 @@ from matplotlib.transforms import offset_copy
 from inferplot import _validate as v
 from inferplot.render import base, theme
 from inferplot.render.base import GAP_PT, LABEL_PAD_PT, LayerArgs, px
-from inferplot.render.comparison import wrap_tick_label
+from inferplot.render.comparison import wrap_names
 from inferplot.render.figure import (
     CellLabel,
     DrawnData,
@@ -68,7 +69,7 @@ from inferplot.render.figure import (
     axes_background,
 )
 from inferplot.result import StatsResult
-from inferplot.text import drawable, figure_alt_text, figure_texts
+from inferplot.text import bar_name, drawable, figure_alt_text, figure_texts
 
 if TYPE_CHECKING:
     from matplotlib.artist import Artist
@@ -94,6 +95,29 @@ LEAD_PT: Final = 7.0
 STACK_GAP_PT: Final = 1.5
 LEADER_WIDTH_PT: Final = 0.6
 SEGMENT_EDGE_PT: Final = 0.8
+# A moved label carries a key of its segment's colour at its left (review B13):
+# a square KEY_PT wide, edged in inferplot's ink (so a light colour reads on the
+# background, as the legend's keys do), KEY_GAP_PT before the label.
+KEY_PT: Final = 5.0
+KEY_GAP_PT: Final = 2.0
+# bar_args' bounds (B2): a wider edge covers small segments (1% of a 3 in bar is
+# about 2 points) and the legend keys; below this alpha the default palette's
+# yellow has under 1.1:1 contrast with white (low_contrast's floor for a level's
+# colour), and the Okabe-Ito colours keep a CIELAB difference of at least 10.
+MAX_SEGMENT_EDGE_PT: Final = 2.0
+MIN_SEGMENT_ALPHA: Final = 0.4
+# The bound of inferplot's own figure (review B11): its plotting area is at most
+# MAX_PLOT_IN wide and tall, so with the y axis, the legend and the margins the
+# figure stays within figure_oversized's 30 in (a long title or caption, which
+# figure_oversized reports, aside). Up to MAX_PLOT_IN / MIN_SPACING_IN bars keep
+# a slot of MIN_SPACING_IN; more share MAX_PLOT_IN down to MIN_SLOT_IN a bar
+# (the bar narrows with its slot, and level names wrap to the slot; 0.7 in
+# holds an n label such as "(n = 123)" with its gaps); beyond
+# MAX_BARS bars, or where the labels need wider slots or a taller legend than
+# the bound allows, the call is refused before a figure is returned.
+MAX_PLOT_IN: Final = 26.0
+MIN_SLOT_IN: Final = 0.7
+MAX_BARS: Final = int(MAX_PLOT_IN // MIN_SLOT_IN)
 # Level names in the tick labels and the legend (and its default title) wrap on
 # spaces into lines at most this wide; a slot widens for the tick labels' lines.
 TICK_LINE_IN: Final = 1.0
@@ -209,6 +233,17 @@ def barstats(
     _check_legend_title(options.legend_title)
     check_axes(ax)
     _check_contents(result)
+    if ax is None and len(result.bars) > MAX_BARS:
+        y = result.y
+        raise ValueError(
+            f"{len(result.bars)} bars do not fit inferplot's own figure, whose "
+            f"plotting area is at most {MAX_PLOT_IN:g} in wide with at least "
+            f"{MIN_SLOT_IN:g} in a bar: at most {MAX_BARS} bars fit. Draw fewer "
+            f"levels of {y!r} (filter the data or merge levels), or draw into an "
+            "Axes of a figure of your own size with ax=, for example "
+            "ax=Figure(figsize=(40, 6)).add_subplot() (from matplotlib.figure "
+            "import Figure); fig.check() then reports what does not fit."
+        )
     return base.draw(
         lambda colors, warning: _BarDrawing(result, options, colors, warning, ax),
         palette=palette,
@@ -287,12 +322,56 @@ def _scratch_segment(ax: Axes) -> Artist:
     return _segment_artist(ax, -0.4, 0.0, 0.8, 4.0, (0.0, 0.0, 0.0, 1.0))
 
 
+def _refused_style(key: str, prop: str, value: object) -> str | None:
+    """Why ``bar_args`` may not set ``prop`` (given as ``key``) to ``value``, or
+    None: the colour of a segment is the only key to its level of x, so
+    ``bar_args`` may not colour every level alike or leave the fill out, cover
+    the segments and the legend keys with a wide edge, or fade the colours
+    toward the background (review of barstats, B2)."""
+    allowed = (
+        "bar_args may style the segments with edgecolor, hatch, linestyle, "
+        f"linewidth (at most {MAX_SEGMENT_EDGE_PT:g} points) and alpha (at least "
+        f"{MIN_SEGMENT_ALPHA:g})."
+    )
+    if prop in ("color", "facecolor", "fill"):
+        what = (
+            "would leave the segments unfilled"
+            if prop == "fill"
+            else "would paint the segments of every level of x alike"
+        )
+        return (
+            f"bar_args sets {key!r}, which {what}, and the colour of a segment is "
+            "the only key to the legend of the levels of x. Choose the colours with "
+            "palette=, one per level of x in their order (for example palette=["
+            "'#0072B2', '#E69F00', '#009E73'], or a colormap name such as 'Set2'). "
+            f"{allowed}"
+        )
+    number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    if prop == "linewidth" and number and float(value) > MAX_SEGMENT_EDGE_PT:  # pyright: ignore[reportArgumentType]
+        return (
+            f"bar_args sets {key}={value!r}, an edge wider than "
+            f"{MAX_SEGMENT_EDGE_PT:g} points, which would cover small segments "
+            "and the legend keys (a segment of 1% is about 2 points tall). Use "
+            f"{key}={MAX_SEGMENT_EDGE_PT:g} or less."
+        )
+    if prop == "alpha" and number and float(value) < MIN_SEGMENT_ALPHA:  # pyright: ignore[reportArgumentType]
+        return (
+            f"bar_args sets {key}={value!r}, which would fade the colours that "
+            "identify the levels of x toward the background (below "
+            f"{MIN_SEGMENT_ALPHA:g}, the default palette's yellow can hardly be "
+            f"told from a white background). Use {key}={MIN_SEGMENT_ALPHA:g} or "
+            "more, or choose lighter colours with palette=."
+        )
+    return None
+
+
 _BAR_ARGS: Final = LayerArgs(
     name="bar_args",
     layer="bars",
     noun="bar segments",
     make=_scratch_segment,
     advice=("Choose a visible style; the segments show each level's share of its bar."),
+    refuse=_refused_style,
 )
 
 
@@ -318,6 +397,7 @@ class _Cell:
     segment: Rectangle | None = None
     text: Text | None = None
     leader: Line2D | None = None
+    key: Line2D | None = None
     place: Place = "inside"
 
 
@@ -389,6 +469,9 @@ class _BarDrawing(base.BaseDrawing):
             colors=tuple(self.colors),
             data=self.drawn_data(),
             cell_labels=self.cell_records(),
+            segments=tuple(
+                (c.i, c.segment) for c in self.cells if c.segment is not None
+            ),
         )
 
     def draw_bars(self) -> None:
@@ -564,7 +647,7 @@ class _BarDrawing(base.BaseDrawing):
         """The levels of x as the legend writes them: wrapped on spaces into lines
         LEGEND_LINE_IN wide, at most three, shortened with an ellipsis."""
         room = LEGEND_LINE_IN * self.dpi
-        return self.wrapped([drawable(level) for level in self.result.levels], room)
+        return self.wrapped([bar_name(level) for level in self.result.levels], room)
 
     def wrapped(
         self, names: Sequence[str], room: float, *, bold: bool = False
@@ -584,7 +667,7 @@ class _BarDrawing(base.BaseDrawing):
             return float(probe.get_window_extent(renderer).width) <= room
 
         try:
-            return [wrap_tick_label(f"{name}\n", fits)[:-1] for name in names]
+            return wrap_names(names, fits)
         finally:
             probe.remove()
 
@@ -609,10 +692,12 @@ class _BarDrawing(base.BaseDrawing):
             return float(probe.get_window_extent(renderer).width) <= room
 
         try:
+            named = [name for name in self.texts.tick_labels if name]
+            wrapped = iter(wrap_names(named, fits))
             self.tick_texts = [
-                wrap_tick_label(label, fits) if name else label
-                for label, name in zip(
-                    self.unwrapped_ticks(), self.texts.tick_labels, strict=True
+                f"{next(wrapped)}\n{n}" if name else n
+                for name, n in zip(
+                    self.texts.tick_labels, self.texts.n_labels, strict=True
                 )
             ]
         finally:
@@ -666,7 +751,11 @@ class _BarDrawing(base.BaseDrawing):
         labelled = self.labelled()
         pad = 2 * px(CELL_PAD_PT, dpi)
         widest = max((self.label_size(c)[0] for c in labelled), default=0.0)
-        self.bar_px = max(BAR_WIDTH_IN * dpi, widest + pad)
+        # Many bars share MAX_PLOT_IN, down to MIN_SLOT_IN each (B11).
+        floor = MIN_SPACING_IN * dpi
+        if self.n_bars * MIN_SPACING_IN > MAX_PLOT_IN:
+            floor = max(MIN_SLOT_IN, MAX_PLOT_IN / self.n_bars) * dpi
+        self.bar_px = max(min(BAR_WIDTH_IN * dpi, BAR_SHARE * floor), widest + pad)
         # 0% to 100% at least as tall as the legend, which hangs from 100%.
         bars_px = max(BARS_HEIGHT_IN * dpi, self.legend_height())
         moved: list[_Cell] = []
@@ -685,24 +774,65 @@ class _BarDrawing(base.BaseDrawing):
             bars_px = needed
         self.bars_px = bars_px
         column = max((self.label_size(c)[0] for c in moved), default=0.0)
+        if moved:
+            column += self.key_px()
         self.column_px = column
-        slot = max(MIN_SPACING_IN * dpi, self.bar_px / BAR_SHARE)
+        slot = max(floor, self.bar_px / BAR_SHARE)
         if moved:
             slot = max(slot, self.bar_px + px(LEAD_PT, dpi) + column + gap)
         slot = max(
             [slot]
             + [self.extent(t).width + gap for t in self.bar_labels if t is not None]
         )
-        self.wrap_ticks(TICK_LINE_IN * dpi)
+        # Level names wrap to TICK_LINE_IN, narrower only where many bars
+        # share the bounded area (B11).
+        narrow = floor < MIN_SPACING_IN * dpi
+        self.wrap_ticks(
+            min(TICK_LINE_IN * dpi, floor - 2 * gap) if narrow else TICK_LINE_IN * dpi
+        )
         slot = max(slot, self.widest_tick() + 2 * gap)
         self.slot_px = slot
         strip = self.strip_px()
         left, right = self.x_limits(slot, column if moved else 0.0)
+        self.check_bound(slot * (right - left), bars_px + strip)
         ppu = bars_px / 100.0
         self.set_view(left, right, 0.0, 100.0 + strip / ppu)
         self.place_cells(moved, ppu)
         self.place_legend_outside()
         self.fit_figure(slot * (right - left), bars_px + strip)
+
+    def check_bound(self, plot_w: float, plot_h: float) -> None:
+        """Refuse a plotting area beyond MAX_PLOT_IN (B11): the bars' labels need
+        wider slots, or the legend is taller, than the bound allows."""
+        dpi = self.dpi
+        width, height = plot_w / dpi, plot_h / dpi
+        if width <= MAX_PLOT_IN + 1e-9 and height <= MAX_PLOT_IN + 1e-9:
+            return
+        y = self.result.y
+        if width > MAX_PLOT_IN:
+            fit = max(1, int(MAX_PLOT_IN // (self.slot_px / dpi)))
+            why = (
+                f"its {self.n_bars} bars need {self.slot_px / dpi:.2f} in each for "
+                f"their labels, so about {fit} fit"
+            )
+            fewer = f"fewer levels of {y!r} (filter the data or merge levels)"
+        else:
+            per = self.legend_height() / dpi / max(len(self.result.levels), 1)
+            fit = max(1, int(MAX_PLOT_IN // max(per, 1e-9)))
+            why = (
+                f"the legend of the {len(self.result.levels)} levels of "
+                f"{self.result.x!r} is {self.legend_height() / dpi:.1f} in tall, so "
+                f"about {fit} levels fit"
+            )
+            fewer = f"fewer levels of {self.result.x!r} (merge levels)"
+        raise ValueError(
+            f"barstats' figure does not fit inferplot's own figure, whose plotting "
+            f"area is at most {MAX_PLOT_IN:g} in wide and tall: {why}. Draw "
+            f"{fewer}, or draw into an Axes of a figure of your own size with ax=, "
+            "for example ax=Figure(figsize=(40, 6)).add_subplot() (from "
+            "matplotlib.figure import Figure); fig.check() then reports what does "
+            "not fit."
+        )
 
     def widest_tick(self) -> float:
         probe = [
@@ -754,6 +884,9 @@ class _BarDrawing(base.BaseDrawing):
             if cell.leader is not None:
                 cell.leader.remove()
                 cell.leader = None
+            if cell.key is not None:
+                cell.key.remove()
+                cell.key = None
         for j in range(self.n_bars):
             self.stack(j, [c for c in moved if c.j == j], ppu)
 
@@ -794,10 +927,26 @@ class _BarDrawing(base.BaseDrawing):
                 text.set_visible(False)
                 cell.place = "omitted"
                 continue
-            text.set_position((x_text, centre))
+            key_x = x_text + px(KEY_PT / 2, dpi) / self.slot_px
+            text.set_position((x_text + self.key_px() / self.slot_px, centre))
             text.set_horizontalalignment("left")
             text.set_color(self.outside_ink())
             cell.place = "outside"
+            assert cell.segment is not None
+            key = Line2D(
+                [key_x],
+                [centre],
+                linestyle="none",
+                marker="s",
+                markersize=KEY_PT,
+                markerfacecolor=cell.segment.get_facecolor(),
+                markeredgecolor=self.outside_ink(),
+                markeredgewidth=LEADER_WIDTH_PT,
+                zorder=4.5,
+                gid=f"key-{cell.j}-{cell.i}",
+            )
+            self.ax.add_line(key)
+            cell.key = key
             middle = cell.bottom + cell.percent / 2
             line = Line2D(
                 [x_edge, x_text - px(1.5, dpi) / self.slot_px],
@@ -819,13 +968,20 @@ class _BarDrawing(base.BaseDrawing):
                 if cell.leader is not None:
                     cell.leader.remove()
                     cell.leader = None
+                if cell.key is not None:
+                    cell.key.remove()
+                    cell.key = None
+
+    def key_px(self) -> float:
+        """The width of a moved label's key and the gap after it, in pixels."""
+        return px(KEY_PT + KEY_GAP_PT, self.dpi)
 
     def column_fits(self, j: int, moved: Sequence[_Cell]) -> bool:
         """With ``ax=``: whether the moved labels of bar ``j`` fit between it and
         the next bar (or the legend, or the Axes' edge)."""
         dpi = self.dpi
         start = self.bar_px / 2 + px(LEAD_PT, dpi)
-        widest = max(self.label_size(c)[0] for c in moved)
+        widest = max(self.label_size(c)[0] for c in moved) + self.key_px()
         if j < self.n_bars - 1:
             room = self.slot_px - self.bar_px / 2 - px(GAP_PT, dpi)
         else:  # the legend starts a gap right of the last slot
@@ -939,7 +1095,7 @@ class _BarDrawing(base.BaseDrawing):
             if not moved:
                 column = 0.0
                 break
-            column = max(self.label_size(c)[0] for c in moved)
+            column = max(self.label_size(c)[0] for c in moved) + self.key_px()
             beside = slot - px(LEAD_PT, dpi) - column - gap - 1.0  # 1 px slack
             narrower = min(max(MIN_BAR_SHARE * slot, beside), bar)
             if narrower >= bar:
@@ -963,6 +1119,8 @@ class _BarDrawing(base.BaseDrawing):
                 cell.text.set_color(ink)
             if cell.leader is not None:
                 cell.leader.set_color(ink)
+            if cell.key is not None:
+                cell.key.set_markeredgecolor(ink)
 
     def drawn_data(self) -> tuple[DrawnData, ...]:
         drawn = [c for c in self.cells if c.segment is not None]

@@ -597,7 +597,7 @@ def _x_kind(series: nw.Series[Any], name: str, role: _Role = _X_ROLE) -> XKind:
         what = _what_values(_first_value(series))
         if what is not None:
             raise _unusable_values(role, name, what, str(dtype))
-        hint = "convert it to text or to a categorical column first"
+        hint = "Convert it to text or to a categorical column first"
     raise TypeError(
         f"{role.arg}={name!r} must hold text, categories or whole numbers to "
         f"{role.purpose}; its type is {dtype}. {hint}."
@@ -886,6 +886,15 @@ def _lookalikes(levels: Sequence[str]) -> tuple[tuple[str, ...], ...]:
     for level in levels:
         by_core.setdefault(level.strip(), []).append(level)
     return tuple(tuple(same) for same in by_core.values() if len(same) > 1)
+
+
+def _encoding_lookalikes(levels: Sequence[str]) -> tuple[tuple[str, ...], ...]:
+    """Sets of ``levels`` that are equal once their Unicode is normalized (NFC):
+    the same accented letter written precomposed and decomposed (review B17)."""
+    by_form: dict[str, list[str]] = {}
+    for level in levels:
+        by_form.setdefault(unicodedata.normalize("NFC", level), []).append(level)
+    return tuple(tuple(same) for same in by_form.values() if len(same) > 1)
 
 
 def _order_item(item: object) -> object:
@@ -2028,6 +2037,8 @@ class TableLevels:
     """As ``BetweenData.natural_order`` (of the levels that hold a count)."""
     lookalike_levels: tuple[tuple[str, ...], ...] = ()
     """Sets of levels that differ only in leading or trailing whitespace."""
+    encoding_lookalikes: tuple[tuple[str, ...], ...] = ()
+    """Sets of levels that differ only in their Unicode encoding (NFC)."""
 
     @property
     def present(self) -> tuple[str, ...]:
@@ -2066,6 +2077,14 @@ class TableData:
     n_zero_rows: int
     """Rows with every column present whose count is 0: they add nothing
     (``tidyr::uncount``)."""
+    library: Library = "pandas"
+    """The library of the user's frame, for recipes written in it."""
+    n_dropped_observations: int = 0
+    """With ``counts``: the observations the rows left out for a missing x or
+    y stood for (their counts, where present and whole)."""
+    possible_counts: tuple[str, ...] = ()
+    """Without ``counts``: the columns that may be counts the call left out,
+    where every cell holds at most one row (review B10)."""
 
     @property
     def n(self) -> int:
@@ -2108,6 +2127,21 @@ def _boolean_label(value: object) -> str:
     return "True" if value else "False"
 
 
+def _object_booleans(series: nw.Series[Any]) -> bool:
+    """A column of Python objects whose values present are all booleans: what
+    pandas makes of a boolean column holding a None (review B20). Read as
+    booleans, missing values staying missing."""
+    if not isinstance(series.dtype, nw.Object):
+        return False
+    try:
+        values = series.to_list()
+    except Exception:  # an unusual column narwhals cannot list: not booleans
+        return False
+    missing = _missing(series).tolist()
+    present = [v for v, gone in zip(values, missing, strict=True) if not gone]
+    return bool(present) and all(isinstance(v, bool | np.bool_) for v in present)
+
+
 def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
     """A column of categories: text, categoricals, booleans or numbers.
 
@@ -2115,7 +2149,7 @@ def _read_category(series: nw.Series[Any], name: str, role: _Role) -> _Grouping:
     logical values; Python's names); a declared categorical of booleans keeps its
     declared order. Everything else is read as betweenstats reads ``x``.
     """
-    if isinstance(series.dtype, nw.Boolean):
+    if isinstance(series.dtype, nw.Boolean) or _object_booleans(series):
         missing = _missing(series)
         values: list[object] = series.to_list()
         raw: list[object] = [
@@ -2211,8 +2245,46 @@ def _check_codes(
             "observations, so it looks like a measurement, not a column of "
             "categories (most categories would hold a single observation). "
             f"{advice} To count these values as categories anyway, convert them to "
-            f"text first, for example data[{name!r}].astype(str) in pandas."
+            f"text first: {_codes_to_text(_library(series), name)}."
         )
+
+
+def _codes_to_text(library: Library, name: str) -> str:
+    """A statement that writes whole-number codes as text, missing values kept
+    missing (a pandas float column of whole numbers included), in ``library``."""
+    pandas = f"data[{name!r}].astype('Int64').astype('string')"
+    polars = f"pl.col({name!r}).cast(pl.Int64).cast(pl.String)"
+    arrow = (
+        f"pyarrow.compute.cast(pyarrow.compute.cast(data[{name!r}], pyarrow.int64()), "
+        "pyarrow.string())"
+    )
+    return _replace_column(library, name, pandas, polars, arrow)
+
+
+def _counts_to_numbers(library: Library, name: str) -> str:
+    """A statement that reads counts stored as text as numbers, thousands
+    separators ("1,000") and surrounding spaces removed, entries that are not
+    numbers becoming missing (rows then left out and counted), in ``library``."""
+    col = f"data[{name!r}]"
+    pandas = (
+        f"pandas.to_numeric({col}.str.replace(',', '', regex=False).str.strip(), "
+        "errors='coerce')"
+    )
+    polars = (
+        f"pl.col({name!r}).cast(pl.String).str.replace_all(',', '', literal=True)"
+        ".str.strip_chars().cast(pl.Float64, strict=False)"
+    )
+    text = (
+        "pyarrow.compute.utf8_trim_whitespace(pyarrow.compute.replace_substring("
+        f"pyarrow.compute.cast({col}, pyarrow.string()), pattern=',', "
+        "replacement=''))"
+    )
+    arrow = (
+        "pyarrow.compute.cast(pyarrow.compute.if_else("
+        f"pyarrow.compute.match_substring_regex({text}, r'{_NUMBER_PATTERN}'), "
+        f"{text}, None), pyarrow.float64())"
+    )
+    return _replace_column(library, name, pandas, polars, arrow)
 
 
 def _bad_rows(rows: IntArray, bad: BoolArray) -> str:
@@ -2243,12 +2315,20 @@ def _table_weights(series: nw.Series[Any], name: str, rows: IntArray) -> Any:
         )
     if not dtype.is_numeric():
         first = _first_value(series)
-        hint = (
-            f" It holds numbers stored as text (for example {first!r}); convert it "
-            f"first, for example pandas.to_numeric(data[{name!r}])."
-            if _numbers_as_text(first)
-            else " Convert it with pandas.to_numeric() or .cast(int) first."
-        )
+        library = _library(series)
+        text = isinstance(first, str)
+        if text and _numbers_as_text(first.replace(",", "")):
+            hint = (
+                f" It holds numbers stored as text (for example {first!r}); convert "
+                f"it first: {_counts_to_numbers(library, name)}."
+            )
+        elif text:
+            hint = (
+                f" Its entries are not numbers (for example {first!r}): name the "
+                "column that holds the numbers of observations."
+            )
+        else:
+            hint = f" {_generic_numbers(library, name)}"
         raise TypeError(f"{what}; its type is {dtype}.{hint}")
     values: Any
     if dtype.is_integer() and _beyond_exact_integers(series):
@@ -2319,6 +2399,7 @@ def _table_levels(
         dictionary_order=_dictionary_order(dictionary, ordered),
         natural_order=_natural_order(group, ordered),
         lookalike_levels=_lookalikes(levels),
+        encoding_lookalikes=_encoding_lookalikes(levels),
     )
 
 
@@ -2331,20 +2412,53 @@ def _declare_example(
     """The code that declares both ``columns`` on the same ``categories``, in the
     frame's own library."""
     x, y = columns
+    kinds = {name: _text_kind(frame[name].dtype) for name in columns}
     if frame.implementation.is_polars():
-        to_text = ".cast(pl.Int64).cast(pl.String)" if numeric else ".cast(pl.String)"
         enum = f"pl.Enum({list(categories)!r})"
+
+        def polars_text(name: str) -> str:
+            kind = kinds[name]
+            if kind == "number":
+                return ".cast(pl.Int64).cast(pl.String)"
+            if kind == "bool":  # polars writes true/false; the levels are True/False
+                return ".cast(pl.String).str.to_titlecase()"
+            return ".cast(pl.String)"
+
         return (
-            f"data = data.with_columns(pl.col({x!r}){to_text}.cast({enum}), "
-            f"pl.col({y!r}){to_text}.cast({enum}))"
+            f"data = data.with_columns(pl.col({x!r}){polars_text(x)}.cast({enum}), "
+            f"pl.col({y!r}){polars_text(y)}.cast({enum}))"
         )
     shown: list[object] = [int(c) for c in categories] if numeric else [*categories]
     start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+
+    def pandas_column(name: str) -> str:
+        # Text categories need text values: numbers (a whole float with missing
+        # values included) and booleans are written as their level labels first,
+        # or pd.Categorical would make every value missing.
+        if numeric or kinds[name] == "text":
+            return f"data[{name!r}]"
+        if kinds[name] == "number":
+            return f"data[{name!r}].astype('Int64').astype(str)"
+        return f"data[{name!r}].astype(str)"
+
     return (
         f"{start}categories = {shown!r}; "
-        f"data[{x!r}] = pd.Categorical(data[{x!r}], categories=categories); "
-        f"data[{y!r}] = pd.Categorical(data[{y!r}], categories=categories)"
+        f"data[{x!r}] = pd.Categorical({pandas_column(x)}, categories=categories); "
+        f"data[{y!r}] = pd.Categorical({pandas_column(y)}, categories=categories)"
     )
+
+
+def _text_kind(dtype: Any) -> Literal["number", "bool", "text", "other"]:
+    """What a column holds, for the recipes that turn it into text levels:
+    numbers, booleans, text, or other (categoricals: written as text by
+    ``astype(str)``)."""
+    if isinstance(dtype, nw.Boolean):
+        return "bool"
+    if dtype.is_numeric():
+        return "number"
+    if isinstance(dtype, nw.String):
+        return "text"
+    return "other"
 
 
 def _paired_categories(
@@ -2375,6 +2489,18 @@ def _check_paired_levels(
     if xs == ys:
         return
     x, y = x_levels.name, y_levels.name
+    if not set(xs) & set(ys):
+        recipe = long_paired_recipe(frame.to_native(), x, y, None, ys)
+        raise ValueError(
+            f"paired=True: x={x!r} and y={y!r} share no category ({x!r}: "
+            f"{_listed(xs)}; {y!r}: {_listed(ys)}). paired=True reads each row as "
+            "one unit measured twice, x the first measurement and y the second, "
+            f"both on the same categories. The data look long (one row per unit "
+            f"and occasion, with {y!r} naming the occasion): reshape them to one "
+            "row per unit, with one column per occasion, and pass two occasions as "
+            f"x and y: {recipe}. If {x!r} and {y!r} are two measurements coded "
+            "differently, recode one to the other's categories first."
+        )
     start = (
         f"paired=True: x={x!r} and y={y!r} are two measurements of the same units, "
         "so they need the same categories in the same order, and they differ"
@@ -2404,6 +2530,149 @@ def _check_paired_levels(
         categories = _paired_categories(x_levels, y_levels, numeric)
     example = _declare_example(frame, (x, y), categories, numeric)
     raise ValueError(f"{start}{detail}: {example}.")
+
+
+def _unit_column(frame: nw.DataFrame[Any], x: str, y: str) -> str | None:
+    """The column that names each unit in long data (one row per unit and
+    occasion ``y``): another column whose values repeat, and that holds each
+    occasion at most once per value; None where no column does."""
+    for name in frame.columns:
+        if name in (x, y):
+            continue
+        try:
+            pair = frame.select(name, y).drop_nulls()
+            repeats = pair[name].n_unique() < pair.shape[0]
+            if repeats and not bool(pair.is_duplicated().any()):
+                return name
+        except Exception:  # a column narwhals cannot compare: not a unit column
+            continue
+    return None
+
+
+def long_paired_recipe(
+    data: object, x: str, y: str, unit: str | None, occasions: Sequence[str]
+) -> str:
+    """The code that reshapes long data (one row per unit and occasion, ``y``
+    naming the occasion and ``x`` holding the answer) to one row per unit, and
+    the paired call on two occasions, in the frame's own library. ``unit`` names
+    the unit column (found in the frame when None; '<unit>' where none is)."""
+    frame = to_frame(data)
+    unit = unit or _unit_column(frame, x, y) or "<column naming each unit>"
+    first, second = occasions[0], occasions[1] if len(occasions) > 1 else "..."
+    call = f"ip.barstats(wide, x={first!r}, y={second!r}, paired=True)"
+    if frame.implementation.is_polars():
+        return f"wide = data.pivot(on={y!r}, index={unit!r}, values={x!r}); {call}"
+    start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+    return (
+        f"{start}wide = data.pivot(index={unit!r}, columns={y!r}, values={x!r})"
+        f".rename(columns=str).reset_index(); {call}"
+    )
+
+
+# The name drawn for a level that is empty text (review B17).
+EMPTY_NAME: Final = "(empty)"
+
+# Names a column of counts commonly has (review B10).
+_COUNT_NAMES: Final = frozenset(
+    {"n", "count", "counts", "freq", "frequency", "frequencies", "weight", "weights"}
+)
+
+
+def _dropped_observations(series: nw.Series[Any], dropped: BoolArray) -> int:
+    """The observations the rows ``dropped`` stood for: their counts, where
+    present, finite, whole and >= 0."""
+    if not series.dtype.is_numeric() or isinstance(series.dtype, nw.Boolean):
+        return 0
+    values = _float_values(series)[dropped & ~_missing(series)]
+    good = np.isfinite(values) & (values == np.round(values)) & (values >= 0)
+    return int(sum(int(v) for v in values[good].tolist()))
+
+
+def _whole_counts(series: nw.Series[Any]) -> bool:
+    """Whether a column holds whole numbers >= 0, some above 1 (counts)."""
+    dtype = series.dtype
+    if not dtype.is_numeric() or isinstance(dtype, nw.Boolean):
+        return False
+    values = _float_values(series)[~_missing(series)]
+    if values.size == 0 or not bool(np.isfinite(values).all()):
+        return False
+    whole = bool((values == np.round(values)).all()) and bool((values >= 0).all())
+    return whole and bool((values > 1).any())
+
+
+def _possible_counts(
+    frame: nw.DataFrame[Any], used: tuple[str, str | None], rows: IntArray
+) -> tuple[str, ...]:
+    """The other columns of ``frame`` that may be counts left out of the call:
+    whole numbers >= 0 with some above 1, or a usual name of counts."""
+    found: list[str] = []
+    for name in frame.columns:
+        if name in used:
+            continue
+        try:
+            series = frame[name][rows.tolist()]
+            if _whole_counts(series) or str(name).lower() in _COUNT_NAMES:
+                found.append(str(name))
+        except Exception:  # a column narwhals cannot read: not counts
+            continue
+    return tuple(found)
+
+
+def _long_from_wide(frame: nw.DataFrame[Any], key: str, values: Sequence[str]) -> str:
+    """The code that reshapes a wide table of counts (one row per level of
+    ``key``, one column of counts per category, ``values``) to one row per
+    combination with a column of counts, in the frame's own library."""
+    shown = list(values)
+    if frame.implementation.is_polars():
+        return (
+            f"long = data.unpivot(index=[{key!r}], on={shown!r}, "
+            "variable_name='category', value_name='n')"
+        )
+    start = "data = data.to_pandas(); " if frame.implementation.is_pyarrow() else ""
+    return (
+        f"{start}long = data.melt(id_vars=[{key!r}], value_vars={shown!r}, "
+        "var_name='category', value_name='n')"
+    )
+
+
+def _check_wide(
+    frame: nw.DataFrame[Any],
+    x: tuple[_Grouping, nw.Series[Any]],
+    y: tuple[_Grouping, nw.Series[Any]],
+    used: IntArray,
+) -> None:
+    """Without ``counts``: one column of whole-number counts (``x`` or ``y``)
+    beside a column whose every level occupies one row looks like a wide table
+    of counts (one column per category); refused with the reshape (review
+    B10), since every row would be counted as one observation."""
+    if used.size < 2:
+        return
+    for (group, series), (other_group, other) in ((y, x), (x, y)):
+        if group.kind not in ("integer", "float"):
+            continue
+        if not _whole_counts(series[used.tolist()]):
+            continue
+        if other_group.kind == "float":
+            continue  # measurements get their own message (_check_codes)
+        labels = _grouping_labels(other_group, other, used)
+        if len(set(labels)) != len(labels):
+            continue
+        key = other_group.name
+        values = [
+            str(name)
+            for name in frame.columns
+            if name != key and _whole_counts(frame[name][used.tolist()])
+        ]
+        recipe = _long_from_wide(frame, key, values)
+        raise ValueError(
+            f"{group.role.arg}={group.name!r} holds whole numbers and each level of "
+            f"{key!r} occupies one row, so the data look like a wide table of counts "
+            f"(one column of counts per category, one row per level of {key!r}); "
+            "as given, each row would be counted as one observation. barstats "
+            "needs one row per combination of categories and a column of counts: "
+            f"reshape the table and pass counts=: {recipe}; ip.barstats(long, "
+            f"x='category', y={key!r}, counts='n')."
+        )
 
 
 def _sum(values: Any) -> int:
@@ -2490,6 +2759,8 @@ def read_table(
     used, used_weights = rows[positive], weights[positive]
     n_total = _sum(used_weights)
 
+    if counts is None and y_group is not None and y_col is not None and y is not None:
+        _check_wide(frame, (x_group, x_col), (y_group, y_col), used)
     _check_codes(x_group, x_col, used, n_total, _measurement_advice("x", x, y, y_col))
     if y_group is not None and y_col is not None:
         advice = _measurement_advice("y", x, y, x_col)
@@ -2553,6 +2824,17 @@ def read_table(
         n_missing_y=int(missing_y.sum()),
         n_missing_counts=int(missing_counts.sum()),
         n_zero_rows=int(rows.size - used.size),
+        library=_library(x_raw),
+        n_dropped_observations=(
+            0
+            if counts_col is None
+            else _dropped_observations(counts_col, missing_x | missing_y)
+        ),
+        possible_counts=(
+            _possible_counts(frame, (x, y), rows)
+            if counts is None and rows.size > 1 and max(flat.tolist()) <= 1
+            else ()
+        ),
     )
 
 
@@ -2588,7 +2870,15 @@ def table_notes(data: TableData) -> list[str]:
                 + ", ".join(f"{count:,} without {name!r}" for name, count in used)
                 + ")"
             )
-        rows = f"{dropped:,} {'row was' if dropped == 1 else 'rows were'}"
+        stood = ""
+        if data.n_dropped_observations:
+            count = data.n_dropped_observations
+            plural = "observation" if count == 1 else "observations"
+            stood = f" (standing for {count:,} {plural})"
+        verb = "row was" if dropped == 1 else "rows were"
+        if stood:
+            verb = f"{'row' if dropped == 1 else 'rows'}{stood} {verb.split()[1]}"
+        rows = f"{dropped:,} {verb}"
         notes.append(
             f"{rows} left out because {_or_listed([name for name, _ in used])} is "
             f"missing{detail}; {data.n:,} observations remain."
@@ -2597,6 +2887,7 @@ def table_notes(data: TableData) -> list[str]:
         if column is None:
             continue
         notes.extend(_table_level_notes(data, column))
+    notes.extend(_counts_notes(data))
     names = [("x", data.x)]
     if data.y is not None:
         names.append(("y", data.y))
@@ -2607,6 +2898,40 @@ def table_notes(data: TableData) -> list[str]:
                 f"The column name {arg}={name!r} holds control characters {drawn} "
                 "in the figure's labels; the result keeps the name as given."
             )
+    return notes
+
+
+def _counts_notes(data: TableData) -> list[str]:
+    """Counts left out of the call (every cell holds at most one row, and a
+    column holds whole numbers or has a usual name of counts), and counts that
+    sum to exactly 100, as percentages do (review B10)."""
+    notes: list[str] = []
+    if data.possible_counts:
+        column = data.possible_counts[0]
+        where = (
+            f"Each combination of {data.x!r} and {data.y!r}"
+            if data.y is not None
+            else f"Each level of {data.x!r}"
+        )
+        call = (
+            f"barstats(data, {data.x!r}, {data.y!r}, counts={column!r})"
+            if data.y is not None
+            else f"barstats(data, {data.x!r}, counts={column!r})"
+        )
+        notes.append(
+            f"{where} occurs in one row only, and {column!r} holds whole numbers: "
+            "if each row stands for several observations (a table of counts), pass "
+            f"counts={column!r}: {call}. As called, each row counts as one "
+            f"observation (n = {data.n:,})."
+        )
+    if data.counts_var is not None and data.n == 100 and data.n_rows > 1:
+        notes.append(
+            f"The counts in {data.counts_var!r} sum to exactly 100. If they are "
+            "percentages, they are not counts: the tests need the numbers of "
+            "observations behind them (with percentages as counts every p-value "
+            "is that of 100 observations). Pass the numbers of observations as "
+            "counts=."
+        )
     return notes
 
 
@@ -2626,7 +2951,7 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
             "with the categories in the order you want."
         )
     if column.natural_order:
-        notes.append(_table_natural_order_note(column))
+        notes.append(_table_natural_order_note(column, data.library))
     vanished = column.vanished
     if vanished:
         one = len(vanished) == 1
@@ -2653,26 +2978,66 @@ def _table_level_notes(data: TableData, column: TableLevels) -> list[str]:
             "look alike. If they are the same category, remove the spaces first, "
             "for example with .str.strip() in pandas or .str.strip_chars() in polars."
         )
+    for same in column.encoding_lookalikes:
+        shown = ", ".join(ascii(level) for level in same)
+        notes.append(
+            f"The levels {shown} of {name!r} differ only in how their characters are "
+            "encoded (an accented letter written as one character or as a letter "
+            "and an accent, as text from different sources can be), so they are "
+            "counted as separate categories whose labels look alike. If they are "
+            "the same category, normalize the text first (Unicode NFC), for "
+            "example with .str.normalize('NFC') in pandas."
+        )
+    if "" in column.levels:
+        notes.append(
+            f"A level of {name!r} is empty text (''); the figure names it "
+            f"{EMPTY_NAME!r}."
+        )
     return notes
 
 
-def _table_natural_order_note(column: TableLevels) -> str:
+def declare_order(library: Library, name: str, order: Sequence[str]) -> str:
+    """A statement that declares column ``name`` (text) on the categories
+    ``order``, in ``library``: a pandas Categorical, a polars Enum, an ordered
+    pyarrow dictionary (also to leave out unused categories)."""
+    shown = list(order)
+    if library == "polars":
+        return (
+            f"data = data.with_columns(pl.col({name!r}).cast(pl.String)"
+            f".cast(pl.Enum({shown!r})))"
+        )
+    if library == "pyarrow":
+        arrow = (
+            "pyarrow.DictionaryArray.from_arrays(pyarrow.compute.index_in("
+            f"data[{name!r}].combine_chunks(), value_set=pyarrow.array({shown!r})), "
+            f"pyarrow.array({shown!r}), ordered=True)"
+        )
+        return _replace_column(library, name, "", "", arrow)
+    return f"data[{name!r}] = pd.Categorical(data[{name!r}], categories={shown!r})"
+
+
+def _table_natural_order_note(column: TableLevels, library: Library) -> str:
     """The natural-order note of a barstats column: barstats has no ``order=``,
-    so another order comes from a declared categorical."""
+    so another order comes from a declared categorical, written in the frame's
+    own library (review B14)."""
     levels, natural = column.present, column.natural_order
     first = next(
         n for n, (a, b) in enumerate(zip(levels, natural, strict=True)) if a != b
     )
-    example = f"categories={list(natural)!r}"
-    how = (
-        f"pd.Categorical(data[{column.name!r}], {example})"
-        if len(example) <= _MAX_EXAMPLE
-        else "with the categories in the order you want"
-    )
+    what = {
+        "pandas": "a pandas Categorical",
+        "polars": "a polars Enum",
+        "pyarrow": "an ordered pyarrow dictionary",
+    }[library]
+    if len(f"{list(natural)!r}") <= _MAX_EXAMPLE:
+        how = f"declare the column as {what} in that order: " + declare_order(
+            library, column.name, natural
+        )
+    else:
+        how = f"declare the column as {what} with the categories in that order"
     return (
         f"The levels of {column.name!r} are text, sorted as text (as R sorts "
         f"them), so {levels[first]!r} comes before {natural[first]!r}: "
         f"{_listed(levels)}. The analysis and the figure use this order. To order "
-        f"them by the numbers in their names, pass the column as a pandas "
-        f"Categorical ({how}) or a polars Enum in that order."
+        f"them by the numbers in their names, {how}."
     )

@@ -1073,6 +1073,27 @@ _OTHER_LAYERS: Final = frozenset(
 )
 
 
+# Other names of the axis labels and of the legend title (review B9).
+_AXIS_LABEL_NAMES: Final = frozenset(
+    {"x_label", "y_label", "x_title", "y_title", "xtitle", "ytitle", "x_lab", "y_lab"}
+)
+_LEGEND_TITLE_NAMES: Final = frozenset(
+    {"legend_label", "fill_label", "legend_name", "fill_title", "fill_name"}
+)
+
+# What a direction means in barstats (review B8): its tests have no direction.
+CONTINGENCY_DIRECTION: Final = (
+    "barstats' tests have no direction: the chi-square and McNemar tests compare "
+    "all the cells at once, so their p-values are the same whatever is asked. "
+    "alternative='greater' or 'less' only makes the effect-size intervals "
+    "one-sided ([low, 1] or [0, high]: the main one and the pairs'; the bars' "
+    "tests stay two-sided) "
+    "and the Fisher test of a pair whose table is 2 x 2; alternative='two-sided' "
+    "is the default. barstats has no order=: the levels follow their declared "
+    "categories, else their sorted values."
+)
+
+
 def _bar_targeted(
     arg: str, key: str, value: object, valid: frozenset[str]
 ) -> TypeError | None:
@@ -1224,6 +1245,17 @@ def _bar_targeted(
             f"it is matplotlib's name for the {axis} axis label, which inferplot "
             f"calls {axis}lab=. {where}"
         )
+    if key in _AXIS_LABEL_NAMES:
+        # Without this, label= (a few edits away) would be the did-you-mean.
+        axis, text = key[0], shown or "'...'"
+        where = f"Write {axis}lab={text}." if "ax" in valid else f"It is {drawing}."
+        return no(f"the {axis} axis label is {axis}lab=. {where}")
+    if key in _LEGEND_TITLE_NAMES:
+        text = shown or "'...'"
+        where = f"Write legend_title={text}." if "ax" in valid else f"It is {drawing}."
+        return no(
+            f"the title of the legend of the levels of x is legend_title=. {where}"
+        )
     if key in {"order", "x_order", "level_order", "levels", "categories"}:
         return no(
             "barstats has no order=, as ggbarstats has none: the levels of x and y "
@@ -1232,11 +1264,56 @@ def _bar_targeted(
             "data['x'] = pd.Categorical(data['x'], categories=['low', 'mid', "
             "'high']), or a polars Enum."
         )
+    if key in _DIRECTION_NAMES:
+        return no(CONTINGENCY_DIRECTION)
+    # Review B17: seaborn's and matplotlib's names.
+    if key in {"cmap", "colormap"}:
+        name = shown or "'viridis'"
+        return no(
+            f"a colormap name is passed as palette=, for example palette={name}, "
+            f"{drawing}; the levels of x take colours from it."
+        )
+    if key in {"figsize", "fig_size", "size"}:
+        return no(
+            "inferplot sizes its own figure to its contents (at most 30 in); for a "
+            "figure of your own size, draw into its Axes with ax=, for example "
+            "ax=Figure(figsize=(8, 5)).add_subplot() (from matplotlib.figure "
+            f"import Figure), {drawing}."
+        )
+    if key == "hue_order":
+        return no(
+            "the order of the levels of x (seaborn's hue) follows their declared "
+            "categories, else their sorted values; barstats has no order=. To "
+            "choose it, pass x as a pandas Categorical, for example data['x'] = "
+            "pd.Categorical(data['x'], categories=['low', 'mid', 'high']), or a "
+            "polars Enum."
+        )
+    if key in {"width", "bar_width"}:
+        return no(
+            "the bars' width follows the figure's layout (their slot and their "
+            "labels), so it has no argument; for more room, draw into a wider Axes "
+            f"with ax=, {drawing}."
+        )
+    if key in {"edgecolor", "edgecolors", "linewidth", "linewidths", "hatch"}:
+        prop = {"edgecolors": "edgecolor", "linewidths": "linewidth"}.get(key, key)
+        value_text = _show(value)
+        return no(
+            f"the bar segments are styled with bar_args=, for example "
+            f"bar_args={{{prop!r}: {value_text}}}, {drawing}."
+        )
+    if key == "bayes":
+        return no(
+            "barstats' Bayes factor (ggstatsplot's Bayesian contingency-table "
+            "test) arrives in inferplot 0.2: type='bayes' and bf_message=True are "
+            "refused until then, so there is no call to make for it yet; "
+            "bf_message=False leaves out the note that says so."
+        )
     if key in {"subject", "id", "subject_id"}:
         return no(
             "with paired=True each row holds one unit's two measurements, x and y "
-            "(McNemar's test), so there are no subjects to name. For a measurement "
-            "repeated over conditions use withinstats(data, x, y, subject_id=...)."
+            "(McNemar's test), so there are no subjects to name. For a numeric "
+            "measurement repeated over conditions use withinstats(data, x, y, "
+            "subject_id=...)."
         )
     if key in {"test_value", "mu"}:
         return no(
@@ -1278,8 +1355,10 @@ def _bar_targeted(
         )
     if key in _COLOUR_KEYS:
         return no(
-            f"colours are set with palette= (one per level of x) or bar_args=, "
-            f"{drawing}."
+            "colours are set with palette=, one per level of x in their order (for "
+            f"example palette=['#0072B2', '#E69F00']), {drawing}; the colour of "
+            "the segments is the only key to the legend, so bar_args= styles only "
+            "their edges, hatching and transparency."
         )
     if key == "alpha":
         return no(
@@ -1299,6 +1378,40 @@ def _bar_targeted(
             f"barstats counts categories and has no centrality. Remove {arg}=."
         )
     return None
+
+
+def _with_long_recipe(
+    problem: TypeError | NotImplementedError,
+    arg: str,
+    value: object,
+    args: Sequence[object],
+    kwargs: Mapping[str, object],
+) -> TypeError | NotImplementedError:
+    """barstats given a subject column (``subject_id=`` and its other names):
+    the data are very likely long, one row per unit and occasion; the message
+    then shows the reshape to one row per unit and the paired call, in the
+    frame's own library (review B6). The message as it was where the call
+    gives no data, x and y to build it from."""
+    if _snake(arg) not in {"subject", "id", "subject_id"} or not isinstance(value, str):
+        return problem
+    given = dict(zip(("data", "x", "y"), args, strict=False)) | dict(kwargs)
+    data, x, y = given.get("data"), given.get("x"), given.get("y")
+    if not isinstance(x, str) or not isinstance(y, str):
+        return problem
+    from inferplot._data import long_paired_recipe, to_frame
+
+    try:
+        frame = to_frame(data)
+        occasions = [str(v) for v in frame[y].drop_nulls().unique().to_list()]
+        recipe = long_paired_recipe(data, x, y, value, sorted(occasions))
+    except Exception:  # whatever is wrong with the data is reported later
+        return problem
+    return TypeError(
+        f"{problem} If the data are long, one row per unit and occasion with "
+        f"{value!r} naming the unit and {y!r} the occasion, reshape them to one row "
+        "per unit with one column per occasion, and compare two occasions with "
+        f"McNemar's test: {recipe}."
+    )
 
 
 # Functions whose analysis takes subject_id (their drawing functions share the name).
@@ -1518,6 +1631,8 @@ def checked(fn: Callable[P, R]) -> Callable[P, R]:
         for arg, value in kwargs.items():
             if arg not in valid:
                 problem = _keyword_problem(arg, value, name, valid, order, filled)
+                if name == "barstats" and not draws_result:
+                    problem = _with_long_recipe(problem, arg, value, args, kwargs)
                 raise _render_named(problem, name) if draws_result else problem
         if len(args) > len(positional):
             problem = _positional_problem(
@@ -1626,10 +1741,17 @@ _ONE_SIDED: Final = ("one_sided", "onesided", "one_side", "one_tailed", "onetail
 _TWO_TAILED: Final = ("two_tailed", "twotailed")
 
 
-def check_alternative(value: object, name: str = "alternative") -> str:
+def check_alternative(
+    value: object, name: str = "alternative", *, directionless: bool = False
+) -> str:
     """'two-sided', 'less' or 'greater'. R's 'two.sided' and 'two-tailed' are told
-    the spelling; 'one-sided' is told that the direction must be given."""
-    one_sided = f" A one-sided test needs its direction: {direction_note(name)}"
+    the spelling; 'one-sided' is told that the direction must be given, or with
+    ``directionless`` (barstats) what a direction does there."""
+    one_sided = (
+        f" {CONTINGENCY_DIRECTION}"
+        if directionless
+        else f" A one-sided test needs its direction: {direction_note(name)}"
+    )
     two_tailed = f" A two-tailed test is {name}='two-sided': write {name}='two-sided'."
     hints = {
         "two.sided": f" R spells it 'two.sided'; inferplot writes {name}='two-sided'.",

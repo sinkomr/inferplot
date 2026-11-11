@@ -145,7 +145,7 @@ Drawing arguments (`ip.<name>`, `ip.render.<name>`):
 | `point_args` | B W S | matplotlib properties of the points (`Artist.set`); B, W: needs the points layer. |
 | `boxplot_args` | B W | Properties of the boxes; needs the box layer. |
 | `violin_args` | B W | Properties of the violins; needs the violin layer. |
-| `bar_args` | H C | Properties of every bar (`Rectangle`); properties that move the bars are refused. |
+| `bar_args` | H C | Properties of every bar (`Rectangle`); properties that move, rotate or reorder the bars are refused; C: also the fill colour (use `palette`), edges over 2 points, alpha under 0.4. |
 | `smooth_args` | S | Properties of the line (`Line2D`); the band takes its colour. Needs `smooth=True`. |
 | `marginal_args` | S | Properties of the marginal bars. Needs `marginal=True`. |
 | `ax` | all | Draw into this matplotlib Axes; nothing is resized, so run `check()`. B, W, C: its x axis may not be shared. S needs `marginal=False`. |
@@ -275,11 +275,12 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `small_n` | warning | A group, the complete subjects, the sample or the pairs number fewer than 5. |
 | `small_expected` | warning | C: expected counts too small for the chi-square approximation (one below 1, or over 20% below 5). |
 | `pairs_without_test` | info | C: a pair of levels has no Fisher test; the others are adjusted among themselves. |
+| `empty_level_tested` | warning | C: a level of x without observations counts as a category in the bars' drawn tests. |
 | `heavy_ties` | warning | Nonparametric: over 25% of the ranked values are ties. |
 | `rows_dropped` | info | Rows or subjects were dropped for missing values; a warning when over half were. |
 | `pairs_hidden` | info | Some computed pairs have no bracket (`pairwise_display`). |
 | `infinite_effect_size` | warning | Robust: the effect size or some bootstrap resamples are infinite; a bound may be Inf. |
-| `estimate_outside_interval` | warning | The effect size lies outside its own bootstrap interval; the p-value is unaffected. |
+| `estimate_outside_interval` | warning | The effect size lies outside its own interval (a bootstrap one, or C: the noncentral chi-square interval of V or C); the p-value is unaffected. |
 | `pairwise_conf_level` | info | The pairwise (or robust within) intervals are 95% whatever `conf_level` says. |
 | `label_overlap` | warning | Two texts overlap, or a bracket label crosses another bracket. |
 | `text_clipped` | warning | A text extends outside the figure or its Axes. |
@@ -291,6 +292,9 @@ Each issue is an `Issue(code, severity, message, fix)`; `str(issue)` reads
 | `point_labels_crowded` | warning | S: point labels overlap, cross the line, or more than 200 are labelled. |
 | `figure_oversized` | warning | inferplot's own figure grew far beyond its panels (a very long text). |
 | `cell_labels_hidden` | warning | C: a cell label left out, or drawn where it does not read as its cell's. |
+| `level_labels_alike` | warning | B, W, C: two levels drawn with tick labels or legend entries that read alike. |
+| `level_colors_alike` | warning | C: two levels of x drawn in colours that cannot be told apart (the legend's only key). |
+| `legend_missing` | warning | C: the legend, the only key to the colours, was removed or hidden after drawing. |
 | `line_label_ambiguous` | warning | H: a line's label is nearer the other line or crossed by it. |
 | `low_contrast` | warning | A text or a level colour can hardly be told from its background. |
 | `glyph_missing` | warning | Characters no available font can draw. |

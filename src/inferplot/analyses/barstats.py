@@ -48,7 +48,13 @@ from typing import Final, Literal, cast
 import numpy as np
 
 from inferplot import stats
-from inferplot._data import TableData, TableLevels, read_table, table_notes
+from inferplot._data import (
+    TableData,
+    TableLevels,
+    declare_order,
+    read_table,
+    table_notes,
+)
 from inferplot._validate import (
     canonical_type,
     check_alternative,
@@ -74,7 +80,7 @@ from inferplot.result import (
     TestResult,
     current_provenance,
 )
-from inferplot.text import contingency_texts
+from inferplot.text import contingency_texts, r_number_text, zero_p_note
 
 __all__ = ["barstats"]
 
@@ -260,13 +266,13 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
     """The proportion test of each bar (the levels of y that hold observations,
     in order): the goodness-of-fit test of x within the bar against ``ratio``,
     every level of x kept, two-sided at 95% and unadjusted (ggstatsplot's
-    ``onesample_data()``), with Pearson's C. A bar without a test keeps its
-    entry with the reason, and ``warnings`` says so (R prints NA there)."""
+    ``onesample_data()``), with Pearson's C. A bar's test fails only when x has
+    a single level, which ``_check_two_way`` refuses first (D101, review B21):
+    that branch keeps the entry with the reason (R prints NA there) but is not
+    reached through the API, so it adds no warning."""
     if table.y_levels is None:
         return (), []
-    levels = table.y_levels.levels
     out: list[_BarTest] = []
-    untested: list[str] = []
     for bar in stats.proportion_tests(table.table(), args.ratio):
         if bar.test is None or bar.effect is None:
             reason = (
@@ -274,7 +280,6 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
                 "compares two or more (ggstatsplot prints NA)"
             )
             out.append(_BarTest(test=None, effect_size=None, no_test_reason=reason))
-            untested.append(levels[bar.column])
             continue
         out.append(
             _BarTest(
@@ -284,17 +289,7 @@ def _bar_tests(table: TableData, args: _Args) -> tuple[tuple[_BarTest, ...], lis
                 ),
             )
         )
-    warnings: list[str] = []
-    if untested:
-        warnings.append(
-            f"The {'bar' if len(untested) == 1 else 'bars'} "
-            f"{_levels_text(untested)} of {args.y!r} "
-            f"{'has' if len(untested) == 1 else 'have'} no proportion test: x="
-            f"{args.x!r} has a single level, and a goodness-of-fit test compares two "
-            "or more. The bars are drawn without a p-value label (ggstatsplot "
-            "prints NA)."
-        )
-    return tuple(out), warnings
+    return tuple(out), []
 
 
 def _two_way(table: TableData, args: _Args) -> _Parts:
@@ -426,6 +421,13 @@ def _check_discordant(table: TableData, args: _Args) -> None:
             "silently). Report the agreement as it is, or pass "
             "results_subtitle=False to draw the bars without a test."
         )
+    unused = [
+        level
+        for i, level in enumerate(levels)
+        if sum(counts[i]) == 0 and sum(row[i] for row in counts) == 0
+    ]
+    if quiet and all(a in unused or b in unused for a, b in quiet):
+        _refuse_unused(table, args, unused, quiet)
     if quiet:
         between = [f"between {a!r} and {b!r}" for a, b in quiet]
         listed = (
@@ -445,6 +447,41 @@ def _check_discordant(table: TableData, args: _Args) -> None:
             "(keep the units whose both measurements are among those two: a 2 x 2 "
             "McNemar test)."
         )
+
+
+def _refuse_unused(
+    table: TableData,
+    args: _Args,
+    unused: Sequence[str],
+    quiet: Sequence[tuple[str, str]],
+) -> None:
+    """Bowker's test fails only for levels without observations in either
+    measurement (review B19): say so, and give the call that leaves them out
+    of both columns, in the frame's own library."""
+    one = len(unused) == 1
+    names = _levels_text(unused)
+    kept = [level for level in table.x_levels.levels if level not in unused]
+    names_ = [name for name in (args.x, args.y) if name is not None]
+    if table.library == "pandas":  # declared, so both are categoricals
+        calls = "; ".join(
+            f"data[{name!r}] = data[{name!r}].cat.remove_categories({list(unused)!r})"
+            for name in names_
+        )
+    else:
+        calls = "; ".join(declare_order(table.library, name, kept) for name in names_)
+    test = "McNemar's test" if len(kept) == 2 else "Bowker's test"
+    terms = ", ".join(f"{a!r} and {b!r}" for a, b in quiet)
+    raise ValueError(
+        f"The declared {'level' if one else 'levels'} {names} "
+        f"{'has' if one else 'have'} no observations in either measurement "
+        f"({args.x!r} or {args.y!r}), so "
+        f"Bowker's test of symmetry has a term of 0/0 for every pair with "
+        f"{'it' if one else 'them'} ({terms}) and is not defined (R's statistic "
+        "is NaN, and ggstatsplot leaves out its subtitle silently). If "
+        f"{'it is' if one else 'they are'} not a possible answer, leave "
+        f"{'it' if one else 'them'} out of both columns, and {test} runs on the "
+        f"other levels: {calls}."
+    )
 
 
 def _one_way(table: TableData, args: _Args) -> _Parts:
@@ -513,8 +550,8 @@ def _fisher_pairs(
             single += 1
             column = y_levels[pair.columns[0]]
             reason = (
-                f"both levels occur only in {column!r} of y, so their table has a "
-                "single column and no test; R's fisher.test stops there"
+                f"both levels occur only in {column!r} of {args.y!r}, so their "
+                "table has a single column and no test; R's fisher.test stops there"
             )
             warnings.append(
                 f"The pair {name} of {args.x!r} has no Fisher test: both levels "
@@ -686,15 +723,19 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
                 f"{'it' if one else 'them'}."
             )
         elif args.design == "paired":
+            # Review B19: McNemar's test is named only where it is computed.
+            where = " in McNemar's test" if args.results_subtitle else ""
             rest = (
                 f"; {'it stays a level' if one else 'they stay levels'} of both "
-                "measurements in McNemar's test, with a count of 0."
+                f"measurements{where}, with a count of 0."
+                + (_empty_in_bar_tests(table, args, column) if role == "x" else "")
             )
         elif role == "x":
             rest = (
                 f"; {'it stays' if one else 'they stay'} in the legend with no share "
                 "of any bar, and the chi-square test leaves the empty "
                 f"{'row' if one else 'rows'} out (as ggstatsplot does)."
+                + _empty_in_bar_tests(table, args, column)
             )
         else:
             rest = (
@@ -704,6 +745,44 @@ def _empty_level_notes(table: TableData, args: _Args) -> list[str]:
             )
         notes.append(start + rest)
     return notes
+
+
+def remove_unused(table: TableData, column: TableLevels) -> str:
+    """The statement that leaves the unused categories of ``column`` out, in the
+    frame's own library (review B18)."""
+    if table.library == "pandas":
+        name = column.name
+        return f"data[{name!r}] = data[{name!r}].cat.remove_unused_categories()"
+    return declare_order(table.library, column.name, column.present)
+
+
+def _empty_in_bar_tests(table: TableData, args: _Args, column: TableLevels) -> str:
+    """What declared empty levels of x do to the bars' proportion tests (review
+    B18): each bar's goodness-of-fit test counts them as categories expected
+    to hold their share of the bar, so a bar's p can be small although its
+    drawn shares are close; and how to leave them out."""
+    if table.y_levels is None or not args.proportion_test:
+        return ""
+    k = len(column.levels)
+    one = len(column.empty) == 1
+    if args.ratio is None:
+        share = f"1/{k} of the bar" if one else f"1/{k} of the bar each"
+    else:
+        shares = [
+            r_number_text(args.ratio[column.levels.index(level)])
+            for level in column.empty
+        ]
+        share = f"the share {', '.join(shares)} of the bar"
+        if not one:
+            share = f"the shares {', '.join(shares)} of the bar"
+    return (
+        f" Each bar's proportion test, though, counts "
+        f"{'it as a category' if one else 'them as categories'} expected to hold "
+        f"{share} ({k} categories in all), so the p above a bar can be small "
+        "although its drawn shares are close. If "
+        f"{'it is not a possible answer' if one else 'they are not possible answers'}"
+        f", leave {'it' if one else 'them'} out: {remove_unused(table, column)}."
+    )
 
 
 def _no_effect_warnings(table: TableData, args: _Args, parts: _Parts) -> list[str]:
@@ -996,6 +1075,7 @@ def _assemble(
         *_empty_level_notes(table, args),
         *parts.warnings,
         *_no_effect_warnings(table, args, parts),
+        *_zero_p_notes(parts, bars, settings),
     )
     return StatsResult(
         analysis="barstats",
@@ -1032,6 +1112,33 @@ def _assemble(
 # --------------------------------------------------------------------------- #
 # arguments
 # --------------------------------------------------------------------------- #
+
+
+def _zero_p_notes(parts: _Parts, bars: Sequence[Bar], settings: Settings) -> list[str]:
+    """What a p-value of exactly 0 means where a text prints it as 2.23e-308
+    (D108, review B15): the main test's in the subtitle, the bars' in the
+    labels above them and in the alt text."""
+    notes: list[str] = []
+    test = parts.test
+    if settings.results_subtitle and test is not None and test.p_value == 0.0:
+        notes.append(zero_p_note(test.label))
+    zero = [
+        bar.level
+        for bar in bars
+        if bar.test is not None and bar.test.p_value == 0.0 and bar.level is not None
+    ]
+    if zero and settings.proportion_test:
+        names = ", ".join(repr(level) for level in zero)
+        many = len(zero) > 1
+        notes.append(
+            zero_p_note(
+                f"the goodness-of-fit test of the bar{'s' if many else ''} {names}",
+                "The labels above those bars print"
+                if many
+                else "The label above that bar prints",
+            )
+        )
+    return notes
 
 
 def _check_type(value: object) -> str:
@@ -1278,7 +1385,7 @@ def _prepare(
     n_digits_perc = check_digits(digits_perc, "digits_perc")
     level = check_conf_level(conf_level)
     n_digits = check_digits(digits)
-    side = canonical_alternative(check_alternative(alternative))
+    side = canonical_alternative(check_alternative(alternative, directionless=True))
     show_bf = check_optional_bool(bf_message, "bf_message")
     subtitle_on = check_bool(results_subtitle, "results_subtitle")
     rng_seed = check_seed(seed)

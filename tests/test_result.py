@@ -1260,14 +1260,19 @@ def test_contingency_checks() -> None:
         "6 of the 6 expected counts of McNemar's test (half the pairs that change "
         "between two levels) are below 5"
     )
-    # Without the subtitle only the labelled bars count.
+    # Without the subtitle the bars' tests count, drawn or not: the APA sentence
+    # reports them whenever y is given (D108; review B17).
     quiet = _bar_result("mtcars-cyl-am-nosubtitle-proptest-parametric")
     assert quiet.test is None
     assert quiet.check()[0].message.startswith(
         "The proportion test of the bar '1' has expected counts below 5, so its "
         "p-value may be inaccurate."
     )
-    assert _codes(_bar_result("mtcars-cyl-am-nosubtitle-parametric").check()) == []
+    unlabelled = _bar_result("mtcars-cyl-am-nosubtitle-parametric")
+    assert not unlabelled.settings.proportion_test
+    assert unlabelled.check()[0].message.startswith(
+        "The proportion test of the bar '1' has expected counts below 5"
+    )
     missing = _bar_result("edge_bar_missing-counts-parametric").check()
     rows = [i for i in missing if i.code == "rows_dropped"]
     assert rows[0].message == "4 rows were left out because 'x', 'y' or 'w' is missing."
