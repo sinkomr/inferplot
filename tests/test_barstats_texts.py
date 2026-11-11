@@ -336,15 +336,13 @@ _REPLAYED = tuple(
     and bc.REFUSALS[c.name].replay is not None
     and c.type == "robust"
 )
-# Two fixtures bar_cases can assemble that the statistics refuse (D101), as
-# ggstatsplot prints no subtitle for them: no discordant pair (McNemar's 0/0),
-# and a pair of levels of x whose table keeps one column (Fisher's test stops and
-# ggstatsplot loses every pair). Their labels are checked on their own numbers
-# above.
-REFUSED_BY_STATISTICS = (
-    "ggbarstats-edge_bar_paired_agree-parametric",
-    "ggbarstats-edge_bar_degenerate-single-x-parametric",
-)
+# The fixture the statistics refuse (D101; bar_cases.REFUSALS) although ggstatsplot
+# draws its bars: no discordant pair (McNemar's 0/0, no subtitle). Its labels are
+# checked on its own numbers above. edge_bar_degenerate-single-x is answered: its
+# pair a-b, whose table keeps one column, stays without a p-value (R's
+# fisher.test stops there and ggstatsplot loses every pair).
+REFUSED_BY_STATISTICS = ("ggbarstats-edge_bar_paired_agree-parametric",)
+SINGLE_X = "ggbarstats-edge_bar_degenerate-single-x-parametric"
 ANSWERED_NAMES: tuple[str, ...] = tuple(
     c.name for c in (*bc.ANSWERED, *_REPLAYED) if c.name not in REFUSED_BY_STATISTICS
 )
@@ -370,8 +368,19 @@ def _accurate(es: EffectSize | None) -> EffectSize | None:
 
 @functools.cache
 def result_for(name: str) -> StatsResult:
-    """The fixture's result from its own numbers (the robust ones by their
-    parametric replay), with D99's accurate bounds, and its texts rebuilt."""
+    """The fixture's result from ``ip.analyze.barstats`` (the robust ones by their
+    parametric replay), whose intervals are D99's accurate ones."""
+    case = bc.BY_NAME[name]
+    refusal = bc.REFUSALS.get(name)
+    changes = None if refusal is None else refusal.replay
+    return bc.assembled(case, "pandas", changes)
+
+
+@functools.cache
+def fixture_result_for(name: str) -> StatsResult:
+    """The fixture's result from its own numbers, with D99's accurate bounds and
+    its texts rebuilt: equal in every text to :func:`result_for`'s
+    (``test_the_analysis_gives_the_texts_of_the_fixture_numbers``)."""
     case = bc.BY_NAME[name]
     refusal = bc.REFUSALS.get(name)
     changes = None if refusal is None else refusal.replay
@@ -411,13 +420,31 @@ def _own_subtitle(result: StatsResult) -> tx.Node | None:
 
 
 def test_every_fixture_is_covered() -> None:
-    assert len(bc.ANSWERED) == 68
+    assert len(bc.ANSWERED) == 67
     assert len(_REPLAYED) == 7
-    assert len(ANSWERED_NAMES) == 73
-    agree, single_x = (bc.BY_NAME[name] for name in REFUSED_BY_STATISTICS)
+    assert len(ANSWERED_NAMES) == 74
+    (agree,) = (bc.BY_NAME[name] for name in REFUSED_BY_STATISTICS)
+    assert agree.name in bc.REFUSALS
     assert agree.subtitle is None
+    single_x = bc.BY_NAME[SINGLE_X]
+    assert single_x.name in ANSWERED_NAMES
     assert single_x.subtitle is not None
     assert single_x.pairwise == []
+
+
+@pytest.mark.parametrize("name", _params(ANSWERED_NAMES))
+def test_the_analysis_gives_the_texts_of_the_fixture_numbers(name: str) -> None:
+    # Every text from R's numbers (D99's bounds replaced) equals the analysis'
+    # own, so the checks below hold for the result a caller gets. single-x: R
+    # has no pairs, so only its pairs' labels differ (checked on their own).
+    real, fixture = result_for(name).text, fixture_result_for(name).text
+    if name == SINGLE_X:
+        # R has no pairs: the pair labels and the sentence's pair clause differ.
+        assert real.apa.startswith(fixture.apa.removesuffix("."))
+        blank = {"pairwise_labels": (), "apa": "", "alt_text": ""}
+        real = dataclasses.replace(real, **blank)
+        fixture = dataclasses.replace(fixture, **blank)
+    assert real == fixture
 
 
 def _subtitle_difference(name: str) -> tuple[str, str] | None:
@@ -506,11 +533,13 @@ def test_how_many_texts_equal_ggstatsplots() -> None:
             if cell.count:
                 cells[1] += 1
                 cells[0] += label == theirs[(cell.bar, cell.level)]
+    # edge_bar_degenerate-single-x is answered by the analysis: 1 subtitle, 2
+    # bars and 3 cells more than when it was set aside.
     assert (subtitles, bar_labels, n_labels, cells) == (
-        [69, 70],
-        [136, 136],
-        [149, 149],
-        [428, 428],
+        [70, 71],
+        [138, 138],
+        [151, 151],
+        [431, 431],
     )
 
 
@@ -547,9 +576,28 @@ def test_bar_n_cell_and_pair_labels(name: str) -> None:
         texts.cell_labels
     )
     # pairs: ggstatsplot's labels (never drawn)
-    assert len(texts.pairwise_labels) == len(result.pairwise) == len(case.pairwise)
-    for label, row in zip(texts.pairwise_labels, case.pairwise, strict=True):
-        assert label == tx.to_plain(parse(str(row["expression"])))
+    if name == SINGLE_X:
+        # R loses the whole table; inferplot's pair a-b has no test and an empty
+        # p, as a bar without a test, and the other two their adjusted p.
+        assert case.pairwise == []
+        assert texts.pairwise_labels == tuple(
+            tx.to_plain(
+                tx.pairwise_p_expression(
+                    p_adjusted=p.p_adjusted,
+                    adjust_method=p.adjust_method,
+                    digits=digits,
+                )
+            )
+            for p in result.pairwise
+        )
+        assert result.pairwise[0].p_adjusted is None
+        assert texts.pairwise_labels[0] == tx.to_plain(
+            parse('list(italic(p)["Holm" - adj.] == "")')
+        )
+    else:
+        assert len(texts.pairwise_labels) == len(result.pairwise) == len(case.pairwise)
+        for label, row in zip(texts.pairwise_labels, case.pairwise, strict=True):
+            assert label == tx.to_plain(parse(str(row["expression"])))
     # titles and ticks
     plot = case.plot_texts
     assert figure.legend_title == plot["legend_title"] == result.x

@@ -712,7 +712,7 @@ def p_adjust_label(method: str) -> str:
 
 
 def pairwise_p_expression(
-    *, p_adjusted: float, adjust_method: str, digits: int = 2
+    *, p_adjusted: float | None, adjust_method: str, digits: int = 2
 ) -> Call:
     """Bracket label ``list(italic(p)['Holm'-adj.]=='0.47')``.
 
@@ -2007,6 +2007,13 @@ def _pair_label(pair: PairwiseComparison, digits: int) -> Call:
     adjusted p."""
     if pair.bayes is not None:
         return pairwise_bf_expression(log_bf01=pair.bayes.log_bf01, digits=digits)
+    if pair.p_adjusted is None and pair.no_test_reason is not None:
+        # barstats: a Fisher pair without a test (its table has one column, or
+        # its exact test is beyond the cost limit) gets an empty p, as a bar
+        # without a test does: list(italic(p)['Holm'-adj.]=='').
+        return pairwise_p_expression(
+            p_adjusted=None, adjust_method=pair.adjust_method, digits=digits
+        )
     if pair.p_adjusted is None:
         raise ValueError(
             f"the pair {pair.group1!r}-{pair.group2!r} has neither an adjusted p nor "
