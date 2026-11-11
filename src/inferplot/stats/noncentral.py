@@ -186,9 +186,21 @@ _T_MAX: Final = 1e300
 _XTOL: Final = 1e-13
 # From this chi-square on, chi2_ncp_bound solves the Cornish-Fisher expansion of
 # the noncentral chi-square quantile to its lambda^-1/2 term instead of searching
-# (_chi2_ncp_expansion): what it leaves out is of order z^4 / lambda, below a unit
-# in the last place of lambda here (measured: at most 0.5 units from 1.4e9 on).
+# (_chi2_ncp_expansion): what it leaves out is below a unit in the last place of
+# lambda here (measured: at most 0.5 units from 1.4e9 on).
 _CHI2_EXPANSION_FROM: Final = 1e9
+# For prob < 0.5 (the bound above x) the expansion takes over much earlier: there
+# the search's lower tail (noncentral_chi2_logcdf with lambda > x) loses accuracy
+# from about 2e6 on (relative error at prob 0.025: 1e-13 at 3e6, 6e-12 at 1e7,
+# 5e-11 from 1e8; at prob 0.0005: 2e-11 at 3e6, 1e-9 at 1e7), while the
+# expansion's own error falls as 1 / x^2 (4e-13 at 2e6 and 2e-14 at 1e7 at prob
+# 0.0005; 1e-13 and 5e-15 at prob 0.025). They cross near 2e6. For prob > 0.5 the
+# search stays accurate (below 3e-16) up to 1e9. Measured against 40-digit roots
+# (tools/reference/ncx2_mid_mpmath.py; DECISIONS.md D119).
+_CHI2_EXPANSION_FROM_ABOVE: Final = 2e6
+# The expansion is used while df is at most this share of x (measured accurate to
+# its error above up to df = 10,000 at x = 3e6 and at 1e9, a share of 0.0033).
+_CHI2_EXPANSION_DF_SHARE: Final = 1e-3
 _MAX_EXPANSIONS: Final = 2000
 
 
@@ -1132,11 +1144,13 @@ def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
     the bracket is that value +/- 4 sqrt(value), widened four-fold until it holds the
     root; otherwise it runs from 0 to max(1, 2 x), doubled until it holds the root.
     Returns ``math.inf`` when the root lies beyond the largest double. From x =
-    1e9 on (``_CHI2_EXPANSION_FROM``, with df at most 1e-6 x, so that the root is
-    near x) the root is the solution of the Cornish-Fisher expansion
-    (``_chi2_ncp_expansion``), accurate to the rounding of x there, so every finite
-    x has its bounds at once (the search's incomplete gamma series stopped
-    converging from about 1e31 on, after about 5 seconds).
+    1e9 on (``_CHI2_EXPANSION_FROM``), and from 2e6 on for prob < 0.5
+    (``_CHI2_EXPANSION_FROM_ABOVE``: the bound above x, where the search loses
+    accuracy), with df at most a thousandth of x, the root is the solution of the
+    Cornish-Fisher expansion (``_chi2_ncp_expansion``): accurate to the rounding
+    of x from 1e9, and within 5e-13 relative at 2e6 (1e-13 at prob 0.025), so
+    every finite x has its bounds at once (the search's incomplete gamma series
+    stopped converging from about 1e31 on, after about 5 seconds).
 
     Raises:
         ValueError: an argument is not finite, x < 0, df is not positive, or
@@ -1146,7 +1160,9 @@ def chi2_ncp_bound(x: float, df: float, *, prob: float) -> float:
     _check_chi2_args(x, df, 0.0)
     if not 0.0 < prob < 1.0:
         raise ValueError(f"prob must lie strictly between 0 and 1; got {prob!r}")
-    if x >= _CHI2_EXPANSION_FROM and df <= 1e-6 * x:
+    if df <= _CHI2_EXPANSION_DF_SHARE * x and (
+        x >= _CHI2_EXPANSION_FROM or (prob < 0.5 and x >= _CHI2_EXPANSION_FROM_ABOVE)
+    ):
         return _chi2_ncp_expansion(x, df, prob)
     upper = prob > 0.5
     log_target = math.log1p(-prob) if upper else math.log(prob)

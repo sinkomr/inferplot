@@ -429,10 +429,10 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     units in the last place of the lead's independent 40-digit roots); a statistic
     beyond the doubles raises naming `ratio`; D107's accuracy figure corrected (1.3e-10
     at 1e9 per cell); R's order kept. Check wording and small items: with fix G.
-  - [ ] C7, open (low): noncentral chi-square bounds for a chi-square between 1e7 and
-    1e9 are off by up to 5e-11 relative at 95% (2.8e-9 at prob 0.001); the Poisson
-    sum's tails above x are inaccurate from about 1e7. Not visible in any printed
-    number.
+  - [x] C7, last item: noncentral chi-square bounds between 2e6 and 1e9 were off by
+    up to 4.8e-11 relative at 95% (8.5e-9 at 99.9%). Fixed (D119 amended): the bound
+    above x comes from the Cornish-Fisher solution from 2e6; within 1.1e-13 of 168
+    new 40-digit roots at 95%.
 - [x] oracle round 3 (attested run 42949626258): 594 fixtures, 23 probes, 15 held-out
   cases. The five questions of the barstats review and the two of the Phase 4 review
   answered by R: percent labels follow R's `round()`, now implemented (D127; 98 of
@@ -617,7 +617,7 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
     inferplot's p was lower than R's on 45 of 186 probe tables, by 0.4% to 7.9%; it
     now follows R on all 186 (D129). L5: R's `round()` keeps a large x by its binary
     exponent; `r_round` follows (D130; no percent label is affected).
-  - [ ] L6 = C7's open item (bounds for a chi-square between 1e7 and 1e9).
+  - [x] L6 = C7's last item (bounds for a chi-square between 2e6 and 1e9): fixed.
 - [ ] the owner runs the agent evaluation (each run needs their go-ahead)
 - [ ] the owner publishes: TestPyPI, then PyPI (`docs/RELEASING.md`)
 

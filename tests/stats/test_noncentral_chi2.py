@@ -191,6 +191,7 @@ def _exact_upper_df3(x: float, ncp: float) -> float:
     return q1 + density
 
 
+MID_REFERENCE = Path(__file__).resolve().parents[1] / "data" / "ncx2_mid_reference.json"
 LARGE_REFERENCE = (
     Path(__file__).resolve().parents[1] / "data" / "ncx2_large_reference.json"
 )
@@ -213,6 +214,46 @@ def test_roots_of_huge_chi_squares_match_mpmath() -> None:
         expected = Fraction(Decimal(row["ncp"]))
         assert abs(Fraction(ours) - expected) <= Fraction(math.ulp(ours)), row
     assert time.perf_counter() - start < allowed(1.0)
+
+
+def test_roots_from_1e6_to_5e8_match_mpmath() -> None:
+    # 168 roots at x = 1e6 to 5e8, df = 2 to 1,000, prob = 0.0005 to 0.9995, at
+    # 40 digits from another exact representation
+    # (tools/reference/ncx2_mid_mpmath.py). This is the range where the bound
+    # above x (prob < 0.5) changes from the search to the Cornish-Fisher solution
+    # at 2e6: the search was off there by up to 4.8e-11 at prob 0.025 and 8.5e-9
+    # at prob 0.0005 (review C7, open until now). Measured after the change: the
+    # bound below x within 3.1e-16; the bound above x within 1.1e-13 at prob
+    # 0.025 to 0.45 (worst at x = 2.1e6, just past the change) and 1.7e-12 at
+    # prob 0.0005 (at x = 1.9e6, just before it). The limits are those with a
+    # margin of about two.
+    rows = json.loads(MID_REFERENCE.read_text(encoding="utf-8"))["roots"]
+    assert len(rows) == 168
+    worst = {"below": 0.0, "above": 0.0, "above, far tail": 0.0}
+    for row in rows:
+        x, prob = float.fromhex(row["x"]), float.fromhex(row["prob"])
+        ours = chi2_ncp_bound(x, float(row["df"]), prob=prob)
+        expected = Fraction(Decimal(row["ncp"]))
+        error = float(abs(Fraction(ours) - expected) / expected)
+        kind = "below" if prob > 0.5 else "above" if prob > 0.01 else "above, far tail"
+        worst[kind] = max(worst[kind], error)
+    assert worst["below"] <= 1e-15, worst
+    assert worst["above"] <= 2.5e-13, worst
+    assert worst["above, far tail"] <= 4e-12, worst
+
+
+def test_the_expansion_takes_over_where_it_is_the_more_accurate() -> None:
+    # A change of these constants must come with new measurements (a planted
+    # change of the first to 1e7 went unnoticed before this test).
+    from inferplot.stats import noncentral
+
+    assert noncentral._CHI2_EXPANSION_FROM == 1e9  # pyright: ignore[reportPrivateUsage]
+    assert noncentral._CHI2_EXPANSION_FROM_ABOVE == 2e6  # pyright: ignore[reportPrivateUsage]
+    # Either side of the change the two methods agree far inside the limits.
+    for df in (2.0, 60.0):
+        before = chi2_ncp_bound(math.nextafter(2e6, 0.0), df, prob=0.025)
+        after = chi2_ncp_bound(2e6, df, prob=0.025)
+        assert abs(after - before) / after < 3e-13
 
 
 @pytest.mark.parametrize("x", [2.5e31, 2.5e100, 1e300, 1.7976931348623157e308])
