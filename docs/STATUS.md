@@ -581,13 +581,14 @@ table, the Bayes factor count 35 to 36 re-measured, the D31 row's 2 of 31 to 3 o
   - [x] D1, I2, I3, U1: differences and limits added to the changelog and README;
     three rates added to `docs/intervals.md`; `fig.show()` says how to look at a
     figure.
-  - [ ] E1 to E10 (5 high): the evaluation scorer would mislead as it stands: every
-    baseline run flagged contaminated (the folder names contain "inferplot"); a
-    correct exact McNemar answer and SciPy's default signed-rank test scored as
-    wrong numbers; inferplot's own test names not recognised; a task that
-    penalises the textbook two-way analysis; expected numbers reachable from the
-    run directories. Being fixed on `fix/evals-review`; the evaluation must not be
-    run before it is merged.
+  - [x] E1 to E10 (5 high): the evaluation scorer would have misled (every baseline
+    run flagged contaminated; correct SciPy and statsmodels answers scored as wrong
+    numbers; inferplot's own test names not recognised; a task that penalised the
+    textbook analysis; expected numbers reachable from the run directories). Fixed
+    (D117 amended): 109 accepted analyses (64 before), counts accepted for n, trap
+    scoring per task (3 traps left for reading), neutral and separated paths,
+    contamination as real use; 32 of 32 tasks valid; the lead's own SciPy and
+    statsmodels answers score as intended. Still not run.
   Statistics half done (2026-11-11; the lead's own changes; scripts in
   `reviewP5B/`): Fisher's test exact on 3,615 enumerated tables (worst 8e-14); the
   adjustment with uncomputed pairs never below the all-computed value (20,000 trials

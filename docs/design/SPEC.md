@@ -1452,9 +1452,19 @@ Every other subtitle number is compared as the exact string inferplot produces.
   PyPI only from a version tag, after TestPyPI, through the `pypi` environment. The
   wheel holds the package and its metadata only (runtime dependencies exactly rule
   5's); the sdist holds what the tests need.
-- **Agent evaluation (`evals/`, `tests/test_evals.py`; D117):** 32 tasks with a trap
-  each; the dry run (the default, no model call) recomputes every expected number.
-  A real run needs the owner's flag and is refused in CI.
+- **Agent evaluation (`evals/`, `tests/test_evals.py`; D117):** 32 tasks; the dry run
+  (the default, no model call) recomputes every expected number and every count
+  accepted for n. An answer is scored against every accepted variant of the test it
+  names and keeps the best; each standard variant a careful analyst gets from
+  SciPy's, statsmodels' or R's defaults has its own recomputed numbers. Acceptance:
+  careful SciPy answers to 23 tasks (computed in the test from the data) and
+  inferplot's own answers for every accepted inferplot call (by name, label and
+  method) must score as the correct test with the correct numbers; a table of more
+  than 100 test-name spellings, right and wrong. Each trap is scored (by a known
+  mistake's numbers, by the choice of test, or by n) or listed for reading, never
+  assumed avoided. Agent-visible paths are neutral, each arm has its own root, and
+  results go elsewhere. A real run needs the owner's flag and is refused in CI and
+  on Windows.
 - **Scale:** the data times 2^k give bit-identical statistics, intervals, Bayes factors
   and Games-Howell rows for every k that keeps them normal doubles; times 10^k (k =
   -300..300) they agree within `closed_form` (`noncentral_ci` for interval bounds)
