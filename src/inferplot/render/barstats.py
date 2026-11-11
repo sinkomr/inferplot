@@ -11,7 +11,8 @@
   written on their segment in the ink that contrasts with it. A label that does
   not fit inside its segment (its height, or with ``ax=`` its width) is moved
   beside its bar, in a column right of the bar, stacked clear of the other
-  moved labels of that bar and joined to its segment by a short line; with
+  moved labels of that bar, joined to its segment by a short line and keyed by
+  a small square of its segment's colour (edged in the ink); with
   ``ax=``, a moved label for which that column has no room is left out.
   inferplot's own figure is made tall enough for every column, so it leaves no
   label out; ``fig.check()`` reports every label that is left out or does not
@@ -94,6 +95,11 @@ LEAD_PT: Final = 7.0
 STACK_GAP_PT: Final = 1.5
 LEADER_WIDTH_PT: Final = 0.6
 SEGMENT_EDGE_PT: Final = 0.8
+# A moved label carries a key of its segment's colour at its left (review B13):
+# a square KEY_PT wide, edged in inferplot's ink (so a light colour reads on the
+# background, as the legend's keys do), KEY_GAP_PT before the label.
+KEY_PT: Final = 5.0
+KEY_GAP_PT: Final = 2.0
 # bar_args' bounds (B2): a wider edge covers small segments (1% of a 3 in bar is
 # about 2 points) and the legend keys; below this alpha the default palette's
 # yellow has under 1.1:1 contrast with white (low_contrast's floor for a level's
@@ -391,6 +397,7 @@ class _Cell:
     segment: Rectangle | None = None
     text: Text | None = None
     leader: Line2D | None = None
+    key: Line2D | None = None
     place: Place = "inside"
 
 
@@ -767,6 +774,8 @@ class _BarDrawing(base.BaseDrawing):
             bars_px = needed
         self.bars_px = bars_px
         column = max((self.label_size(c)[0] for c in moved), default=0.0)
+        if moved:
+            column += self.key_px()
         self.column_px = column
         slot = max(floor, self.bar_px / BAR_SHARE)
         if moved:
@@ -870,6 +879,9 @@ class _BarDrawing(base.BaseDrawing):
             if cell.leader is not None:
                 cell.leader.remove()
                 cell.leader = None
+            if cell.key is not None:
+                cell.key.remove()
+                cell.key = None
         for j in range(self.n_bars):
             self.stack(j, [c for c in moved if c.j == j], ppu)
 
@@ -910,10 +922,26 @@ class _BarDrawing(base.BaseDrawing):
                 text.set_visible(False)
                 cell.place = "omitted"
                 continue
-            text.set_position((x_text, centre))
+            key_x = x_text + px(KEY_PT / 2, dpi) / self.slot_px
+            text.set_position((x_text + self.key_px() / self.slot_px, centre))
             text.set_horizontalalignment("left")
             text.set_color(self.outside_ink())
             cell.place = "outside"
+            assert cell.segment is not None
+            key = Line2D(
+                [key_x],
+                [centre],
+                linestyle="none",
+                marker="s",
+                markersize=KEY_PT,
+                markerfacecolor=cell.segment.get_facecolor(),
+                markeredgecolor=self.outside_ink(),
+                markeredgewidth=LEADER_WIDTH_PT,
+                zorder=4.5,
+                gid=f"key-{cell.j}-{cell.i}",
+            )
+            self.ax.add_line(key)
+            cell.key = key
             middle = cell.bottom + cell.percent / 2
             line = Line2D(
                 [x_edge, x_text - px(1.5, dpi) / self.slot_px],
@@ -935,13 +963,20 @@ class _BarDrawing(base.BaseDrawing):
                 if cell.leader is not None:
                     cell.leader.remove()
                     cell.leader = None
+                if cell.key is not None:
+                    cell.key.remove()
+                    cell.key = None
+
+    def key_px(self) -> float:
+        """The width of a moved label's key and the gap after it, in pixels."""
+        return px(KEY_PT + KEY_GAP_PT, self.dpi)
 
     def column_fits(self, j: int, moved: Sequence[_Cell]) -> bool:
         """With ``ax=``: whether the moved labels of bar ``j`` fit between it and
         the next bar (or the legend, or the Axes' edge)."""
         dpi = self.dpi
         start = self.bar_px / 2 + px(LEAD_PT, dpi)
-        widest = max(self.label_size(c)[0] for c in moved)
+        widest = max(self.label_size(c)[0] for c in moved) + self.key_px()
         if j < self.n_bars - 1:
             room = self.slot_px - self.bar_px / 2 - px(GAP_PT, dpi)
         else:  # the legend starts a gap right of the last slot
@@ -1055,7 +1090,7 @@ class _BarDrawing(base.BaseDrawing):
             if not moved:
                 column = 0.0
                 break
-            column = max(self.label_size(c)[0] for c in moved)
+            column = max(self.label_size(c)[0] for c in moved) + self.key_px()
             beside = slot - px(LEAD_PT, dpi) - column - gap - 1.0  # 1 px slack
             narrower = min(max(MIN_BAR_SHARE * slot, beside), bar)
             if narrower >= bar:
@@ -1079,6 +1114,8 @@ class _BarDrawing(base.BaseDrawing):
                 cell.text.set_color(ink)
             if cell.leader is not None:
                 cell.leader.set_color(ink)
+            if cell.key is not None:
+                cell.key.set_markeredgecolor(ink)
 
     def drawn_data(self) -> tuple[DrawnData, ...]:
         drawn = [c for c in self.cells if c.segment is not None]
