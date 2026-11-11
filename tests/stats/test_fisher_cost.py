@@ -18,6 +18,7 @@ from __future__ import annotations
 import itertools
 import json
 import math
+import time
 import tracemalloc
 from fractions import Fraction
 from pathlib import Path
@@ -30,6 +31,7 @@ from numpy.typing import NDArray
 from inferplot.stats import contingency as C
 from inferplot.stats import fisher_exact, pairwise_fisher
 from inferplot.stats.padjust import p_adjust
+from tests.timing import allowed
 from tests.tolerances import is_close
 
 IntArray = NDArray[np.int64]
@@ -286,7 +288,10 @@ def test_work_known_from_the_margins_is_refused_before_it_is_spent() -> None:
     # The list and the bounds cost what the margins say whatever is pruned: a
     # budget smaller than that refuses at once, having spent nothing.
     table = _reviewer_2xc(304, 8, 0.0)
-    *_, certain = C._fisher_work(table, "two-sided")  # pyright: ignore[reportPrivateUsage]
+    first, second = C._oriented(table, "two-sided")  # pyright: ignore[reportPrivateUsage]
+    cols = [a + b for a, b in zip(first, second, strict=True)]
+    _, widths = C._ranges(first, cols)  # pyright: ignore[reportPrivateUsage]
+    certain = C._fisher_plan(widths).certain  # pyright: ignore[reportPrivateUsage]
     budget = C._Budget(certain / 2)  # pyright: ignore[reportPrivateUsage]
     with pytest.raises(C._TooLarge):  # pyright: ignore[reportPrivateUsage]
         C._fisher(table, "two-sided", budget)  # pyright: ignore[reportPrivateUsage]
@@ -494,3 +499,313 @@ def _work_of_each_pair(table: list[list[int]]) -> list[float]:
             C._pairwise_fisher([table[i], table[j]], "none", 0.95, "two-sided", budget)
             work.append(budget.spent)
     return work
+
+
+# --------------------------------------------------------------------------- #
+# Everything the pairs take is counted (review P5B, A2)
+# --------------------------------------------------------------------------- #
+
+# The least work a 2 x 2 test, the planning of a pair and one Cramer's V take, in
+# units of about a nanosecond (measured: 25 us, 115 us and 0.8 ms or more).
+LEAST_2X2: Final = 25_000.0
+LEAST_PLAN: Final = 100_000.0
+LEAST_EFFECT: Final = 1.0e6
+
+
+def _random_table(rows: int, cols: int, n: int, seed: int) -> IntArray:
+    rng = np.random.default_rng(seed)
+    table = np.zeros((rows, cols), dtype=np.int64)
+    np.add.at(table, (rng.integers(0, rows, n), rng.integers(0, cols, n)), 1)
+    return table
+
+
+def test_two_by_two_tests_are_charged_their_work() -> None:
+    # The reviewer's 100 x 2 table of 100,000 observations: 4,950 2 x 2 pairs.
+    # Each test was charged about 21,000 units while it took 9 to 18 ms (88 s
+    # in all). Now a budget of 2e7 units pays for at most 2e7 / 25,000 tests.
+    table = _random_table(100, 2, 100_000, seed=1)
+    budget = C._Budget(2e7)
+    pairs = C._pairwise_fisher(table, "holm", 0.95, "two-sided", budget)
+    tested = [p for p in pairs if p.p_value is not None]
+    assert budget.spent <= 2e7
+    assert 0 < len(tested) <= 2e7 / LEAST_2X2
+    for pair in tested[:20]:
+        sub = table[[pair.row1, pair.row2]]
+        assert pair.p_value == fisher_exact(sub).p_value
+
+
+def test_every_two_by_two_pair_within_the_budget() -> None:
+    # With the default budget all 4,950 are tested, together, in about a second.
+    table = _random_table(100, 2, 100_000, seed=1)
+    start = time.perf_counter()
+    pairs = pairwise_fisher(table)
+    assert time.perf_counter() - start < allowed(4.0)
+    assert all(p.p_value is not None for p in pairs)
+    rng = np.random.default_rng(3)
+    for k in rng.choice(len(pairs), 25, replace=False).tolist():
+        pair = pairs[k]
+        assert pair.p_value == fisher_exact(table[[pair.row1, pair.row2]]).p_value
+
+
+def test_pairs_too_wide_for_any_search_are_not_planned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The reviewer's 3 x 2000 table of 20,000: planning its three 2 x ~2000
+    # tables took 53 s (O(c^2) per plan). No search of 669 or more columns fits
+    # one test (_certain_floor), so they are not planned at all.
+    plans: list[int] = []
+    original = C._fisher_plan
+
+    def counted(widths: list[int], list_columns: int | None = None) -> C._Plan:
+        plans.append(len(widths))
+        return original(widths, list_columns)
+
+    monkeypatch.setattr(C, "_fisher_plan", counted)
+    table = _random_table(3, 2000, 20_000, seed=1)
+    start = time.perf_counter()
+    pairs = pairwise_fisher(table)
+    assert time.perf_counter() - start < allowed(2.0)
+    assert plans == []
+    assert all(p.reason == C._TOO_LARGE_REASON for p in pairs)
+    assert C._certain_floor(668) <= C._FISHER_WORK_LIMIT < C._certain_floor(669)
+
+
+def test_planning_is_charged_within_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 435 pairs of 2 x 6 tables: planning every one was free (three plans each).
+    # Now it is charged, up to half the budget, smallest tables first.
+    plans: list[int] = []
+    original = C._fisher_plan
+
+    def counted(widths: list[int], list_columns: int | None = None) -> C._Plan:
+        plans.append(len(widths))
+        return original(widths, list_columns)
+
+    monkeypatch.setattr(C, "_fisher_plan", counted)
+    table = _random_table(30, 6, 3_000, seed=2)
+    budget = C._Budget(2e6)
+    pairs = C._pairwise_fisher(table, "holm", 0.95, "two-sided", budget)
+    assert len(pairs) == 435
+    assert budget.spent <= 2e6
+    assert len(plans) <= 2e6 / LEAST_PLAN
+
+
+def test_planning_cost_is_linear_in_the_columns() -> None:
+    # A plan of 2,000 columns takes a few milliseconds (it took seconds).
+    rng = np.random.default_rng(4)
+    widths = [int(v) for v in rng.integers(1, 6, 2000)]
+    start = time.perf_counter()
+    C._fisher_plan(widths)
+    assert time.perf_counter() - start < allowed(0.1)
+
+
+def test_effect_intervals_have_their_own_allowance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Each pair's V interval took about a millisecond, uncounted: 666 of them on
+    # a 37 x 37 table took 10 s. They draw on their own allowance, smallest
+    # tables first (a group of equal size wholly or not at all); the others say
+    # why they have no V.
+    calls: list[int] = []
+    original = C.cramers_v
+
+    def counted(table: Any, **kw: Any) -> Any:
+        calls.append(1)
+        return original(table, **kw)
+
+    monkeypatch.setattr(C, "cramers_v", counted)
+    table = _random_table(37, 37, 5_000, seed=1)
+    effects = C._Budget(5e7)
+    pairs = C._pairwise_fisher(
+        table, "holm", 0.95, "two-sided", C._Budget(1e6), effects
+    )
+    assert effects.spent <= effects.limit
+    assert 0 < len(calls) <= effects.limit / LEAST_EFFECT
+    reached = [p for p in pairs if p.effect is not None]
+    missed = [p for p in pairs if p.effect_reason == C._EFFECT_NOT_REACHED]
+    assert len(reached) == len(calls)
+    assert len(reached) + len(missed) == len(pairs)
+    assert max((len(p.columns), p.n) for p in reached) < min(
+        (len(p.columns), p.n) for p in missed
+    )
+    for pair in reached[:5]:
+        sub = table[np.ix_((pair.row1, pair.row2), pair.columns)]
+        assert pair.effect == original(sub)
+
+
+def test_the_public_pairs_count_their_intervals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 70 x 37 sparse: 2,415 pairs. Every interval used to be computed.
+    calls: list[int] = []
+    original = C.cramers_v
+
+    def counted(table: Any, **kw: Any) -> Any:
+        calls.append(1)
+        return original(table, **kw)
+
+    monkeypatch.setattr(C, "cramers_v", counted)
+    table = _random_table(70, 37, 3_000, seed=5)
+    start = time.perf_counter()
+    pairs = pairwise_fisher(table)
+    assert time.perf_counter() - start < allowed(4.0)
+    assert len(pairs) == 2415
+    most = (C._PAIRWISE_WORK_LIMIT + C._PAIRWISE_EFFECT_LIMIT) / LEAST_EFFECT
+    assert 0 < len(calls) <= most
+
+
+def _limited(
+    table: IntArray, order: list[int], limit: float, effect_limit: float
+) -> dict[frozenset[int], tuple[object, ...]]:
+    pairs = C._pairwise_fisher(
+        table[order],
+        "holm",
+        0.95,
+        "two-sided",
+        C._Budget(limit),
+        C._Budget(effect_limit),
+    )
+    return {
+        frozenset((order[p.row1], order[p.row2])): (
+            p.p_value,
+            p.p_adjusted,
+            p.reason,
+            p.effect,
+            p.effect_reason,
+        )
+        for p in pairs
+    }
+
+
+def test_limited_pairs_do_not_depend_on_the_order_of_the_rows() -> None:
+    # Budgets that admit some 2 x 2 tests, some larger ones and some V
+    # intervals: which ones, and every number, are the same in any row order.
+    tables = [_random_table(40, 2, 4_000, seed=6), _random_table(12, 5, 900, seed=7)]
+    for table, limit, effect_limit in ((tables[0], 3e7, 3e7), (tables[1], 4e7, 2e7)):
+        base = _limited(table, list(range(table.shape[0])), limit, effect_limit)
+        values = list(base.values())
+        assert any(v[0] is None for v in values)
+        assert any(v[0] is not None for v in values)
+        assert any(v[3] is None for v in values)
+        for _ in range(3):
+            order = [int(i) for i in RNG.permutation(table.shape[0])]
+            assert _limited(table, order, limit, effect_limit) == base
+
+
+def test_two_by_two_tests_together_give_each_its_own_p() -> None:
+    # A batch of 2 x 2 tests (both sides, all margins) gives every table the p it
+    # gets alone, to the last bit, and spends at most each table's bound.
+    rng = np.random.default_rng(8)
+    items: list[tuple[int, int, int, int, Any]] = []
+    for _ in range(300):
+        scale = int(10 ** rng.uniform(0.5, 7))
+        t = rng.integers(0, scale, size=(2, 2)) + rng.integers(0, 2, size=(2, 2))
+        if (t.sum(axis=0) == 0).any() or (t.sum(axis=1) == 0).any():
+            continue
+        side = ["two-sided", "greater", "less"][int(rng.integers(0, 3))]
+        first = [int(v) for v in t[0]]
+        second = [int(v) for v in t[1]]
+        if side == "two-sided":
+            first, second = C._canonical(first, second)
+        cols = [a + b for a, b in zip(first, second, strict=True)]
+        items.append((first[0], sum(first), cols[0], cols[1], side))
+    bounds = [C._estimate_2x2(r1, c0, c1) for _, r1, c0, c1, _ in items]
+    rounds = max(C._rounds_2x2(r1, c0, c1) for _, r1, c0, c1, _ in items)
+    together, _ = C._fisher_2x2_many(
+        items, bounds, sum(bounds) + rounds * C._UNIT_ROUND
+    )
+    for item, p_value in zip(items, together, strict=True):
+        a, r1, c0, c1, side = item
+        alone = C._fisher_2x2(a, r1, c0, c1, side, C._Budget(C._FISHER_WORK_LIMIT))
+        assert p_value == alone, item
+
+
+def test_the_planners_closed_forms_equal_the_sums(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _plan_bound_work equals _bound_work over the rotated sizes; the running
+    # sums equal the convolution; the long network side through NumPy equals
+    # the loop; _certain_floor is below every plan's certain work.
+    rng = np.random.default_rng(9)
+    for _ in range(60):
+        k = int(rng.integers(2, 90))
+        sizes = sorted(int(v) for v in rng.integers(2, 40, k))
+        prefix = [0]
+        for s in sizes:
+            prefix.append(prefix[-1] + s - 1)
+        sum_p = [0]
+        sum_ip = [0]
+        for i, v in enumerate(prefix):
+            sum_p.append(sum_p[-1] + v)
+            sum_ip.append(sum_ip[-1] + i * v)
+        for q in (1, k // 2, k):
+            rotated = sizes[q:] + sizes[:q]
+            assert C._plan_bound_work(sizes, q, prefix, sum_p, sum_ip) == (
+                C._bound_work(rotated, k - q)
+            )
+        counts = np.ones(1)
+        for s in sizes[:4]:
+            assert np.array_equal(
+                C._window_sums(counts, s), np.convolve(counts, np.ones(s))
+            )
+            counts = np.convolve(counts, np.ones(s))
+        widths = [s - 1 for s in sizes]
+        plan = C._fisher_plan(widths)
+        assert C._certain_floor(k) <= plan.certain
+        monkeypatch.setattr(C, "_LONG_NETWORK", 0)
+        assert C._fisher_plan(widths) == plan
+        monkeypatch.setattr(C, "_LONG_NETWORK", 64)
+
+
+# --------------------------------------------------------------------------- #
+# p = 0 only below the smallest double
+# --------------------------------------------------------------------------- #
+
+# 2 x 3 tables whose exact p lies between 1e-320 and 1e-300 (subnormal or near),
+# and whose shortcut bound as the search computes it, (number of first rows in
+# the box of the columns' ranges) x P_obs (1 + 1e-7), is below 1e-304: a
+# shortcut that rounded p to 0 from about 1e-304 instead of 2^-1075 (the
+# reviewer's planted bug) would report 0 for each.
+TINY: Final = [
+    [[575, 6, 0], [0, 500, 5]],
+    [[550, 3, 0], [0, 500, 12]],
+    [[525, 3, 0], [0, 500, 40]],
+    [[575, 1, 0], [0, 500, 2]],
+    [[550, 3, 0], [0, 500, 40]],
+]
+
+
+def _exact_p_2x3(table: list[list[int]]) -> tuple[int, int, int]:
+    """The exact two-sided p as counted / total (integers; a table counts when
+    its weight is at most the observed one times 1 + 1e-7, R's rule), and the
+    observed weight times the number of first rows in the box of the columns'
+    ranges (the shortcut's bound, over total)."""
+    first = table[0]
+    cols = [a + b for a, b in zip(table[0], table[1], strict=True)]
+    r1 = sum(first)
+    weights = [[math.comb(c, a) for a in range(c + 1)] for c in cols]
+    observed = math.prod(weights[j][first[j]] for j in range(3))
+    counted = 0
+    for a0 in range(cols[0] + 1):
+        for a1 in range(max(0, r1 - a0 - cols[2]), min(cols[1], r1 - a0) + 1):
+            w = weights[0][a0] * weights[1][a1] * weights[2][r1 - a0 - a1]
+            if w * 10**7 <= observed * (10**7 + 1):
+                counted += w
+    r2 = sum(cols) - r1
+    box = math.prod(min(c, r1) - max(0, c - r2) + 1 for c in cols)
+    return counted, math.comb(sum(cols), r1), box * observed
+
+
+@pytest.mark.parametrize("table", TINY, ids=[str(t) for t in TINY])
+def test_a_p_value_between_1e_320_and_1e_300_is_not_rounded_to_0(
+    table: list[list[int]],
+) -> None:
+    counted, total, bound = _exact_p_2x3(table)
+    exact = counted / total  # correctly rounded, subnormals included
+    assert 1e-320 < exact < 1e-300
+    log_bound = math.log(bound) + math.log1p(1e-7) - math.log(total)
+    assert -1075 * math.log(2.0) < log_bound < math.log(1e-304)
+    p = fisher_exact(table).p_value
+    assert p > 0.0
+    # Relative 1e-12 for a normal p; a subnormal holds fewer digits, so an
+    # absolute two units of the smallest subnormal as well.
+    assert abs(p - exact) <= 1e-12 * exact + 2 * 5e-324, (p, exact)

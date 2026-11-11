@@ -46,7 +46,9 @@ counts (fisher_exact).
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import functools
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -70,6 +72,7 @@ from inferplot.stats.written import READ_ULPS, written_values
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
+BoolArray = NDArray[np.bool_]
 
 CountTable: TypeAlias = NDArray[Any] | Sequence[Sequence[int]]
 """A table of counts: a two-dimensional NumPy array or nested sequences (rows x
@@ -349,6 +352,14 @@ def chisq_independence(table: CountTable) -> IndependenceTest:
     incomplete gamma). Expected counts below 5 only make R warn (ggstatsplot mutes
     it); they are returned for the caller to report.
 
+    A statistic of exactly 0 (p = 1) is either an exactly independent table, 0 in
+    rational arithmetic on the counts (DECISIONS D118: R's order of operations
+    would leave rounding noise), or a statistic that R's order of operations
+    (D107) rounds to 0 although its exact value is not 0: [[60000000000001,
+    119999999999998], [60000000000002, 120000000000000]] has exact chi^2 6.2e-42,
+    reported as 0 because every expected count E, rounded once to a double, equals
+    its count. The two cannot be told apart from the statistic.
+
     Raises:
         ValueError: the table is not r x c with r, c >= 2, a row or column is
             empty, or a count is negative, not whole or too large.
@@ -625,7 +636,18 @@ def _check_ratio(ratio: Probabilities | None, k: int) -> FloatArray:
         )
     if ratio is None:
         return np.full(k, 1.0 / k)
-    p = np.asarray(ratio, dtype=np.float64)
+    p: FloatArray = np.asarray(ratio, dtype=np.float64)
+    # A share given in single (or half) precision is read as the decimal it
+    # prints as, as the analysis layer reads every float32 argument: 0.2 in
+    # float32 is 0.2, not 0.20000000298023224 (DECISIONS D118).
+    given = np.asarray(ratio)
+    if given.dtype.kind == "f" and given.dtype.itemsize < 8:
+        read = [float(str(v)) for v in given.reshape(-1)]
+        p = np.array(read, dtype=np.float64).reshape(given.shape)
+    elif p.ndim == 1 and not isinstance(ratio, np.ndarray):
+        for i, item in enumerate(ratio):
+            if isinstance(item, np.floating) and item.dtype.itemsize < 8:
+                p[i] = float(str(item))
     if p.ndim != 1 or p.size != k:
         raise ValueError(
             f"ratio must give one probability per category: {k} expected, got "
@@ -882,14 +904,19 @@ _UNIT_LIST: Final = 6.0  # one placement of one completion of the list
 _UNIT_BOUND: Final = 10.0  # one element of a column's bound arrays
 _UNIT_VERTEX: Final = 3_000.0  # one vertex of the box (smallest completion)
 _UNIT_PMF: Final = 40.0  # one hypergeometric log probability (2 x 2)
+_UNIT_PROBE: Final = 1_000.0  # one 2 x 2 log probability in Loader's form
+_UNIT_2X2: Final = 50_000.0  # a 2 x 2 test's setup (its margins' binomials)
+_UNIT_TAIL_BLOCK: Final = 5_000.0  # one block of a 2 x 2 tail (a pass of Python)
+_UNIT_ROUND: Final = 200_000.0  # one pass over a batch of 2 x 2 tests (the calls)
 _UNIT_QUERY: Final = 40.0  # one partial table joined with the list
 _UNIT_PIECE: Final = 800.0  # one block of a row of the list (a pass of Python)
 _UNIT_CALL: Final = 20_000.0  # one pass of Python over a chunk
 # One test may spend this much (about a second here) ...
 _FISHER_WORK_LIMIT: Final = 1.0e9
-# ... and the pairwise tests of one table this much in all (about two seconds).
+# ... and the pairwise tests of one table this much in all, their planning
+# included (about 1.6 seconds; the pairs' V intervals have their own, below).
 _PAIRWISE_WORK_LIMIT: Final = 1.6e9
-# A pairwise test whose smaller work estimate (_fisher_work) is above this is not
+# A pairwise test whose smaller work estimate (_work_spans) is above this is not
 # attempted: the estimate exceeds the work spent by at most 1.1e4 times (largest
 # answered estimate 2.5e12) on the tables of tests/data and the grids measured,
 # so the attempt would only spend the budget the other pairs need.
@@ -943,6 +970,10 @@ _TAIL_BLOCK_MAX: Final = 1 << 15
 # ... and their terms are computed in Loader's form every this many terms, by the
 # exact ratio of consecutive terms in between.
 _ANCHOR: Final = 256
+# 2 x 2 tests computed together evaluate at most this many terms per pass; a run
+# of at least _LONG_RUN terms is computed alone.
+_BATCH_ELEMENTS: Final = 1 << 17
+_LONG_RUN: Final = 16384
 
 
 class _TooLarge(Exception):
@@ -986,10 +1017,13 @@ def _log_ratio(num: int, den: int) -> float:
 
 def _split_mean(size: int, num: int, den: int) -> tuple[float, float]:
     """size * num / den as the nearest double and the rest (exact value minus the
-    double), from exact rationals."""
-    exact = Fraction(size * num, den)
-    hi = float(exact)
-    return hi, float(exact - Fraction(hi))
+    double), the rest rounded once: Python's division of integers is correctly
+    rounded, so these are the doubles nearest the exact rationals (as
+    ``float(Fraction(...))`` gives them, without a Fraction)."""
+    top = size * num
+    hi = top / den
+    p, q = hi.as_integer_ratio()
+    return hi, (top * q - p * den) / (den * q)
 
 
 def _log_dbinom(x: FloatArray, size: int, num: int, den: int) -> FloatArray:
@@ -1030,72 +1064,146 @@ def _log_dbinom(x: FloatArray, size: int, num: int, den: int) -> FloatArray:
 
 # --- 2 x 2 ------------------------------------------------------------------ #
 
-
-def _tail_log_sum(f: _LogPmf, start: int, stop: int, budget: _Budget) -> float:
-    """log of sum exp(f(a)) for a from ``start`` to ``stop`` inclusive (either
-    direction), where the terms fall away from ``start`` (a tail of a log-concave
-    sequence beyond its mode). Summed in blocks of growing size (at most
-    ``_TAIL_BLOCK_MAX`` terms, so memory stays small); the rest after a block is at
-    most last term x r / (1 - r), r the ratio of the last two terms (the ratios
-    fall away from the mode), and the sum stops once that is below 1e-17 of the
-    sum. Each block is charged to ``budget`` before it is computed (the terms of
-    a block come from _LogPmf.run)."""
-    step = 1 if stop >= start else -1
-    ref = float(f(np.array([float(start)]))[0])
-    total = 0.0
-    pos = start
-    block = _TAIL_BLOCK
-    while True:
-        end = pos + step * (block - 1)
-        if (end - stop) * step > 0:
-            end = stop
-        size = abs(end - pos) + 1
-        budget.charge(size * _UNIT_PMF + _UNIT_CALL / 20.0)
-        values = f.run(pos, size, step) - ref
-        total += float(np.sum(np.exp(values)))
-        if end == stop:
-            break
-        if values.size >= 2:
-            ratio = math.exp(float(values[-1] - values[-2]))
-            if ratio < 1.0:
-                rest = math.exp(float(values[-1])) * ratio / (1.0 - ratio)
-                if rest <= _TAIL_EPS * total:
-                    break
-        pos = end + step
-        block = min(2 * block, _TAIL_BLOCK_MAX)
-    return ref + math.log(total)
+# Rows of the parameters of a binomial (_binomial_rows): its size, the two means
+# as a double and the rest (_split_mean), and its log probability at 0 and at size.
+_B_SIZE, _B_M1, _B_D1, _B_M2, _B_D2, _B_ZERO, _B_FULL = range(7)
 
 
-class _LogPmf:
-    """log P(A = a) of the first cell of a 2 x 2 table with fixed margins (the
-    hypergeometric distribution), from Loader's binomial form: P(a) = dbinom(a;
-    c0, p) dbinom(r1 - a; c1, p) / dbinom(r1; n, p) for any p, here p = r1 / n."""
+def _binomial_rows(sizes: list[int], num: list[int], den: list[int]) -> FloatArray:
+    """The parameters _log_dbinom computes for Binomial(size, num / den), one
+    column per binomial (0 < num < den)."""
+    out = np.empty((7, len(sizes)))
+    for t, (size, p, q) in enumerate(zip(sizes, num, den, strict=True)):
+        m1, d1 = _split_mean(size, p, q)
+        m2, d2 = _split_mean(size, q - p, q)
+        n = float(size)
+        out[:, t] = (n, m1, d1, m2, d2, n * _log_ratio(q - p, q), n * _log_ratio(p, q))
+    return out
 
-    def __init__(self, r1: int, c0: int, c1: int) -> None:
-        n = c0 + c1
-        self.r1, self.c0, self.c1, self.n = r1, c0, c1, n
-        self.log_total = float(_log_dbinom(np.array([float(r1)]), n, r1, n)[0])
 
-    def __call__(self, a: FloatArray) -> FloatArray:
-        return (
-            _log_dbinom(a, self.c0, self.r1, self.n)
-            + _log_dbinom(float(self.r1) - a, self.c1, self.r1, self.n)
-            - self.log_total
+def _log_dbinom_rows(x: FloatArray, params: FloatArray, which: IntArray) -> FloatArray:
+    """_log_dbinom element-wise, element i with the binomial of column which[i] of
+    ``params`` (_binomial_rows): the same operations on each element as
+    _log_dbinom performs on it, so an element's value does not depend on the
+    others."""
+    size = params[_B_SIZE, which]
+    out = np.empty(x.shape)
+    zero = x == 0.0
+    full = x == size
+    out[zero] = params[_B_ZERO, which[zero]]
+    out[full] = params[_B_FULL, which[full]]
+    mid = ~(zero | full)
+    if bool(mid.any()):
+        w = which[mid]
+        xm = x[mid]
+        n = size[mid]
+        rest = n - xm
+        m1, d1 = params[_B_M1, w], params[_B_D1, w]
+        m2, d2 = params[_B_M2, w], params[_B_D2, w]
+        lc = (
+            _stirlerr(n)
+            - _stirlerr(xm)
+            - _stirlerr(rest)
+            - (_bd0(xm, m1) + d1 * ((m1 - xm) / m1))
+            - (_bd0(rest, m2) + d2 * ((m2 - rest) / m2))
         )
+        lf = _LOG_2PI + np.log(xm) + np.log1p(-xm / n)
+        out[mid] = lc - 0.5 * lf
+    return out
 
-    def run(self, start: int, count: int, step: int) -> FloatArray:
-        """log P(A = a) at a = start, start + step, ... (``count`` terms, step 1
-        or -1): Loader's form at every ``_ANCHOR``-th term, and from each such
-        anchor on the exact ratio of consecutive terms, P(a + 1) / P(a) = (c0 -
-        a)(r1 - a) / ((a + 1)(c1 - r1 + a + 1)), whose factors are integers below
-        2^53: each log ratio is within 3 + |log ratio| units of 2^-53 of the true
-        one, so a term is within about 256 x 4 x 2^-53 (2e-13) of its log."""
+
+class _Hyper:
+    """log P(A = a) of the first cell of 2 x 2 tables with fixed margins (the
+    hypergeometric distribution), many tables at once, from Loader's binomial
+    form: P(a) = dbinom(a; c0, p) dbinom(r1 - a; c1, p) / dbinom(r1; n, p) for any
+    p, here p = r1 / n. Every element of an evaluation names its table and is
+    computed by the same operations as alone, so a table's values do not depend
+    on the other tables of the batch."""
+
+    def __init__(self, margins: Sequence[tuple[int, int, int]]) -> None:
+        r1 = [m[0] for m in margins]
+        c0 = [m[1] for m in margins]
+        c1 = [m[2] for m in margins]
+        n = [a + b for a, b in zip(c0, c1, strict=True)]
+        self.r1 = np.array(r1, dtype=np.float64)
+        self.c0 = np.array(c0, dtype=np.float64)
+        self.c1 = np.array(c1, dtype=np.float64)
+        self.first = _binomial_rows(c0, r1, n)
+        self.second = _binomial_rows(c1, r1, n)
+        every = np.arange(len(margins))
+        self.log_total = _log_dbinom_rows(self.r1, _binomial_rows(n, r1, n), every)
+
+    def __call__(self, which: IntArray, a: FloatArray) -> FloatArray:
+        out = np.empty(a.shape)
+        for lo in range(0, a.size, _BATCH_ELEMENTS):
+            w = which[lo : lo + _BATCH_ELEMENTS]
+            x = a[lo : lo + _BATCH_ELEMENTS]
+            out[lo : lo + _BATCH_ELEMENTS] = (
+                _log_dbinom_rows(x, self.first, w)
+                + _log_dbinom_rows(self.r1[w] - x, self.second, w)
+                - self.log_total[w]
+            )
+        return out
+
+    def runs(
+        self, which: IntArray, start: IntArray, count: IntArray, step: IntArray
+    ) -> tuple[FloatArray, IntArray]:
+        """log P(A = a) along runs a = start, start + step, ... (``count`` terms,
+        step 1 or -1), one run per table named: Loader's form at every
+        ``_ANCHOR``-th term, and from each such anchor on the exact ratio of
+        consecutive terms, P(a + 1) / P(a) = (c0 - a)(r1 - a) / ((a + 1)(c1 - r1 +
+        a + 1)), whose factors are integers below 2^53: each log ratio is within
+        3 + |log ratio| units of 2^-53 of the true one, so a term is within about
+        256 x 4 x 2^-53 (2e-13) of its log. The runs are laid out one after
+        another, each padded to a whole number of anchors; returns the values and
+        where each run starts."""
+        padded = -(-count // _ANCHOR) * _ANCHOR
+        offset = np.concatenate(([0], np.cumsum(padded)[:-1])).astype(np.int64)
+        size = int(padded.sum())
+        run_of = np.repeat(np.arange(count.size), padded)
+        i = np.arange(size, dtype=np.int64) - offset[run_of]
+        valid = i < count[run_of]
+        lane = i & (_ANCHOR - 1)  # runs start at multiples of _ANCHOR
+        anchor = np.flatnonzero(valid & (lane == 0))
+        inner = np.flatnonzero(valid & (lane != 0))
+        st = step[run_of]
+        a = start[run_of].astype(np.float64) + st.astype(np.float64) * i.astype(
+            np.float64
+        )
+        out = np.empty(size)
+        out[anchor] = self(which[run_of[anchor]], a[anchor])
+        grid = np.zeros(size)
+        if inner.size:
+            wi = which[run_of[inner]]
+            c0, c1, r1 = self.c0[wi], self.c1[wi], self.r1[wi]
+            up = st[inner] > 0
+            here = a[inner] - np.where(up, 1.0, -1.0)  # the previous term's a
+            ratio = np.empty(inner.size)
+            for rising in (True, False):
+                sel = up if rising else ~up
+                if not bool(sel.any()):
+                    continue
+                h, k0, k1, k = here[sel], c0[sel], c1[sel], r1[sel]
+                if rising:
+                    ratio[sel] = ((k0 - h) * (k - h)) / ((h + 1.0) * (k1 - k + h + 1.0))
+                else:
+                    ratio[sel] = (h * (k1 - k + h)) / ((k0 - h + 1.0) * (k - h + 1.0))
+            grid[inner] = np.log(ratio)
+            cube = grid.reshape(-1, _ANCHOR)
+            np.cumsum(cube, axis=1, out=cube)
+            out[inner] = out[inner - lane[inner]] + grid[inner]
+        return out, offset
+
+    def run(self, row: int, start: int, count: int, step: int) -> FloatArray:
+        """One run of ``runs`` (table ``row``), with the table's margins as
+        scalars: the same values, fewer passes over a long run."""
         a = start + step * np.arange(count, dtype=np.float64)
         out = np.empty(count)
-        out[::_ANCHOR] = self(a[::_ANCHOR])
+        anchors = a[::_ANCHOR]
+        out[::_ANCHOR] = self(np.full(anchors.size, row, dtype=np.int64), anchors)
         if count == 1:
             return out
-        c0, c1, r1 = float(self.c0), float(self.c1), float(self.r1)
+        c0, c1, r1 = float(self.c0[row]), float(self.c1[row]), float(self.r1[row])
         here = a[:-1]
         if step > 0:
             ratio = ((c0 - here) * (r1 - here)) / (
@@ -1103,77 +1211,317 @@ class _LogPmf:
             )
         else:
             ratio = (here * (c1 - r1 + here)) / ((c0 - here + 1.0) * (r1 - here + 1.0))
-        steps = np.log(ratio)
         segments = -(-count // _ANCHOR)
         grid = np.zeros(segments * _ANCHOR)
         # grid[s * A + i] (i >= 1) holds the step into term s * A + i.
-        grid[1:count] = steps
-        grid = grid.reshape(segments, _ANCHOR)
-        grid[:, 0] = 0.0
-        np.cumsum(grid, axis=1, out=grid)
+        grid[1:count] = np.log(ratio)
+        cube = grid.reshape(segments, _ANCHOR)
+        cube[:, 0] = 0.0
+        np.cumsum(cube, axis=1, out=cube)
         rest = np.arange(count) % _ANCHOR != 0
-        anchors = np.repeat(out[::_ANCHOR], _ANCHOR)[:count]
-        out[rest] = anchors[rest] + grid.reshape(-1)[:count][rest]
+        base = np.repeat(out[::_ANCHOR], _ANCHOR)[:count]
+        out[rest] = base[rest] + grid[:count][rest]
         return out
 
 
-def _first_true(lo: int, hi: int, pred: Callable[[int], bool]) -> int:
-    """Smallest a in [lo, hi] with pred(a) true for a monotone predicate (false then
-    true); hi + 1 if none."""
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        if pred(mid):
-            hi = mid - 1
+class _Tables2x2:
+    """The state of a batch of 2 x 2 tests: each table's work units spent and
+    allowed, whether it was refused, and the pool all of them draw on. Tables
+    earlier in the batch come first: when the pool cannot pay for a step of
+    every table, the earlier ones are paid and the others refused. A step is
+    paid before it is taken, so a refused table has spent at most its limit and
+    the pool at most its own."""
+
+    def __init__(self, limits: list[float], pool: float) -> None:
+        self.limit = np.array(limits, dtype=np.float64)
+        self.spent = np.zeros(len(limits))
+        self.refused = np.zeros(len(limits), dtype=bool)
+        self.pool = pool
+        self.used = 0.0
+
+    def charge(self, tables: IntArray, units: FloatArray) -> BoolArray:
+        """Charge each named table (a table may be named more than once) before
+        the step it pays for; a table whose charge would pass its own limit, or
+        what is left of the pool after the earlier tables, is refused instead
+        (nothing charged). Returns, per entry, whether it may go on."""
+        if tables.size == 0:
+            return np.zeros(0, dtype=bool)
+        total = np.bincount(tables, weights=units, minlength=self.limit.size)
+        named = np.flatnonzero((total > 0.0) & ~self.refused)
+        own = self.spent[named] + total[named] <= self.limit[named]
+        self.refused[named[~own]] = True
+        named = named[own]
+        fits = self.used + np.cumsum(total[named]) <= self.pool
+        self.refused[named[~fits]] = True
+        named = named[fits]
+        self.spent[named] += total[named]
+        self.used += float(np.sum(total[named]))
+        return ~self.refused[tables]
+
+    def round(self, tables: IntArray) -> bool:
+        """Pay for one pass over the named tables (the calls' own cost, shared
+        by however many tables the pass holds) from the pool; if it cannot, the
+        named tables are refused."""
+        if self.used + _UNIT_ROUND > self.pool:
+            self.refused[tables] = True
+            return False
+        self.used += _UNIT_ROUND
+        return True
+
+
+def _tail_log_sums(
+    h: _Hyper,
+    state: _Tables2x2,
+    tails: list[tuple[int, int, int, int]],
+) -> list[float | None]:
+    """For each tail (state index, table of ``h``, start, stop): log of sum
+    exp(f(a)) for a from start to stop inclusive (either direction), where the
+    terms fall away from start (a tail of a log-concave sequence beyond its mode).
+    Summed in blocks of growing size (at most ``_TAIL_BLOCK_MAX`` terms, so memory
+    stays small); the rest after a block is at most last term x r / (1 - r), r
+    the ratio of the last two terms (the ratios fall away from the mode), and the
+    sum stops once that is below 1e-17 of the sum. Each block is charged to its
+    table before it is computed (the terms of a block come from _Hyper.runs); a
+    refused table's tails give None. The tails advance together, a block each per
+    round, so the per-call cost is shared."""
+    count = len(tails)
+    owner = np.array([t[0] for t in tails], dtype=np.int64)
+    table = np.array([t[1] for t in tails], dtype=np.int64)
+    pos = np.array([t[2] for t in tails], dtype=np.int64)
+    stop = np.array([t[3] for t in tails], dtype=np.int64)
+    step = np.where(stop >= pos, 1, -1).astype(np.int64)
+    if count and state.round(owner):
+        state.charge(owner, np.full(count, _UNIT_PROBE))
+    ref = h(table, pos.astype(np.float64)) if count else np.zeros(0)
+    total = [0.0] * count
+    block = np.full(count, _TAIL_BLOCK, dtype=np.int64)
+    done = np.zeros(count, dtype=bool)
+    out: list[float | None] = [None] * count
+    while True:
+        live = np.flatnonzero(~done & ~state.refused[owner])
+        if live.size == 0 or not state.round(owner[live]):
+            break
+        end = pos[live] + step[live] * (block[live] - 1)
+        past = (end - stop[live]) * step[live] > 0
+        end = np.where(past, stop[live], end)
+        size = np.abs(end - pos[live]) + 1
+        units = size * _UNIT_PMF + _UNIT_TAIL_BLOCK
+        go = state.charge(owner[live], units.astype(np.float64))
+        live, end, size = live[go], end[go], size[go]
+        # The runs: a long one alone, short ones together in pieces of at most
+        # _BATCH_ELEMENTS terms (a run is at most _TAIL_BLOCK_MAX long).
+        pieces: list[tuple[int, int]] = []
+        first = 0
+        while first < live.size:
+            last = first + 1
+            held = int(size[first])
+            while (
+                int(size[first]) < _LONG_RUN
+                and last < live.size
+                and int(size[last]) < _LONG_RUN
+                and held + int(size[last]) <= _BATCH_ELEMENTS
+            ):
+                held += int(size[last])
+                last += 1
+            pieces.append((first, last))
+            first = last
+        for first, last in pieces:
+            part = live[first:last]
+            sizes = size[first:last]
+            if part.size == 1 and int(sizes[0]) >= _LONG_RUN:
+                tail = int(part[0])
+                values = h.run(
+                    int(table[tail]), int(pos[tail]), int(sizes[0]), int(step[tail])
+                )
+                offset = np.zeros(1, dtype=np.int64)
+            else:
+                values, offset = h.runs(table[part], pos[part], sizes, step[part])
+            for k, tail in enumerate(part.tolist()):
+                o = int(offset[k])
+                m = int(sizes[k])
+                v = values[o : o + m] - ref[tail]
+                total[tail] += float(np.sum(np.exp(v)))
+                if int(end[first + k]) == int(stop[tail]):
+                    done[tail] = True
+                    continue
+                if m >= 2:
+                    ratio = math.exp(float(v[-1] - v[-2]))
+                    if ratio < 1.0:
+                        rest = math.exp(float(v[-1])) * ratio / (1.0 - ratio)
+                        if rest <= _TAIL_EPS * total[tail]:
+                            done[tail] = True
+                            continue
+                pos[tail] = int(end[first + k]) + int(step[tail])
+                block[tail] = min(2 * int(block[tail]), _TAIL_BLOCK_MAX)
+    for tail in range(count):
+        if done[tail] and not state.refused[owner[tail]]:
+            out[tail] = float(ref[tail]) + math.log(total[tail])
+    return out
+
+
+def _rare_ends(
+    h: _Hyper,
+    state: _Tables2x2,
+    searches: list[tuple[int, int, int, int, bool]],
+    threshold: FloatArray,
+) -> IntArray:
+    """For each search (state index, table of ``h``, lo, hi, above): the smallest
+    a in [lo, hi] where f(a) > threshold of its table (``above``) or f(a) <=
+    threshold, hi + 1 if none, for a predicate that is false then true; by
+    bisection, every search advancing one step per round (the same steps as one
+    search alone). Each evaluation is charged to its table first."""
+    owner = np.array([s[0] for s in searches], dtype=np.int64)
+    table = np.array([s[1] for s in searches], dtype=np.int64)
+    lo = np.array([s[2] for s in searches], dtype=np.int64)
+    hi = np.array([s[3] for s in searches], dtype=np.int64)
+    above = np.array([s[4] for s in searches], dtype=bool)
+    while True:
+        live = np.flatnonzero((lo <= hi) & ~state.refused[owner])
+        if live.size == 0 or not state.round(owner[live]):
+            return lo
+        go = state.charge(owner[live], np.full(live.size, _UNIT_PROBE))
+        live = live[go]
+        mid = (lo[live] + hi[live]) // 2
+        values = h(table[live], mid.astype(np.float64))
+        limit = threshold[table[live]]
+        hit = np.where(above[live], values > limit, values <= limit)
+        hi[live] = np.where(hit, mid - 1, hi[live])
+        lo[live] = np.where(hit, lo[live], mid + 1)
+
+
+def _fisher_2x2_many(
+    tables: Sequence[tuple[int, int, int, int, Alternative]],
+    limits: list[float],
+    pool: float,
+) -> tuple[list[float | None], float]:
+    """Fisher's exact p of 2 x 2 tables (first cell a, first row total r1, column
+    totals c0 and c1, all > 0 except possibly a; ``alternative``), computed
+    together: each is held to its own limit of work units and all of them to
+    ``pool``, earlier tables first (_Tables2x2; a refused table gives None), and
+    each gives the p it gives alone, to the last bit. Returns the p-values and
+    the units spent from the pool.
+
+    "greater" is P(A >= a), "less" P(A <= a), each summed from a outward (or one
+    minus the other tail where a lies on the near side of the mode); two-sided
+    sums both ends of the range where the probability is at most the observed one
+    times 1 + 1e-7, their bounds found by bisection (the probabilities are
+    log-concave in a, so those tables form both ends)."""
+    count = len(tables)
+    state = _Tables2x2(limits, pool)
+    p_values: list[float | None] = [None] * count
+    live: list[int] = []
+    for t, (_, r1, c0, c1, _) in enumerate(tables):
+        if max(0, r1 - c1) == min(r1, c0):
+            p_values[t] = 1.0
         else:
-            lo = mid + 1
-    return lo
+            live.append(t)
+    if live:
+        ok = state.charge(np.array(live, dtype=np.int64), np.full(len(live), _UNIT_2X2))
+        live = [t for t, keep in zip(live, ok.tolist(), strict=True) if keep]
+    if not live:
+        return p_values, state.used
+    h = _Hyper([(tables[t][1], tables[t][2], tables[t][3]) for t in live])
+    # Per table: how its p is made from its tails ("tail": the one tail; "minus":
+    # one minus it; "sum": the sum of the two-sided ends).
+    how: dict[int, str] = {}
+    tails: list[tuple[int, int, int, int]] = []
+    two: list[int] = []
+    for row, t in enumerate(live):
+        a, r1, c0, c1, side = tables[t]
+        n = c0 + c1
+        lo, hi = max(0, r1 - c1), min(r1, c0)
+        mode = min(max((r1 + 1) * (c0 + 1) // (n + 2), lo), hi)
+        if side == "greater":  # P(A >= a)
+            if a > mode:
+                how[t] = "tail"
+                tails.append((t, row, a, hi))
+            elif a == lo:
+                p_values[t] = 1.0
+            else:
+                how[t] = "minus"
+                tails.append((t, row, a - 1, lo))
+        elif side == "less":  # P(A <= a)
+            if a < mode:
+                how[t] = "tail"
+                tails.append((t, row, a, lo))
+            elif a == hi:
+                p_values[t] = 1.0
+            else:
+                how[t] = "minus"
+                tails.append((t, row, a + 1, hi))
+        else:
+            two.append(row)
+    if two:
+        rows = np.array(two, dtype=np.int64)
+        owners = np.array([live[r] for r in two], dtype=np.int64)
+        go = np.zeros(rows.size, dtype=bool)
+        if state.round(owners):
+            go = state.charge(owners, np.full(rows.size, _UNIT_PROBE))
+        threshold = np.full(len(live), math.inf)
+        firsts = np.array([float(tables[live[r]][0]) for r in two])
+        threshold[rows[go]] = h(rows[go], firsts[go]) + _LOG_TIE
+        searches: list[tuple[int, int, int, int, bool]] = []
+        for row in two:
+            t = live[row]
+            _, r1, c0, c1, _ = tables[t]
+            n = c0 + c1
+            lo, hi = max(0, r1 - c1), min(r1, c0)
+            mode = min(max((r1 + 1) * (c0 + 1) // (n + 2), lo), hi)
+            # f rises on [lo, mode] and falls on [mode + 1, hi]: the tables at most
+            # as probable as the observed one are [lo, left] and [right, hi].
+            searches.append((t, row, lo, mode, True))
+            searches.append((t, row, mode + 1, hi, False))
+        ends = _rare_ends(h, state, searches, threshold).tolist()
+        for k, row in enumerate(two):
+            t = live[row]
+            if state.refused[t]:
+                continue
+            _, r1, c0, c1, _ = tables[t]
+            lo, hi = max(0, r1 - c1), min(r1, c0)
+            mode = searches[2 * k][3]
+            left = ends[2 * k] - 1
+            right = ends[2 * k + 1]
+            if left >= mode:
+                # The most probable table counts, so every table does: p is 1.
+                p_values[t] = 1.0
+                continue
+            how[t] = "sum"
+            if left >= lo:
+                tails.append((t, row, left, lo))
+            if right <= hi:
+                tails.append((t, row, right, hi))
+    sums = _tail_log_sums(h, state, tails)
+    parts: dict[int, list[float]] = {t: [] for t in how}
+    for (t, *_), value in zip(tails, sums, strict=True):
+        if value is not None:
+            parts[t].append(value)
+    for t, kind in how.items():
+        if state.refused[t]:
+            continue
+        if kind == "tail":
+            p_values[t] = min(1.0, math.exp(parts[t][0]))
+        elif kind == "minus":
+            p_values[t] = min(1.0, max(0.0, 1.0 - math.exp(parts[t][0])))
+        else:
+            p_values[t] = min(1.0, math.fsum(math.exp(v) for v in parts[t]))
+    for t in range(count):
+        if state.refused[t]:
+            p_values[t] = None
+    return p_values, state.used
 
 
 def _fisher_2x2(
     a: int, r1: int, c0: int, c1: int, side: Alternative, budget: _Budget
 ) -> float:
     """Fisher's exact p of a 2 x 2 table with first cell a, first row total r1 and
-    column totals c0, c1 (all > 0 except possibly a)."""
-    n = c0 + c1
-    lo, hi = max(0, r1 - c1), min(r1, c0)
-    if lo == hi:
-        return 1.0
-    f = _LogPmf(r1, c0, c1)
-
-    def at(v: int) -> float:
-        return float(f(np.array([float(v)]))[0])
-
-    mode = min(max((r1 + 1) * (c0 + 1) // (n + 2), lo), hi)
-    if side == "greater":  # P(A >= a)
-        if a > mode:
-            return min(1.0, math.exp(_tail_log_sum(f, a, hi, budget)))
-        if a == lo:
-            return 1.0
-        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a - 1, lo, budget))))
-    if side == "less":  # P(A <= a)
-        if a < mode:
-            return min(1.0, math.exp(_tail_log_sum(f, a, lo, budget)))
-        if a == hi:
-            return 1.0
-        return min(1.0, max(0.0, 1.0 - math.exp(_tail_log_sum(f, a + 1, hi, budget))))
-    threshold = at(a) + _LOG_TIE
-
-    # f rises on [lo, mode] and falls on [mode + 1, hi]: the tables at most as
-    # probable as the observed one are [lo, left] and [right, hi].
-    def rarer(v: int) -> bool:
-        return at(v) <= threshold
-
-    left = _first_true(lo, mode, lambda v: not rarer(v)) - 1
-    right = _first_true(mode + 1, hi, rarer)
-    if left >= mode:
-        # The most probable table counts, so every table does: p is 1 exactly.
-        return 1.0
-    parts: list[float] = []
-    if left >= lo:
-        parts.append(_tail_log_sum(f, left, lo, budget))
-    if right <= hi:
-        parts.append(_tail_log_sum(f, right, hi, budget))
-    return min(1.0, math.fsum(math.exp(v) for v in parts))
+    column totals c0, c1 (all > 0 except possibly a), within ``budget`` (raises
+    _TooLarge having spent at most its limit)."""
+    left = budget.limit - budget.spent
+    (p_value,), spent = _fisher_2x2_many([(a, r1, c0, c1, side)], [left], left)
+    budget.spent += spent
+    if p_value is None:
+        raise _TooLarge("work")
+    return p_value
 
 
 def _sd_2x2(r1: int, c0: int, c1: int) -> float:
@@ -1187,10 +1535,18 @@ def _sd_2x2(r1: int, c0: int, c1: int) -> float:
 
 def _estimate_2x2(r1: int, c0: int, c1: int) -> float:
     """Work units a 2 x 2 test takes at most when its tails stop where the terms
-    have fallen below 1e-17 of their sum: about 40 standard deviations of terms,
-    and the blocks' doubling at most doubles that."""
-    terms = 2.0 * (40.0 * _sd_2x2(r1, c0, c1) + 4.0 * _TAIL_BLOCK)
-    return min(terms, float(min(r1, c0) + 1) * 2.0) * _UNIT_PMF
+    have fallen below 1e-17 of their sum: about 40 standard deviations of terms
+    (the blocks' doubling at most doubles that), at most the whole range twice;
+    with its setup, the bisections over the range and a charge per block (at most
+    8 growing blocks per tail, then blocks of _TAIL_BLOCK_MAX terms). The pairwise
+    tests hold each 2 x 2 test to this bound."""
+    span = float(min(r1, c0) + 1)
+    terms = min(2.0 * (40.0 * _sd_2x2(r1, c0, c1) + 4.0 * _TAIL_BLOCK), 2.0 * span)
+    probes = 2.0 * _bits(span) + 3.0
+    blocks = 2.0 * (8.0 + terms / _TAIL_BLOCK_MAX)
+    return (
+        terms * _UNIT_PMF + _UNIT_2X2 + probes * _UNIT_PROBE + blocks * _UNIT_TAIL_BLOCK
+    )
 
 
 # --- 2 x c ------------------------------------------------------------------ #
@@ -1313,15 +1669,22 @@ def _bits(size: float) -> float:
 def _bound_work(sizes: list[int], m: int) -> float:
     """Work units of the bounds of network columns 0..m - 2 (column m - 1 reads
     its bounds off the list): the greedy maximum and the masses over the later
-    columns' totals, and the vertices of the smallest."""
+    columns' totals, and the vertices of the smallest. Linear in the number of
+    columns (suffix sums and maxima)."""
+    k = len(sizes)
+    tail = [0] * (k + 1)  # sum of s - 1 over sizes[i:]
+    top = [0] * (k + 1)  # max of sizes[i:]
+    for i in range(k - 1, -1, -1):
+        tail[i] = tail[i + 1] + sizes[i] - 1
+        top[i] = max(top[i + 1], sizes[i])
     work = 0.0
     for j in range(m - 1):
-        later = sizes[j + 1 :]
-        rest = float(sum(s - 1 for s in later) + 1)
-        work += (len(later) + 2) * rest * _UNIT_BOUND
-        if len(later) <= _MAX_VERTEX_COLUMNS:
-            vertices = len(later) * 2.0 ** (len(later) - 1)
-            work += vertices * (_UNIT_VERTEX + max(later) * _UNIT_BOUND)
+        later = k - j - 1
+        rest = float(tail[j + 1] + 1)
+        work += (later + 2) * rest * _UNIT_BOUND
+        if later <= _MAX_VERTEX_COLUMNS:
+            vertices = later * 2.0 ** (later - 1)
+            work += vertices * (_UNIT_VERTEX + top[j + 1] * _UNIT_BOUND)
     return work
 
 
@@ -1350,13 +1713,28 @@ def _fits(plan: _Plan) -> bool:
     return plan.certain <= _FISHER_WORK_LIMIT and plan.memory <= _FISHER_MEMORY_LIMIT
 
 
-def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
+def _window_sums(counts: FloatArray, size: int) -> FloatArray:
+    """The convolution of ``counts`` with ``size`` ones (the list's rows after one
+    more column of ``size`` values), as differences of running sums: the same
+    integers as the convolution (exact below 2^53), in time linear in the
+    lengths rather than their product."""
+    running = np.concatenate(([0.0], np.cumsum(counts)))
+    t = np.arange(counts.size + size - 1)
+    return (
+        running[np.minimum(t + 1, counts.size)] - running[np.maximum(t - size + 1, 0)]
+    )
+
+
+def _list_memory(
+    sizes: list[int], counts: FloatArray | None = None
+) -> tuple[int, int, float]:
     """The list of the completions over columns with these numbers of values: its
     size, its longest row (one row per total), and the bytes it takes at most
     while it is built (the list, its running sums, the last column's placements,
     and the temporaries of sorting and summing the longest row). A list beyond
     the memory limit by its size alone is not looked at further (its longest row
-    is then given as its size)."""
+    is then given as its size). ``counts``: the rows' lengths if known (the
+    convolution below)."""
     size = math.prod(sizes)
     rows = sum(sizes) - len(sizes) + 1
     if _rowwise(sizes):
@@ -1368,9 +1746,10 @@ def _list_memory(sizes: list[int]) -> tuple[int, int, float]:
     if nbytes > _FISHER_MEMORY_LIMIT:
         return size, size, float(nbytes + size * 64.0)
     if sum(sizes) <= 1 << 16:
-        counts = np.ones(1)
-        for s in sizes:
-            counts = np.convolve(counts, np.ones(s))  # exact: counts below 2^53
+        if counts is None:
+            counts = np.ones(1)
+            for s in sizes:
+                counts = _window_sums(counts, s)
         longest = int(counts.max())
     else:
         # A row holds at most one first row per choice of the other columns.
@@ -1383,51 +1762,79 @@ def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
     _fisher_2xc): the columns sorted by width (narrowest first); the list side
     takes the narrowest columns, as many as keep the work estimate lowest within
     the list's memory; the network side takes the others, narrowest first.
-    ``list_columns`` forces the number of list columns."""
+    ``list_columns`` forces the number of list columns.
+
+    About c (the number of columns) steps of Python per split considered (at most
+    about 27: the list's memory grows at least twice per column), so a plan is
+    near linear in c: the sums over the network side's columns come from prefix
+    sums in exact integers (the same doubles as summed one by one while below
+    2^53, which covers every plan that can fit), and its estimate from NumPy's
+    sequential cumulative sums where that side is long."""
     k = len(widths)
     order = sorted(range(k), key=lambda j: widths[j])
     sizes = [widths[j] + 1 for j in order]
+    # prefix[i]: the sum of s - 1 over sizes[:i]; its prefix sums, plain and
+    # weighted by i (for the closed forms below).
+    prefix = [0] * (k + 1)
+    for i, size in enumerate(sizes):
+        prefix[i + 1] = prefix[i] + size - 1
+    sum_p = [0] * (k + 2)
+    sum_ip = [0] * (k + 2)
+    for i in range(k + 1):
+        sum_p[i + 1] = sum_p[i] + prefix[i]
+        sum_ip[i + 1] = sum_ip[i] + i * prefix[i]
+    whole = prefix[k]
+    total = float(whole)
+    all_values = 8.0 * sum(sizes)  # the columns' log probabilities
+    widest = sizes[-1]
+    arrays = (
+        np.array(sizes, dtype=np.float64),
+        np.array(prefix, dtype=np.float64),
+        np.array([_bits(size) for size in sizes], dtype=np.float64),
+    )
     best: _Plan | None = None
     choices = range(1, k + 1) if list_columns is None else [list_columns]
+    # The list's rows (counts per total) of the narrowest q columns, extended a
+    # column at a time while short enough to be counted (_list_memory).
+    counts = np.ones(1)
+    counted = 0
+    product = 1
     for q in choices:
         list_sizes = sizes[:q]
-        list_size, longest, list_bytes = _list_memory(list_sizes)
+        # (beyond 2^52 tables the list is far beyond its memory, its rows unused)
+        while counted < q and prefix[q] + q <= 1 << 16 and product <= 1 << 52:
+            counts = _window_sums(counts, sizes[counted])
+            product *= sizes[counted]
+            counted += 1
+        list_size, longest, list_bytes = _list_memory(
+            list_sizes, counts if counted == q else None
+        )
         if list_columns is None and q > 1 and list_bytes > _FISHER_LIST_MEMORY:
             break
-        net = sizes[q:]
-        m = len(net)
-        total = float(sum(s - 1 for s in sizes))
+        m = k - q
         # Bounds of every network column's completions: three arrays over the
         # totals of the later columns (the greedy maximum passes over each of
-        # those columns once).
-        bound_cells = 0.0
-        remaining = total
-        for j in range(m):
-            remaining -= net[j] - 1
-            bound_cells += remaining + 1.0
-        rows = sum(list_sizes) - q + 1
+        # those columns once): sum over j < m of (whole - prefix[q + j + 1] +
+        # prefix[q] + 1).
+        bound_cells = float(m * (whole + prefix[q] + 1) - (sum_p[k + 1] - sum_p[q + 1]))
+        rows = prefix[q] + 1
         list_work = _list_work(list_sizes, list_size, longest, rows)
-        certain = list_work + _bound_work(net + list_sizes, m) + 2 * _UNIT_CALL
+        certain = (
+            list_work
+            + _plan_bound_work(sizes, q, prefix, sum_p, sum_ip)
+            + 2 * _UNIT_CALL
+        )
         if m:
-            certain += net[0] * _UNIT_GRID
-        work = certain
-        paths = 1.0
-        remaining = total
-        for j in range(m):
-            nodes = min(paths, remaining + 1.0)
-            work += nodes * net[j] * _UNIT_GRID
-            work += paths * 2.0 * _bits(net[j]) * _UNIT_STEP + _UNIT_CALL
-            remaining -= net[j] - 1
-            paths *= net[j]
-            work += paths * _UNIT_CHILD
+            certain += sizes[q] * _UNIT_GRID
+        work, paths = _network_estimate(sizes, q, prefix, certain, arrays)
         if m:
             work += paths * (_UNIT_QUERY + 4.0 * _bits(longest) + _UNIT_CHILD)
         memory = (
             list_bytes
-            + 8.0 * sum(sizes)  # the columns' log probabilities
+            + all_values
             + 24.0 * bound_cells  # the bounds
             + 64.0 * (total + 1.0)  # the greedy maximum's temporaries
-            + 4 * max(_FISHER_GRID_CHUNK, max(net, default=1)) * _BYTES_GRID
+            + 4 * max(_FISHER_GRID_CHUNK, widest if m else 1) * _BYTES_GRID
             + float(_FISHER_PATH_TOTAL * _BYTES_PATH)
         )
         plan = _Plan(
@@ -1448,6 +1855,85 @@ def _fisher_plan(widths: list[int], list_columns: int | None = None) -> _Plan:
             best = plan
     assert best is not None
     return best
+
+
+def _plan_bound_work(
+    sizes: list[int], q: int, prefix: list[int], sum_p: list[int], sum_ip: list[int]
+) -> float:
+    """_bound_work(sizes[q:] + sizes[:q], len(sizes) - q) for sizes sorted
+    ascending, in closed form: with i = q + j + 1 the column after network column
+    j, (later + 2) rest = (k + q + 2 - i)(whole + prefix[q] + 1 - prefix[i]) summed
+    over i in [q + 1, k - 1], plus the vertex terms of the last ten columns (whose
+    later columns include the widest)."""
+    k = len(sizes)
+    m = k - q
+    if m < 2:
+        return 0.0
+    c = prefix[k] + prefix[q] + 1
+    lo, hi = q + 1, k - 1  # i ranges over [lo, hi]
+    count = hi - lo + 1
+    weights = count * (k + q + 2) - (lo + hi) * count // 2
+    sp = sum_p[hi + 1] - sum_p[lo]
+    sip = sum_ip[hi + 1] - sum_ip[lo]
+    work = (c * weights - (k + q + 2) * sp + sip) * int(_UNIT_BOUND)
+    for j in range(max(0, k - 1 - _MAX_VERTEX_COLUMNS), m - 1):
+        later = k - j - 1
+        work += (
+            later
+            * 2 ** (later - 1)
+            * (int(_UNIT_VERTEX) + sizes[-1] * int(_UNIT_BOUND))
+        )
+    return float(work)
+
+
+# A network side longer than this is estimated with NumPy (_network_estimate).
+_LONG_NETWORK: Final = 64
+
+
+def _network_estimate(
+    sizes: list[int],
+    q: int,
+    prefix: list[int],
+    certain: float,
+    arrays: tuple[FloatArray, FloatArray, FloatArray],
+) -> tuple[float, float]:
+    """``certain`` plus the work of the network side over sizes[q:] if nothing
+    were pruned: per column, its grid over the nodes, the bisections of its
+    partial tables and the children carried on, added one by one in this order
+    (a long side through NumPy's cumulative sums and products, which add and
+    multiply in the same order); and the partial tables carried to the list (the
+    product of the sizes). ``arrays``: the sizes, the prefix sums and _bits of
+    every size, as doubles."""
+    net = sizes[q:]
+    m = len(net)
+    work = certain
+    if m <= _LONG_NETWORK:
+        paths = 1.0
+        remaining = float(prefix[-1])
+        for j in range(m):
+            nodes = min(paths, remaining + 1.0)
+            work += nodes * net[j] * _UNIT_GRID
+            work += paths * 2.0 * _bits(net[j]) * _UNIT_STEP + _UNIT_CALL
+            remaining -= net[j] - 1
+            paths *= net[j]
+            work += paths * _UNIT_CHILD
+        return work, paths
+    all_sizes, all_prefix, bits = arrays
+    values = all_sizes[q:]
+    with np.errstate(invalid="ignore", over="ignore"):
+        after = np.multiply.accumulate(values)
+        before = np.concatenate(([1.0], after[:-1]))
+        shift = all_prefix[q:-1] - float(prefix[q])
+        remaining = float(prefix[-1]) - shift
+        grid = np.minimum(before, remaining + 1.0) * values * _UNIT_GRID
+        steps = before * 2.0 * bits[q:] * _UNIT_STEP + _UNIT_CALL
+        children = after * _UNIT_CHILD
+        terms = np.empty(3 * m + 1)
+        terms[0] = work
+        terms[1::3] = grid
+        terms[2::3] = steps
+        terms[3::3] = children
+        return float(np.add.accumulate(terms)[-1]), float(after[-1])
 
 
 class _CompletionList:
@@ -2079,18 +2565,32 @@ class _Network:
         self.parts.append(_log_sum(counted))
 
 
+def _ranges(first: list[int], cols: list[int]) -> tuple[list[int], list[int]]:
+    """Per column, the smallest count its first row can take with these margins
+    and the width of its range."""
+    r1 = sum(first)
+    r2 = sum(cols) - r1
+    lows = [max(0, c - r2) for c in cols]
+    return lows, [min(c, r1) - lo for c, lo in zip(cols, lows, strict=True)]
+
+
 def _fisher_2xc(
-    first: list[int], cols: list[int], budget: _Budget, list_columns: int | None = None
+    first: list[int],
+    cols: list[int],
+    budget: _Budget,
+    list_columns: int | None = None,
+    plan: _Plan | None = None,
 ) -> float:
     """Two-sided Fisher exact p of a 2 x c table, c >= 3, every column non-empty,
     both rows non-empty (fisher_exact describes the search). ``list_columns``
-    overrides the plan's split (tests check that every split gives the same p)."""
+    overrides the plan's split (tests check that every split gives the same p);
+    ``plan``: the plan of these columns if already made (_fisher_plan of
+    _ranges' widths)."""
     n = sum(cols)
     r1 = sum(first)
-    r2 = n - r1
-    lows = [max(0, c - r2) for c in cols]
-    widths = [min(c, r1) - lo for c, lo in zip(cols, lows, strict=True)]
-    plan = _fisher_plan(widths, list_columns)
+    lows, widths = _ranges(first, cols)
+    if plan is None:
+        plan = _fisher_plan(widths, list_columns)
     budget.request(plan.memory)
     if plan.certain > budget.limit - budget.spent:
         raise _TooLarge("work")
@@ -2140,64 +2640,60 @@ def _canonical(first: list[int], second: list[int]) -> tuple[list[int], list[int
     return [a for a, _ in chosen], [b for _, b in chosen]
 
 
-def _fisher_work(table: IntArray, side: Alternative) -> tuple[float, float, float]:
-    """Work units of fisher_exact on a 2 x c table, from the margins and the
-    observed table: two estimates of the work after pruning, the plan's estimate
-    with each column's range cut to 8 + sqrt(X^2) standard deviations either side
-    of its mean (X^2 Pearson's statistic: where the tables the search cannot
-    settle in bulk lie; for the order of the pairwise tests) and to 8 standard
-    deviations (smaller; for the cutoff), and the work spent whatever is pruned."""
+def _oriented(table: IntArray, side: Alternative) -> tuple[list[int], list[int]]:
+    """The rows of a 2 x c table as the test takes them: the columns with counts,
+    put in the canonical order when the test is two-sided."""
     rows = table.tolist()
-    first = [int(v) for v in rows[0]]
-    cols = [int(a) + int(b) for a, b in zip(rows[0], rows[1], strict=True)]
-    kept = [j for j, c in enumerate(cols) if c > 0]
-    n = sum(cols)
-    r1 = sum(first)
-    if len(kept) < 2 or r1 in (0, n):
-        return 0.0, 0.0, 0.0
-    if len(kept) == 2:
-        estimate = _estimate_2x2(r1, cols[kept[0]], cols[kept[1]])
-        return estimate, estimate, 0.0
-    r2 = n - r1
-    widths = [min(cols[j], r1) - max(0, cols[j] - r2) for j in kept]
-    chi2 = sum(
-        (first[j] - cols[j] * r1 / n) ** 2 / (cols[j] * r1 * r2 / n**2) for j in kept
-    )
-    estimates: list[float] = []
-    for reach in (_SPAN_SD + math.sqrt(chi2), _SPAN_SD):
-        spans: list[int] = []
-        for j, w in zip(kept, widths, strict=True):
-            c = cols[j]
-            sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
-            spans.append(min(w, 2 * math.ceil(reach * sd)))
-        estimates.append(_fisher_plan(spans).estimate)
-    return estimates[0], estimates[1], _fisher_plan(widths).certain
-
-
-def _fisher(table: IntArray, side: Alternative, budget: _Budget) -> FisherExact:
-    """fisher_exact on a validated 2 x c table, within ``budget`` (raises
-    _TooLarge)."""
-    rows = table.tolist()
-    first = [int(v) for v in rows[0]]
-    second = [int(v) for v in rows[1]]
-    cols = [a + b for a, b in zip(first, second, strict=True)]
-    n = sum(cols)
-    kept = [j for j, c in enumerate(cols) if c > 0]
-    r1 = sum(first)
-    if len(kept) < 2 or r1 == 0 or r1 == n:
-        return FisherExact(p_value=1.0, alternative=side, n=n, columns=len(kept))
-    first = [first[j] for j in kept]
-    second = [second[j] for j in kept]
+    first = [int(a) for a, b in zip(rows[0], rows[1], strict=True) if a + b > 0]
+    second = [int(b) for a, b in zip(rows[0], rows[1], strict=True) if a + b > 0]
     if side == "two-sided":
         first, second = _canonical(first, second)
-    cols = [a + b for a, b in zip(first, second, strict=True)]
+    return first, second
+
+
+def _work_spans(first: list[int], cols: list[int]) -> tuple[list[int], list[list[int]]]:
+    """The widths of a 2 x c table's columns (c >= 3) and two cut versions, for
+    two estimates of the work after pruning: each width cut to 8 + sqrt(X^2)
+    standard deviations either side of the column's mean (X^2 Pearson's
+    statistic: where the tables the search cannot settle in bulk lie; the plan's
+    estimate over these orders the pairwise tests) and to 8 (smaller; its
+    estimate is the cutoff, _PAIRWISE_ESTIMATE_LIMIT). The plan over the full
+    widths gives the work spent whatever is pruned (_Plan.certain)."""
+    n = sum(cols)
     r1 = sum(first)
-    if len(kept) == 2:
+    r2 = n - r1
+    _, widths = _ranges(first, cols)
+    chi2 = sum(
+        (a - c * r1 / n) ** 2 / (c * r1 * r2 / n**2)
+        for a, c in zip(first, cols, strict=True)
+    )
+    cut: list[list[int]] = []
+    for reach in (_SPAN_SD + math.sqrt(chi2), _SPAN_SD):
+        spans: list[int] = []
+        for c, w in zip(cols, widths, strict=True):
+            sd = math.sqrt(c * (r1 / n) * (r2 / n) * (n - c) / max(n - 1, 1))
+            spans.append(min(w, 2 * math.ceil(reach * sd)))
+        cut.append(spans)
+    return widths, cut
+
+
+def _fisher(
+    table: IntArray, side: Alternative, budget: _Budget, plan: _Plan | None = None
+) -> FisherExact:
+    """fisher_exact on a validated 2 x c table, within ``budget`` (raises
+    _TooLarge); ``plan``: the search's plan if already made (_fisher_2xc)."""
+    n = int(table.sum())
+    first, second = _oriented(table, side)
+    r1 = sum(first)
+    if len(first) < 2 or r1 == 0 or r1 == n:
+        return FisherExact(p_value=1.0, alternative=side, n=n, columns=len(first))
+    cols = [a + b for a, b in zip(first, second, strict=True)]
+    if len(cols) == 2:
         # A 2 x 2 table (as given, or with empty columns left out: then two-sided).
         p_value = _fisher_2x2(first[0], r1, cols[0], cols[1], side, budget)
         return FisherExact(p_value=p_value, alternative=side, n=n, columns=2)
-    p_value = _fisher_2xc(first, cols, budget)
-    return FisherExact(p_value=p_value, alternative=side, n=n, columns=len(kept))
+    p_value = _fisher_2xc(first, cols, budget, plan=plan)
+    return FisherExact(p_value=p_value, alternative=side, n=n, columns=len(cols))
 
 
 def _check_fisher_table(counts: IntArray, side: Alternative) -> None:
@@ -2248,7 +2744,11 @@ def fisher_exact(
     by bisection and each end is summed outward in blocks until a geometric bound
     of the rest falls below 1e-17 of the sum: about 10 to 40 standard deviations of
     terms, each from the exact ratio of consecutive terms between Loader anchors
-    every 256 terms (_LogPmf.run). With balanced margins the two-sided test is
+    every 256 terms (_Hyper.run). Every step is charged before it is taken: the
+    setup, each evaluation of the bisections and each block of terms (many 2 x 2
+    tests, as the pairwise tests run them, share each pass: _fisher_2x2_many,
+    which gives each table the p it gets alone, to the last bit). With balanced
+    margins the two-sided test is
     answered up to about n = 1e13 within the work limit below (n = 1e12: 0.2 s;
     1e13: 0.5 s), a one-sided one up to about 1e14; unbalanced margins go
     further. Beyond, the test is refused having spent at most the limit (about
@@ -2343,32 +2843,343 @@ def _too_large_message(counts: IntArray, kind: str) -> str:
 # --------------------------------------------------------------------------- #
 
 _TOO_LARGE_REASON: Final = "too large to compute exactly"
+# The reason of a pair whose Cramer's V the pairwise allowance did not reach.
+_EFFECT_NOT_REACHED: Final = "not computed within the limit for the pairs' intervals"
+# The pairwise part of one table: the tests (their planning included) may spend
+# _PAIRWISE_WORK_LIMIT units, and at most this share of it on planning, so that
+# planning many pairs leaves the tests something; the pairs' Cramer's V intervals
+# have their own _PAIRWISE_EFFECT_LIMIT (about 0.4 s; an interval takes about a
+# millisecond): about two seconds in all.
+_PAIRWISE_PLAN_SHARE: Final = 0.5
+_PAIRWISE_EFFECT_LIMIT: Final = 4.0e8
+# Planning a pair: its table, its canonical form and margins (per column), and a
+# plan of its search (_fisher_plan: at most _PLAN_SPLITS splits, each a pass of
+# Python over up to _LONG_NETWORK network columns and NumPy over the rest).
+_UNIT_PAIR: Final = 20_000.0
+_UNIT_PAIR_COLUMN: Final = 2_000.0
+_UNIT_PLAN: Final = 80_000.0
+_UNIT_PLAN_SPLIT: Final = 10_000.0
+_UNIT_PLAN_STEP: Final = 400.0
+_UNIT_PLAN_COLUMN: Final = 4_000.0
+_PLAN_SPLITS: Final = 24
+# One pair's Cramer's V with its interval: per column of its table, and the
+# noncentral chi-square roots by the size of the statistic (an upper bound of
+# the measured cost, 1.2 to 1.5 times the largest of 468 tables of 2 to 300
+# columns: about 1 ms below 1, 3 to 4 ms to 100, 8 ms to 1,000, 26 ms to 1e4, 39
+# ms to 1e5, where the Poisson weights start to be subsampled, 10 ms beyond).
+_UNIT_EFFECT_COLUMN: Final = 5_000.0
+_UNIT_EFFECT_STEPS: Final = (
+    (1.0, 1.5e6),
+    (10.0, 4.5e6),
+    (100.0, 5.5e6),
+    (1e3, 1.2e7),
+    (1e4, 3.5e7),
+    (1e5, 5.5e7),
+    (math.inf, 1.5e7),
+)
 
 
-def _pair_table(counts: IntArray, i: int, j: int) -> tuple[tuple[int, ...], IntArray]:
-    pair = counts[[i, j]]
-    columns = tuple(int(c) for c in np.flatnonzero(pair.sum(axis=0) > 0))
-    return columns, pair[:, list(columns)]
+def _pair_units(columns: int) -> float:
+    """Work units of preparing a pair's table: the table, its canonical form, its
+    margins and the estimate's statistic."""
+    return _UNIT_PAIR + columns * _UNIT_PAIR_COLUMN
 
 
-def _pair_effect(
-    sub: IntArray, level: float, side: Alternative
-) -> tuple[EffectSizeCI | None, str | None]:
-    if int(sub.sum()) <= max(sub.shape):
-        return None, (
-            "the bias-corrected Cramer's V needs more counts than columns (R: NaN)"
+def _plan_units(columns: int) -> float:
+    """Work units of one _fisher_plan of a 2 x c table, an upper bound from c
+    alone: at most _PLAN_SPLITS splits (the list's memory at least doubles per
+    column and stops them), each a pass of Python over up to _LONG_NETWORK
+    columns, and the arrays over all c."""
+    splits = min(columns, _PLAN_SPLITS)
+    return (
+        _UNIT_PLAN
+        + splits * (min(columns, _LONG_NETWORK) * _UNIT_PLAN_STEP + _UNIT_PLAN_SPLIT)
+        + columns * _UNIT_PLAN_COLUMN
+    )
+
+
+def _effect_units(columns: int, statistic: float) -> float:
+    """Work units of one pair's Cramer's V and its interval, an upper bound of
+    the measured cost from the table's columns and its chi-square statistic."""
+    roots = next(units for below, units in _UNIT_EFFECT_STEPS if statistic < below)
+    return roots + columns * _UNIT_EFFECT_COLUMN
+
+
+@functools.lru_cache(maxsize=4096)
+def _certain_floor(columns: int) -> float:
+    """A lower bound of the work any plan of a 2 x c table spends whatever is
+    pruned (_Plan.certain), from c alone: every column with two values (each of
+    the list's completions placed once, and the network side's bounds), the
+    cheapest split. Above the limit of one test, no 2 x c table is computed, so
+    such pairs are refused without being planned."""
+    sizes = [2] * columns
+    prefix = list(range(columns + 1))
+    sum_p = [0] * (columns + 2)
+    sum_ip = [0] * (columns + 2)
+    for i in range(columns + 1):
+        sum_p[i + 1] = sum_p[i] + prefix[i]
+        sum_ip[i + 1] = sum_ip[i] + i * prefix[i]
+    best = math.inf
+    for q in range(1, min(columns, 64) + 1):
+        listed = float(2**q) * _UNIT_LIST
+        best = min(best, listed + _plan_bound_work(sizes, q, prefix, sum_p, sum_ip))
+    return best + 2 * _UNIT_CALL
+
+
+@dataclass(slots=True)
+class _Pair:
+    """A pair of rows of the table: their indices, the columns either holds, its
+    total; the key of its test (None until planned) and the test's p."""
+
+    row1: int
+    row2: int
+    columns: tuple[int, ...]
+    n: int
+    key: tuple[object, ...] | None = None
+
+
+@dataclass(slots=True)
+class _Test:
+    """A distinct pair table to test: its estimate (for the order), the table as
+    the test takes it and its alternative."""
+
+    estimate: float
+    table: IntArray
+    side: Alternative
+    first: list[int]
+    cols: list[int]
+
+
+def _list_pairs(counts: IntArray) -> list[_Pair]:
+    """Every pair of rows that hold counts, in row order, with the columns either
+    holds (shared int objects, so a long list of columns costs a pointer each)."""
+    present = [i for i in range(counts.shape[0]) if int(counts[i].sum()) > 0]
+    held = counts[present] > 0
+    totals = [int(v) for v in counts[present].sum(axis=1).tolist()]
+    names = tuple(range(counts.shape[1]))
+    pairs: list[_Pair] = []
+    for a, i in enumerate(present):
+        if a + 1 == len(present):
+            break
+        either = held[a] | held[a + 1 :]
+        for b, row in enumerate(either):
+            index = np.flatnonzero(row).tolist()
+            pairs.append(
+                _Pair(
+                    row1=i,
+                    row2=present[a + 1 + b],
+                    columns=tuple(map(names.__getitem__, index)),
+                    n=totals[a] + totals[a + 1 + b],
+                )
+            )
+    return pairs
+
+
+def _pair_sub(counts: IntArray, pair: _Pair) -> IntArray:
+    return counts[np.ix_((pair.row1, pair.row2), pair.columns)]
+
+
+def _size_groups(
+    pairs: list[_Pair], indices: list[int]
+) -> list[tuple[tuple[int, int], list[int]]]:
+    """The pairs grouped by the size of their table (columns, then
+    observations), smallest first: an order that does not depend on the order of
+    the rows."""
+    groups: dict[tuple[int, int], list[int]] = {}
+    for k in indices:
+        groups.setdefault((len(pairs[k].columns), pairs[k].n), []).append(k)
+    return sorted(groups.items())
+
+
+def _plan_pairs(
+    counts: IntArray, pairs: list[_Pair], side: Alternative, budget: _Budget
+) -> dict[tuple[object, ...], _Test]:
+    """Plan the tests: for the pairs with a table of two columns or more, by size
+    (_size_groups), each group's planning charged before it is done; a group that
+    does not fit what planning may still spend, and every group after it, is not
+    planned (their pairs are too large to compute), and pairs whose table no plan
+    could compute within one test's limit (_certain_floor) are not planned at
+    all. Returns the distinct tables with their estimates; each planned pair gets
+    its key."""
+    tests: dict[tuple[object, ...], _Test] = {}
+    stop = budget.spent + _PAIRWISE_PLAN_SHARE * (budget.limit - budget.spent)
+    testable = [k for k, pair in enumerate(pairs) if len(pair.columns) >= 2]
+    for (columns, _), members in _size_groups(pairs, testable):
+        if columns >= 3 and _certain_floor(columns) > _FISHER_WORK_LIMIT:
+            continue
+        units = _pair_units(columns) + (_plan_units(columns) if columns >= 3 else 0.0)
+        units *= len(members)
+        if budget.spent + units > min(stop, budget.limit):
+            break
+        budget.charge(units)
+        for k in members:
+            sub = _pair_sub(counts, pairs[k])
+            used: Alternative = side if columns == 2 else "two-sided"
+            first, second = _oriented(sub, used)
+            key = (used, tuple(first), tuple(second))
+            pairs[k].key = key
+            if key in tests:
+                continue
+            cols = [a + b for a, b in zip(first, second, strict=True)]
+            if columns == 2:
+                estimate = _estimate_2x2(sum(first), cols[0], cols[1])
+            else:
+                _, (order, _) = _work_spans(first, cols)
+                estimate = _fisher_plan(order).estimate
+            tests[key] = _Test(estimate, sub, used, first, cols)
+    return tests
+
+
+def _rounds_2x2(r1: int, c0: int, c1: int) -> float:
+    """Passes a batch of 2 x 2 tests makes at most for a test with these margins
+    (_fisher_2x2_many): the threshold, the bisection steps over its range, the
+    tails' first terms, and its tails' blocks (at most 8 growing ones, then one
+    per _TAIL_BLOCK_MAX terms of _estimate_2x2's bound)."""
+    span = float(min(r1, c0) + 1)
+    terms = min(2.0 * (40.0 * _sd_2x2(r1, c0, c1) + 4.0 * _TAIL_BLOCK), 2.0 * span)
+    return 3.0 + _bits(span) + 8.0 + terms / _TAIL_BLOCK_MAX
+
+
+def _item_2x2(test: _Test) -> tuple[int, int, int, int, Alternative]:
+    return (test.first[0], sum(test.first), test.cols[0], test.cols[1], test.side)
+
+
+def _run_pairs_2x2(
+    keys: list[tuple[object, ...]],
+    tests: dict[tuple[object, ...], _Test],
+    budget: _Budget,
+    results: dict[tuple[object, ...], float | None],
+) -> None:
+    """The 2 x 2 tests (``keys``, cheapest first). In rounds: the longest run of
+    the next tests whose bounds (_estimate_2x2), with the passes of the batch
+    (_rounds_2x2), fit what is left is computed together, each held to its
+    bound, and what they did not spend is left for the next round. The tests
+    whose bound no longer fits are then tried one at a time with what is left,
+    each within one test's limit (a test near independence at a very large total
+    spends far less than its bound)."""
+    pending = list(keys)
+    while pending:
+        remaining = budget.limit - budget.spent
+        held = 0.0
+        rounds = 0.0
+        take = 0
+        for key in pending:
+            test = tests[key]
+            _, r1, c0, c1, _ = _item_2x2(test)
+            need = max(rounds, _rounds_2x2(r1, c0, c1))
+            if held + test.estimate + need * _UNIT_ROUND > remaining:
+                break
+            held += test.estimate
+            rounds = need
+            take += 1
+        if take == 0:
+            break
+        batch, pending = pending[:take], pending[take:]
+        p_values, spent = _fisher_2x2_many(
+            [_item_2x2(tests[key]) for key in batch],
+            [tests[key].estimate for key in batch],
+            held + rounds * _UNIT_ROUND,
         )
-    return cramers_v(sub, conf_level=level, alternative=side), None
+        budget.spent += spent
+        results.update(zip(batch, p_values, strict=True))
+    for key in pending:
+        left = min(_FISHER_WORK_LIMIT, budget.limit - budget.spent)
+        if left < _UNIT_2X2 + 3.0 * _UNIT_ROUND:
+            results[key] = None
+            continue
+        (p_value,), spent = _fisher_2x2_many([_item_2x2(tests[key])], [left], left)
+        budget.spent += spent
+        results[key] = p_value
 
 
-def _pair_key(sub: IntArray, side: Alternative) -> tuple[object, ...]:
-    """Pairs with equal keys have the same p (the two-sided p does not depend on
-    the order of rows and columns; a one-sided 2 x 2 test does)."""
-    first = [int(v) for v in sub[0]]
-    second = [int(v) for v in sub[1]]
-    if side == "two-sided":
-        first, second = _canonical(first, second)
-    return (side, tuple(first), tuple(second))
+def _run_tests(
+    tests: dict[tuple[object, ...], _Test], budget: _Budget
+) -> dict[tuple[object, ...], float | None]:
+    """The planned tests, cheapest first by their estimates (ties by the table):
+    the 2 x 2 tests first (_run_pairs_2x2), then each larger test, when its two
+    further plans fit, its certain work fits what is left and its smaller
+    estimate is at most _PAIRWISE_ESTIMATE_LIMIT; it spends what it spends,
+    within one test's limit and what is left."""
+    results: dict[tuple[object, ...], float | None] = {}
+    order = sorted(tests, key=lambda k: (tests[k].estimate, repr(k)))
+    _run_pairs_2x2(
+        [key for key in order if len(tests[key].cols) == 2], tests, budget, results
+    )
+    for key in order:
+        test = tests[key]
+        columns = len(test.cols)
+        if columns == 2:
+            continue
+        results[key] = None
+        units = 2.0 * _plan_units(columns)
+        if units > budget.limit - budget.spent:
+            continue
+        budget.charge(units)
+        widths, (_, least) = _work_spans(test.first, test.cols)
+        plan = _fisher_plan(widths)
+        remaining = budget.limit - budget.spent
+        if plan.certain > remaining or _fisher_plan(least).estimate > (
+            _PAIRWISE_ESTIMATE_LIMIT
+        ):
+            continue
+        one = _Budget(min(_FISHER_WORK_LIMIT, remaining))
+        with contextlib.suppress(_TooLarge):
+            results[key] = _fisher(test.table, test.side, one, plan).p_value
+        budget.spent += one.spent
+        budget.largest = max(budget.largest, one.largest)
+    return results
+
+
+def _pair_effects(
+    counts: IntArray,
+    pairs: list[_Pair],
+    level: float,
+    side: Alternative,
+    effects: _Budget,
+) -> dict[int, tuple[EffectSizeCI | None, str | None]]:
+    """Each pair's Cramer's V (adjusted) with its interval, or why there is none:
+    not defined (no more counts than columns: R gives NaN), or not reached by
+    ``effects``, which the pairs draw on by size, smallest first, a group of
+    equal size wholly or not at all (_size_groups), until a group does not fit."""
+    out: dict[int, tuple[EffectSizeCI | None, str | None]] = {}
+    defined: list[int] = []
+    for k, pair in enumerate(pairs):
+        if len(pair.columns) < 2:
+            continue
+        if pair.n <= max(2, len(pair.columns)):
+            out[k] = (
+                None,
+                "the bias-corrected Cramer's V needs more counts than columns (R: NaN)",
+            )
+        else:
+            defined.append(k)
+    reached = True
+    for (columns, _), members in _size_groups(pairs, defined):
+        if not reached:
+            for k in members:
+                out[k] = (None, _EFFECT_NOT_REACHED)
+            continue
+        # The statistics first (charged as the tables' preparation), then the
+        # group's intervals, by their statistics.
+        prep = len(members) * _pair_units(columns)
+        if effects.spent + prep > effects.limit:
+            reached = False
+            for k in members:
+                out[k] = (None, _EFFECT_NOT_REACHED)
+            continue
+        effects.charge(prep)
+        subs = [_pair_sub(counts, pairs[k]) for k in members]
+        stats = [_independence(sub)[0] for sub in subs]
+        units = math.fsum(_effect_units(columns, x) for x in stats)
+        if effects.spent + units > effects.limit:
+            reached = False
+            for k in members:
+                out[k] = (None, _EFFECT_NOT_REACHED)
+            continue
+        effects.charge(units)
+        for k, sub in zip(members, subs, strict=True):
+            out[k] = (cramers_v(sub, conf_level=level, alternative=side), None)
+    return out
 
 
 def _pairwise(
@@ -2376,52 +3187,26 @@ def _pairwise(
     level: float,
     side: Alternative,
     budget: _Budget,
+    effects: _Budget,
 ) -> list[PairComparison]:
     """The pairs of rows with their p (or the reason there is none) and V, before
-    adjustment; the Fisher tests share ``budget``."""
-    present = [i for i in range(counts.shape[0]) if int(counts[i].sum()) > 0]
-    pairs: list[tuple[int, int, tuple[int, ...], IntArray]] = []
-    for index, i in enumerate(present):
-        for j in present[index + 1 :]:
-            columns, sub = _pair_table(counts, i, j)
-            pairs.append((i, j, columns, sub))
-    # The tests, cheapest first by their estimated work, each distinct table once;
-    # the order depends on the tables only, never on the order of the rows.
-    tests: dict[
-        tuple[object, ...], tuple[float, float, float, IntArray, Alternative]
-    ] = {}
-    for _, _, columns, sub in pairs:
-        if len(columns) < 2:
-            continue
-        used: Alternative = side if sub.shape == (2, 2) else "two-sided"
-        key = _pair_key(sub, used)
-        if key not in tests:
-            estimate, least, certain = _fisher_work(sub, used)
-            tests[key] = (estimate, least, certain, sub, used)
-    results: dict[tuple[object, ...], float | None] = {}
-    for key in sorted(tests, key=lambda k: (tests[k][0], repr(k))):
-        _, least, certain, sub, used = tests[key]
-        remaining = budget.limit - budget.spent
-        if certain > remaining or least > _PAIRWISE_ESTIMATE_LIMIT:
-            results[key] = None
-            continue
-        one = _Budget(min(_FISHER_WORK_LIMIT, remaining))
-        try:
-            results[key] = _fisher(sub, used, one).p_value
-        except _TooLarge:
-            results[key] = None
-        budget.spent += one.spent
-        budget.largest = max(budget.largest, one.largest)
+    adjustment; the Fisher tests and their planning share ``budget``, the V
+    intervals ``effects``."""
+    pairs = _list_pairs(counts)
+    tests = _plan_pairs(counts, pairs, side, budget)
+    results = _run_tests(tests, budget)
+    # The intervals also have what the tests left.
+    effects.limit += max(0.0, budget.limit - budget.spent)
+    effect_of = _pair_effects(counts, pairs, level, side, effects)
     out: list[PairComparison] = []
-    for i, j, columns, sub in pairs:
-        n = int(sub.sum())
-        if len(columns) < 2:
+    for k, pair in enumerate(pairs):
+        if len(pair.columns) < 2:
             out.append(
                 PairComparison(
-                    row1=i,
-                    row2=j,
-                    columns=columns,
-                    n=n,
+                    row1=pair.row1,
+                    row2=pair.row2,
+                    columns=pair.columns,
+                    n=pair.n,
                     p_value=None,
                     p_adjusted=None,
                     alternative=None,
@@ -2434,15 +3219,15 @@ def _pairwise(
                 )
             )
             continue
-        used = side if sub.shape == (2, 2) else "two-sided"
-        p_value = results[_pair_key(sub, used)]
-        effect, effect_reason = _pair_effect(sub, level, side)
+        p_value = None if pair.key is None else results[pair.key]
+        used: Alternative = side if len(pair.columns) == 2 else "two-sided"
+        effect, effect_reason = effect_of[k]
         out.append(
             PairComparison(
-                row1=i,
-                row2=j,
-                columns=columns,
-                n=n,
+                row1=pair.row1,
+                row2=pair.row2,
+                columns=pair.columns,
+                n=pair.n,
                 p_value=p_value,
                 p_adjusted=None,
                 alternative=used if p_value is not None else None,
@@ -2460,11 +3245,14 @@ def _pairwise_fisher(
     conf_level: float,
     alternative: Alternative,
     budget: _Budget,
+    effects: _Budget | None = None,
 ) -> tuple[PairComparison, ...]:
     counts = _as_counts(table)
     level = check_conf_level(conf_level)
     side = check_alternative(alternative)
-    pairs = _pairwise(counts, level, side, budget)
+    if effects is None:
+        effects = _Budget(_PAIRWISE_EFFECT_LIMIT)
+    pairs = _pairwise(counts, level, side, budget, effects)
     raw = [pair.p_value for pair in pairs if pair.p_value is not None]
     # A pair too large to compute is still a comparison of the family: it enters
     # the adjustment as p = 1, so that leaving it out never makes a computed pair
@@ -2505,17 +3293,37 @@ def pairwise_fisher(
     to compute (below) counts in that family with p = 1 (as ``p.adjust(p, n =)``
     allows for comparisons whose p is not at hand).
 
-    Cost. The tests of one table share a budget of 1.6e9 work units (about two
-    seconds; fisher_exact describes the units), and each test is also held to
-    fisher_exact's own limit. They are computed cheapest first by their estimated
-    work (from the margins and the observed table: _fisher_work), each distinct
-    table once (a table and its permutations have the same p). A test is not
-    computed when its certain work exceeds what is left, when its estimate is
-    above 1e14 units (1e5 times a test's limit; the largest estimate of a test
-    answered in the tables measured is 2.5e12), or when it would pass what is
-    left. So the call returns after at
-    most about two seconds of tests on any table, and which pairs are tested
-    depends on the tables only, never on the order of the rows.
+    Cost. Everything the pairs take that grows with the table is counted in
+    work units (fisher_exact describes them) and charged before it is done: 2e9
+    units, about two seconds, in all, whatever the numbers of rows, columns and
+    counts. Only listing the pairs (each pair's columns and total, the size of
+    the result itself) and the adjustment are outside the count.
+
+    - The tests share 1.6e9 units, their planning included, and each test is
+      also held to fisher_exact's limit of 1e9. Planning a pair (its table, its
+      canonical form, a work estimate from its margins and the observed table)
+      is charged by an upper bound from its number of columns, pairs of equal
+      size (columns, then total) together, smallest first, until half the
+      budget is spent; a pair of so many columns that no search of its table
+      could fit one test (669 columns or more: _certain_floor) is not planned.
+      Each distinct table is tested once (a table and its permutations have the
+      same p), cheapest first by the estimate: the 2 x 2 tests first, together,
+      admitted while their bounds (_estimate_2x2) fit what is left, what they did
+      not spend handed on, and those whose bound does not fit then one at a time
+      with what is left; then the larger tests, each when its certain work fits
+      what is left and its estimate after pruning is at most 1e14 units (1e5
+      times a test's limit; the largest estimate of a test answered in the
+      tables measured is 2.5e12), spending what it spends within what is left.
+    - The V intervals have 4e8 units and what the tests left (a V takes about 1
+      to 50 ms, by the size of its statistic; _effect_units charges an upper
+      bound from the statistic, computed first), pairs of equal size together,
+      smallest first, until a group does not fit.
+
+    So the call returns after at most about two seconds of counted work on any
+    table (measured on 38 shapes up to 200 x 2000 at n = 1e6: at most 2.8 s, the
+    rest being the list of 19,900 pairs; 100 x 2 at n = 1e5, every one of 4,950
+    pairs tested, 0.9 s), and which pairs are tested and which have a V depends
+    on the tables only, never on the order of the rows.
 
     A pair whose table keeps one column has no test (fisher.test stops; ggstatsplot
     loses the whole pairwise table silently, edge_bar_degenerate-single-x), and a
@@ -2526,8 +3334,8 @@ def pairwise_fisher(
     p = 1, the cautious choice, because which pairs fit the budget depends on the
     data (for Holm, Hochberg, Bonferroni and the false-discovery methods no
     computed pair then has a smaller adjusted p than it would have with every pair
-    computed). A pair whose V is not
-    defined (no more counts than columns) has ``effect`` None and an
+    computed). A pair whose V is not defined (no more counts than columns), or
+    whose V the intervals' allowance did not reach, has ``effect`` None and an
     ``effect_reason``.
 
     Raises:

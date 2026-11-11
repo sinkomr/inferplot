@@ -33,6 +33,9 @@ SMALL_N: Final = 5
 # rows_dropped is a warning when more than this share of the subjects (within) or
 # of the rows (between) was left out.
 _MOST_LEFT_OUT: Final = 0.5
+# pairs_without_test names this many pairs and counts the rest (a table of 200
+# levels can leave thousands of pairs without a test).
+_LISTED_PAIRS: Final = 6
 # A rank-based test on data with more than this share of tied values gets a
 # heavy_ties warning (SPEC section 8).
 HEAVY_TIES: Final = 0.25
@@ -750,30 +753,41 @@ def _pairs_without_test(result: StatsResult) -> Issue | None:
     if not missing:
         return None
     total = len(result.pairwise)
-    rest = total - len(missing)
+    tested = [pair for pair in result.pairwise if pair.no_test_reason is None]
+    rest = len(tested)
     one = len(missing) == 1
     listed = "; ".join(
         f"{pair.group1!r} and {pair.group2!r} ({pair.no_test_reason})"
-        for pair in missing
+        for pair in missing[:_LISTED_PAIRS]
     )
+    if len(missing) > _LISTED_PAIRS:
+        listed += f"; and {len(missing) - _LISTED_PAIRS} more"
     # A pair too large to compute counts in the adjustment with p = 1
-    # (stats.pairwise_fisher); a pair whose table has a single column is none.
+    # (stats.pairwise_fisher); a pair whose table has a single column is none;
+    # p_adjust_method="none" adjusts nothing.
     costly = sum(
         1 for pair in missing if str(pair.no_test_reason).startswith("too large")
     )
+    other = "The other one" if rest == 1 else f"The other {rest}"
     if not rest:
         adjusted = ""
+    elif tested[0].adjust_method == "none":
+        adjusted = (
+            f" {other} {'keeps its p-value' if rest == 1 else 'keep their p-values'} "
+            "unadjusted (p_adjust_method='none')."
+        )
     elif costly:
         adjusted = (
-            f" The other {rest} {'is' if rest == 1 else 'are'} adjusted as "
-            f"{rest + costly} comparisons: a pair too large to compute counts as a "
-            "test with p = 1."
+            f" {other} {'is' if rest == 1 else 'are'} adjusted as {rest + costly} "
+            "comparisons: a pair too large to compute counts as a test with p = 1."
+        )
+    elif rest == 1:
+        adjusted = (
+            " The other one is the only test, so its p-value is its own adjusted "
+            "p-value."
         )
     else:
-        adjusted = (
-            f" The other {rest} {'is' if rest == 1 else 'are'} adjusted among "
-            "themselves."
-        )
+        adjusted = f" {other} are adjusted among themselves."
     return Issue(
         code="pairs_without_test",
         severity="info",
