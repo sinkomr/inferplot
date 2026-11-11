@@ -165,6 +165,17 @@ def histostats(
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
         rendering warnings to ``result.warnings``.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9],
+        ... })
+        >>> result = ip.analyze.histostats(df, "score", test_value=5)
+        >>> fig = ip.render.histostats(result, binwidth=0.5)
+        >>> fig.check()
+        ()
     """
     base.check_drawable(result, "histostats", "ip.analyze.histostats(data, x, ...)")
     options = check_drawing(

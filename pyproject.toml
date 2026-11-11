@@ -74,6 +74,13 @@ include = [
     "/oracle/export_datasets.R",
     "/.github/workflows/oracle.yml",
     "/tools/reference/*.py",
+    # The documentation tests run every example and code block in these.
+    "/docs/api.md",
+    "/docs/intervals.md",
+    "/docs/examples/*.py",
+    "/docs/img/*.png",
+    "/skills/inferplot/SKILL.md",
+    "/llms.txt",
     "/LICENSE",
     "/NOTICE",
     "/README.md",
@@ -121,6 +128,8 @@ banned-module-level-imports = ["pandas", "polars", "pyarrow"]
 "tests/**" = ["T20", "TID251", "TID253"]
 # The audit script reports PASS/FAIL lines on stdout by design.
 "tools/**" = ["T20", "TID253"]
+# Examples for users print their results and import pandas as user code does.
+"docs/examples/**" = ["T20", "TID253"]
 
 # --- pyright ----------------------------------------------------------------
 

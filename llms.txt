@@ -1,0 +1,19 @@
+# inferplot
+
+> inferplot is ggstatsplot for Python: one call (`ip.betweenstats`, `ip.withinstats`, `ip.histostats`, `ip.scatterstats`, `ip.barstats`) draws a statistical plot, runs the test that fits the design and writes the full result on the figure (statistic, df, exact p, effect size with its confidence interval, Bayes factor, n, adjusted pairwise comparisons). The result is also available as text (`fig.result.text.apa`) and JSON (`fig.result.to_json()`); `fig.check()` lists statistical and drawing problems; `fig.save()` writes SVG, PDF or PNG with the result embedded. Not yet on PyPI: install from the repository.
+
+The links below are relative to the repository root. Once published, the same files are at https://github.com/sinkomr/inferplot/blob/main/<path>.
+
+## Docs
+
+- [README.md](README.md): what inferplot is, install, a quick start, which function answers which question, how to choose `type`, differences from ggstatsplot and what is not in v0.1.
+- [docs/api.md](docs/api.md): the complete public API in one file: signatures, every argument, what each function and type computes, result fields, `check()` codes, errors and rules for agents.
+- [docs/intervals.md](docs/intervals.md): how far to trust each confidence interval and test, measured by simulation, and how bootstrap intervals depend on `seed`.
+
+## Examples
+
+- [docs/examples/](docs/examples/): one runnable script per function, plus two panels with `ax=`, compute once and draw twice, and reading the result back from a saved figure.
+
+## Agent skill
+
+- [skills/inferplot/SKILL.md](skills/inferplot/SKILL.md): a Claude Code skill for projects that use inferplot: when to use it, the decision table, the rules, minimal examples.

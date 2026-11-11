@@ -25,8 +25,11 @@ implementation of R's method.
 What to do about it:
 
 - **Effect sizes that cannot be negative** (rank epsilon squared, Kendall's W, xi,
-  partial omega squared) have a one-sided interval from a lower bound to 1. Their
-  bootstrap interval can never contain 0, even when there is no effect at all. Use
+  partial omega squared) never get an interval that contains a negative value.
+  Rank epsilon squared, Kendall's W and partial omega squared have a one-sided
+  interval from a lower bound to 1 (`effect_size.sidedness` is "greater"); xi has a
+  two-sided percentile interval. The bootstrap intervals (rank epsilon squared,
+  Kendall's W, xi) can never contain 0, even when there is no effect at all. Use
   the test's p-value to judge whether there is an effect, and read the interval as a
   range of plausible sizes, not as a test. Under no effect the estimate itself falls
   outside its own interval in 4 to 5% of data sets; `result.check()` reports that as
@@ -40,6 +43,16 @@ What to do about it:
 - **Pairwise comparisons** are computed and adjusted exactly as ggstatsplot does
   (Holm on top of Games-Howell for the parametric type), which is stricter than
   either adjustment alone.
+- **The average AKP** (withinstats, type robust, three or more conditions) is the
+  mean of the pairs' AKP values, and its interval is the mean of the pairs' own
+  95% intervals, as in R. That interval covered the true value in 99.6% of
+  simulated data sets: it is wider than a 95% interval needs to be. The average is
+  signed (each pair is earlier level minus later level), so it changes with the
+  order of the conditions; fix the order with `order=` before the analysis.
+- **AKP with two conditions** (withinstats, type robust): listing the two
+  conditions the other way round negates the estimate exactly, but the bootstrap
+  interval is mirrored only approximately, because the resamples are drawn anew.
+  Robust within-subjects intervals are always 95%, whatever `conf_level` says.
 
 Everything not listed held its level in the simulations: Welch's t-test and ANOVA,
 the paired and one-sample t-tests, Hedges' g and its interval, the Mann-Whitney,
@@ -48,3 +61,34 @@ correlations with their intervals (Spearman's slightly narrow at strong
 correlations, 94%), the trimmed-means ANOVA, the dependent Yuen test, the
 bootstrap-t test of the trimmed mean, the between-groups AKP interval, and the
 robust pairwise intervals.
+
+## Bootstrap intervals and `seed`
+
+Bootstrap intervals use 2,000 resamples drawn from `seed` (default 0, recorded in
+`effect_size.bootstrap_seed`); ggstatsplot uses 100. Another seed gives a slightly
+different interval:
+
+```python
+import pandas as pd
+import inferplot as ip
+
+weights = [4.17, 5.58, 5.18, 6.11, 4.50, 4.61, 5.17, 4.53, 5.33, 5.14,
+           4.81, 4.17, 4.41, 3.59, 5.87, 3.83, 6.03, 4.89, 4.32, 4.69,
+           6.31, 5.12, 5.54, 5.50, 5.37, 5.29, 4.92, 6.15, 5.80, 5.26]
+df = pd.DataFrame({"group": ["ctrl"] * 10 + ["trt1"] * 10 + ["trt2"] * 10,
+                   "weight": weights})
+for seed in (0, 1):
+    result = ip.analyze.betweenstats(df, "group", "weight", type="nonparametric",
+                                     seed=seed)
+    print(seed, result.text.apa)
+```
+
+```text
+0 Kruskal-Wallis test: chi2(2) = 7.99, p = .018, rank epsilon squared = .28, 95% CI [.10, 1.00], n = 30.
+1 Kruskal-Wallis test: chi2(2) = 7.99, p = .018, rank epsilon squared = .28, 95% CI [.11, 1.00], n = 30.
+```
+
+Choose the seed before the analysis and report it; never try seeds until an
+interval excludes 0. The bootstrap-t test of histostats (type robust) takes its
+p-value from the resamples too: a p of 0 means that no resample was as extreme,
+that is p below about 1 in 2,000, and `warnings` says so.

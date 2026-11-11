@@ -135,6 +135,19 @@ def withinstats(
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
         rendering warnings to ``result.warnings``.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "subject": ["s1", "s2", "s3", "s4", "s5"] * 2,
+        ...     "time": ["pre"] * 5 + ["post"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 5.9, 6.4, 6.8, 5.6],
+        ... })
+        >>> result = ip.analyze.withinstats(df, "time", "score", subject_id="subject")
+        >>> fig = ip.render.withinstats(result, point_path=False)
+        >>> fig.check()
+        ()
     """
     comparison.checked_result(
         result,

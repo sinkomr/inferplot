@@ -842,6 +842,18 @@ def histostats(
             ``test_value`` for the signed-rank test, too few values left after
             trimming); the message says how to fix the call.
         KeyError: a column that the data frame does not have.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 6.9, 5.9],
+        ... })
+        >>> result = ip.analyze.histostats(df, "score", test_value=5,
+        ...                                 type="nonparametric")
+        >>> print(result.text.apa)
+        Wilcoxon signed-rank test against 5: V = 33.50, p = .035, rank-biserial r = .86,
+        95% CI [.48, .97], n = 8.
     """
     one, args, n_digits = _prepare(
         data,

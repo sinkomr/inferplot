@@ -870,6 +870,19 @@ class StatsResult(_Plain):
         result read back from it has ``values == ()``, ``subjects == ()`` and
         ``point_labels == ()`` and cannot be drawn again, but ``check()`` reports
         the same issues (every check reads stored fields, not the observations).
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> import json
+            >>> data = json.loads(result.to_json())
+            >>> data["schema_version"], data["test"]["name"], len(data["pairwise"])
+            (4, 'welch_anova', 3)
         """
         fields = cast("dict[str, object]", _encode(self))
         if not include_values:
@@ -899,6 +912,17 @@ class StatsResult(_Plain):
 
         Also reads the copy ``fig.save()`` embeds in a figure file. Raises
         ``ValueError`` for JSON of another schema version (see :meth:`from_dict`).
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> ip.StatsResult.from_json(result.to_json()) == result
+            True
         """
         return cls.from_dict(json.loads(text))
 
@@ -1008,6 +1032,20 @@ class StatsResult(_Plain):
 
         Missing values are nulls (pandas: NaN in float columns, None in text
         columns, ``<NA>`` in the nullable boolean columns).
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> frame = result.to_frame()
+            >>> list(frame["test"])
+            ['welch_anova', 'games_howell', 'games_howell', 'games_howell']
+            >>> list(frame["group2"][1:])
+            ['b', 'c', 'c']
         """
         rows = self.frame_rows()
         columns = {name: [row[name] for row in rows] for name, _ in _FRAME_COLUMNS}
@@ -1049,7 +1087,23 @@ class StatsResult(_Plain):
     # -- checks and printing ------------------------------------------------- #
 
     def check(self) -> tuple[Issue, ...]:
-        """Statistical problems with this result; empty when there are none."""
+        """Statistical problems with this result; empty when there are none.
+
+        Each is an :class:`~inferplot.check.Issue` with a stable ``code``, its
+        ``severity`` ("warning" or "info"), a ``message`` and a ``fix``.
+        ``fig.check()`` adds the problems of the drawn figure.
+
+        Example:
+            >>> import pandas as pd
+            >>> import inferplot as ip
+            >>> df = pd.DataFrame({
+            ...     "group": ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+            ...     "score": [1.0, 2, 3, 4, 2, 3, 4, 5, 6, 7, 8, 9.5],
+            ... })
+            >>> result = ip.analyze.betweenstats(df, "group", "score")
+            >>> [issue.code for issue in result.check()]
+            ['small_n', 'pairs_hidden']
+        """
         from inferplot.check import result_issues
 
         return result_issues(self)

@@ -179,6 +179,21 @@ def barstats(
     Returns:
         A :class:`~inferplot.render.figure.StatsFigure`; its ``result`` adds any
         rendering warnings to ``result.warnings``.
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "answer": ["yes", "no", "yes", "no"],
+        ...     "group": ["a", "a", "b", "b"],
+        ...     "n": [12, 8, 5, 15],
+        ... })
+        >>> result = ip.analyze.barstats(df, "answer", "group", counts="n")
+        >>> fig = ip.render.barstats(result, legend_title="Answer")
+        >>> fig.result.text.bar_labels
+        ('p = 0.37', 'p = 0.03')
+        >>> fig.check()
+        ()
     """
     base.check_result_type(result, "barstats")
     options = check_drawing(

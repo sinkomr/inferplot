@@ -1532,6 +1532,20 @@ def withinstats(
         NotImplementedError: what arrives in inferplot 0.2 (the Bayesian
             repeated-measures ANOVA: type "bayes" with three or more conditions
             unless ``results_subtitle=False``, and ``bf_message=True`` there).
+
+    Example:
+        >>> import pandas as pd
+        >>> import inferplot as ip
+        >>> df = pd.DataFrame({
+        ...     "subject": ["s1", "s2", "s3", "s4", "s5"] * 2,
+        ...     "time": ["pre"] * 5 + ["post"] * 5,
+        ...     "score": [5.1, 4.8, 6.0, 5.5, 5.2, 6.3, 5.9, 6.4, 6.8, 5.6],
+        ... })
+        >>> result = ip.analyze.withinstats(df, "time", "score", subject_id="subject",
+        ...                                  type="bayes")
+        >>> print(result.text.apa)
+        Bayesian paired t-test (JZS prior, r = 0.707): BF10 = 6.41, log(BF01) = -1.86, n
+        = 5 pairs.
     """
     if subject_id is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise subject_id_required("withinstats", given=describe_value(subject_id))
