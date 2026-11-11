@@ -6159,6 +6159,9 @@ fisherties_probe <- function() {
         ggstatsplot::ggbarstats(data = frame, x = x, y = y, counts = n, type = "parametric"),
         function(plot) {
           rows <- ggstatsplot::extract_stats(plot)$pairwise_comparisons_data
+          if (is.null(rows)) {
+            return(list(pairwise = NULL))
+          }
           list(pairwise = lapply(seq_len(nrow(rows)), function(j) {
             list(
               group1 = as.character(rows$group1[[j]]), group2 = as.character(rows$group2[[j]]),
