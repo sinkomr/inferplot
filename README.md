@@ -13,7 +13,13 @@ repository as below. Version 0.1 covers five functions; see
 
 ## Install
 
-Python 3.11 or newer. From a clone of the repository:
+Python 3.11 or newer. Straight from GitHub (this needs git):
+
+```sh
+pip install "inferplot[pandas] @ git+https://github.com/sinkomr/inferplot"
+```
+
+Or from a clone of the repository:
 
 ```sh
 git clone https://github.com/sinkomr/inferplot
@@ -21,9 +27,10 @@ cd inferplot
 pip install ".[pandas]"
 ```
 
-With uv, `uv pip install ".[pandas]"` does the same. The extras `pandas`, `polars`
-and `pyarrow` install the data frame library you use; inferplot itself needs only
-numpy, scipy, matplotlib and narwhals.
+With uv, put `uv` in front of `pip install` in either form. The extras `pandas`,
+`polars` and `pyarrow` install the data frame library you use; inferplot itself needs
+only numpy, scipy, matplotlib and narwhals. To check the installation, run the quick
+start below: it should print the three lines shown under it.
 
 <!-- PyPI: once 0.1.0 is published, this section gets `pip install "inferplot[pandas]"`. -->
 

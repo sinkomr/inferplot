@@ -7,33 +7,37 @@ Current phase: **5 — documentation, evaluation, release 0.1.0** (Phase 4 close
 
 ## Waiting for the owner
 
-Everything the lead can do without the owner is done and reviewed (Phases 0 to 4
-closed; Phase 5 built and reviewed). What is left is the owner's to decide or do:
+On 2026-11-11 the owner handed the open decisions to the lead ("I don't want to make
+any decisions here, you do what you think is best"). The lead decided (D131):
 
-1. **Publish 0.1.0** (`docs/RELEASING.md`, about 30 minutes the first time): accounts
-   on PyPI and TestPyPI, the two trusted publishers, the two GitHub environments
-   (`pypi` with you as required reviewer: the workflow refuses to run without it).
-   Then say so, and the lead prepares the release commit (version, changelog date,
-   install instructions); you push the tag and approve.
-2. **Run the agent evaluation** (`evals/README.md`): 64 Claude sessions, spending
-   your usage; run it in a container or a throwaway account. Not run so far.
-3. **Confirm, or overrule, the places where inferplot deliberately differs from
-   ggstatsplot's numbers.** Until then they stay as they are; each is listed in
-   `CHANGELOG.md` and SPEC §5 with R's number beside inferplot's in a test.
-   - Accurate where R's routine is not: Bayes factors at very large t (D61, D81),
-     interval bounds R's root search stops short of (D99), exactly collinear data
-     (D85, D86, D106).
-   - Fewer subjects than conditions: the repeated-measures ANOVA keeps its
-     correction (D62). Undefined bootstrap resamples are left out and counted (D65).
-   - Numbers are read as written: 0.1 + 0.2 and 0.3 are one value in the rank tests
-     and robust bootstraps (D74, D105, D126). Counts that fit exactly print 0 where
-     R prints rounding noise (D118).
-   - Two places where inferplot follows R although another choice is defensible:
-     ties among signed-rank differences are R's (W9, D88), and a p of exactly 0
-     prints as 2.23e-308 (D108).
-4. **Make `Fixture provenance` a required check on main** (GitHub > Settings >
-   Branches; T8). It runs and passes today, but nothing blocks a merge on it.
-5. **Clean up what the lead may not delete.** Remote branches, all merged or
+- **Shared as a preview, installed from GitHub.** Checked the way a newcomer meets
+  it: a fresh environment outside the repository, one `pip install` from the public
+  repository (4 s), the README quick start printing exactly what the README shows,
+  the five example scripts, and five analyses of made-up data with missing values.
+  The README now leads with the one-line install.
+- **The deliberate differences from ggstatsplot stand** (D61, D62, D65, D74, D81,
+  D85, D86, D99, D105, D106, D118, D126; W9/D88 and D108 keep following R). Each is
+  in `CHANGELOG.md` and SPEC §5 with R's number beside inferplot's in a test. They
+  are no longer waiting for a confirmation; the owner can still overrule any of them.
+- **PyPI comes after the first outside feedback**, not before: a version number on
+  PyPI can never be reused, and the preview costs the friend one longer install line.
+- **The agent evaluation is not run.** Sharing does not depend on it, and it starts
+  64 Claude sessions on the owner's machine and usage; it stays the owner's to start.
+
+What only the owner can do, none of it urgent:
+
+1. **Publish 0.1.0**, when wanted (`docs/RELEASING.md`, about 30 minutes the first
+   time): accounts on PyPI and TestPyPI, the two trusted publishers, the two GitHub
+   environments (`pypi` with you as required reviewer: the workflow refuses to run
+   without it). Then say so, and the lead prepares the release commit (version,
+   changelog date, install instructions); you push the tag and approve.
+2. **Run the agent evaluation**, if wanted (`evals/README.md`); in a container or a
+   throwaway account.
+3. **Make `Fixture provenance` a required check on main** (GitHub > Settings >
+   Branches; T8). Optional: it runs and passes on every push, but nothing blocks a
+   pull request on it. The lead tried on 2026-11-11; the permission system refuses
+   changes to branch protection.
+4. **Clean up what the lead may not delete.** Remote branches, all merged or
    obsolete: `baselines/barstats`, `baselines/barstats-keys`,
    `baselines/phase3-visible`, `baselines/phase3-within`, `baselines/phase4-fixes`,
    `baselines/phase4-render`, `baselines/review-render`, `oracle/phase1-cases`,

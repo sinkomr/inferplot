@@ -174,7 +174,7 @@ def test_install_commands_use_this_project() -> None:
     assert commands
     for command in commands:
         assert re.match(r"(git clone|cd|pip install|uv pip install|uv sync) ", command)
-        for url in re.findall(r"https?://\S+", command):
+        for url in re.findall(r"https?://[^\s\"']+", command):
             assert url == homepage, command
         for group in re.findall(r"\[([a-z,]+)\]", command):
             assert set(group.split(",")) <= extras, command
