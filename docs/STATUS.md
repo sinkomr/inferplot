@@ -37,19 +37,13 @@ What only the owner can do, none of it urgent:
    Branches; T8). Optional: it runs and passes on every push, but nothing blocks a
    pull request on it. The lead tried on 2026-11-11; the permission system refuses
    changes to branch protection.
-4. **Clean up what the lead may not delete.** Remote branches, all merged or
-   obsolete: `baselines/barstats`, `baselines/barstats-keys`,
-   `baselines/phase3-visible`, `baselines/phase3-within`, `baselines/phase4-fixes`,
-   `baselines/phase4-render`, `baselines/review-render`, `oracle/phase1-cases`,
-   `oracle/phase2-cases`, `oracle/phase3-cases`, `oracle/phase4-barstats`,
-   `oracle/phase4-cases`, `oracle/probes-round3`, `oracle/probes-round4`,
-   `phase0-review-fixes`, `phase1/integration`, `phase2/oracle-fixes`,
-   `phase2/oracle-merge`, `phase2/review-fixes`, `test/mpl-baselines`
-   (`git push origin --delete <name>`). Local branches that need `git branch -D`:
-   `baselines/barstats`, `baselines/barstats-keys`, `baselines/phase3-visible`,
-   `baselines/phase4-fixes`, `baselines/phase4-render`, `oracle/phase4-barstats`,
-   `test/mpl-baselines-break`, `test/mpl-baselines-break2`. The session's scratch
-   folder (about 5 GB of agents' environments and outputs) can be removed whole.
+4. **Clean up what the lead may not delete.** Done on 2026-11-11 at the owner's
+   request: all 20 old remote branches (only `main` is left on GitHub), the five
+   merged local branches, the lead's worktrees, and 4.0 GB of unused entries in uv's
+   cache. Still refused by the permission system: three throwaway local branches
+   (`git branch -D baselines/barstats-keys test/mpl-baselines-break
+   test/mpl-baselines-break2`) and the session's scratch folder (4.6 GB of agents'
+   environments and outputs; it can be removed whole).
 
 Open, low priority, no decision needed: a table with 2,000 levels of y takes 5 to
 160 s to analyse (a chart that size is refused anyway); on very large tables only
